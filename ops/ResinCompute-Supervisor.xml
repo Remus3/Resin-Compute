@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ResinCompute-Supervisor - Windows Scheduled Task definition.
+
+  Modelled on Riot Commander's ops/RC-Supervisor.xml, which is the shape that
+  is actually in production on that fleet. Inherited properties, each load
+  bearing:
+
+    - LogonTrigger        the supervisor comes up with the session, so nothing
+                          has to be started by hand after a reboot.
+    - HighestAvailable    the child manages processes and writes under the
+                          install root.
+    - InteractiveToken    the task runs in the logged-on session. An S4U task
+                          has no desktop, which changes process-creation
+                          behaviour.
+    - ExecutionTimeLimit  PT0S, meaning no limit. A supervisor that the
+                          scheduler kills after three days is not a supervisor.
+    - MultipleInstances   IgnoreNew. Two supervisors both believing they own
+                          the child PID is the failure this prevents.
+    - Hidden + pythonw    no console window flashes on logon or on a restart.
+
+  PLACEHOLDERS. Nothing here is a real path. ops/install_scheduled_task.ps1
+  substitutes them at registration time:
+
+    __PYTHONW_EXE__   full path to pythonw.exe, quoted by the installer
+    __INSTALL_ROOT__  full path to the ResinCompute checkout
+    __TASK_USER__     the account the task runs as, as DOMAIN\User or a SID
+
+  ASCII only, and the encoding declaration says UTF-8 rather than the UTF-16
+  that schtasks exports. The installer reads this file and hands the string to
+  Register-ScheduledTask, which takes the XML as text, so the on-disk encoding
+  is ours to choose and ASCII is the repo rule.
+
+  Element order is inherited verbatim from the parent's exported task
+  (RegistrationInfo, Principals, Settings, Triggers, Actions). Do not reorder
+  it to match a published schema listing without testing an actual import.
+-->
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>ResinCompute</Author>
+    <Description>ResinCompute supervisor - owns the headless runner lifecycle.</Description>
+    <URI>\ResinCompute-Supervisor</URI>
+  </RegistrationInfo>
+  <Principals>
+    <Principal id="Author">
+      <UserId>__TASK_USER__</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <Enabled>true</Enabled>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Hidden>true</Hidden>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <Priority>7</Priority>
+    <RestartOnFailure>
+      <Count>3</Count>
+      <Interval>PT1M</Interval>
+    </RestartOnFailure>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+  </Settings>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Actions Context="Author">
+    <Exec>
+      <Command>__PYTHONW_EXE__</Command>
+      <Arguments>-m ops.supervisor</Arguments>
+      <WorkingDirectory>__INSTALL_ROOT__</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

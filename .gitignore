@@ -1,0 +1,85 @@
+# ResinCompute - ignore rules.
+#
+# Ported in spirit from Riot Commander's .gitignore, trimmed to what this tree
+# actually produces. Rule of thumb inherited from RC: anything the runtime
+# MUTATES, anything re-fetchable, and anything holding a credential stays out
+# of history. Authored source and hand-written fixtures stay in.
+
+# --- Secrets. NEVER commit. ---------------------------------------------
+# The Enka client needs no key, but a local override file is the obvious place
+# a token would land, so it is pre-ignored rather than added after the leak.
+secrets.json
+secrets.local.json
+config/secrets.json
+api-key*.txt
+*.key
+*.pem
+.env
+.env.*
+!.env.example
+
+# --- Runtime state (mutates constantly) ---------------------------------
+# ops/runtime/ holds health.json, pid files and the restart trigger. It is
+# written atomically by the supervisor and is never source.
+#
+# Ignore the CONTENTS, not the directory, and re-admit the .gitkeep. A bare
+# `ops/runtime/` also swallows the marker file, so the directory does not exist
+# in a fresh clone and the first atomic write fails on a missing parent - the
+# supervisor's very first heartbeat. The negation is why the pattern needs the
+# trailing `*` rather than the directory form: git will not re-include a file
+# whose parent directory is itself excluded.
+ops/runtime/*
+!ops/runtime/.gitkeep
+restart_trigger.txt
+
+# --- Logs ---------------------------------------------------------------
+logs/
+*.log
+*.log.[0-9]
+
+# --- Fetched payload cache ----------------------------------------------
+# Enka / Project Amber responses are cached here honouring the response ttl.
+# Re-fetchable by definition, and it is third-party game data we deliberately
+# do not vendor (SPEC_SCAFFOLD section 4). data/fixtures/ IS tracked - those
+# are hand-authored minimal test fixtures.
+data/cache/
+data/*.tmp
+
+# --- Python bytecode + tool caches --------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+
+# --- Virtualenvs --------------------------------------------------------
+.venv/
+venv/
+env/
+
+# --- Local-only tooling config (may carry server URLs or tokens) --------
+.claude/
+.mcp.json
+
+# --- Editor / IDE -------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS -----------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Scratch ------------------------------------------------------------
+_scratch/
+tmp/
+/commit_*.txt

@@ -1,0 +1,41 @@
+{
+  "_synthetic": true,
+  "_note": "Hand-authored seed identity table. No upstream dataset is vendored. Only the five avatarIds verified in docs/SPEC_SCAFFOLD.md section 5 appear here - do not add a sixth without a verified id.",
+  "_refuted": {
+    "10000088": "Charlotte, NOT Dehya. Refuted 2026-09-06 - do not reintroduce as a Dehya id.",
+    "10000080": "Mika, NOT Lynette. Refuted 2026-09-06 - do not reintroduce as a Lynette id."
+  },
+  "schema_version": 1,
+  "characters": [
+    {
+      "avatar_id": 10000096,
+      "name": "Arlecchino",
+      "element": "pyro",
+      "note": "avatarId confirmed by two independent sources"
+    },
+    {
+      "avatar_id": 10000079,
+      "name": "Dehya",
+      "element": "pyro",
+      "note": ""
+    },
+    {
+      "avatar_id": 10000083,
+      "name": "Lynette",
+      "element": "anemo",
+      "note": "internal name Linette"
+    },
+    {
+      "avatar_id": 10000032,
+      "name": "Bennett",
+      "element": "pyro",
+      "note": ""
+    },
+    {
+      "avatar_id": 10000034,
+      "name": "Noelle",
+      "element": "geo",
+      "note": "internal icon name Noel"
+    }
+  ]
+}

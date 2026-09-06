@@ -1,0 +1,88 @@
+# ResinCompute roadmap
+
+Open work, newest priorities first. Aspirational items live at the bottom.
+Per-item completion history belongs in `docs/LEDGER.md` once that file exists,
+never in `CLAUDE.md`.
+
+## Status
+
+Scaffold shipped 2026-09-06. The tree stands up, both suites run, the headless
+lane smoke test passes, and the forecaster is correct for the current game
+version. What follows is everything the scaffold deliberately did not do.
+
+## Now
+
+- **Repo relocation.** The scaffold was built inside the Riot Commander
+  repository because the session's GitHub integration could not create a new
+  repository (`POST /user/repos` returned 403 Resource not accessible by
+  integration). Create the private repo manually, move this tree to its root,
+  and run `python scripts/install_hooks.py` in the new clone before the first
+  commit. Until that happens the CI workflows are inert, because they are written
+  for `resin-compute/` as the repository root.
+- **Wire the objective DAG to real material costs.** `engines/objectives.py` is
+  mechanism only and takes materials as a caller-supplied argument. Nothing
+  currently supplies them. This needs a licensed or first-party cost table, which
+  is gated on the data-source question in ADR-002.
+- **Ascension and talent cost tables.** Same gate. The level-cap table (20, 40,
+  50, 60, 70, 80, 90) is encoded; the Mora and material quantities behind each
+  step are not.
+- **A real end-to-end goal.** The brief's worked example - ascend a character to
+  60 with 6/6/6 talents and a weapon at 60 - should run start to finish and emit a
+  dated task list. It currently decomposes into a correct DAG with empty costs.
+
+## Next
+
+- **Artifact scoring.** `MappedArtifact` parses cleanly but nothing scores a
+  substat roll. Needs a stated scoring model before implementation, not after.
+- **Banner calendar.** The forecaster answers "given N pulls" but not "by when",
+  because nothing knows when a banner runs. A calendar source has the same licence
+  gate as the cost tables.
+- **Income velocity from real history.** `estimate_velocity` folds observed ledger
+  entries, but nothing populates the ledger automatically yet. Wire it to a
+  reconciliation job.
+- **Chronicled Wish support in the service route.** The engine models it; the HTTP
+  route does not expose it.
+- **A `docs/LEDGER.md`** with the per-item completion history, following the
+  parent project's append-only newest-first convention.
+
+## Later
+
+- **Dashboard.** Explicitly out of scope for the scaffold. ADR-001 rejected a
+  TypeScript frontend as premature. Revisit when there is a specified UI, and give
+  it its own ADR rather than reopening ADR-001.
+- **Containers.** Riot Commander has none, so there was nothing to inherit. If
+  containers are wanted, that is a new decision with its own ADR.
+- **Multi-account support.** Everything is keyed by a single UID today.
+- **Team composition solver.** Elemental reaction modelling is a large piece of
+  domain work and should not be started before the resource layer is complete.
+
+## Known gaps, stated honestly
+
+- **The weapon banner micro-curve is not pinned by public data.** Increments of
+  7.0%, 6.6%, 6.0% and 5.8% all overshoot the published 1.850% consolidated rate.
+  The increment is exposed as a tunable rather than hidden behind a constant. If a
+  better-measured value appears, change the default and update ADR-003.
+- **Capturing Radiance's per-loss ramp is unpublished.** Only the 55.000%
+  aggregate is official. The engine uses the flat 0.52106 plus forced-win model
+  that reproduces it. A published ramp would supersede this.
+- **`fetchedProfile` freshness depends entirely on upstream `ttl`.** There is no
+  push channel, so a roster change is invisible until the showcase refreshes.
+
+- **Constellation talent bonuses are not always resolvable on a live profile.**
+  `proudSkillExtraLevelMap` is keyed by `proudSkillGroupId` while `skillLevelMap`
+  is keyed by `skillId`, and joining them needs the character's skill depot -
+  exactly the bulk game data ADR-002 forbids vendoring. `fold_talent_levels`
+  therefore resolves via a caller-supplied `skill_group_map` or an exact key hit,
+  keeps its positional fallback DEFAULT-OFF, and RETURNS anything unresolved
+  rather than guessing. Until a licensed depot source exists, a C3+ character's
+  effective talent levels are exact only when the caller supplies the mapping.
+  Recorded in SPEC 5.1. This is a product limitation, not a bug to fix in code.
+
+- **Intermediate talent-ascension gates are interpolated, not sourced.** The
+  contract pins only three points: talent level 1 needs no ascension, above 1
+  needs at least A1, and level 10 needs A6. Everything between is derived by
+  monotone ceiling interpolation in `min_ascension_for_talent` rather than
+  smuggling in unverified per-level numbers.
+  `expand_character_goal(talent_gate=...)` accepts a real table the moment one is
+  available. Same licence gate as the cost tables. Weapon level caps default to
+  the character cap table for the same reason.

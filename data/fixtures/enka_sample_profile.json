@@ -1,0 +1,234 @@
+{
+  "_synthetic": true,
+  "_note": "SYNTHETIC hand-authored payload. Shaped like a real profile response but containing NO upstream data. Nothing here is copied from any dataset. Only the avatarIds are real, and only the five verified in docs/SPEC_SCAFFOLD.md section 5. Every other numeric id, name hash and prop id is a deliberately unrealistic placeholder (9xxxxxxx / SYNTHETIC_*) so it can never be mistaken for game data.",
+  "_traps_exercised": [
+    "Bennett 10000032 has NO talentIdList key at all - the C0 state. len(avatar['talentIdList']) would raise KeyError.",
+    "propMap 4001 carries ival 0 and val 80. A reader that trusts ival reports level 0. ival is documented as 'Ignore it'.",
+    "Arlecchino 10000096 carries proudSkillExtraLevelMap, which skillLevelMap does NOT include.",
+    "Arlecchino's weapon carries affixMap under equipList[].weapon, value 4, so presented refinement is 5.",
+    "Noelle's weapon carries affixMap value 0, so presented refinement is 1.",
+    "Arlecchino carries an ITEM_RELIQUARY with flat.reliquarySubstats as [{appendPropId, propValue}].",
+    "The wire key is avatarId. avatarID (the docs table misprint) appears nowhere."
+  ],
+  "_note_extra_level_keys": "In a LIVE payload the proudSkillExtraLevelMap keys are proudSkillGroupIds and need the character skill depot to resolve onto skill ids. This fixture keys them by a skill id already present in skillLevelMap so the fold is exercised without vendoring any depot data. The mapper accepts an explicit skill_group_map for the live case.",
+  "uid": "000000000",
+  "ttl": 60,
+  "playerInfo": {
+    "nickname": "SyntheticTraveler",
+    "level": 60,
+    "signature": "hand-authored test fixture",
+    "worldLevel": 8,
+    "nameCardId": 0,
+    "namecardId": 0,
+    "finishAchievementNum": 123,
+    "towerFloorIndex": 12,
+    "towerLevelIndex": 3,
+    "showAvatarInfoList": [
+      {
+        "avatarId": 10000096,
+        "level": 90
+      }
+    ]
+  },
+  "avatarInfoList": [
+    {
+      "avatarId": 10000032,
+      "propMap": {
+        "1001": {
+          "type": 1001,
+          "ival": "0",
+          "val": "8967"
+        },
+        "1002": {
+          "type": 1002,
+          "ival": "0",
+          "val": "5"
+        },
+        "4001": {
+          "type": 4001,
+          "ival": "0",
+          "val": "80"
+        }
+      },
+      "fightPropMap": {
+        "1": 12000.0,
+        "4": 900.0
+      },
+      "skillDepotId": 9000000,
+      "inherentProudSkillList": [
+        9000010
+      ],
+      "skillLevelMap": {
+        "9000001": 6,
+        "9000002": 6,
+        "9000003": 6
+      },
+      "fetterInfo": {
+        "expLevel": 8
+      },
+      "equipList": []
+    },
+    {
+      "avatarId": 10000096,
+      "propMap": {
+        "1001": {
+          "type": 1001,
+          "ival": "0",
+          "val": "8967"
+        },
+        "1002": {
+          "type": 1002,
+          "ival": "0",
+          "val": "6"
+        },
+        "4001": {
+          "type": 4001,
+          "ival": "0",
+          "val": "90"
+        }
+      },
+      "fightPropMap": {
+        "1": 15000.0,
+        "4": 1400.0
+      },
+      "talentIdList": [
+        9600001,
+        9600002,
+        9600003
+      ],
+      "skillDepotId": 9000100,
+      "inherentProudSkillList": [
+        9000110
+      ],
+      "costumeId": 0,
+      "skillLevelMap": {
+        "9000101": 9,
+        "9000102": 9,
+        "9000103": 9
+      },
+      "proudSkillExtraLevelMap": {
+        "9000102": 3
+      },
+      "fetterInfo": {
+        "expLevel": 10
+      },
+      "equipList": [
+        {
+          "itemId": 90000001,
+          "weapon": {
+            "level": 90,
+            "promoteLevel": 6,
+            "affixMap": {
+              "190000001": 4
+            }
+          },
+          "flat": {
+            "nameTextHashMap": "SYNTHETIC_WEAPON_NAME_A",
+            "rankLevel": 5,
+            "itemType": "ITEM_WEAPON",
+            "icon": "SYNTHETIC_WEAPON_ICON_A",
+            "weaponStats": [
+              {
+                "appendPropId": "SYNTHETIC_PROP_BASE_ATTACK",
+                "statValue": 608.0
+              },
+              {
+                "appendPropId": "SYNTHETIC_PROP_CRIT_DAMAGE",
+                "statValue": 66.2
+              }
+            ]
+          }
+        },
+        {
+          "itemId": 90000002,
+          "reliquary": {
+            "level": 21,
+            "mainPropId": 90001,
+            "appendPropIdList": [
+              900011,
+              900012
+            ]
+          },
+          "flat": {
+            "nameTextHashMap": "SYNTHETIC_ARTIFACT_NAME_A",
+            "setNameTextHashMap": "SYNTHETIC_SET_NAME_A",
+            "rankLevel": 5,
+            "itemType": "ITEM_RELIQUARY",
+            "icon": "SYNTHETIC_ARTIFACT_ICON_A",
+            "equipType": "EQUIP_BRACER",
+            "reliquaryMainstat": {
+              "mainPropId": "SYNTHETIC_PROP_HP",
+              "statValue": 4780.0
+            },
+            "reliquarySubstats": [
+              {
+                "appendPropId": "SYNTHETIC_PROP_CRIT_RATE",
+                "propValue": 7.8
+              },
+              {
+                "appendPropId": "SYNTHETIC_PROP_ATTACK_PERCENT",
+                "propValue": 9.9
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "avatarId": 10000034,
+      "propMap": {
+        "1001": {
+          "type": 1001,
+          "ival": "0",
+          "val": "0"
+        },
+        "1002": {
+          "type": 1002,
+          "ival": "0",
+          "val": "4"
+        },
+        "4001": {
+          "type": 4001,
+          "ival": "0",
+          "val": "70"
+        }
+      },
+      "talentIdList": [
+        9340001
+      ],
+      "skillDepotId": 9000200,
+      "skillLevelMap": {
+        "9000201": 4,
+        "9000202": 4,
+        "9000203": 4
+      },
+      "fetterInfo": {
+        "expLevel": 6
+      },
+      "equipList": [
+        {
+          "itemId": 90000003,
+          "weapon": {
+            "level": 70,
+            "promoteLevel": 4,
+            "affixMap": {
+              "190000003": 0
+            }
+          },
+          "flat": {
+            "nameTextHashMap": "SYNTHETIC_WEAPON_NAME_B",
+            "rankLevel": 4,
+            "itemType": "ITEM_WEAPON",
+            "icon": "SYNTHETIC_WEAPON_ICON_B",
+            "weaponStats": [
+              {
+                "appendPropId": "SYNTHETIC_PROP_BASE_ATTACK",
+                "statValue": 401.0
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

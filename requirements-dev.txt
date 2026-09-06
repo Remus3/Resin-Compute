@@ -1,0 +1,16 @@
+# ResinCompute development + CI dependencies.
+#
+# Runtime deps are deliberately empty - see requirements.txt. Nothing pinned
+# here may be imported by shipped code; these three exist to lint, test and
+# type-check it.
+#
+# Pinned with == rather than >=. CI installs this file on every run, and an
+# unpinned lint tool means a new ruff release can turn the tree red on a commit
+# that changed nothing. Bump these deliberately, in their own commit, so the
+# diff that introduces new findings is the diff that raised the pin.
+#
+# Versions below were resolved and installed on 2026-09-06.
+
+ruff==0.16.6
+pytest==9.1.1
+mypy==2.3.1

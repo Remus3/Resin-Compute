@@ -1,0 +1,31 @@
+{
+  "_synthetic": true,
+  "_note": "Hand-authored seed material table. No upstream dataset is vendored. Only the two boss materials verified in docs/SPEC_SCAFFOLD.md section 5 appear here.",
+  "_corrections": {
+    "113039": "The original brief paired Light Guiding Tetrahedron with Arlecchino. That is WRONG. It is used by Candace, Dehya and Faruzan, and is NOT an Arlecchino material. Do not reintroduce the pairing."
+  },
+  "schema_version": 1,
+  "materials": [
+    {
+      "material_id": 113059,
+      "name": "Fragment of a Golden Melody",
+      "used_by": [
+        "Arlecchino",
+        "Emilie"
+      ],
+      "boss": "Legatus Golem",
+      "region": "Fontaine"
+    },
+    {
+      "material_id": 113039,
+      "name": "Light Guiding Tetrahedron",
+      "used_by": [
+        "Candace",
+        "Dehya",
+        "Faruzan"
+      ],
+      "boss": "Algorithm of Semi-Intransient Matrix of Overseer Network",
+      "region": "Sumeru"
+    }
+  ]
+}
