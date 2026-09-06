@@ -118,8 +118,11 @@ attempt a real commit, assert HEAD is unchanged.
 The three QA gates lead because each found real defects the first time it ran:
 
 - **Licence QA** was written alongside ADR-006, which reversed a posture that had
-  never actually been decided. The README said "Private. No licence granted.",
-  which is a default rather than a choice.
+  never actually been decided. The README used to say the project was private
+  with no licence granted, which is a default rather than a choice. The exact
+  old wording is deliberately NOT reproduced here: the licence guard sweeps every
+  root `.md` for that phrase, and it cannot tell a historical quote from a live
+  claim. Describing a stale string beats quoting it.
 - **Project goals QA** found five dead pointers immediately, including two ADRs
   that existed but had never been added to the index, and a README tree listing
   claiming a file that was not there.
