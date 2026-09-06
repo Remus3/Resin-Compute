@@ -12,6 +12,15 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **Persist the reconciled account state so the dashboard has a cold-start
+  source.** `headless/jobs.py::reconcile_state` builds `AccountState` in memory
+  each pass and nothing writes it down, so `surface/` falls back to
+  `default_state_provider`, which is deliberately EMPTY. The consequence is
+  visible: launch the companion from the desktop shortcut on a cold machine and
+  four of six panels correctly report that they have nothing behind them. Needs a
+  serializer for `AccountState`, a `persist_state` job writing through
+  `core/atomic_io.py`, and a loader in `surface/server.py`. This is the single
+  change that most raises the readiness meter.
 - **Repo relocation.** The scaffold was built inside the Riot Commander
   repository because the session's GitHub integration could not create a new
   repository (`POST /user/repos` returned 403 Resource not accessible by
@@ -29,6 +38,11 @@ version. What follows is everything the scaffold deliberately did not do.
 - **A real end-to-end goal.** The brief's worked example - ascend a character to
   60 with 6/6/6 talents and a weapon at 60 - should run start to finish and emit a
   dated task list. It currently decomposes into a correct DAG with empty costs.
+  Verified 2026-09-06: the expansion produces exactly 30 nodes for Arlecchino at
+  level 60 with 6/6/6 and a weapon at 60, in four dependency chains, and the
+  character chain reaches ascension phase 4 because the talent gate demands it
+  rather than because level 60 does. The scheduler has no dating layer yet, so
+  `ScheduledTask.earliest_day` is a day offset and nothing turns it into a date.
 
 ## Next
 
@@ -47,9 +61,13 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Later
 
-- **Dashboard.** Explicitly out of scope for the scaffold. ADR-001 rejected a
-  TypeScript frontend as premature. Revisit when there is a specified UI, and give
-  it its own ADR rather than reopening ADR-001.
+- ~~**Dashboard.**~~ **DONE 2026-09-06, recorded in ADR-005.** The operator
+  specified one and asked for it BEFORE further feature work, so that each
+  feature becomes visible as it lands. `surface/` serves it on 8791 and `shell/`
+  is the Electron companion with a system tray. ADR-001 was NOT reopened: its
+  subject was the language of the compute tree, and the surface is Python too.
+  Panels declare their own readiness and a panel that is not live says what it is
+  waiting on rather than showing a placeholder number.
 - **Containers.** Riot Commander has none, so there was nothing to inherit. If
   containers are wanted, that is a new decision with its own ADR.
 - **Multi-account support.** Everything is keyed by a single UID today.
