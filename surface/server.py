@@ -22,15 +22,20 @@ from __future__ import annotations
 
 import json
 import os
+import socket
+import sys
 import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from importlib import import_module
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from core.log_setup import get_logger
 from core.ports import DASHBOARD
+from core.state_io import DEFAULT_STATE_FILENAME, read_state
 from core.types import AccountState
 from surface.model import Dashboard, Panel, PanelState, build_dashboard
 from surface.render import render_html, render_json
@@ -70,13 +75,36 @@ _DEGRADED_MESSAGE = (
 StateProvider = Callable[[], AccountState]
 
 
-def default_state_provider() -> AccountState:
-    """The account the surface renders when no provider is injected.
+def _try_import(dotted: str):
+    """Import a module or return None. Mirrors headless/jobs.py's own seam."""
+    try:
+        return import_module(dotted)
+    except ImportError:  # pragma: no cover - the tree ships every module it names
+        return None
 
-    Deliberately EMPTY rather than a fabricated demo account. Every panel then
-    reports honestly that it has nothing behind it, which is the correct first
-    impression for a tree whose cost tables are still gated.
+
+def default_state_provider() -> AccountState:
+    """Load the snapshot the headless lane wrote, or an empty account.
+
+    THE COLD-START PATH, and the reason `persist_state` exists. The headless lane
+    reconciles the account from the live upstream response and writes the result
+    down; this process starts separately and reads it back here.
+
+    NEVER A FABRICATED DEMO ACCOUNT. When there is no snapshot the answer is an
+    EMPTY account, and every panel then reports honestly that it has nothing
+    behind it. For an account that has not been played yet that is not a degraded
+    state, it is the correct one.
+
+    A corrupt or truncated snapshot degrades to empty too: `read_state` is total
+    by contract and has already logged the raw failure.
     """
+    config_mod = _try_import("core.config")
+    load_config = getattr(config_mod, "load_config", None) if config_mod else None
+    data_dir = Path(load_config().data_dir) if callable(load_config) else Path("data")
+
+    loaded = read_state(data_dir / DEFAULT_STATE_FILENAME)
+    if loaded is not None:
+        return loaded
     return AccountState(uid="")
 
 
@@ -160,6 +188,42 @@ class _Handler(BaseHTTPRequestHandler):
         self._respond(404, json.dumps({"error": _NOT_FOUND_MESSAGE}), "application/json")
 
 
+class _ExclusiveHTTPServer(ThreadingHTTPServer):
+    """A server that REFUSES a port something else already holds.
+
+    MEASURED DEFECT, and this class is the fix. `socketserver.TCPServer` sets
+    `allow_reuse_address = True`, which sets SO_REUSEADDR. On POSIX that only
+    sidesteps TIME_WAIT and is exactly what you want. **On Windows it lets a
+    completely separate process bind a port another process is already listening
+    on**, leaving both sockets in LISTENING with no defined rule about which one
+    receives a connection.
+
+    Observed on this machine on 2026-09-06: two dashboard surfaces bound 8791
+    simultaneously, `netstat` showed both, and the OLDER one answered every
+    request - so a freshly started surface serving new code was silently ignored
+    while looking perfectly healthy from the outside.
+
+    It also silently voided a documented contract. `main` promises exit code 2
+    for "the port it needs is already held by something else", and the Electron
+    shell renders its refusal text from exactly that code. With the default
+    reuse behaviour that branch was unreachable on Windows: the second process
+    bound successfully and then blocked in `serve_forever` forever.
+
+    So SO_REUSEADDR is dropped, and on Windows SO_EXCLUSIVEADDRUSE is set in its
+    place - the flag that actually means what SO_REUSEADDR means on POSIX. The
+    listening socket is closed on shutdown, so TIME_WAIT does not apply to it and
+    an immediate restart still works; `tests/test_surface_render.py` pins that,
+    because turning off address reuse is exactly the change that could break it.
+    """
+
+    allow_reuse_address = False
+
+    def server_bind(self) -> None:
+        if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 class DashboardServer:
     """Own the socket and the thread, so a caller and a test share one lifecycle.
 
@@ -194,7 +258,7 @@ class DashboardServer:
         if self._httpd is not None:
             return
         handler = type("_BoundHandler", (_Handler,), {"state_provider": staticmethod(self._provider)})
-        self._httpd = ThreadingHTTPServer((self.host, self._requested_port), handler)
+        self._httpd = _ExclusiveHTTPServer((self.host, self._requested_port), handler)
         self._httpd.daemon_threads = True
         self._thread = threading.Thread(target=self._httpd.serve_forever, name="resin-surface", daemon=True)
         self._thread.start()
@@ -243,8 +307,16 @@ def main(argv: list[str] | None = None) -> int:
 
     server = DashboardServer(host=args.host, port=args.port)
     try:
-        server.serve_forever()
+        # start() is what binds, so it is what can fail. serve_forever() would
+        # bind too, but catching around the whole blocking call would also
+        # swallow a later failure as though it were a bind refusal.
+        server.start()
     except OSError as exc:
         _log.error("dashboard surface could not bind %s:%s: %s", args.host, args.port, exc)
         return 2
+
+    try:
+        server.serve_forever()
+    finally:
+        server.stop()
     return 0

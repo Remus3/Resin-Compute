@@ -31,11 +31,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from core import domains, resin
 from core.log_setup import get_logger
+from core.state_io import snapshot_age
 from core.types import AccountState, CurrencyKind
 
 _log = get_logger(__name__)
@@ -85,12 +86,61 @@ class Panel:
             raise ValueError(f"panel {self.panel_id} is not wired but carries {len(self.rows)} rows")
 
 
+#: A reading older than this is called stale. Chosen against the upstream
+#: refresh cycle rather than arbitrarily: an Enka showcase refreshes on a ttl
+#: measured in minutes, so anything past an hour is certainly not current.
+STALE_AFTER = timedelta(hours=1)
+
+
+def _humanise(age: timedelta) -> str:
+    """Render an age the way a person reads it, coarsest useful unit first."""
+    seconds = int(age.total_seconds())
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, _ = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}h {minutes:02d}m"
+    days, hours = divmod(hours, 24)
+    return f"{days}d {hours}h"
+
+
 @dataclass(frozen=True)
 class Dashboard:
     """Everything one render needs, and a summary of how much of it is live."""
 
     generated_at: datetime
     panels: tuple[Panel, ...] = ()
+    source_age: timedelta | None = None
+
+    @property
+    def freshness(self) -> str:
+        """How old the underlying reading is, in words.
+
+        THE WHOLE REASON THIS IS ON THE BOARD RATHER THAN OPTIONAL. The dashboard
+        renders a snapshot written by the headless lane, not a live query. A
+        cached roster shown with no age is indistinguishable from a live one,
+        which is exactly the confusion the live-state-first rule exists to
+        prevent - and the confusion is silent, because a stale roster looks
+        perfectly plausible.
+
+        `None` is NOT zero. An account that has never synced has no reading, and
+        saying "0s ago" would present an absence as a measurement.
+        """
+        if self.source_age is None:
+            return "no reading yet"
+        return f"synced {_humanise(self.source_age)} ago"
+
+    @property
+    def is_stale(self) -> bool:
+        """True when the reading is old enough to distrust.
+
+        A never-synced account is NOT stale - it is empty, which is a different
+        problem and already visible in every panel saying so.
+        """
+        return self.source_age is not None and self.source_age > STALE_AFTER
 
     def panel(self, panel_id: str) -> Panel:
         for panel in self.panels:
@@ -364,4 +414,8 @@ def build_dashboard(
                     waiting_on=_DEGRADED,
                 )
             )
-    return Dashboard(generated_at=now, panels=tuple(panels))
+    return Dashboard(
+        generated_at=now,
+        panels=tuple(panels),
+        source_age=snapshot_age(account, now),
+    )

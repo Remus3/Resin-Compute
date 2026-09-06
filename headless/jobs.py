@@ -554,6 +554,65 @@ def reconcile_state(context: JobContext) -> JobResult:
 
 
 @job(
+    name="persist_state",
+    description="Write the reconciled account down so the dashboard can start cold.",
+    cadence=CADENCE_PER_PASS,
+    depends_on=("reconcile_state",),
+)
+def persist_state(context: JobContext) -> JobResult:
+    """Persist the reconciled account as a DISPLAY snapshot.
+
+    WHY THIS EXISTS. `reconcile_state` rebuilds the account from the live
+    response every pass and the process then exits. The dashboard is a separate
+    process that starts cold, so with nothing on disk every panel correctly but
+    uselessly reported having no data behind it. This is that file.
+
+    WHY IT DOES NOT BREAK LIVE-STATE-FIRST, which is the obvious objection. The
+    snapshot is WRITE-ONLY from the headless lane's point of view. Nothing here
+    ever reads it back, so no pass is ever seeded from a cache; reconciliation
+    still derives from the current response and only the current response. The
+    only reader is `surface/`, which renders it alongside its age.
+    `tests/test_headless_persist_state.py` asserts the absence of a read
+    structurally rather than trusting this paragraph, because a cache that
+    quietly starts being read looks like a hit, not like a bug.
+
+    A PASS THAT PRODUCED NO STATE WRITES NOTHING. Overwriting a good snapshot
+    with an empty one because a fetch failed is strictly worse than leaving
+    yesterday's reading in place and letting the surface say how old it is.
+    """
+    name = "persist_state"
+    state = context.state
+    if state is None:
+        return skipped(name, "no reconciled state in this pass - existing snapshot left untouched")
+
+    if context.dry_run:
+        return skipped(name, "dry run - would write the account snapshot")
+
+    from core.state_io import DEFAULT_STATE_FILENAME, write_state
+
+    override = context.options.get("state_path")
+    if override:
+        target = Path(str(override))
+    else:
+        config_mod = _try_import("core.config")
+        load_config = getattr(config_mod, "load_config", None) if config_mod else None
+        data_dir = Path(load_config().data_dir) if callable(load_config) else Path("data")
+        target = data_dir / DEFAULT_STATE_FILENAME
+
+    if not write_state(target, state):
+        # write_state is fail-soft and has already logged the raw error. The
+        # message here names the FILE and never the directory, because a path
+        # under the user profile carries the Windows account name.
+        return failed(name, f"could not write {target.name} - see the log")
+
+    return passed(
+        name,
+        f"snapshot written to {target.name} - {len(state.roster)} roster entries",
+        roster_size=len(state.roster),
+    )
+
+
+@job(
     name="recompute_plan",
     description="Re-solve the objective DAG and the task scheduler.",
     cadence=CADENCE_DAILY,

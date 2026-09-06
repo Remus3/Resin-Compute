@@ -276,3 +276,64 @@ def test_a_panel_builder_that_raises_degrades_that_panel_and_not_the_board():
     assert panel.state is not PanelState.READY
     assert "Traceback" not in panel.waiting_on
     assert "AttributeError" not in panel.waiting_on
+
+
+# ---------------------------------------------------------------------------
+# Freshness - a snapshot rendered without its age reads as a live reading
+# ---------------------------------------------------------------------------
+
+
+def test_a_board_built_from_a_never_synced_account_says_so():
+    """NONE IS NOT ZERO. 'no reading yet' and 'synced 0 seconds ago' are
+    different facts, and only one of them is true for a fresh account."""
+    board = build_dashboard(account(), now=NOW)
+    assert board.source_age is None
+    assert "no reading" in board.freshness.lower()
+
+
+def test_a_board_reports_how_old_its_reading_is():
+    from datetime import timedelta
+
+    state = account()
+    state.last_synced_at = NOW - timedelta(hours=3, minutes=12)
+    board = build_dashboard(state, now=NOW)
+    assert board.source_age == timedelta(hours=3, minutes=12)
+    assert "3h" in board.freshness
+
+
+def test_a_recent_reading_reads_as_minutes_not_a_bare_timestamp():
+    from datetime import timedelta
+
+    state = account()
+    state.last_synced_at = NOW - timedelta(minutes=7)
+    board = build_dashboard(state, now=NOW)
+    assert "7m" in board.freshness
+
+
+def test_freshness_never_reports_a_negative_age():
+    """A clock that moved backwards, or a snapshot written by another machine."""
+    from datetime import timedelta
+
+    state = account()
+    state.last_synced_at = NOW + timedelta(hours=5)
+    board = build_dashboard(state, now=NOW)
+    assert board.source_age == timedelta(0)
+
+
+def test_a_stale_reading_is_flagged_as_stale():
+    from datetime import timedelta
+
+    state = account()
+    state.last_synced_at = NOW - timedelta(days=2)
+    board = build_dashboard(state, now=NOW)
+    assert board.is_stale
+    assert not build_dashboard(account(), now=NOW).is_stale
+
+
+def test_a_fresh_reading_is_not_flagged_as_stale():
+    from datetime import timedelta
+
+    state = account()
+    state.last_synced_at = NOW - timedelta(minutes=2)
+    board = build_dashboard(state, now=NOW)
+    assert not board.is_stale
