@@ -68,7 +68,25 @@ venv/
 env/
 
 # --- Local-only tooling config (may carry server URLs or tokens) --------
-.claude/
+# The blanket ignore stays: settings.local.json and the session/cache junk under
+# .claude/ are per-machine and can carry server URLs or tokens.
+#
+# THE COMMAND DOCS ARE THE EXCEPTION, and it is not a preference. A ritual that
+# is not version controlled does not reach a fresh clone, is not scanned by
+# docs-guards.yml, and cannot be reviewed in a diff - the same shape of failure
+# as core.hooksPath, where the tracked directory is useless if nothing points at
+# it. Riot Commander ran with 11 command docs under zero version control and its
+# drift guard names that as one of the breaches that cost it a whole session;
+# RedMoon, Clockspeed and Lanternlight all track theirs. So do we.
+#
+# A negation cannot re-include a file whose PARENT DIRECTORY is excluded, so the
+# exclusions below are on directory CONTENTS (`dir/*`) rather than on the
+# directories themselves. Writing `.claude/` here instead would make the three
+# negations that follow silently dead.
+.claude/*
+!.claude/commands/
+.claude/commands/*
+!.claude/commands/*.md
 .mcp.json
 
 # --- Editor / IDE -------------------------------------------------------

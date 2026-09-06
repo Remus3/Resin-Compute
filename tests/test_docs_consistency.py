@@ -45,7 +45,13 @@ TREE_ROOTS = (
 
 #: Documents whose pointers must all resolve. These are the ones a session is
 #: told to read, so a dead pointer in them costs real time.
-GOVERNING_DOCS = ("CLAUDE.md", "README.md", "ROADMAP.md")
+#:
+#: `.claude/commands/done.md` is here because it is the densest collection of
+#: paths in the tree - it names the gates, the workflows, the hooks and the
+#: hand-off - and it is read at the moment a session is wrapping up, which is
+#: the worst possible time to discover a pointer went stale. It is not under
+#: `docs/`, so the directory sweep below does not reach it.
+GOVERNING_DOCS = ("CLAUDE.md", "README.md", "ROADMAP.md", ".claude/commands/done.md")
 
 #: File suffixes this tree actually contains. A backticked token whose last
 #: segment carries a dot that is NOT one of these is a dotted symbol reference -
