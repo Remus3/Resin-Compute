@@ -124,11 +124,33 @@ Requires Python 3.11 or newer.
 fresh clone runs **zero** hooks until you set it. The tracked `.githooks/`
 directory is inert until then.
 
-```bash
-git clone <your-remote> resin-compute
-cd resin-compute
+On Legion, the canonical checkout is `C:\Resin Compute`:
+
+```powershell
+git clone https://github.com/Remus3/Resin-Compute.git "C:\Resin Compute"
+cd "C:\Resin Compute"
 python scripts/install_hooks.py
 ```
+
+The install path contains a space, deliberately, matching `C:\Riot Commander\`.
+That is verified rather than assumed: the whole tree was run from a
+space-containing path before this was written - ruff, both suites, the headless
+smoke test, the bootstrap script and the supervisor dry-run all pass, and the
+git hooks fire and block a banned glyph with HEAD unchanged.
+
+The pieces that make it safe are load-bearing, so do not "simplify" them:
+
+- `.githooks/*` quote every expansion (`"$ROOT/..."`, `"$PY"`), and `$ROOT`
+  comes from `git rev-parse --show-toplevel`, which returns the space.
+- `ops/supervisor.py` builds its child command as a LIST and never passes
+  `shell=True`, so nothing re-parses the path.
+- `ops/install_scheduled_task.ps1` uses `-LiteralPath` and `Join-Path`, and
+  concatenates rather than interpolates.
+- `ops/ResinCompute-Supervisor.xml` keeps `<Command>`, `<Arguments>` and
+  `<WorkingDirectory>` as separate elements, so Task Scheduler handles the
+  space natively and no manual quoting is needed.
+
+Any new script that touches the install path must hold to the same rules.
 
 ### 2. Install dev dependencies
 
