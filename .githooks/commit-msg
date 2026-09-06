@@ -1,0 +1,58 @@
+#!/bin/sh
+# ResinCompute commit-msg hook.
+#
+# Install per-clone with:
+#   python scripts/install_hooks.py        (sets core.hooksPath for you)
+# or directly:
+#   git config core.hooksPath .githooks
+#
+# THREE jobs, and all three must stay in THIS file. Riot Commander kept two of
+# them in two different files - the trailer strip only in the untracked
+# `.git/hooks/commit-msg`, the subject validation only in the tracked one - so
+# whichever file `core.hooksPath` resolved to, one of the two silently did not
+# run. Do not split them again.
+#
+# THE ORDER IS LOAD-BEARING, not stylistic. Each step must see the message the
+# previous step produced.
+
+set -e
+
+ROOT="$(git rev-parse --show-toplevel)"
+PY="${PYTHON:-python3}"
+
+if ! command -v "$PY" >/dev/null 2>&1; then
+    PY=python
+fi
+
+# 1. Operator policy: never emit a `Co-Authored-By: Claude` trailer.
+#
+# STRIP it rather than REJECT it. A session that adds one out of habit still
+# commits cleanly, and the trailer simply is not in the message that lands.
+# This is why its absence reads as an authoring omission rather than as a
+# rejection - do not file that as a defect, and do not audit for it with a bare
+# `grep -ci 'Co-Authored-By'`, which also matches prose ABOUT the trailer.
+# Anchor the pattern and read the message TAIL.
+#
+# Runs FIRST so steps 2 and 3 both see the final message.
+# `|| true` because grep exits 1 when it filters away every line.
+tmp="$1.rcfilt"
+grep -v -i '^Co-Authored-By: Claude' "$1" > "$tmp" || true
+mv "$tmp" "$1"
+
+# 2. Banned glyphs in the MESSAGE.
+#
+# This half CANNOT live in pre-commit. Git's order is
+#   pre-commit -> prepare the message -> commit-msg
+# so `.git/COMMIT_EDITMSG` DOES NOT EXIST YET when pre-commit runs and there is
+# nothing to scan. Splitting the gate across the two hooks is required, not
+# stylistic.
+#
+# The failure mode is silent, which is why it survived in Riot Commander: with
+# the gate invoked only from pre-commit, the staged-content and ruff halves
+# still fired - so the gate LOOKED healthy - while a U+2014 em-dash in a commit
+# SUBJECT committed clean.
+"$PY" "$ROOT/tools/precommit_gate.py" --message-file "$1" || exit 1
+
+# 3. Validate the subject line against Conventional Commits. Runs LAST so it
+# judges the message that will actually be committed.
+"$PY" "$ROOT/scripts/precommit_msg_check.py" "$1" || exit 1

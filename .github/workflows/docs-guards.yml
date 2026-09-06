@@ -1,0 +1,135 @@
+# The complement of ci.yml's docs path-split.
+#
+# WHY THIS PAIRING EXISTS
+# -----------------------
+# ci.yml carries `paths-ignore: ['**/*.md']`, so a docs-only commit triggers NO
+# workflow at all. That is a deliberate minute saver and it is worth keeping.
+# On its own, though, it leaves two holes:
+#
+#   1. Test modules that READ tracked .md off disk and assert on its CONTENT
+#      can be turned RED by a prose edit. With no workflow firing, nothing is
+#      watching. Riot Commander hit this exactly: one docs-only commit pushed a
+#      table past a byte cap and broke a guard, and the docs-only FIX for it
+#      also ran no CI, so the fix's own green was never machine-confirmed.
+#   2. The 7-bit-ASCII hard rule reaches .md as much as it reaches .py, and the
+#      local commit-time gate only covers a clone that has run
+#      `scripts/install_hooks.py`. A commit made from a fresh clone, or by an
+#      automated routine that never installs hooks, is seen by CI or by nobody.
+#
+# So this workflow fires on exactly what ci.yml declines, and runs ONLY the two
+# things that are cheap and .md-shaped. The minute saver survives intact: a
+# prose edit that no guard reads still skips the full suite, the compile sweep,
+# ruff, mypy and the headless smoke.
+#
+# Do not remove one file without the other, and keep the two filters
+# complementary: an entry added to ci.yml's `paths-ignore` needs the matching
+# entry in `paths` here, in the same commit.
+#
+# THE GUARD LIST IS NOT WRITTEN HERE. A hand-maintained universe in YAML is
+# green over every module added after it was written. It is derived from
+# `git ls-files` at CI time instead, so a guard added tomorrow is selected
+# tomorrow.
+#
+# Paths are repo-root relative - see the header of ci.yml.
+
+name: docs-guards
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.md'
+      # Edits to the mechanism itself must re-run the mechanism.
+      - '.github/workflows/docs-guards.yml'
+      - 'tools/precommit_gate.py'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*.md'
+      - '.github/workflows/docs-guards.yml'
+      - 'tools/precommit_gate.py'
+  workflow_dispatch:
+
+# A newer docs push supersedes an in-flight one, same shape as ci.yml.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+# Read-only, and it stays that way. Riot Commander elevated its equivalent job
+# to `contents: write` for an auto-repair-and-push step; that is a real answer
+# to a real problem there, and it is not this tree's problem yet. Do not
+# elevate this without a recorded reason.
+permissions:
+  contents: read
+
+jobs:
+  md-guards:
+    name: guards that read docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The selection below shells out to `git ls-files`, which needs a
+          # real index. A depth-1 clone provides one; being explicit that this
+          # job is git-dependent.
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dev deps
+        run: |
+          python -m pip install --upgrade pip
+          # This job runs on the docs half of all commits, so it installs the
+          # same small dev set the rest of the tree uses and nothing more. The
+          # runtime is stdlib-only, so there is no second install to skip.
+          pip install -r requirements-dev.txt
+
+      - name: ASCII hygiene over tracked .md
+        # Runs FIRST because it is seconds long and it is the check most likely
+        # to fire on a prose edit. Reuses the very same banned-glyph engine the
+        # git hooks use (tools/precommit_gate.py --scan-files), so CI and the
+        # commit-time gate can never disagree about what the rule means - two
+        # rules enforcing one hard rule is how the looser one ends up deciding.
+        run: |
+          set -euo pipefail
+          git ls-files '*.md' > md_files.txt
+          echo "tracked .md files: $(wc -l < md_files.txt)"
+          xargs -r -a md_files.txt python tools/precommit_gate.py --scan-files
+
+      - name: Select the guards that read tracked .md
+        run: |
+          set -euo pipefail
+          # Derived, never hardcoded. Any test module that mentions a .md path
+          # is a candidate; the set is recomputed on every run from the index.
+          git ls-files '*/tests/*.py' 'tests/*.py' > candidate_tests.txt || true
+          : > md_guards.txt
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            if grep -qE '\.md([^a-zA-Z0-9]|$)' "$f"; then
+              printf '%s\n' "$f" >> md_guards.txt
+            fi
+          done < candidate_tests.txt
+          echo "selected $(wc -l < md_guards.txt) md-reading guard module(s):"
+          cat md_guards.txt
+
+      - name: Run the guards that read tracked .md
+        run: |
+          set -euo pipefail
+          if [ ! -s md_guards.txt ]; then
+            # Legitimately possible while the tree is young. Say so loudly
+            # rather than reporting a silent green over zero assertions.
+            echo "::notice::no test module reads tracked .md yet - nothing to run"
+            exit 0
+          fi
+          # -r so an empty list can never hand pytest zero arguments, which
+          # would make it collect the WHOLE tree and report a green that this
+          # job did not earn.
+          xargs -r -a md_guards.txt python -m pytest -q --tb=short

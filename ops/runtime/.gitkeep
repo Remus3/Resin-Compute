@@ -1,0 +1,11 @@
+# ops/runtime/ - mutable runtime state, written atomically.
+#
+# Holds health.json, supervisor_health.json and any pid file. Every file in
+# here is written by the tmp-then-replace path in ops/health.py, so a reader
+# polling mid-write never sees a partial document.
+#
+# This marker is tracked so the directory exists in a fresh clone. .gitignore
+# ignores the CONTENTS (`ops/runtime/*`) and re-admits this one file with a
+# negation. A bare `ops/runtime/` rule would swallow the marker too, and git
+# will not re-include a file whose parent directory is excluded - which is why
+# the rule is written against the contents rather than the directory.

@@ -1,0 +1,46 @@
+# ResinCompute - line-ending and diff policy.
+#
+# EOL POLICY, and it is load-bearing rather than cosmetic.
+#
+# Riot Commander runs core.autocrlf=true on its Windows fleet and paid for it
+# twice: 21 tracked .py files ended up with doubled CR line endings (the
+# 2026-05-19 rc_facts.py incident), and a byte-compared generated sentinel came
+# back CRLF on every fresh clone. Forcing eol=lf pins the bytes in the repo AND
+# in the working tree, which overrides autocrlf so neither can recur.
+#
+# The .githooks/ shims are the sharper case. They are `#!/bin/sh` scripts. A
+# CRLF shebang line makes the kernel look for an interpreter literally named
+# "/bin/sh\r", which does not exist - so the hook fails with an unreadable
+# "bad interpreter" error, or on some setups is skipped, and the whole
+# commit-time gate is silently absent. A gate that is absent without saying so
+# is the failure mode this scaffold exists to prevent.
+
+# Sensible default: git decides what is text, and normalises it to LF in the
+# repo.
+* text=auto eol=lf
+
+# Explicit for the surfaces where a wrong ending is a real failure, not a
+# diff nuisance.
+*.py       text eol=lf
+*.sh       text eol=lf
+*.md       text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.ini      text eol=lf
+*.toml     text eol=lf
+*.json     text eol=lf
+.githooks/* text eol=lf
+
+# Windows-only helpers, if any are ever added, must keep CRLF - cmd.exe and
+# PowerShell 5.1 both mis-parse an LF-only script in places.
+*.bat      text eol=crlf
+*.ps1      text eol=crlf
+
+# Binary - never diffed, never EOL-converted.
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.ico      binary
+*.gz       binary
+*.zip      binary
+*.db       binary

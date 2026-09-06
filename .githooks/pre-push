@@ -1,0 +1,66 @@
+#!/bin/sh
+# ResinCompute pre-push hook: do not push a red tree.
+#
+# Install per-clone with:
+#   python scripts/install_hooks.py        (sets core.hooksPath for you)
+#
+# WHY THIS IS NOT A PORT
+# ----------------------
+# Riot Commander's pre-push is the Git LFS uploader and nothing else. This tree
+# has no LFS objects, so there is nothing to inherit and a verbatim port would
+# be a hook that exists to fail on a missing `git-lfs`. What is worth carrying
+# across is the SHAPE of RC's gating: cheap checks run at commit time, the
+# suites run before anything leaves the machine.
+#
+# The dual-suite invocation matches pytest.ini exactly: the two suites are run
+# SEPARATELY and never as `pytest .` from the root.
+#
+# ESCAPE HATCH: RESIN_SKIP_PREPUSH=1 git push
+# Use it for a docs-only or work-in-progress push. CI is still the backstop.
+#
+# FAIL-OPEN ON A MISSING TOOL, never fail-silent. A clone without dev deps
+# installed must still be able to push; it just gets told which half did not
+# run. Same rule as tools/precommit_gate.py.
+
+set -e
+
+# Drain the ref list git writes to our stdin. We gate the whole push rather
+# than per-ref, so the content is unused - but leaving it unread is untidy.
+cat > /dev/null
+
+if [ "${RESIN_SKIP_PREPUSH:-0}" = "1" ]; then
+    echo "pre-push: SKIPPED via RESIN_SKIP_PREPUSH=1 - CI is now your only gate."
+    exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+PY="${PYTHON:-python3}"
+
+if ! command -v "$PY" >/dev/null 2>&1; then
+    PY=python
+fi
+
+cd "$ROOT"
+
+# 1. Lint the whole tree. Cheap, and it catches the case the commit-time gate
+# deliberately does not: a finding on a line this commit did not touch.
+if "$PY" -m ruff --version >/dev/null 2>&1; then
+    "$PY" -m ruff check . || exit 1
+else
+    echo "pre-push WARNING: ruff not importable - the lint half did NOT run." >&2
+    echo "  pip install -r requirements-dev.txt" >&2
+fi
+
+# 2. Both suites, separately. See pytest.ini: the engine package is
+# self-validating and is mirrored as a standalone unit, so collecting it under
+# a root-wide run is how a sibling project earned an import-file-mismatch
+# incident.
+if "$PY" -m pytest --version >/dev/null 2>&1; then
+    "$PY" -m pytest tests || exit 1
+    "$PY" -m pytest agents/pity_engine || exit 1
+else
+    echo "pre-push WARNING: pytest not importable - the suites did NOT run." >&2
+    echo "  pip install -r requirements-dev.txt" >&2
+fi
+
+echo "pre-push: OK"

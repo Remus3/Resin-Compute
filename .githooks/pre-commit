@@ -1,0 +1,56 @@
+#!/bin/sh
+# ResinCompute pre-commit hook.
+#
+# Install per-clone with:
+#   python scripts/install_hooks.py        (sets core.hooksPath for you)
+# or directly:
+#   git config core.hooksPath .githooks
+#
+# WHY THIS FILE IS THE AUTHORITATIVE ONE
+# --------------------------------------
+# `.git/hooks/` is NOT version controlled, so a hook that lives only there does
+# not reach a fresh clone, another machine, or CI. THIS directory is tracked,
+# and `core.hooksPath` must point at it.
+#
+# Riot Commander proved what happens otherwise. Its tracked hook and its active
+# `.git/hooks/pre-commit` diverged for long enough that three tracked guards
+# silently stopped running, and both generated artifacts had drifted by the
+# time anyone noticed. The cause was an installer that WROTE `.git/hooks/
+# pre-commit` with a single step, clobbering everything else. That is why
+# `scripts/install_hooks.py` sets `core.hooksPath` and writes no hook file -
+# do not reintroduce a hook-writing installer.
+#
+# A fresh clone runs ZERO hooks until `core.hooksPath` is set, because that
+# setting is local config and is not cloned. Absence is silent. Run the
+# installer first thing in a new clone.
+#
+# ORDER IS DELIBERATE: the glyph/ruff gate runs FIRST so a bad commit fails
+# fast, before the (slower) compile sweep.
+
+set -e
+
+ROOT="$(git rev-parse --show-toplevel)"
+PY="${PYTHON:-python3}"
+
+# Fall back to `python` where `python3` is not on PATH (Windows, some venvs).
+if ! command -v "$PY" >/dev/null 2>&1; then
+    PY=python
+fi
+
+# 1. Banned glyphs on STAGED lines + py_compile + NET-NEW ruff.
+#
+# A git-level gate is channel-independent: a human at a terminal, a headless
+# agent run, and a scripted commit all get it. An editor-side or agent-side
+# hook does not - Riot Commander measured a headless run committing a banned
+# em-dash straight through while these git hooks caught it.
+#
+# The gate reads a COMMAND STRING on stdin and self-gates on it, so "git
+# commit" is what tells it a commit is in flight.
+echo "git commit" | "$PY" "$ROOT/tools/precommit_gate.py" || exit 1
+
+# 2. py_compile every staged .py. A syntax error here is a silent crash under a
+# windowless interpreter at runtime, so it must never enter history.
+#
+# Deliberately separate from step 1: the gate is fail-OPEN (it must never wedge
+# the repo), while a file that does not parse has no legitimate exception.
+"$PY" "$ROOT/scripts/precommit_pycompile.py" || exit 1

@@ -1,0 +1,36 @@
+# ResinCompute runtime dependencies: NONE, deliberately.
+#
+# This file is intentionally empty of pins. It is kept - rather than deleted -
+# because an absent requirements.txt reads as an oversight, while an empty one
+# with this note records a decision.
+#
+# THE DECISION
+# ------------
+# Everything the runtime needs is in the standard library:
+#
+#   urllib.request   the Enka / Project Amber HTTP fetch. A custom User-Agent
+#                    is required by Enka policy and urllib sets headers fine,
+#                    so `requests` buys nothing here.
+#   http.server      the PityEngine local compute service on :8870. Same shape
+#                    as Riot Commander's Daemon Slayer on :8860, which is also
+#                    stdlib-only.
+#   json             every payload and every state file.
+#   dataclasses      the type contract in core/types.py. SPEC_SCAFFOLD section 1
+#                    delivers the brief's TypeScript interfaces as dataclasses,
+#                    so no pydantic dependency is implied by them.
+#   decimal          exact arithmetic where a float would drift.
+#
+# WHY IT MATTERS
+# --------------
+# The headless lane and the engine service both have to start on a bare
+# interpreter with no install step. Riot Commander has a standing ban on a
+# dep-less interpreter running a tracked invocation precisely because the two
+# channels there disagree about which Python owns the packages; a zero-runtime-
+# dependency tree cannot have that class of bug at all.
+#
+# A third-party runtime dependency is therefore a real decision, not a
+# convenience: add it here only with the reason recorded next to the pin, and
+# re-check that the headless lane still starts on a clean interpreter.
+#
+# Development and CI tooling (ruff / pytest / mypy) lives in
+# requirements-dev.txt and is never imported by shipped code.

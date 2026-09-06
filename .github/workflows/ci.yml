@@ -1,0 +1,170 @@
+# ResinCompute CI.
+#
+# PATHS ARE REPO-ROOT RELATIVE. This workflow is written as if `resin-compute/`
+# IS the repository root, because that is what it becomes once this tree is
+# extracted to its own repo. There is deliberately no `cd resin-compute` and no
+# `working-directory:` anywhere below - if the tree is ever run from inside a
+# parent repo instead, the fix is a single `defaults.run.working-directory`
+# here, not a `cd` sprinkled through fifteen steps.
+#
+# THE DOCS PATH-SPLIT, and why this file has a sibling
+# ----------------------------------------------------
+# `paths-ignore: ['**/*.md']` below is a minute saver: a docs-only commit skips
+# the whole suite, and in a repo where a large share of commits are the
+# per-session notes sync that is most of the CI bill.
+#
+# It also opens a hole, and Riot Commander fell in it twice in a row. Test
+# modules that READ tracked .md off disk and assert on its CONTENT go red on a
+# docs-only commit - which triggers NO workflow at all, so nothing is watching.
+# The docs-only FIX then also ran no CI, so its own green was never confirmed
+# either.
+#
+# `.github/workflows/docs-guards.yml` is the complement: it fires on exactly
+# what this file declines. Do not remove one without the other. If you add a
+# `paths-ignore` entry here, add the matching `paths` entry there in the same
+# commit.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+  # paths-ignore does not apply to a schedule, so the nightly run covers the
+  # whole tree including anything a docs-only push skipped.
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+# Cancel a superseded in-progress run when a newer commit lands on the same
+# ref, so rapid pushes do not each bill to completion. event_name is IN the
+# group on purpose: without it a push would cancel the nightly schedule run, or
+# the reverse. Only same-event runs supersede each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+# Least privilege, declared at workflow level so any job added later inherits
+# it. This workflow only reads the tree; nothing here needs write.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: lint, types, dual suite, headless smoke
+    runs-on: ubuntu-latest
+    # The JOB ceiling must exceed every STEP ceiling below with room to spare.
+    # A step killed by its own timeout is marked FAILED; a job killed by the
+    # job ceiling is marked CANCELLED - the same word GitHub uses for a run
+    # superseded by the concurrency group above, so a timed-out branch would
+    # read as neither pass nor fail. Keep job > step or the conclusion goes
+    # silent.
+    timeout-minutes: 20
+
+    steps:
+      # Action majors match Riot Commander's, which is the tree these
+      # workflows are ported from and the one where they are proven green.
+      - uses: actions/checkout@v6
+        with:
+          # Shallow is fine TODAY: nothing in this tree asks git about history.
+          # If a guard is ever added that runs `git log` over the past (was
+          # this path once tracked, and when did it stop), raise this to 0 -
+          # on a depth-1 clone git answers "never" rather than erroring, so
+          # such a guard does not fail, it asserts the wrong thing.
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v6
+        with:
+          # 3.11 is the pin. ruff.toml targets py311 and mypy.ini declares
+          # python_version 3.11; running CI on anything else would validate a
+          # language level the tree does not claim.
+          python-version: '3.11'
+          cache: pip
+          # Both files, so a change to either busts the cache. The default
+          # (**/requirements.txt) would miss the dev pins entirely, which is
+          # the file that actually decides what gets installed here.
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dev deps
+        run: |
+          python -m pip install --upgrade pip
+          # requirements.txt is deliberately EMPTY - the runtime is stdlib-only
+          # (see that file). Installing it anyway is the cheap way to notice
+          # the day that stops being true.
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: ruff lint
+        run: ruff check .
+
+      - name: py_compile sweep over every .py
+        # Not redundant with ruff. Ruff parses with its own Rust frontend; this
+        # asserts that the pinned CPython can compile every file in the tree,
+        # which is the property that matters at runtime - a syntax error under
+        # a windowless interpreter is a SILENT crash, so it must never reach a
+        # branch.
+        run: |
+          set -euo pipefail
+          count="$(find . -name '*.py' -not -path './.venv/*' \
+                        -not -path '*/__pycache__/*' | wc -l)"
+          python -m compileall -q -x '(\.venv|__pycache__|build|dist)' .
+          echo "py_compile sweep OK over ${count} .py file(s)"
+
+      - name: mypy
+        # ADVISORY, deliberately, and this is the one line to change when that
+        # should stop being true.
+        #
+        # docs/SPEC_SCAFFOLD.md section 7 defines slice acceptance as
+        # py_compile + ruff + the slice's own pytest + no banned glyph. mypy is
+        # NOT in it. Making it blocking here would impose a requirement on
+        # every other slice that its written contract does not carry, and a
+        # scaffold whose first CI run is red for an unagreed reason teaches
+        # people to ignore the red. Flip `continue-on-error` to false (or drop
+        # the line) once the tree settles and section 7 is amended to match.
+        continue-on-error: true
+        run: mypy
+
+      # THE TWO SUITES RUN SEPARATELY, and never as `pytest .` from the root.
+      # pytest.ini says why: the engine package is self-validating and is
+      # mirrored as a standalone unit, so a root-wide collection is how a
+      # sibling project earned its import-file-mismatch incident. Two steps
+      # rather than one command with two arguments, so the summary names which
+      # half failed.
+      - name: Application suite (tests/)
+        timeout-minutes: 10
+        run: python -m pytest tests
+
+      - name: Engine suite (agents/pity_engine)
+        timeout-minutes: 10
+        run: python -m pytest agents/pity_engine
+
+      - name: Headless lane smoke test
+        timeout-minutes: 5
+        # The lane has to START on this runner, on a bare interpreter with no
+        # runtime dependencies installed. A green unit suite does not prove
+        # that: the suites import modules, while the lane is entered through
+        # `python -m`, which exercises __main__ dispatch, argument parsing and
+        # the whole import graph in one shot.
+        #
+        # --dry-run so nothing is fetched and nothing is written; --once so it
+        # performs a single pass instead of entering its scheduler loop.
+        #
+        # The exit code is checked EXPLICITLY rather than left to the shell's
+        # errexit, so the log carries the observed status either way.
+        run: |
+          set +e
+          python -m headless.runner --once --dry-run
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::error::headless lane smoke exited ${status}, expected 0"
+            exit 1
+          fi
+          echo "headless lane smoke: exit 0"

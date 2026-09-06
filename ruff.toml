@@ -1,0 +1,66 @@
+# ruff.toml - ResinCompute
+#
+# Ported from Riot Commander's ruff.toml. Two deliberate divergences from the
+# parent, both recorded in docs/SPEC_SCAFFOLD.md section 1:
+#
+#   1. target-version is py311, not py39. RC targets py39 because it has a
+#      deployed py39 surface. This is a new tree with none, so the UP007 /
+#      UP035 / UP045 / UP006 suppressions RC needs for py39 compatibility are
+#      NOT inherited - modern union and builtin-generic syntax is allowed and
+#      pyupgrade is left free to enforce it.
+#
+#   2. F401 and F841 are NOT globally ignored. RC suppresses both as "too
+#      noisy" against an existing large tree. A greenfield tree has no such
+#      debt, and both catch real defects, so they stay on. The one place F401
+#      is genuinely expected is __init__.py re-exports, which is scoped below.
+#
+# Everything else is RC's config as-is, including the BLE ratchet.
+
+target-version = "py311"
+line-length = 120
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes (undefined names, unused imports)
+    "I",    # isort (import ordering)
+    "UP",   # pyupgrade (safe modern syntax)
+    "B",    # flake8-bugbear (common bugs)
+    "BLE",  # flake8-blind-except - ratchet: no NEW bare `except Exception`
+]
+ignore = [
+    "E501",   # line too long - not enforced, formatter's job
+    "E741",   # ambiguous variable names - common in short math loops
+    "B008",   # function calls in default args - used intentionally
+    "B905",   # zip() without strict= - noisy on fixed-length pairs
+]
+
+exclude = [
+    "__pycache__",
+    ".venv",
+    "ops/runtime",
+    "data",
+    "logs",
+]
+
+[lint.per-file-ignores]
+# One-off maintenance scripts are procedural; bugbear and import order are
+# both too strict for them, matching RC's own carve-out.
+"scripts/*.py" = ["B", "I"]
+# __init__.py re-exports are the point of the file.
+"*/__init__.py" = ["F401"]
+# The engine package is a fail-soft local compute service. A blind except at a
+# request boundary is the correct behaviour there - a malformed query must
+# degrade to a 400, never take the daemon down. Scoped to the engine only, so
+# the ratchet still bites everywhere else.
+"agents/pity_engine/__main__.py" = ["BLE001"]
+"headless/runner.py" = ["BLE001"]
+"ops/supervisor.py" = ["BLE001"]
+# Tests assert on constants that read as magic numbers by design.
+"tests/*.py" = ["B011"]
+"agents/pity_engine/tests/*.py" = ["B011"]
+
+[lint.isort]
+known-first-party = [
+    "core", "engines", "ingest", "headless", "ops", "agents",
+]
