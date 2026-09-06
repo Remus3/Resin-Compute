@@ -404,15 +404,43 @@ def test_a_stopped_server_releases_its_port_immediately():
 
     TIME_WAIT making a restart fail is the reason `allow_reuse_address` exists at
     all, so turning it off has to be checked for the regression it could cause.
-    """
-    first = DashboardServer(host="127.0.0.1", port=0)
-    first.start()
-    port = first.port
-    first.stop()
 
-    second = DashboardServer(host="127.0.0.1", port=port)
-    second.start()
-    try:
-        assert second.port == port
-    finally:
-        second.stop()
+    RETRIED, AND THE RETRY IS THE POINT rather than a papering-over. Dropping
+    SO_REUSEADDR made this rebind strict, which introduces a second way for it to
+    fail that has nothing to do with TIME_WAIT: the operating system can hand
+    that freed ephemeral port to some other process in the gap. Observed once as
+    a single unreproducible failure in an otherwise green suite, which is the
+    worst kind - it trains people to re-run rather than to look.
+
+    The two causes are distinguishable by their shape. A TIME_WAIT regression
+    would fail on EVERY attempt, deterministically; a third party taking one port
+    fails on that port and not on a fresh one. So the assertion is "some
+    just-released port can be rebound immediately", which is exactly the claim,
+    and it stays non-vacuous because a real regression fails all the attempts.
+    """
+    attempts = 5
+    failures: list[str] = []
+
+    for _ in range(attempts):
+        first = DashboardServer(host="127.0.0.1", port=0)
+        first.start()
+        port = first.port
+        first.stop()
+
+        second = DashboardServer(host="127.0.0.1", port=port)
+        try:
+            second.start()
+        except OSError as exc:
+            failures.append(f"{port}: {exc.__class__.__name__}")
+            continue
+        try:
+            assert second.port == port
+            return
+        finally:
+            second.stop()
+
+    raise AssertionError(
+        "a just-released port could not be rebound on any of "
+        f"{attempts} attempts, which is a TIME_WAIT regression rather than "
+        f"a stolen port: {failures}"
+    )
