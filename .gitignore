@@ -87,6 +87,9 @@ env/
 !.claude/commands/
 .claude/commands/*
 !.claude/commands/*.md
+!.claude/agents/
+.claude/agents/*
+!.claude/agents/*.md
 .mcp.json
 
 # --- Editor / IDE -------------------------------------------------------

@@ -30,19 +30,27 @@ ROOT="$(git rev-parse --show-toplevel)"
 . "$ROOT/scripts/hook_python.sh"
 PY="$(resin_pick_python)" || PY=python
 
-# 1. Operator policy: never emit a `Co-Authored-By: Claude` trailer.
+# 1. Operator policy: never emit an AGENT trailer. TWO forms, not one.
 #
-# STRIP it rather than REJECT it. A session that adds one out of habit still
+# STRIP them rather than REJECT them. A session that adds one out of habit still
 # commits cleanly, and the trailer simply is not in the message that lands.
 # This is why its absence reads as an authoring omission rather than as a
 # rejection - do not file that as a defect, and do not audit for it with a bare
 # `grep -ci 'Co-Authored-By'`, which also matches prose ABOUT the trailer.
 # Anchor the pattern and read the message TAIL.
 #
+# `Claude-Session:` WAS MISSING HERE UNTIL 2026-09-06, and the gap was not
+# theoretical: a history sweep that day found BOTH forms on two commits - the
+# root commit and one made later from the same hookless clone. The hook stripped
+# the first and passed the second straight through. A policy enforced on one of
+# its two forms is a policy that reads as enforced and is not. Any new trailer
+# form goes in this list, and `tests/test_commit_trailers.py` fails if a message
+# carrying either one survives this hook.
+#
 # Runs FIRST so steps 2 and 3 both see the final message.
 # `|| true` because grep exits 1 when it filters away every line.
 tmp="$1.rcfilt"
-grep -v -i '^Co-Authored-By: Claude' "$1" > "$tmp" || true
+grep -v -i -e '^Co-Authored-By: Claude' -e '^Claude-Session:' "$1" > "$tmp" || true
 mv "$tmp" "$1"
 
 # 2. Banned glyphs in the MESSAGE.
