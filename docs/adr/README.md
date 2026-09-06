@@ -14,3 +14,4 @@ argument is not had twice.
 | [ADR-004](ADR-004-port-block.md) | Reserve 8790-8809 and migrate PityEngine off 8870 | Accepted |
 | [ADR-005](ADR-005-companion-shell.md) | An Electron companion window over a local dashboard surface | Accepted |
 | [ADR-006](ADR-006-outbound-licence.md) | GPL-3.0-or-later as the outbound licence | Accepted |
+| [ADR-007](ADR-007-orchestration-doctrine.md) | Orchestrated multi-agent sessions as the default session shape | Accepted |

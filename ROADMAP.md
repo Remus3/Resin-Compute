@@ -12,6 +12,21 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **QA the repo for going public.** Next session's task. The outbound licence is
+  settled (GPL-3.0-or-later, ADR-006) and `tests/test_licence_posture.py` guards
+  the declaration in both directions, but "licence is correct" is not the same
+  as "ready to be read by a stranger". Needs: a `README.md` that opens for an
+  outsider rather than for the operator, a stated quickstart that a fresh clone
+  can actually follow, the per-file GPL headers ADR-006 deliberately deferred,
+  and a sweep for anything machine-specific or account-specific in tracked
+  files. The repo-relocation item below is a prerequisite for the CI half.
+- ~~**Session shape and the agent roster.**~~ **DONE 2026-09-06.** The default
+  session is orchestrated, multi-agent, self-adjudicating and self-adversarial;
+  the reasoning is in ADR-007 and the roster lives in `.claude/agents/`. The
+  `/done` ritual is `.claude/commands/done.md`, and
+  `tools/publish_next_session.py` publishes the Desktop backup of the hand-off
+  from `NEXT_SESSION_PROMPT.md` so the printed block and the file cannot
+  disagree.
 - **Observe the seed-team cost table in game.** `docs/GOAL_SPEC_SEED_TEAM.md`
   records the operator's roadmap with every claim stamped verified, unverified,
   time-sensitive or refuted, and section 3.1 is the gate on a real dated plan.

@@ -147,6 +147,45 @@ echo restart > restart_trigger.txt
 Verify by reading `ops/runtime/health.json` and confirming a new `pid` and
 `alive=true`. Do not verify by looking at a window.
 
+## Session default - the shape, not an escalation
+
+**Every session is orchestrated, multi-agent, self-adjudicating and
+self-adversarial by default.** Choosing this shape needs no justification.
+Departing from it does, and the departure is recorded. The only exception is
+genuinely trivial work: a one-line cosmetic edit, a doc typo, a conversational
+answer. Substance decides, not file count.
+
+- **Orchestrated.** One merger holds the plan and the merge. Work decomposes
+  into disjoint slices BEFORE any of it starts. The merger's context stays
+  small: it holds the plan and the seams, not the implementations.
+- **Multi-agent.** Slices run in parallel on non-overlapping files, worktree
+  isolated wherever they write. Disjointness is a PRECONDITION checked before
+  dispatch, not a hope. An undeclared write-list is a merge conflict already.
+- **Self-adjudicating.** A distinct agent decides between competing outputs
+  against stated criteria. **The agent that produced a thing never grades it.**
+  Freeze the candidate before dispatch - a tree that edits itself mid-verdict
+  makes the ruling a statement about no state at all.
+- **Self-adversarial.** Findings and done-claims get an independent pass whose
+  job is to REFUTE them, defaulting to refuted when uncertain.
+
+**Agreement between two agents is not evidence.** Two agents can share one wrong
+premise. If two agree, find their shared input and test THAT. Spawn refuters
+with DISTINCT LENSES - correctness, licence, does-it-reproduce, resource
+lifetime, scope-and-siblings - never N identical skeptics.
+
+**The main thread reads, plans, dispatches, merges and reports.** It does not
+run long builds, long suites or wide sweeps inline. The operator's session stays
+free for querying and redirection.
+
+Independence is a PROMPT-LEVEL property, not a vendor-level one: it comes from
+the producer not grading its own work. Do not add a second vendor for
+"independent review".
+
+The roster lives in `.claude/agents/`, the dispatch protocol in
+`.claude/commands/orchestrated-run.md`, and the reasoning in ADR-007. Every
+agent definition repeats this section inline, because subagent context does NOT
+inherit the main thread's.
+
 ## Session workflow
 
 Scoped sessions - each focused task is one session.
