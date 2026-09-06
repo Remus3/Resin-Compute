@@ -21,6 +21,12 @@
 # FAIL-OPEN ON A MISSING TOOL, never fail-silent. A clone without dev deps
 # installed must still be able to push; it just gets told which half did not
 # run. Same rule as tools/precommit_gate.py.
+#
+# "MISSING" MEANS UNIMPORTABLE, NOT UNRESOLVABLE. This hook used to pick its
+# interpreter with `command -v`, which is a name lookup and not a capability
+# test - see scripts/hook_python.sh for the measurement. On Windows that landed
+# it on the Microsoft Store `python3` shim, which has neither tool, so the two
+# warnings below fired on EVERY push and the gate had never actually run.
 
 set -e
 
@@ -34,20 +40,25 @@ if [ "${RESIN_SKIP_PREPUSH:-0}" = "1" ]; then
 fi
 
 ROOT="$(git rev-parse --show-toplevel)"
-PY="${PYTHON:-python3}"
 
-if ! command -v "$PY" >/dev/null 2>&1; then
-    PY=python
-fi
+# Interpreter selection is SHARED with pre-commit and commit-msg. Sourced
+# rather than restated, because three private copies of one selector is how a
+# defect gets fixed in one place and left live in two.
+. "$ROOT/scripts/hook_python.sh"
 
 cd "$ROOT"
 
+# ruff and pytest are resolved SEPARATELY. They are two different capabilities
+# and a machine can carry one without the other, so one answer must not stand
+# in for the other.
+
 # 1. Lint the whole tree. Cheap, and it catches the case the commit-time gate
 # deliberately does not: a finding on a line this commit did not touch.
-if "$PY" -m ruff --version >/dev/null 2>&1; then
-    "$PY" -m ruff check . || exit 1
+if RUFF_PY="$(resin_pick_python ruff)"; then
+    "$RUFF_PY" -m ruff check . || exit 1
 else
     echo "pre-push WARNING: ruff not importable - the lint half did NOT run." >&2
+    echo "  tried: $(resin_python_candidates)" >&2
     echo "  pip install -r requirements-dev.txt" >&2
 fi
 
@@ -55,11 +66,12 @@ fi
 # self-validating and is mirrored as a standalone unit, so collecting it under
 # a root-wide run is how a sibling project earned an import-file-mismatch
 # incident.
-if "$PY" -m pytest --version >/dev/null 2>&1; then
-    "$PY" -m pytest tests || exit 1
-    "$PY" -m pytest agents/pity_engine || exit 1
+if TEST_PY="$(resin_pick_python pytest)"; then
+    "$TEST_PY" -m pytest tests || exit 1
+    "$TEST_PY" -m pytest agents/pity_engine || exit 1
 else
     echo "pre-push WARNING: pytest not importable - the suites did NOT run." >&2
+    echo "  tried: $(resin_python_candidates)" >&2
     echo "  pip install -r requirements-dev.txt" >&2
 fi
 

@@ -30,12 +30,26 @@
 set -e
 
 ROOT="$(git rev-parse --show-toplevel)"
-PY="${PYTHON:-python3}"
 
-# Fall back to `python` where `python3` is not on PATH (Windows, some venvs).
-if ! command -v "$PY" >/dev/null 2>&1; then
-    PY=python
-fi
+# Interpreter selection is SHARED with pre-push and commit-msg. This hook used
+# to fall back to `python` only when `python3` was ABSENT, which is a name
+# lookup and not a capability test - see scripts/hook_python.sh for the
+# measurement that killed that idea.
+. "$ROOT/scripts/hook_python.sh"
+
+# PREFER one that can import ruff. tools/precommit_gate.py resolves ruff at call
+# time and tries `sys.executable` FIRST, so launching it under a ruff-less
+# interpreter kills its best candidate and leaves the net-new-lint half leaning
+# on a bare `ruff` happening to sit on PATH.
+#
+# Then settle for any interpreter that RUNS: the three scripts below are
+# stdlib-only, so that is enough to keep the glyph and py_compile gates alive on
+# a clone with no dev deps.
+#
+# And if not even that resolves, keep the literal `python` so the hook ERRORS.
+# This gate is fail-CLOSED - unlike pre-push, a scan that did not run must not
+# be reported as a scan that passed.
+PY="$(resin_pick_python ruff)" || PY="$(resin_pick_python)" || PY=python
 
 # 1. Banned glyphs on STAGED lines + py_compile + NET-NEW ruff.
 #
