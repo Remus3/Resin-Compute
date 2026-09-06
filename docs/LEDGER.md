@@ -12,6 +12,86 @@ now.
 
 ---
 
+## 2026-09-06 - The public-repo audit, and the finding that refuted itself
+
+An audit session, not a fix session. Every gate was green at commit `96a8c54`
+before a line was touched, so nothing below is a broken build - each item is a
+defect a stranger would meet on a repository that is still PRIVATE. The findings
+landed in `ROADMAP.md`; the fixes are next session's work, on operator
+instruction. No builder was dispatched and no slice was merged, and that
+departure from the default orchestrated shape is recorded here rather than left
+to be inferred.
+
+**THE MOST USEFUL RESULT WAS A REFUTATION OF THIS SESSION'S OWN FINDING.** UID
+`618285856` appears in `README.md` and three test modules while every other UID
+in the tree is patently fake - `000000000`, `900000000`, `111111111`. Both the
+audit and the planner independently flagged it as a probable real account, on
+that reasoning, and both were WRONG. It is Enka.Network's own published example
+UID, verified against the primary artifact rather than against either agent's
+reasoning: it appears twice in
+`https://raw.githubusercontent.com/EnkaNetwork/API-docs/master/api.md`. Two
+agents agreeing was not evidence - they shared the premise that an
+unlabelled-looking UID is an unlabelled UID, and testing that shared premise
+against upstream is what settled it. The residual work is one line at the use
+site so the next reader does not spend the same hour reaching the same wrong
+conclusion. Verification pointer: the URL above, and `README.md` line 195.
+
+**A single-line grep missed a wrapped sentence, measured here.** The sweep for
+the dissolved copyleft rationale - "vendoring either would relicense this repo",
+which stopped being true when ADR-006 made this tree GPL-3-or-later - returned
+eight files and did not return `README.md`. The phrase wraps across
+`README.md:317-318`, so `relicense th` matches nothing on either line. A
+multiline-aware re-grep found it. Any sweep that greps for prose must assume
+wrapping; a naive one scores clean by not looking.
+
+**The licence gate REFUSED publication, and the refusal is narrow.** An
+independent read-plus-web pass cleared the substance: zero binary assets
+anywhere in the tree - no art, icons, audio or fonts, confirmed by glob rather
+than by the NOTICE's assertion about itself - zero runtime dependencies, three
+dev pins none of which is a data library, zero imports of any forbidden
+upstream, zero bulk data. Names and published drop rates are facts and are
+excluded from copyright. It refused on four text defects, all recorded in
+`ROADMAP.md`. The sharpest is that two fixtures are labelled false in a way that
+matters more once public: `seed_roster.json` and `seed_materials.json` carry
+`"_synthetic": true` on the line directly above a `"_note"` reading
+"Hand-authored seed identity table", and `data/fixtures/README.md` is titled
+"SYNTHETIC test data only" while its body says "hand-authored by this
+repository". Hand-authored is what ADR-002 requires and what `NOTICE` already
+says correctly; synthetic means invented, and real verified avatarIds are not
+invented. The true claim is also the stronger one, which is why this is worth
+fixing rather than arguing.
+
+**Per-file GPL headers: the deferral was checked and holds.** GPL-3's "How to
+Apply These Terms" sits AFTER `END OF TERMS AND CONDITIONS` in the shipped
+`LICENSE`, so it is an advisory appendix rather than a condition of the grant,
+and section 5(b) binds "the work" and binds a modifier rather than the original
+author. So the project is below best practice, NOT non-compliant, and ADR-006's
+Consequences section is correct as written. The decision still needs recording
+as a decision rather than a silence - 78 tracked `.py` and 10 tracked `.js`
+carry zero SPDX identifiers, measured this session.
+
+**Two ROADMAP claims were measured false and removed.** "Until that happens the
+CI workflows are inert" - `git rev-parse --show-toplevel` returns the tree root,
+`git remote -v` returns the standalone remote, `ci.yml` carries no
+`working-directory`, and `gh run list` shows both workflows green against this
+tree. And `docs/LEDGER.md` was listed under open work as a file to create, while
+being the file that listing appears in.
+
+**Recorded for the operator, not actionable by an agent:** two commits on `main`
+carry an agent identity as author AND committer. This is not the trailer rule -
+the trailers were stripped and are guarded by `tests/test_commit_trailers.py`,
+which reads subject and body only and never `%an`, `%ae`, `%cn` or `%ce`. That
+is the same shape as the already-recorded defect where the trailer policy was
+enforced on one of its two forms. A second history rewrite is the operator's
+call; the guard extension cannot be written before it, because it would fail at
+HEAD.
+
+Counts observed 2026-09-06 at `96a8c54`, as a reading and not a claim about now:
+licence QA exit 0; docs QA exit 0; `scripts/qa_companion.py` 17 passed, 0
+failed, 1 skipped; ruff clean; `pytest tests` 697 passed, 1 skipped;
+`pytest agents/pity_engine` 76 passed; `shell` node --test 52 passed; headless
+smoke exit 0.
+
 ## 2026-09-06 - The session shape, the ritual, and three silent gates
 
 The default session here is now orchestrated, multi-agent, self-adjudicating and
