@@ -4,7 +4,7 @@
   "private": true,
   "description": "Electron companion window for ResinCompute. Node exists solely for this shell.",
   "main": "main.js",
-  "license": "UNLICENSED",
+  "license": "GPL-3.0-or-later",
   "engines": {
     "node": ">=22.12.0"
   },

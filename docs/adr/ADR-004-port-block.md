@@ -80,8 +80,8 @@ this block starts one port into a sibling's range.
 
 A grep for `879[0-9]` and `880[0-9]` across all six sibling trees returned hits
 only in vendored JavaScript, decompiled game assets, a strings dump and one
-`docs/LEDGER.md` line - plus Amberstone's `range(8770, 8790)`, the exclusive end
-discussed above. **No bind site and no registry claim** in 8790-8809.
+line of Lanternlight's own ledger document - plus Amberstone's
+`range(8770, 8790)`, the exclusive end discussed above. **No bind site and no registry claim** in 8790-8809.
 
 ## Consequences
 

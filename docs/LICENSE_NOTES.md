@@ -4,6 +4,19 @@ Read this before adding any external data source, library or dataset. Verified
 2026-09-06 against primary sources. Inherited from Riot Commander's third-party
 lift rule.
 
+> **This file answers the INBOUND question only:** what may this project
+> consume? The OUTBOUND question - what may others do with this project - is
+> answered by `LICENSE` (GPL-3.0-or-later) and recorded in ADR-006. They are
+> different questions and the answer to one constrains the other only in the one
+> respect ADR-006 sets out.
+>
+> **ADR-006 dissolves exactly one objection below and no others.** This tree is
+> now GPL-3-or-later, so "vendoring a GPL-3 library would relicense this repo"
+> is no longer true of `enka-py` or `ambr-py`. The blanket caveat at the end of
+> this file is untouched and is the reason those projects still are not
+> vendored: a licence on a wrapper cannot grant rights to HoYoverse's data, and
+> the data was always the actual gate.
+
 ## The rule
 
 Before lifting ANYTHING from an external repo, check the licence and say what it

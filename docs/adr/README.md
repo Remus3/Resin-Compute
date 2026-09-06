@@ -12,3 +12,5 @@ argument is not had twice.
 | [ADR-002](ADR-002-data-posture.md) | Vendor no game data; re-implement the Enka client from protocol | Accepted |
 | [ADR-003](ADR-003-forecaster-model.md) | Markov chain forecaster, not a binomial, and the three brief corrections | Accepted |
 | [ADR-004](ADR-004-port-block.md) | Reserve 8790-8809 and migrate PityEngine off 8870 | Accepted |
+| [ADR-005](ADR-005-companion-shell.md) | An Electron companion window over a local dashboard surface | Accepted |
+| [ADR-006](ADR-006-outbound-licence.md) | GPL-3.0-or-later as the outbound licence | Accepted |

@@ -1,0 +1,18 @@
+ResinCompute
+Copyright 2026 Moonbeam
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See the LICENSE file for the full terms.
+
+ResinCompute is a companion and analysis project for the game Genshin Impact.
+It is not affiliated with, endorsed by, or connected to HoYoverse / miHoYo /
+Cognosphere in any way.
+
+NO GAME DATA IS VENDORED IN THIS REPOSITORY. Everything under data/ is
+hand-authored by this project. Genshin Impact, its characters, item names,
+statistics and assets are the copyright of their respective owners, and this
+project's licence grants no rights whatsoever over them - a licence on this
+code cannot and does not licence anything belonging to HoYoverse. See
+docs/LICENSE_NOTES.md and docs/adr/ADR-002-data-posture.md.
