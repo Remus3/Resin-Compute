@@ -1,0 +1,388 @@
+"""Tests for the cost-table loader and the end-to-end dated build plan.
+
+Two different things are under test here and they are deliberately kept apart:
+
+1. **The shipped seed data.** These tests are a GUARD, not a demonstration.
+   They assert that the tables shipped in `data/costs/` reference only ids
+   that were independently verified in docs/SPEC_SCAFFOLD.md section 5. If
+   somebody adds a plausible-looking material id from memory or from a scraped
+   dataset, these fail. That is the entire point of them.
+
+2. **The mechanism.** Loading, node-id mapping, coverage reporting, dating and
+   scheduling are exercised with an explicit, obviously-synthetic cost overlay
+   built inside the test. No test asserts an unverified game quantity, because
+   the repository does not know one.
+
+The distinction matters: mechanism can be proved without data, and shipped
+data must be provable as verified. Mixing the two is how an invented number
+acquires a passing test and becomes a fact.
+"""
+from __future__ import annotations
+
+from datetime import date
+
+import pytest
+
+from core.types import MaterialCost, ObjectiveKind
+from engines.costs import (
+    ARLECCHINO_AVATAR_ID,
+    GOLDEN_MELODY_MATERIAL_ID,
+    PLACEHOLDER_WEAPON_ID,
+    BuildPlan,
+    CostTableError,
+    CostTables,
+    build_node_costs,
+    load_cost_tables,
+    plan_character_build,
+)
+from engines.objectives import (
+    character_ascension_id,
+    expand_character_goal,
+    talent_id,
+    weapon_level_id,
+)
+from engines.scheduler import DatedTask, to_dated_tasks
+from ingest.static_data import known_avatar_ids, known_material_ids
+
+# A Monday, so weekday arithmetic in the dating tests is readable.
+START = date(2026, 9, 7)
+
+
+# ---------------------------------------------------------------------------
+# The shipped seed tables - these are guards against invented data
+# ---------------------------------------------------------------------------
+
+
+def test_seed_cost_tables_load_from_the_shipped_location():
+    tables = load_cost_tables()
+    assert isinstance(tables, CostTables)
+    assert tables.schema_version >= 1
+
+
+def test_every_shipped_material_id_is_independently_verified():
+    """No material id may appear that is not in the verified seed set.
+
+    This is the regression guard for the hard rule in CLAUDE.md: do not invent
+    a material id. A new id belongs in `data/fixtures/seed_materials.json`
+    WITH its verification, and only then here.
+    """
+    tables = load_cost_tables()
+    verified = set(known_material_ids())
+    assert tables.material_ids(), "the seed table must carry at least the one verified cost"
+    assert set(tables.material_ids()) <= verified
+
+
+def test_every_shipped_avatar_id_is_independently_verified():
+    tables = load_cost_tables()
+    assert set(tables.avatar_ids()) <= set(known_avatar_ids())
+
+
+def test_arlecchino_ascension_two_costs_two_fragments_of_a_golden_melody():
+    """The one ascension cost SPEC section 5 actually pins.
+
+    'Fragment of a Golden Melody, item id 113059. Arlecchino ascension
+    (ascend2 takes 2).' If this ever changes, the source that changed it must
+    be recorded in SPEC section 5 first.
+    """
+    tables = load_cost_tables()
+    row = tables.ascension_cost(ARLECCHINO_AVATAR_ID, 2)
+    assert row is not None
+    assert MaterialCost(material_id=GOLDEN_MELODY_MATERIAL_ID, quantity=2) in _ids_and_quantities(row.materials)
+
+
+def test_the_refuted_tetrahedron_pairing_is_not_reintroduced():
+    """113039 is Candace, Dehya and Faruzan. It is NOT an Arlecchino material.
+
+    The original brief made this pairing and it was refuted on 2026-09-06.
+    A test is cheaper than rediscovering it.
+    """
+    tables = load_cost_tables()
+    for phase in range(1, 7):
+        row = tables.ascension_cost(ARLECCHINO_AVATAR_ID, phase)
+        if row is None:
+            continue
+        assert all(m.material_id != 113039 for m in row.materials)
+
+
+def test_seed_tables_carry_provenance_on_every_cost_row():
+    """A cost with no stated source is indistinguishable from an invented one."""
+    tables = load_cost_tables()
+    for row in tables.all_rows():
+        assert row.source, f"cost row {row.node_key} has no provenance"
+
+
+# ---------------------------------------------------------------------------
+# Loading and validation - mechanism
+# ---------------------------------------------------------------------------
+
+
+def test_a_missing_table_raises_at_load_time(tmp_path):
+    with pytest.raises(CostTableError):
+        load_cost_tables(tmp_path / "does_not_exist")
+
+
+def test_malformed_json_raises_at_load_time(tmp_path):
+    (tmp_path / "character_costs.json").write_text("{not json", encoding="utf-8")
+    (tmp_path / "weapon_costs.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(CostTableError):
+        load_cost_tables(tmp_path)
+
+
+def test_an_unverified_material_id_is_reported_rather_than_silently_accepted(tmp_path):
+    """A caller extending the table with their own observations is supported.
+
+    Their ids will not be in the five-character, two-material verified seed
+    set, and refusing them outright would make the file useless for its stated
+    purpose. So they load, and they are REPORTED, so nothing unverified is
+    invisible.
+    """
+    _write_table(tmp_path, avatar_id=ARLECCHINO_AVATAR_ID, phase=1, material_id=999001, quantity=3)
+    tables = load_cost_tables(tmp_path, verified_material_ids=known_material_ids())
+    assert 999001 in tables.unverified_material_ids
+
+
+def test_strict_mode_refuses_an_unverified_material_id(tmp_path):
+    _write_table(tmp_path, avatar_id=ARLECCHINO_AVATAR_ID, phase=1, material_id=999001, quantity=3)
+    with pytest.raises(CostTableError):
+        load_cost_tables(tmp_path, verified_material_ids=known_material_ids(), strict=True)
+
+
+def test_a_nonpositive_quantity_is_rejected(tmp_path):
+    _write_table(tmp_path, avatar_id=ARLECCHINO_AVATAR_ID, phase=1, material_id=GOLDEN_MELODY_MATERIAL_ID, quantity=0)
+    with pytest.raises(CostTableError):
+        load_cost_tables(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Node-id mapping and coverage
+# ---------------------------------------------------------------------------
+
+
+def test_costs_are_keyed_by_the_objective_node_ids_the_dag_actually_emits():
+    """The map is useless unless its keys match what expand_character_goal makes."""
+    tables = load_cost_tables()
+    costs, _ = build_node_costs(tables, ARLECCHINO_AVATAR_ID, target_level=60, talent_targets={1: 6, 2: 6, 3: 6})
+    emitted = {n.node_id for n in expand_character_goal(ARLECCHINO_AVATAR_ID, 60, {1: 6, 2: 6, 3: 6})}
+    assert costs
+    assert set(costs) <= emitted
+
+
+def test_the_verified_cost_reaches_the_generated_node():
+    tables = load_cost_tables()
+    costs, _ = build_node_costs(tables, ARLECCHINO_AVATAR_ID, target_level=60, talent_targets={1: 6, 2: 6, 3: 6})
+    nodes = expand_character_goal(ARLECCHINO_AVATAR_ID, 60, {1: 6, 2: 6, 3: 6}, costs=costs)
+    target = character_ascension_id(ARLECCHINO_AVATAR_ID, 2)
+    node = next(n for n in nodes if n.node_id == target)
+    assert node.kind is ObjectiveKind.CHARACTER_ASCENSION
+    assert (GOLDEN_MELODY_MATERIAL_ID, 2) in _ids_and_quantities(node.materials)
+
+
+def test_an_absent_cost_is_reported_as_a_gap_and_never_as_free():
+    """Zero and unknown are different answers and must not collapse.
+
+    `NodeCost` defaults every field to zero, so a node with no data looks free.
+    The coverage report is the only thing that distinguishes the two, which is
+    why it is a required return value rather than an optional extra.
+    """
+    tables = load_cost_tables()
+    costs, coverage = build_node_costs(
+        tables, ARLECCHINO_AVATAR_ID, target_level=60, talent_targets={1: 6, 2: 6, 3: 6}
+    )
+    assert not coverage.is_complete
+    assert coverage.missing
+    assert talent_id(ARLECCHINO_AVATAR_ID, 1, 6) in coverage.missing
+    assert character_ascension_id(ARLECCHINO_AVATAR_ID, 2) in coverage.covered
+    assert set(coverage.covered).isdisjoint(coverage.missing)
+
+
+def test_coverage_counts_add_up_to_the_node_set():
+    tables = load_cost_tables()
+    nodes = expand_character_goal(ARLECCHINO_AVATAR_ID, 60, {1: 6, 2: 6, 3: 6})
+    _, coverage = build_node_costs(tables, ARLECCHINO_AVATAR_ID, target_level=60, talent_targets={1: 6, 2: 6, 3: 6})
+    assert len(coverage.covered) + len(coverage.missing) == len(nodes)
+
+
+# ---------------------------------------------------------------------------
+# Dating
+# ---------------------------------------------------------------------------
+
+
+def test_day_offsets_become_real_dates():
+    from core.types import ScheduledTask, TaskCadence
+
+    tasks = (
+        ScheduledTask(task_id="t0", node_id="a", cadence=TaskCadence.DAILY, resin_cost=0, earliest_day=0),
+        ScheduledTask(task_id="t3", node_id="b", cadence=TaskCadence.DAILY, resin_cost=0, earliest_day=3),
+    )
+    dated = to_dated_tasks(tasks, START)
+    assert [d.on_date for d in dated] == [date(2026, 9, 7), date(2026, 9, 10)]
+    assert all(isinstance(d, DatedTask) for d in dated)
+    assert dated[0].task is tasks[0]
+
+
+def test_dating_preserves_the_weekday_the_scheduler_gated_on():
+    """The scheduler gates on `start_weekday`; dating must agree with it.
+
+    If the caller passes a start date whose weekday disagrees with the
+    weekday the scheduler was given, every weekday-gated task is dated onto a
+    day its domain is shut. Deriving one from the other is the only way that
+    cannot drift.
+    """
+    plan = plan_character_build(
+        ARLECCHINO_AVATAR_ID,
+        target_level=60,
+        talent_targets={1: 6, 2: 6, 3: 6},
+        start_date=START,
+        costs_overlay=_wednesday_only_overlay(),
+    )
+    gated = [d for d in plan.dated_tasks if d.task.node_id == character_ascension_id(ARLECCHINO_AVATAR_ID, 2)]
+    assert gated, "the gated node should have been placed"
+    assert gated[0].on_date.weekday() == 2
+
+
+# ---------------------------------------------------------------------------
+# The worked example, end to end
+# ---------------------------------------------------------------------------
+
+
+def test_worked_example_produces_a_dated_task_list():
+    """Arlecchino to 60, talents 6/6/6, weapon to 60 - start to finish."""
+    plan = plan_character_build(
+        ARLECCHINO_AVATAR_ID,
+        target_level=60,
+        talent_targets={1: 6, 2: 6, 3: 6},
+        weapon_subject_id=PLACEHOLDER_WEAPON_ID,
+        weapon_target_level=60,
+        start_date=START,
+    )
+    assert isinstance(plan, BuildPlan)
+    assert len(plan.dated_tasks) == 30
+    assert not plan.path.blocked_on
+    assert all(d.on_date >= START for d in plan.dated_tasks)
+    assert [d.on_date for d in plan.dated_tasks] == sorted(d.on_date for d in plan.dated_tasks)
+
+
+def test_worked_example_covers_both_the_character_and_the_weapon_chain():
+    plan = plan_character_build(
+        ARLECCHINO_AVATAR_ID,
+        target_level=60,
+        talent_targets={1: 6, 2: 6, 3: 6},
+        weapon_subject_id=PLACEHOLDER_WEAPON_ID,
+        weapon_target_level=60,
+        start_date=START,
+    )
+    ids = {d.task.node_id for d in plan.dated_tasks}
+    assert weapon_level_id(PLACEHOLDER_WEAPON_ID, 60) in ids
+    assert talent_id(ARLECCHINO_AVATAR_ID, 3, 6) in ids
+
+
+def test_worked_example_states_its_own_incompleteness():
+    """A plan built on one known cost must SAY it is built on one known cost.
+
+    Reporting a confident finish date off a table that is 1/30 populated is
+    the failure mode this assertion exists to prevent.
+    """
+    plan = plan_character_build(
+        ARLECCHINO_AVATAR_ID,
+        target_level=60,
+        talent_targets={1: 6, 2: 6, 3: 6},
+        weapon_subject_id=PLACEHOLDER_WEAPON_ID,
+        weapon_target_level=60,
+        start_date=START,
+    )
+    assert not plan.coverage.is_complete
+    assert plan.coverage.covered_fraction < 1.0
+    assert plan.dates_are_understated
+
+
+def test_a_plan_ordered_by_date_still_respects_every_dependency():
+    plan = plan_character_build(
+        ARLECCHINO_AVATAR_ID,
+        target_level=60,
+        talent_targets={1: 6, 2: 6, 3: 6},
+        weapon_subject_id=PLACEHOLDER_WEAPON_ID,
+        weapon_target_level=60,
+        start_date=START,
+        costs_overlay=_resin_overlay(),
+    )
+    position = {d.task.node_id: i for i, d in enumerate(plan.dated_tasks)}
+    for node in plan.nodes:
+        for dep in node.depends_on:
+            assert position[dep] < position[node.node_id]
+
+
+def test_a_real_resin_cost_spreads_the_plan_across_real_dates():
+    """Proof the dating is load bearing rather than every task landing on day 0."""
+    plan = plan_character_build(
+        ARLECCHINO_AVATAR_ID,
+        target_level=60,
+        talent_targets={1: 6, 2: 6, 3: 6},
+        start_date=START,
+        costs_overlay=_resin_overlay(),
+    )
+    distinct = {d.on_date for d in plan.dated_tasks}
+    assert len(distinct) > 1
+    assert max(distinct) > START
+
+
+def test_the_plan_is_deterministic():
+    kwargs = dict(
+        target_level=60,
+        talent_targets={1: 6, 2: 6, 3: 6},
+        weapon_subject_id=PLACEHOLDER_WEAPON_ID,
+        weapon_target_level=60,
+        start_date=START,
+    )
+    first = plan_character_build(ARLECCHINO_AVATAR_ID, **kwargs)
+    second = plan_character_build(ARLECCHINO_AVATAR_ID, **kwargs)
+    assert [d.task.task_id for d in first.dated_tasks] == [d.task.task_id for d in second.dated_tasks]
+    assert [d.on_date for d in first.dated_tasks] == [d.on_date for d in second.dated_tasks]
+
+
+# ---------------------------------------------------------------------------
+# Helpers - every synthetic number below is confined to this file
+# ---------------------------------------------------------------------------
+
+
+def _ids_and_quantities(materials) -> set[tuple[int, int]]:
+    return {(m.material_id, m.quantity) for m in materials}
+
+
+def _resin_overlay():
+    """A synthetic resin cost on every ascension node. NOT a game quantity."""
+    from engines.objectives import NodeCost
+
+    return {
+        character_ascension_id(ARLECCHINO_AVATAR_ID, phase): NodeCost(resin_cost=200)
+        for phase in range(1, 5)
+    }
+
+
+def _wednesday_only_overlay():
+    """A synthetic Wednesday-only gate. NOT a real domain rotation."""
+    from engines.objectives import NodeCost
+
+    return {character_ascension_id(ARLECCHINO_AVATAR_ID, 2): NodeCost(available_weekdays=(2,))}
+
+
+def _write_table(tmp_path, avatar_id: int, phase: int, material_id: int, quantity: int) -> None:
+    import json
+
+    payload = {
+        "schema_version": 1,
+        "characters": [
+            {
+                "avatar_id": avatar_id,
+                "ascensions": [
+                    {
+                        "phase": phase,
+                        "materials": [{"material_id": material_id, "quantity": quantity}],
+                        "source": "synthetic:test",
+                    }
+                ],
+                "talents": [],
+            }
+        ],
+    }
+    (tmp_path / "character_costs.json").write_text(json.dumps(payload), encoding="utf-8")
+    (tmp_path / "weapon_costs.json").write_text(json.dumps({"schema_version": 1, "weapons": []}), encoding="utf-8")
