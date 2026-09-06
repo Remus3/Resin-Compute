@@ -18,15 +18,12 @@ version. What follows is everything the scaffold deliberately did not do.
   The account has not been played yet, so no first-hand observation exists and
   the three cost figures that arrived from a web assistant are deliberately NOT
   in `data/` - `tests/test_goal_spec.py` fails if they get copied in.
-- **Persist the reconciled account state so the dashboard has a cold-start
-  source.** `headless/jobs.py::reconcile_state` builds `AccountState` in memory
-  each pass and nothing writes it down, so `surface/` falls back to
-  `default_state_provider`, which is deliberately EMPTY. The consequence is
-  visible: launch the companion from the desktop shortcut on a cold machine and
-  four of six panels correctly report that they have nothing behind them. Needs a
-  serializer for `AccountState`, a `persist_state` job writing through
-  `core/atomic_io.py`, and a loader in `surface/server.py`. This is the single
-  change that most raises the readiness meter.
+- ~~**Persist the reconciled account state.**~~ **DONE 2026-09-06.**
+  `core/state_io.py` serializes `AccountState`, the `persist_state` job writes it
+  through `core/atomic_io.py`, and `surface/` cold-starts from it and renders how
+  old the reading is. The snapshot is WRITE-ONLY from the headless lane so
+  live-state-first still holds, and a test asserts that structurally rather than
+  documentarily.
 - **Repo relocation.** The scaffold was built inside the Riot Commander
   repository because the session's GitHub integration could not create a new
   repository (`POST /user/repos` returned 403 Resource not accessible by

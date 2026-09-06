@@ -107,6 +107,12 @@ h1 { font-size: 16px; margin: 0; letter-spacing: 0.04em; }
   overflow: hidden;
 }
 .meter-fill { height: 100%; background: var(--accent); }
+/* Freshness. The dashboard renders a SNAPSHOT written by the headless lane, not
+   a live query, so the age is not decoration - a cached roster shown without one
+   is indistinguishable from a live reading. Stale gets a colour because the
+   whole point is that it must not be readable as current at a glance. */
+.freshness { color: var(--ink-dim); font-size: 12px; }
+.state-stale { color: var(--partial); font-weight: 600; }
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -181,6 +187,10 @@ def render_html(board: Dashboard) -> str:
     """
     percent = round(board.readiness * 100)
     generated = escape(board.generated_at.isoformat(timespec="seconds"), quote=True)
+    freshness = escape(board.freshness, quote=True)
+    stale_class = " state-stale" if board.is_stale else ""
+    if board.is_stale:
+        freshness += " (stale)"
     cards = "".join(_panel_html(panel) for panel in board.panels)
 
     return (
@@ -192,6 +202,7 @@ def render_html(board: Dashboard) -> str:
         '<div id="dragbar"></div>'
         "<header>"
         "<h1>ResinCompute</h1>"
+        f'<span class="freshness{stale_class}">{freshness}</span>'
         f'<span class="sub">{generated}</span>'
         '<div class="meter">'
         f'<div class="sub">Readiness {percent}% '
@@ -218,6 +229,9 @@ def render_json(board: Dashboard) -> str:
     payload = {
         "schema": 1,
         "generated_at": board.generated_at.isoformat(timespec="seconds"),
+        "freshness": board.freshness,
+        "is_stale": board.is_stale,
+        "source_age_seconds": (None if board.source_age is None else int(board.source_age.total_seconds())),
         "readiness": board.readiness,
         "ready_count": board.ready_count,
         "partial_count": board.partial_count,

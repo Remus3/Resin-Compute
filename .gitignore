@@ -44,6 +44,10 @@ logs/
 # are hand-authored minimal test fixtures.
 data/cache/
 data/*.tmp
+# The account snapshot is RUNTIME state written by headless/jobs.py persist_state
+# and read by surface/. It carries a player UID and a roster, it changes on every
+# pass, and it is a display cache rather than source - see core/state_io.py.
+data/account_state.json
 
 # --- Python bytecode + tool caches --------------------------------------
 __pycache__/

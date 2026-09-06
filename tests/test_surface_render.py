@@ -276,3 +276,143 @@ def test_the_drag_strip_appears_before_any_content():
     """It is fixed-position, but DOM order still decides paint order among peers."""
     page = render_html(board())
     assert page.index('id="dragbar"') < page.index("<header>")
+
+
+# ---------------------------------------------------------------------------
+# Freshness on the page, and the snapshot the surface loads
+# ---------------------------------------------------------------------------
+
+
+def test_the_freshness_is_rendered_on_the_page():
+    page = render_html(board())
+    assert "no reading yet" in page
+
+
+def test_a_stale_reading_is_marked_stale_on_the_page():
+    from datetime import timedelta
+
+    state = AccountState(uid="1")
+    state.last_synced_at = NOW - timedelta(days=2)
+    page = render_html(build_dashboard(state, now=NOW))
+    assert "stale" in page.lower()
+    assert "2d" in page
+
+
+def test_a_fresh_reading_is_not_marked_stale():
+    from datetime import timedelta
+
+    state = AccountState(uid="1")
+    state.last_synced_at = NOW - timedelta(minutes=3)
+    page = render_html(build_dashboard(state, now=NOW))
+    assert "3m" in page
+    # NOT `"state-stale" not in page`: the class is DEFINED in the stylesheet on
+    # every render, so its mere presence says nothing about whether it was
+    # applied. The applied form is what distinguishes the two states.
+    assert 'class="freshness state-stale"' not in page
+    assert "(stale)" not in page
+
+
+def test_the_json_payload_carries_the_freshness_too():
+    payload = json.loads(render_json(board()))
+    assert "freshness" in payload
+    assert payload["is_stale"] is False
+
+
+def test_the_default_provider_returns_an_empty_account_with_no_snapshot(tmp_path, monkeypatch):
+    from surface.server import default_state_provider
+
+    monkeypatch.setenv("RC_DATA_DIR", str(tmp_path))
+    state = default_state_provider()
+    assert state.roster == ()
+    assert state.last_synced_at is None
+
+
+def test_the_default_provider_loads_a_snapshot_when_one_exists(tmp_path, monkeypatch):
+    """The cold-start path. This is the whole reason persist_state exists."""
+    from core.state_io import write_state
+    from surface.server import default_state_provider
+
+    monkeypatch.setenv("RC_DATA_DIR", str(tmp_path))
+    written = AccountState(uid="618285856", adventure_rank=58)
+    written.roster = (
+        MappedCharacter(avatar_id=10000096, level=80, ascension=5, constellations=0, display_name="Arlecchino"),
+    )
+    written.last_synced_at = NOW
+    assert write_state(tmp_path / "account_state.json", written)
+
+    state = default_state_provider()
+    assert state.uid == "618285856"
+    assert state.roster[0].display_name == "Arlecchino"
+
+
+def test_a_corrupt_snapshot_degrades_to_an_empty_account_rather_than_raising(tmp_path, monkeypatch):
+    from surface.server import default_state_provider
+
+    monkeypatch.setenv("RC_DATA_DIR", str(tmp_path))
+    (tmp_path / "account_state.json").write_text("{truncated", encoding="utf-8")
+
+    state = default_state_provider()
+    assert state.roster == ()
+
+
+# ---------------------------------------------------------------------------
+# Exclusive bind
+# ---------------------------------------------------------------------------
+
+
+def test_a_second_server_cannot_bind_a_port_the_first_already_holds():
+    """MEASURED DEFECT, not a hypothetical.
+
+    `ThreadingHTTPServer.allow_reuse_address` is True, which on POSIX only
+    sidesteps TIME_WAIT but on WINDOWS lets a completely separate process bind a
+    port another process is already listening on. Both sockets then sit in
+    LISTENING and which one receives a connection is undefined.
+
+    Observed on this machine: two surfaces bound 8791 simultaneously, and the
+    older one answered every request, so a freshly started surface serving new
+    code was silently ignored while looking perfectly healthy.
+
+    It also silently breaks a documented contract. `surface.server.main` promises
+    exit code 2 for "the port it needs is already held by something else", and
+    the Electron shell renders its refusal from exactly that code. Without an
+    exclusive bind that code can never fire on Windows.
+    """
+    first = DashboardServer(host="127.0.0.1", port=0)
+    first.start()
+    try:
+        second = DashboardServer(host="127.0.0.1", port=first.port)
+        with pytest.raises(OSError):
+            second.start()
+    finally:
+        first.stop()
+
+
+def test_main_returns_the_documented_exit_code_when_the_port_is_taken():
+    """The contract the Electron supervisor reads."""
+    from surface.server import main
+
+    holder = DashboardServer(host="127.0.0.1", port=0)
+    holder.start()
+    try:
+        assert main(["--host", "127.0.0.1", "--port", str(holder.port)]) == 2
+    finally:
+        holder.stop()
+
+
+def test_a_stopped_server_releases_its_port_immediately():
+    """The exclusive bind must not leave the port unusable afterwards.
+
+    TIME_WAIT making a restart fail is the reason `allow_reuse_address` exists at
+    all, so turning it off has to be checked for the regression it could cause.
+    """
+    first = DashboardServer(host="127.0.0.1", port=0)
+    first.start()
+    port = first.port
+    first.stop()
+
+    second = DashboardServer(host="127.0.0.1", port=port)
+    second.start()
+    try:
+        assert second.port == port
+    finally:
+        second.stop()

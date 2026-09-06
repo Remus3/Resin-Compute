@@ -23,6 +23,11 @@ is the pure deterministic compute engine inside it.
   `core/atomic_io.py`; it is the only sanctioned state-write path. Readers poll
   mid-write.
 - **Never `Stop-Process` on Windows.** Use `taskkill /F /PID`.
+  **Under Git Bash write `taskkill //F //PID <pid>`.** MSYS path conversion
+  rewrites a lone `/F` into `F:/` and the command fails with
+  `Invalid argument/option - 'F:/'`. Measured 2026-09-06, and it fails SILENTLY
+  when the call is redirected to /dev/null, so a process you believe you killed
+  is still running. Same root cause as the quoting rule below.
 - **No em-dashes or en-dashes, ever.** 7-bit ASCII in all authored text: code,
   comments, docstrings, `.md`, commit messages, chat output. Use ` - ` for a
   clause break. Also no smart quotes (U+2018 U+2019 U+201C U+201D).

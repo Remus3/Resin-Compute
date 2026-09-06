@@ -19,10 +19,19 @@ import pytest
 from headless import jobs as jobs_mod
 
 # The jobs the registry ships with, in the order they must always execute.
-# sync_profile before reconcile_state before the two consumers, health last.
+# sync_profile before reconcile_state before its consumers, health last.
+#
+# persist_state sits immediately after reconcile_state ON PURPOSE. It writes the
+# display snapshot the dashboard cold-starts from, and writing it before the
+# planner and forecaster run means a pass that later fails in one of those still
+# leaves the roster and pity readings on disk. It is WRITE-ONLY from this lane -
+# see tests/test_headless_persist_state.py, which asserts the absence of a read
+# structurally, because a cache that quietly starts being read looks like a hit
+# rather than like a broken live-state-first rule.
 EXPECTED_ORDER = [
     "sync_profile",
     "reconcile_state",
+    "persist_state",
     "recompute_plan",
     "forecast_pity",
     "emit_health",
