@@ -136,6 +136,20 @@ def _normalize_path(value: str) -> str:
     return value.strip().rstrip("\\/").casefold()
 
 
+def matches(observed: ShortcutState, desired: ShortcutState) -> bool:
+    """Is this shortcut the one we would have written?
+
+    THE ONE COMPARISON, used by `decide` and by the renamed-twin scan alike. Two
+    copies of this rule would drift and then disagree about whether a shortcut
+    needs rewriting, which is the worst possible outcome for an idempotent tool.
+    """
+    return (
+        _normalize_path(observed.target) == _normalize_path(desired.target)
+        and observed.arguments.strip() == desired.arguments.strip()
+        and _normalize_path(observed.working_dir) == _normalize_path(desired.working_dir)
+    )
+
+
 def decide(
     observed: ShortcutState | None,
     desired: ShortcutState,
@@ -149,12 +163,7 @@ def decide(
     if observed is None:
         return Action.CREATE
 
-    same = (
-        _normalize_path(observed.target) == _normalize_path(desired.target)
-        and observed.arguments.strip() == desired.arguments.strip()
-        and _normalize_path(observed.working_dir) == _normalize_path(desired.working_dir)
-    )
-    if same:
+    if matches(observed, desired):
         return Action.UNCHANGED
     if no_clobber:
         return Action.REFUSE
@@ -297,6 +306,31 @@ def observe(powershell: str, link_path: Path) -> ShortcutState | None:
     return ShortcutState(target=lines[0].strip(), arguments=lines[1].strip(), working_dir=lines[2].strip())
 
 
+def find_renamed_twin(powershell: str, destination: Path, desired: ShortcutState, skip: Path) -> Path | None:
+    """A shortcut to the same target under a DIFFERENT name, or None.
+
+    WHY THIS EXISTS, and it was measured rather than imagined. The operator
+    renamed the shortcut this script created to match their own convention. The
+    exact-name lookup then found nothing, and without this scan the next run
+    would have created a second shortcut beside the first - which is precisely
+    the failure Clockspeed's refuse-unless-force default was guarding against.
+
+    Idempotence converges on a STATE - a working shortcut to this app exists -
+    not on one particular filename.
+    """
+    try:
+        candidates = sorted(destination.glob("*.lnk"))
+    except OSError:
+        return None
+    for candidate in candidates:
+        if candidate == skip:
+            continue
+        observed = observe(powershell, candidate)
+        if observed is not None and matches(observed, desired):
+            return candidate
+    return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python scripts/make_shortcut.py",
@@ -336,7 +370,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     link_path = destination / file_name
     desired = desired_state()
-    action = decide(observe(powershell, link_path), desired, no_clobber=args.no_clobber)
+    observed = observe(powershell, link_path)
+
+    # Before creating anything, check whether a correct shortcut is already
+    # there under a name the operator chose. Creating a duplicate beside it is
+    # not idempotent, it is litter.
+    if observed is None:
+        twin = find_renamed_twin(powershell, destination, desired, skip=link_path)
+        if twin is not None:
+            print(f"{UNCHANGED}: already present as {twin.name}")
+            return EXIT_OK
+
+    action = decide(observed, desired, no_clobber=args.no_clobber)
 
     if action is Action.UNCHANGED:
         print(f"{UNCHANGED}: {file_name}")

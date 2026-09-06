@@ -217,3 +217,50 @@ def _desired() -> make_shortcut.ShortcutState:
         arguments=".",
         working_dir="C:\\repo\\shell",
     )
+
+
+# ---------------------------------------------------------------------------
+# A RENAMED shortcut is still the same shortcut
+# ---------------------------------------------------------------------------
+
+
+def test_a_renamed_shortcut_with_the_right_target_counts_as_present():
+    """MEASURED, not hypothetical.
+
+    The operator renamed the shortcut this script created from
+    `ResinCompute.lnk` to one matching their own convention. On the next run the
+    exact-name lookup found nothing and would have created a SECOND shortcut
+    beside the first.
+
+    That is exactly the case Clockspeed's refuse-unless-force default was
+    protecting against, and the reason its author gave: "the operator may already
+    have pinned or renamed the shortcut that is there." Idempotence is about
+    converging on the desired STATE - a working shortcut to this app exists - and
+    not on the presence of one particular filename.
+    """
+    desired = _desired()
+    twin = make_shortcut.ShortcutState(
+        target=desired.target, arguments=desired.arguments, working_dir=desired.working_dir
+    )
+    assert make_shortcut.matches(twin, desired)
+
+
+def test_a_shortcut_to_something_else_is_not_a_twin():
+    desired = _desired()
+    # Raw string. Written first without the r prefix, which made "\a" a literal
+    # BEL character and "\o" an invalid escape - the test still passed, because
+    # it only asserts inequality, so the defect was invisible until a
+    # SyntaxWarning surfaced it. A Windows path in a test must never depend on
+    # escape semantics.
+    other = make_shortcut.ShortcutState(target=r"C:\other\app.exe", arguments="", working_dir="")
+    assert not make_shortcut.matches(other, desired)
+
+
+def test_matches_is_the_same_comparison_decide_uses():
+    """One comparison, one place. Two would drift and disagree."""
+    desired = _desired()
+    twin = make_shortcut.ShortcutState(
+        target=desired.target.upper(), arguments=desired.arguments, working_dir=desired.working_dir + "\\"
+    )
+    assert make_shortcut.matches(twin, desired)
+    assert make_shortcut.decide(observed=twin, desired=desired) is make_shortcut.Action.UNCHANGED

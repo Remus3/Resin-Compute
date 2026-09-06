@@ -12,6 +12,45 @@ now.
 
 ---
 
+## 2026-09-06 - Licence decided, and companion QA made runnable
+
+ADR-006: GPL-3.0-or-later. The sibling house pattern was the trap rather than the
+default - MIT and Apache-2.0 both permit closing the source and selling it, the
+exact outcome to prevent. CC BY-SA was asked about and rejected on facts: it
+permits commercial use, and Creative Commons advise against CC for software.
+
+The licence text was VERIFIED, not pasted from memory: cross-checked against a
+second independent copy, confirmed 7-bit ASCII, and its sha256 matches the
+canonical published hash. That hash is pinned in a test.
+
+ADR-006 amends ADR-002 in exactly one respect: the copyleft objection to
+vendoring enka-py and ambr-py dissolves. The objection that mattered stands -
+those wrap HoYoverse data and no outbound licence of ours touches that.
+
+`scripts/qa_companion.py` answers the question the suites cannot: is the
+companion working right now, on this machine, as installed. It binds an ephemeral
+port so it never contends with a running dashboard.
+
+**It found a false negative in its own first run**, which is the useful kind. It
+reported the desktop shortcut absent while the shortcut existed - the operator had
+renamed it to match their convention. Two real consequences:
+
+- `make_shortcut.py` would have created a SECOND shortcut beside the renamed one.
+  That is exactly what Clockspeed's refuse-unless-force default was guarding
+  against, and its author said so in as many words. Fixed: the installer now
+  scans for a shortcut with the same TARGET under any name. Idempotence converges
+  on a state - a working shortcut exists - not on one filename.
+- The QA now matches by target too, reusing the installer's own comparison so the
+  two cannot disagree.
+
+Also fixed: a test wrote a Windows path without a raw string, so `` became a
+literal BEL and `\o` an invalid escape. The test still PASSED, because it only
+asserted inequality, so the defect was invisible until a SyntaxWarning surfaced
+it. And `test_a_stopped_server_releases_its_port_immediately` was flaky by
+construction - dropping SO_REUSEADDR made the rebind strict, so the OS handing
+that port to another process failed a test about TIME_WAIT. Now retried, with the
+retry justified rather than papered over: a real regression fails every attempt.
+
 ## 2026-09-06 - Project-goals QA, mechanised
 
 `tests/test_docs_consistency.py`. The docs must agree with the tree: every
