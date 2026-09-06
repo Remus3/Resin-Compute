@@ -283,9 +283,18 @@ CLAUDE.md's third-party lift rule applies. Findings from the 2026-09-06 pass:
 | genshin-db | `github.com/theBowja/genshin-db`, npm `genshin-db` | MIT, `Copyright (c) 2020 theBowja`, manifest agrees | **Code MIT. Bulk data NO** - its own readme says data is sourced from the Fandom wiki (CC BY-SA 3.0) and GenshinData. The MIT badge does not clear the payload. |
 | Enka API docs | `github.com/EnkaNetwork/API-docs` | **NONE** | Protocol facts are usable. `store/*.json` is **fetch-only, do not vendor**. |
 | Project Amber | base URL is **`https://gi.yatta.moe/api/v2`**, not `ambr.top` | **NONE**, no published ToS or rate limits | Fetch at own risk. Treat as unstable. Do not vendor. |
-| `enka-py` (pypi `enka`) | maintained, 2026-06-26 | **GPL-3.0** | **DO NOT VENDOR** - copyleft would relicense this repo. |
+| `enka-py` (pypi `enka`) | maintained, 2026-06-26 | **GPL-3.0** | **DO NOT VENDOR** - it wraps HoYoverse game data. See the ADR-006 note below. |
 | `enkanetwork.py` | last release 2023-08-30 | MIT, `Copyright 2022 M-307` | Vendorable but unmaintained ~3 years. |
-| `ambr-py` | | **GPL-3.0** | **DO NOT VENDOR.** |
+| `ambr-py` | | **GPL-3.0** | **DO NOT VENDOR** - same reason. See the ADR-006 note below. |
+
+> **ADR-006 dissolves exactly one objection in this table and no others.** This
+> tree is now GPL-3.0-or-later, so the reason this table used to give - that
+> "copyleft would relicense this repo" - is no longer true of `enka-py` or
+> `ambr-py`. That objection is void. The refusal is not, and it stands
+> unchanged: the blanket caveat below is untouched and is why neither is
+> vendored. A licence on a wrapper cannot grant rights to HoYoverse's data, and
+> the data was always the actual gate. Both were re-verified GPL-3.0 on the
+> 2026-09-06 pass.
 
 **Blanket caveat:** every source above wraps HoYoverse-copyright game assets,
 stats, text and item names. A permissive licence on the wrapper grants rights to
@@ -407,7 +416,7 @@ to every slice.
 
 ## 7. Acceptance
 
-A slice is done when, from `resin-compute/`:
+A slice is done when, from the repository root:
 1. `python -m py_compile` passes on every `.py` it wrote.
 2. `python -m ruff check .` reports zero findings on its files.
 3. `python -m pytest <its own test paths> -q` is green, with the observed count

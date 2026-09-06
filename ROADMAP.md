@@ -11,166 +11,98 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **QA the repo for going public - FINDINGS ARE IN, THE FIXES ARE NOT.** The
-  audit ran 2026-09-06 at commit `96a8c54` and every gate was green, so nothing
-  below is a broken build. Each item is a defect a stranger would meet. The repo
-  is still PRIVATE; flipping it is the LAST action, after these land.
-  - **The docs guard tests presence, not trackedness.** Every path check in
-    `tests/test_docs_consistency.py` calls `.exists()`, which is true for a
-    directory that git does not store. That is exactly how `docs-guards` went
-    red on the CI runner while the same test was green locally. Zero live
-    instances today, and it is one deletion away from recurring - remove
-    `data/costs/README.md` and the guard still passes here and fails in every
-    clone. Fix: an arm that asserts a cited path is in `git ls-files`, with
-    non-vacuity proven at the predicate level rather than by mutating the tree.
-  - **The Windows account name is in a tracked file.**
-    `.claude/commands/done.md` carries an absolute
-    `C:/Users/<account>/...` memory path. Sole hit in the tree.
-  - **UID `618285856` is NOT a leak - this was raised and REFUTED in the same
-    session, and the refutation is the useful part.** It reads as a real account
-    because every other UID in the tree is patently fake (`000000000`,
-    `900000000`, `111111111`), and both the audit and the planner flagged it on
-    that basis. It is in fact Enka.Network's OWN published example UID, verified
-    against the primary artifact: it appears twice in
-    `https://raw.githubusercontent.com/EnkaNetwork/API-docs/master/api.md`,
-    retrieved 2026-09-06. Publishing it discloses nothing upstream does not
-    already publish. **Do not "fix" it.** The residual is one line of work, not
-    four files: say so at the use site, so the next reader does not spend the
-    same hour reaching the same wrong conclusion.
-  - **Per-file licence headers: DECIDE, do not defer again.** 78 tracked `.py`
-    and 10 tracked `.js`, zero carrying any SPDX identifier. ADR-006
-    Consequences defers them. Going public is the trigger to settle it in an
-    new ADR with named re-open triggers, so the answer stops being a silence.
-    Recommendation on the measured facts is NO: GPL-3 attaches at the repository
-    level through `LICENSE` and `NOTICE`, its section 5 per-file notice
-    obligation falls on a modifier rather than the original author, and 88 files
-    of churn would invalidate the `file:line` citations this tree runs on.
-  - **The README opens for the operator.** First screen is a description, then
-    "Why the stack is Python" - an argument against an originating brief the
-    reader has never seen, citing a repository they cannot open. No statement of
-    what the project deliberately does NOT do, and no statement of what state it
-    is in. The non-affiliation disclaimer does not appear until far down.
-  - **The README repository tree is stale and unguarded.** It is a fenced block,
-    so no test reads it. It omits `surface/`, `shell/`, `.claude/`, `LICENSE`,
-    `NOTICE`, `data/costs/` and `tests/_parked/` among others, and roots itself
-    at `resin-compute/`, which is not the repo name. A stranger reading it never
-    learns the dashboard or the Electron companion exist.
-  - **The quickstart cannot be followed on the platform it names.** One block is
-    fenced `powershell` and eleven are fenced `bash`, on a documented Windows
-    box: `export ENKA_USER_AGENT=...` is not PowerShell, and `curl -s` resolves
-    to `Invoke-WebRequest` in PowerShell 5.1 where `-s` is not a parameter.
-    Everything the README claims exists was probed and does work.
-  - **`docs/SPEC_SCAFFOLD.md` still says a slice is done "from `resin-compute/`".**
-    Same stale relocation premise, in the authoritative build contract.
-  - **Machine-identity sweep, and the trap in it.** `README.md` presents a
-    machine name and an absolute path as canonical. The sibling-project names
-    are mostly load-bearing engineering rationale a stranger benefits from - the
-    port registry in ADR-004 and the licence survey in ADR-006 are evidence, not
-    chatter. Any sweep needs TWO guards per `CLAUDE.md`: the leak is gone AND
-    the legitimate neighbours survived. Measured example of why - "Legion" names
-    both the machine and a sibling project, so a blind replace destroys a
-    port-registry row. The same applies to the synthetic
-    `C:\Users\x\` path in `tests/test_make_shortcut.py` and the banned-trailer
-    fixture strings in `tests/test_commit_trailers.py`.
-  - **Operator decision, cannot be sliced: two commits on `main` carry `Claude`
-    as author AND committer.** This is not the trailer rule - the trailers were
-    stripped and are guarded. `tests/test_commit_trailers.py` reads only subject
-    and body, never `%an`/`%ae`/`%cn`/`%ce`, which is the same shape as the
-    already-recorded defect where the trailer policy was enforced on one of its
-    two forms. Rewriting history a second time to fix it is the operator's call
-    and nobody else's. If the answer is yes, extend that guard to the identity
-    fields in the same pass - it cannot be written before the rewrite, because
-    it would fail at HEAD.
-  - **Also operator-only:** the author email on nineteen of twenty-one commits
-    becomes public on the flip, and `NEXT_SESSION_PROMPT.md` is 216 lines of
-    operator-shaped hand-off tracked at the repository root. Neither leaks a
-    credential; both are judgement calls about what a stranger meets first.
-- **The licence gate REFUSED publication, on four text defects.** An independent
-  read-plus-web pass over ADR-002, ADR-006 and `docs/LICENSE_NOTES.md` cleared
-  the substance and refused the paperwork, 2026-09-06. The substance is worth
-  stating because it is the strong half: zero binary assets anywhere in the tree
-  (no art, icons, audio, fonts), zero runtime dependencies, three dev pins none
-  of which is a data library, zero imports of any forbidden upstream, zero bulk
-  data. Names and published drop rates are facts, excluded from copyright. The
-  four blockers are all text and none is arguable:
-  - **Two fixtures are labelled false, and the label is the compliance claim.**
-    `data/fixtures/seed_roster.json` and `seed_materials.json` open with
-    `"_synthetic": true` on the line directly above a `"_note"` saying
-    "Hand-authored seed identity table" - the file contradicts itself in two
-    consecutive lines. `data/fixtures/README.md` is titled "SYNTHETIC test data
-    only" while its own body says "hand-authored by this repository". The
-    content is real, correct game fact - verified avatarIds and material ids -
-    that is HAND-AUTHORED rather than VENDORED, which is what ADR-002 actually
-    requires and what `NOTICE` already says correctly. Synthetic means invented,
-    and these are not. Once public this file is what a takedown correspondent is
-    pointed at, and a compliance document that is demonstrably false about its
-    own contents is a worse position than the true claim - which is also the
-    stronger one: no upstream dataset is vendored, and the identity data is a
-    small hand-authored set of publicly known facts. Only
-    `enka_sample_profile.json` is genuinely synthetic. The string
-    `tests/test_licence_posture.py` asserts on survives the edit.
-  - **Four public-facing files still give the reason ADR-006 dissolved.**
-    `README.md`, `ingest/enka_client.py`, `data/fixtures/README.md` and
-    `docs/SPEC_SCAFFOLD.md` all still say vendoring enka-py or ambr-py "would
-    relicense this repo". That stopped being true when this tree became
-    GPL-3-or-later. `docs/LICENSE_NOTES.md` carries the same sentence and is
-    handled correctly - its header states the dissolution - so copy that shape.
-    The refusal itself is unchanged and must stay: both wrap HoYoverse data, and
-    a licence on a wrapper cannot grant rights to the payload. Left as-is, a
-    public reader finds ADR-006, concludes the stated reason is void, and
-    concludes the refusal has no basis. **Trap for whoever sweeps this:** the
-    sentence WRAPS in `README.md`, so a single-line grep for the phrase misses
-    it entirely. That is measured - the first sweep this session did miss it.
-  - **`NOTICE` omits the warranty-disclaimer paragraph.** It carries the first
-    of the GPL-3 appendix's three paragraphs and not the second. GPL-3 section 4
-    requires a conveyor to keep intact all notices of the absence of warranty,
-    and the appendix's own stated reason for per-file notices is warranty-
-    exclusion effectiveness. `LICENSE` still disclaims warranty, so this is
-    below best practice rather than non-compliant, and it is a two-sentence fix.
-    Worth adding alongside: a trademark acknowledgement naming the marks, and a
-    statement that this is a non-commercial companion tool - the second is
-    load-bearing, because every HoYoverse fan-content permission that could be
-    retrieved is conditioned on non-commercial use.
-  - **UNRESOLVED, and UNRESOLVED is treated as REFUSED: no Genshin-specific
-    fan-content policy could be retrieved from a first-party source.** The
-    HoYoverse Help Center article on fan-made content routes to a Zenless Zone
-    Zero guide, and the Genshin merchandising guide governs physical goods only
-    and says nothing about software. That is an absence of retrieval, not proof
-    of absence. The honest reading is that a non-commercial companion tool
-    vendoring no assets sits OUTSIDE the scope of the published asset-use
-    guidelines rather than inside their permission - it needs no permission they
-    grant, and trips no prohibition that could be read. But outside-the-scope is
-    not expressly-permitted and must not be rounded into it. Either retrieve a
-    first-party Genshin policy, or record in an ADR that none was locatable on
-    2026-09-06, what the posture therefore is, and that it is revisited if one
-    appears. **Do not publish on an unrecorded assumption that this is settled.**
-  - **Per-file headers: the gate CLEARED this one.** GPL-3's "How to Apply These
-    Terms" sits AFTER `END OF TERMS AND CONDITIONS` in the shipped `LICENSE`, so
-    it is an advisory appendix and not a condition of the grant; its own wording
-    is "it is safest" and "should have". Section 5(b) binds "the work", not each
-    file, and binds a modifier rather than the original author. The FSF's own
-    SPDX guidance positions the identifier as accompanying the notice, not
-    replacing it, and REUSE's per-file MUST is a condition of REUSE compliance,
-    not of GPL compliance. So the project is below best practice, NOT
-    non-compliant, and ADR-006's deferral is correct as written. This
-    strengthens the recommendation above rather than changing it: the ADR to
-    write is a decision NOT to adopt, with named re-open triggers. The one
-    real cost of omission is narrow and should be recorded - a single file
-    copied out of the tree carries no licence signal with it.
-- **Name the repository for both tiers.** Operator instruction 2026-09-06: the
-  repo should read as "Resin Compute & Pity Engine" or close to it. Two facts
-  constrain how, and neither is a reason not to do it. A GitHub repository NAME
-  admits no space and no ampersand - both are silently folded to hyphens - so
-  the literal string is reachable as the repository DESCRIPTION and as the
-  README H1, and only as something like `Resin-Compute-Pity-Engine` as a name.
-  A rename also flattens the two-tier convention in `CLAUDE.md` where
-  ResinCompute is the repo and PityEngine is the engine inside it, so the
-  convention gets restated or amended in the same pass rather than left
-  contradicted. Cheap in-tree: no test pins the name, and the only tracked
-  citations are `README.md`, `NEXT_SESSION_PROMPT.md` and
-  `.claude/commands/done.md`. GitHub redirects the old URL, but the clone line
-  in `README.md` is the one a stranger actually uses, so it gets updated.
-  DECIDE description-only versus a real rename before touching anything.
+- ~~**QA the repo for going public.**~~ **DONE 2026-09-06.** The audit ran at
+  commit `96a8c54` and every gate was green before a line was touched, so none of
+  it was a broken build - each item was a defect a stranger would meet. Every one
+  is now fixed and guarded. What landed, with the guard that holds it:
+  - **Two fixtures were labelled false, and the label WAS the compliance claim.**
+    `data/fixtures/seed_roster.json` and `seed_materials.json` opened with
+    `"_synthetic": true` on the line directly above a `"_note"` calling them
+    hand-authored. They now carry `_hand_authored`, `_vendored` and `_content`
+    blocks stating what they are: publicly known game facts, independently
+    verified, typed in one row at a time. `data/fixtures/README.md` is retitled
+    and now names which of its three files is which kind -
+    `enka_sample_profile.json` IS genuinely synthetic and keeps that label.
+    Synthetic means invented, and a verified avatarId is not invented. The true
+    claim was also the stronger one. Guarded in
+    `tests/test_licence_posture.py`, which went from 21 arms to 33.
+  - **The dissolved ADR-006 reason is qualified everywhere it appears.**
+    `README.md`, `ingest/enka_client.py`, `docs/SPEC_SCAFFOLD.md` and
+    `data/fixtures/README.md` each stated that vendoring `enka-py` or `ambr-py`
+    "would relicense this repo" - void since this tree became GPL-3-or-later.
+    Each now carries the dissolution note in the shape `docs/LICENSE_NOTES.md`
+    already used, and the refusal STANDS: both wrap HoYoverse data and a licence
+    on a wrapper cannot grant rights to the payload.
+    **A sharper instance the audit missed was found and fixed in the same pass:**
+    the GENERAL RULE in `docs/LICENSE_NOTES.md` - "GPL and other copyleft stays
+    DO-NOT-VENDOR ... because vendoring it would relicense this repo" - was the
+    version a future contributor actually applies, and it was flatly false for a
+    GPL-3 tree. It now says what replaced it: the question is no longer the
+    licence but the PAYLOAD, and a GPL-2-only library remains an automatic bar
+    on incompatibility grounds.
+  - **`NOTICE` gained the GPL-3 warranty disclaimer**, taken verbatim from the
+    appendix in `LICENSE` rather than retyped, plus a trademark acknowledgement
+    naming the marks and a statement that this is a non-commercial companion
+    tool. A guard matches the disclaimer against the text READ FROM `LICENSE` at
+    run time, so the two can never drift.
+  - **The docs guard now tests TRACKEDNESS, not just presence.**
+    `tests/test_docs_consistency.py` called `.exists()`, which is true for a
+    directory git does not store - exactly how `docs-guards` went red on the CI
+    runner while the same test was green locally. It now also asserts every cited
+    path is in `git ls-files`, with non-vacuity proven at the predicate level and
+    no tree mutation. 16 arms to 23. It caught a real unstaged-citation case
+    within minutes of landing.
+  - **The same root cause had two siblings, and both are fixed.**
+    `tests/test_ports.py` had a function NAMED `_tracked_python_files` that did a
+    filesystem `rglob` behind an ad-hoc denylist. It was GENUINELY RED in the
+    main checkout, and it would go red for any contributor who created a
+    `.venv/`. It now derives its list from `git ls-files`. The third sibling was
+    `tests/test_shell_contract.py`, latent rather than red because its assertions
+    were floor-shaped and so could not detect over-collection.
+  - **The Windows account name is out of `.claude/commands/done.md`** and can no
+    longer come back: `tests/test_machine_identity.py` sweeps every tracked file
+    for an absolute path naming a real account, across Windows, POSIX and
+    MSYS/WSL/Cygwin mount spellings. It carries BOTH guards - the leak is gone
+    AND the legitimate neighbours survived - with a by-name allowlist for the
+    synthetic `x` fixture in `tests/test_make_shortcut.py` and the `<account>`
+    documentation placeholder. Nothing in the tree had ever guarded that line in
+    either direction.
+  - **The README now opens for a stranger.** What it is, what state it is in,
+    what it deliberately does NOT do, and the non-affiliation disclaimer on the
+    first screen instead of the last. The repository tree is refreshed and
+    guarded by `tests/test_readme_tree.py` - one-directional by design, so an
+    added ADR cannot turn it red. The quickstart is PowerShell throughout, since
+    `export VAR=...` is not PowerShell and `curl -s` resolves to
+    `Invoke-WebRequest`. The machine name is gone and the space-containing path
+    is reframed as the deliberately exercised test case it actually is. The
+    Enka example UID is annotated at the use site.
+  - **`docs/SPEC_SCAFFOLD.md` no longer says a slice is done "from
+    `resin-compute/`".** The relocation premise is gone from the build contract.
+  - **Per-file licence headers: DECIDED, in `docs/adr/ADR-009-per-file-licence-headers.md`.**
+    The answer is NO, on the merits, with named re-open triggers. Measured: 78
+    tracked `.py`, 10 tracked `.js`, zero SPDX identifiers anywhere. GPL-3's
+    "How to Apply These Terms" sits at LICENSE line 623, AFTER
+    `END OF TERMS AND CONDITIONS` at line 621, so it is advisory; section 5(b)
+    binds the work and a modifier rather than the file and the author. Below
+    best practice, NOT non-compliant. The one real cost of omitting is recorded
+    honestly: a single file copied out of the tree carries no licence signal.
+- ~~**The licence gate's four text defects.**~~ **DONE 2026-09-06,** except that
+  the fan-content arm turned into something much more interesting - see the entry
+  below, which supersedes it. The other three are closed above.
+- **Close the fan-content evidence hole, and watch for a Genshin guide.** The
+  posture is decided and recorded in `docs/adr/ADR-008-fan-content-posture.md`
+  (operator decision 2026-09-06: publish on the vendoring argument alone). Two
+  residuals stay open. FIRST, three first-party PDFs were never read - a zh-CN
+  Terms of Service, the Genshin Creator Program Official Rules, and the HoYoPlay
+  Terms of Service - and their URLs are recorded nowhere, so the hole is not even
+  reproducible. `pdftotext` version 4.00 IS on PATH, so the earlier claim that no
+  renderer was available was false; re-derive the URLs and read them. SECOND,
+  ADR-008's re-open triggers are live, and the likeliest is a "Genshin Impact Fan
+  Creations Guide" appearing on HoYoLAB - Honkai: Star Rail has one and Zenless
+  Zone Zero has one, and Genshin, the oldest title, does not.
+  **Read ADR-008's method warning before doing either.** The research pass this
+  supersedes was wrong in three separately checkable ways and was caught only
+  because something was dispatched to refute it.
 - **A visibility pass, once the repo is public.** Adapted from a sibling
   project's own pass, NOT copied: its topic names and its game are not ours, and
   a lever list is transferable where a keyword list is not. Ranked by leverage:

@@ -2,6 +2,26 @@
 
 **Status:** Accepted, 2026-09-06
 
+> **AMENDED by `docs/adr/ADR-006-outbound-licence.md` in exactly one respect,
+> 2026-09-06. The body below is left exactly as it was written.**
+>
+> **DISSOLVED:** the Context below gives, as one reason to refuse `enka-py` and
+> `ambr-py`, that "Vendoring either would relicense this repo." That was true of
+> a permissive or unlicensed tree. This tree is now GPL-3.0-or-later, so
+> incorporating GPL-3 code relicenses nothing that is not already so licensed.
+> Both projects were re-verified as GPL-3.0 on 2026-09-06.
+>
+> **ADR-006 dissolves that one objection and no others.** In particular, **the
+> refusal itself stands unchanged.** Both projects wrap HoYoverse-copyright game
+> data, and a licence on a wrapper cannot grant rights to the payload. The data
+> was always the actual gate, so nothing below becomes vendorable on the strength
+> of ADR-006 alone.
+>
+> The body is not rewritten. An ADR records a decision as it was made; editing
+> the reasoning to match a later decision destroys the record this directory
+> exists to keep. `docs/LICENSE_NOTES.md` carries the same amendment in the same
+> shape.
+
 ## Context
 
 The originating brief named four data sources to "bootstrap from and periodically

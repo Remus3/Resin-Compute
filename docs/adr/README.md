@@ -15,3 +15,5 @@ argument is not had twice.
 | [ADR-005](ADR-005-companion-shell.md) | An Electron companion window over a local dashboard surface | Accepted |
 | [ADR-006](ADR-006-outbound-licence.md) | GPL-3.0-or-later as the outbound licence | Accepted |
 | [ADR-007](ADR-007-orchestration-doctrine.md) | Orchestrated multi-agent sessions as the default session shape | Accepted |
+| [ADR-008](ADR-008-fan-content-posture.md) | Fan-content posture rests on zero vendored assets, not on a permission | Accepted |
+| [ADR-009](ADR-009-per-file-licence-headers.md) | No per-file licence headers and no SPDX identifiers | Accepted |

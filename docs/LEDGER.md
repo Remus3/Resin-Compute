@@ -12,6 +12,216 @@ now.
 
 ---
 
+## 2026-09-06 - Landing the public-repo fixes, and a refutation that reversed one
+
+The fix session for the previous entry's audit. Nine slices, worktree-isolated,
+dispatched against a write-list union proven disjoint with `sort | uniq -d`
+before anything started. Every slice touched exactly its declared files - checked
+with `git status --short` in each worktree before merging, zero violations and
+zero untracked residue.
+
+**THE MOST IMPORTANT RESULT IS A REVERSAL, AND IT WENT THE OTHER WAY FROM LAST
+SESSION'S.** The previous entry's proudest finding was a refutation that rescued
+a false positive. This one is a refutation that removed a false negative, and it
+landed against work this session had already merged.
+
+A research pass reported that it had located a first-party Genshin-specific Legal
+FAQ on HoYoLAB that the prior session had missed, and that a literal-word probe
+of the COGNOSPHERE Terms of Service found no scraping clause. It returned
+`GATE: CLEARED`. `docs/adr/ADR-008-fan-content-posture.md` was written on that
+evidence and merged. An adversary dispatched with a licence-and-evidentiary-
+weight lens returned `REFUTED`. The main thread then re-probed every checkable
+claim against the primary artifacts itself, because agreement between agents is
+not evidence and neither is disagreement. **The adversary was right on every
+count:**
+
+- **The Terms of Service DO carry an express scraping prohibition.** Section 7,
+  clause c, applied to the COGNOSPHERE Services, conditioned on prior written
+  permission, with no non-commercial carve-out. Measured directly:
+  `curl` of `https://tot.hoyoverse.com/en-us/terms` returns 219297 bytes and
+  `grep -o -i -E "scrap[a-z]*"` returns two hits of `scraped`, at byte offsets
+  66250 and 156982. The summariser the research pass overturned had been right.
+  **The main thread's first reading of WHY was itself wrong, and the correction
+  is the better lesson.** It concluded the probe "cannot have run". A third
+  agent re-probed with word boundaries and found the honest explanation:
+  `\bscrape\b` returns 0, and so do `\bscraping\b`, `\bscraper\b`, `\brobot\b`,
+  `\bspider\b`, `\bcrawl\b` and `data mining`. ONLY the past participle
+  `\bscraped\b` hits. Every term on the original probe list genuinely returns
+  nothing. The probe was defeated by INFLECTION, not fabricated. Verified
+  independently by the main thread against the same 219297-byte fetch.
+  A literal probe is only as good as its morphology: search the stem, not the
+  lemma.
+- **The FAQ's enumeration is open-ended.** Measured on the retrieved body, which
+  lives in the `structured_content` field and not `content` - `content` is 5
+  characters. "including but not limited to" appears 3 times, "any other" 4,
+  "such as" 4, "current or future" once.
+- **The probe searched for vocabulary the document never uses.** `tool`,
+  `software`, `API`, `tracker`, `calculator`, `database` all score zero, and
+  that was reported as reassurance. The document's own words are `program`, 6
+  times, and `service`, 12 times. `website` was reported as appearing once; it
+  appears 8 times.
+- **The sentence the whole finding rested on answers a different question.** It
+  is the answer to a question about using images, text or audiovisual materials
+  of the game for re-creation or posting to a personal fansite. This project
+  vendors none of those. A non-prohibition of X is not evidence about Y.
+- **An admitted evidence hole was admitted for a false reason.** ADR-008 said no
+  PDF renderer was available. `command -v pdftotext` returns
+  `/mingw64/bin/pdftotext`, version 4.00.
+
+ADR-008 was rewritten against the artifacts. Operator decision: publish on the
+vendoring argument alone. The posture rests on what is verifiable about the
+project rather than on a 2021 forum post - zero vendored assets, zero vendored
+data, no contact with the game client, no HoYoverse endpoint called,
+non-commercial - which was always the half doing the work. The Section 7(c)
+clause and the HoYoverse to `enka.network` to this-repo data chain are recorded
+as an open question the ADR does not resolve, rather than one it pretends is
+cleared.
+
+**The durable lesson: a probe returning a convenient NEGATIVE deserves exactly
+the scrutiny a summary returning a convenient POSITIVE gets.** Last session's
+lesson was that agreement between two agents is not evidence. This session's is
+the single-agent version - a retrieval that confirms what you hoped is still a
+retrieval you have to check. Both were settled the same way, by going to the
+artifact instead of counting agents.
+
+**PROCESS FAILURE, recorded rather than left to be inferred.** The adversary
+reported a FREEZE VIOLATION: the main thread merged ADR-008 into the working tree
+while the adversary was reading it, so `git status --porcelain` went from 1 line
+to 13 to 17 mid-pass. `.claude/commands/orchestrated-run.md` phase 5 requires
+candidates to be frozen before dispatch, and phase 6 inherits that requirement.
+The adversary handled it correctly by pinning its verdict to a worktree copy and
+naming the mtime, and its verdict survived independent re-probing - but that was
+luck, not process. A verdict rendered against a moving tree is a statement about
+no state at all.
+
+**One root cause had three instances, and all three are fixed.** A guard that
+tests PRESENCE when it means TRACKEDNESS. Git stores no empty directories and
+knows nothing about ignored ones, so a filesystem walk sweeps content that is in
+nobody's clone.
+
+- `tests/test_docs_consistency.py` called `.exists()` on every cited path. That
+  is how `docs-guards` went red on the CI runner while the same test was green
+  locally. It now also asserts each cited path is in `git ls-files`. It caught a
+  real unstaged-citation case within minutes of landing.
+- `tests/test_ports.py` had a function NAMED `_tracked_python_files` that did
+  `REPO_ROOT.rglob("*.py")` behind an ad-hoc denylist. **This one was genuinely
+  RED in the main checkout** and was found by re-running the suites after the
+  merge, which is the entire reason that phase exists. It would go red for any
+  contributor who created a `.venv/`. The old denylist filtered `.pytest_cache`
+  but never `.mypy_cache` or `.claude/`, both live blind spots.
+- `tests/test_shell_contract.py` was the third, and it turned out CORRECTIVE
+  rather than preventive. Its ad-hoc denylist did cover the one case someone
+  remembered, `node_modules/`, named in `shell/`'s own second `.gitignore`. But
+  six ROOT `.gitignore` rules also apply under `shell/` and it remembered none
+  of them - `dist/`, `build/`, `.mypy_cache/`, `tmp/`, `_scratch/`, `.vscode/`.
+  The dist directory under shell/ - deliberately not written as a live path
+  here, because it is gitignored and absent from a clean checkout, and the very
+  guard this entry describes would flag it as a dead pointer - is
+  electron-builder's DEFAULT output location, and `shell/package.json` declares
+  electron as a devDependency, so it is a path a contributor produces simply by
+  running the build. A file staged there turned TWO
+  existing assertions red - the ASCII sweep and the foreign-port sweep - on
+  content in nobody's clone. Its floor-shaped assertion is what hid it: a floor
+  cannot detect OVER-collection.
+
+**The pattern across all three is worth stating once.** Each guard named its
+intent correctly and implemented something weaker, and in every case the gap was
+an ad-hoc denylist - a list of the ignore rules whoever wrote it happened to
+remember. `git check-ignore` and `git ls-files` already know the real answer.
+The permanent arms added this session check the swept list against
+`git check-ignore`, which is a DIFFERENT ORACLE from the `git ls-files` that
+produced it, so the two cannot fail in agreement.
+
+**The compliance labels now tell the truth, and the true claim is the stronger
+one.** `data/fixtures/seed_roster.json` and `seed_materials.json` opened with
+`"_synthetic": true` on the line directly above a `"_note"` calling them
+hand-authored. Synthetic means invented; a verified avatarId is not invented.
+They now carry `_hand_authored`, `_vendored` and `_content` blocks.
+`data/fixtures/README.md` is retitled and names which of its three files is which
+kind - `enka_sample_profile.json` IS genuinely synthetic and keeps that label.
+The builder deviated from its brief here and was right to: the literal
+instruction it was given would have condemned that honest file, whose own note
+reads "SYNTHETIC hand-authored payload". It implemented mutually-exclusive
+structured flags instead and reported the conflict.
+
+**A sharper instance of the ADR-006 sweep than the audit found.** The audit named
+four public-facing files still giving the dissolved copyleft reason. All four are
+fixed. But `docs/LICENSE_NOTES.md` carried it in its GENERAL RULE - "GPL and
+other copyleft stays DO-NOT-VENDOR ... because vendoring it would relicense this
+repo" - and that is the version a future contributor actually applies, not a
+table row. It was flatly false for a GPL-3 tree. The audit had marked that file
+as handled correctly because its header blockquote states the dissolution.
+
+**`python -m mypy` is green, and the obvious fix was the wrong one.** It had been
+red on `numpy/__init__.pyi:737`. The chain: `mypy.ini` names
+`agents/pity_engine/`, which crawls the engine's own `tests/`, which imports
+pytest, which imports `_pytest.python_api`, which imports numpy. `core/`,
+`engines/` and `ingest/` each check clean alone, which is how the chain was
+isolated. The operator's instruction was to drop the stray numpy. **numpy is not
+a stray:** `pip show numpy` reports it required by ImageHash, opencv-python,
+PyWavelets and scipy, so uninstalling it would have broken software outside this
+repo on a box seven projects share. That was reported back rather than executed,
+and the narrower fix - excluding the engine test directory, which is what
+`[mypy-tests.*]` already intended and simply never matched - was taken instead.
+
+**Nothing in this tree had ever guarded the account-name leak, in either
+direction.** `.claude/commands/done.md` carried an absolute
+`C:/Users/<account>/` path. `tests/test_docs_consistency.py` only inspects
+backticked tokens beginning with one of its declared tree roots, and an absolute
+Windows path begins with none of them, so it was never even looked at.
+`tests/test_machine_identity.py` now sweeps every tracked file across Windows,
+POSIX and MSYS/WSL/Cygwin mount spellings, with a by-name allowlist carrying a
+stated reason per entry. It builds its own offending literals at run time from
+segment lists so the test file cannot become the violation it tests for - the
+same trap that banned-glyph literals hit here before.
+
+**A defect this session introduced, caught by this session's own guard.** The
+main thread spliced a block into `ROADMAP.md` with `pathlib.Path.write_text`,
+which opens in TEXT mode on Windows and silently rewrote all 252 lines as CRLF.
+`.gitattributes` declares `eol=lf`, so git normalises on staging and NO DIFF
+WOULD EVER HAVE SHOWN IT. Only `tests/test_line_endings.py`, which reads bytes,
+caught it. Repair is `raw.replace(b"\r\n", b"\n")` then `write_bytes`; the
+Write and Edit tools preserve LF and are the right instrument. Same shape as the
+recorded backslash-mangling trap: an intermediary silently rewrites the payload.
+
+**Also corrected before shipping, in a public-facing document.** ADR-008 claimed
+a sweep of every HTTP URL in the runtime tree "returns exactly one". Re-run by
+the main thread, a naive grep returns FOUR hosts. The substance holds - only
+`https://enka.network` is a fetch the application makes; `registry.npmjs.org`
+and a `github.com/sponsors` link live in `shell/package-lock.json` as
+install-time package-manager metadata, and `schemas.microsoft.com` is an XML
+namespace identifier in `ops/ResinCompute-Supervisor.xml` that is never
+dereferenced. The wording now says so, because a reader WILL re-run that sweep
+and must not conclude the ADR is wrong. That is the same failure mode that cost
+this ADR its first draft.
+
+**Measured 2026-09-06 at the merge seam, after all nine slices, by the main
+thread rather than reported by a builder.** These are a historical reading, not
+a claim about now, and no count is written into any guarded document.
+
+```
+pytest tests                    762 passed, 1 skipped
+pytest agents/pity_engine        76 passed
+ruff check .                    All checks passed
+mypy                            Success: no issues found in 23 source files
+shell: node --test               52 pass, 0 fail
+scripts/qa_companion.py          17 passed, 0 failed, 1 skipped
+headless --once --dry-run       exit 0
+```
+
+Guard arms added: `tests/test_licence_posture.py` 21 to 33,
+`tests/test_docs_consistency.py` 16 to 23, `tests/test_shell_contract.py` 20 to
+23, plus `tests/test_machine_identity.py` (33 arms) and
+`tests/test_readme_tree.py` (9 arms) as new files.
+
+**Operator decisions taken this session,** so they are not re-litigated: the
+repository keeps the name `Resin-Compute` and gets "Resin Compute & Pity Engine"
+as its DESCRIPTION and README H1 rather than a rename, leaving the two-tier
+convention in `CLAUDE.md` intact; commit identity ships as-is with no second
+history rewrite, considered and declined; publication rests on the vendoring
+argument alone; and the three unread PDFs are recorded as an open hole rather
+than closed this session.
+
 ## 2026-09-06 - The public-repo audit, and the finding that refuted itself
 
 An audit session, not a fix session. Every gate was green at commit `96a8c54`

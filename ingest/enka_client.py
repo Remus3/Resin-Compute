@@ -5,9 +5,12 @@ LICENSE POSTURE - read this before adding a dependency here.
 Nothing in this module is lifted from any upstream project. The Enka API-docs
 repository carries NO LICENSE file, so only the PROTOCOL FACTS it publishes
 (endpoint shapes, field names, status codes) are used, and facts are not
-copyrightable. `enka-py` and `ambr-py` are both GPL-3.0 and vendoring either
-would relicense this repository, so neither is used or copied. See
-`docs/SPEC_SCAFFOLD.md` section 4 and `data/fixtures/README.md`.
+copyrightable. `enka-py` and `ambr-py` are both GPL-3.0. The objection that
+vendoring either "would relicense this repository" died with ADR-006, which made
+this tree GPL-3.0-or-later - but that dissolved exactly one objection and no
+others, and neither is used or copied for the reason that always governed: both
+wrap HoYoverse game data, and a licence on a wrapper cannot grant rights to the
+payload. See `docs/SPEC_SCAFFOLD.md` section 4 and `data/fixtures/README.md`.
 
 Stdlib only, by design: `urllib.request` sets a custom header perfectly well, so
 a third-party HTTP library buys nothing and would break the zero-runtime-
