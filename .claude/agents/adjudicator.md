@@ -67,7 +67,7 @@ reading `git log`. Never edit, create, move, delete, stage, commit or push.
    - 7-bit ASCII in every authored byte; no banned glyph anywhere
      (`tools/precommit_gate.py` is the mechanism)
    - atomic writes through `core/atomic_io.py` for anything a reader polls
-   - no vendored game data; `data/fixtures/` synthetic only; unverified cost figures never
+   - no vendored game data; `data/fixtures/` hand-authored only, nothing vendored; unverified cost figures never
      reach `data/` (`docs/GOAL_SPEC_SEED_TEAM.md`)
    - no raw API or error string surfaced to a user-facing view
    - Enka policy enforced in code, not prose: custom User-Agent, `ttl` honoured, no UID

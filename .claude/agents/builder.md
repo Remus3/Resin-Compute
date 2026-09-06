@@ -61,7 +61,7 @@ recorded.
   write `taskkill //F //PID <pid>` - MSYS path conversion rewrites a lone `/F` into `F:/`
   and the call fails SILENTLY when redirected to `/dev/null`, so a process you believe you
   killed is still running.
-- **Vendor no game data.** `data/fixtures/` is synthetic only. See `docs/LICENSE_NOTES.md`
+- **Vendor no game data.** `data/fixtures/` is hand-authored only, nothing vendored. See `docs/LICENSE_NOTES.md`
   before adding any source.
 - **Never surface a raw API or error string** in a user-facing surface. Catch it, render a
   friendly degraded state, log the raw error.

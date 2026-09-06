@@ -52,7 +52,10 @@ is the pure deterministic compute engine inside it.
 - **Never surface a raw API or error string** in any user-facing surface. Catch
   it, render a friendly degraded state, log the raw error.
 - **Vendor no game data.** See `docs/LICENSE_NOTES.md`. `data/fixtures/` is
-  synthetic only.
+  HAND-AUTHORED only - nothing upstream is vendored. Do not call it "synthetic":
+  two of its three files are verified public game facts typed in by hand, and
+  only `enka_sample_profile.json` is invented. Corrected 2026-09-06; the old
+  wording was false about two of the three files.
 
 ## Layout
 

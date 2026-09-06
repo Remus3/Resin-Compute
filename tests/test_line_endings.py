@@ -34,12 +34,18 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import require_git_repository
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 CRLF = b"\r\n"
 
 
 def _git(*args: str) -> str:
+    # Guarded HERE rather than at module level: the two arms below that read
+    # bytes off disk - the .githooks/ shims and the CRLF detector itself - need
+    # no repository and must keep running in a Download-ZIP copy.
+    require_git_repository()
     return subprocess.run(
         ["git", *args],
         cwd=REPO_ROOT,

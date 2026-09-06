@@ -57,7 +57,7 @@ recorded.
   `python -m pytest agents/pity_engine`. NEVER `pytest .` from the root - the engine
   package is self-validating and mirrored standalone, and a root-wide collection is how a
   sibling earned an import-file-mismatch incident (`pytest.ini` says so).
-- **Vendor no game data.** `data/fixtures/` is synthetic only. Any slice touching a data
+- **Vendor no game data.** `data/fixtures/` is hand-authored only, nothing vendored. Any slice touching a data
   source routes through `researcher` and `docs/LICENSE_NOTES.md` FIRST.
 - Do not re-derive the gacha constants from memory or from a web search. They are in
   `docs/SPEC_SCAFFOLD.md` section 3 with the corrections in

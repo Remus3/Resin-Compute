@@ -36,6 +36,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import git_unusable_reason, require_git_repository
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 #: Matched at the START of a line, case-insensitively, against the message body.
@@ -48,6 +50,7 @@ FIELD_SEP = chr(1)
 
 
 def _git(*args: str) -> str:
+    require_git_repository()
     return subprocess.run(
         ["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, check=True
     ).stdout
@@ -113,6 +116,12 @@ def test_the_history_sweep_is_not_vacuous():
 
 def _run_commit_msg_hook(message: str, tmp_path: Path) -> tuple[int, str]:
     """Run .githooks/commit-msg over a real message file and return the result."""
+    # The hook is a GIT hook and shells out to git itself, so outside a
+    # repository it exits 128 before reaching the trailer logic. Measured: the
+    # arms below then fail with "the hook rejected an otherwise valid message",
+    # which names the wrong cause entirely.
+    require_git_repository()
+
     sh = shutil.which("sh")
     if sh is None:
         pytest.skip("no POSIX sh on PATH - the hook cannot be exercised here")
@@ -194,3 +203,50 @@ def test_the_detector_does_not_fire_on_prose_about_a_trailer():
 def test_a_human_co_author_trailer_is_not_banned():
     """The policy is about AGENT trailers, not about co-authorship as such."""
     assert banned_trailers_in("subject\n\nCo-Authored-By: A Person <a@example.com>\n") == []
+
+
+# ---------------------------------------------------------------------------
+# The skip path must never become the normal path
+# ---------------------------------------------------------------------------
+
+
+def test_the_missing_git_skip_path_is_not_taken_in_a_real_checkout():
+    """The sharpest arm in this file, and the reason it lives here.
+
+    Every git-dependent guard under `tests/` now skips itself when
+    `tests/conftest.py` reports no usable git. That is honest in a
+    Download-ZIP copy and catastrophic anywhere else: if the helper ever
+    answered "no git" inside a REAL checkout, all of those guards would
+    evaporate at once and the suite would still report green. Vacuous green is
+    worse than a missing test, because it reads as coverage - the same argument
+    this module's docstring makes about the shallow-clone hole.
+
+    So the helper is cross-checked against a SECOND, differently-derived
+    signal: a `.git` entry on disk at or above the repo root. Disk presence is
+    deliberately NOT how detection works, because it is wrong for a linked
+    worktree, a submodule and a moved `GIT_DIR`. That independence is exactly
+    what makes it a useful second opinion here - the two can only agree by
+    both being right.
+
+    BOTH ARMS ARE LIVE, each in the environment the other cannot reach. In a
+    checkout the first arm proves the guards are still armed; in an archive
+    extract the second proves the detector actually fires rather than being
+    stuck on "usable". Assert only one and a detector welded to a single answer
+    passes forever.
+    """
+    on_disk = [p for p in (REPO_ROOT, *REPO_ROOT.parents) if (p / ".git").exists()]
+    reason = git_unusable_reason()
+
+    if on_disk:
+        assert reason is None, (
+            f"a .git entry exists at {on_disk[0]}, so this IS a checkout, but the "
+            f"shared helper reports git as unusable: {reason}. Every git-dependent "
+            "guard under tests/ is silently skipping and this suite's green is "
+            "meaningless"
+        )
+    else:
+        assert reason is not None, (
+            "no .git entry exists at or above the repo root, yet the shared helper "
+            "reports git as usable - the detector is not detecting, and the guards "
+            "that depend on it will fail with a confusing error instead of skipping"
+        )

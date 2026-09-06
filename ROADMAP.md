@@ -79,8 +79,10 @@ version. What follows is everything the scaffold deliberately did not do.
   - **`docs/SPEC_SCAFFOLD.md` no longer says a slice is done "from
     `resin-compute/`".** The relocation premise is gone from the build contract.
   - **Per-file licence headers: DECIDED, in `docs/adr/ADR-009-per-file-licence-headers.md`.**
-    The answer is NO, on the merits, with named re-open triggers. Measured: 78
-    tracked `.py`, 10 tracked `.js`, zero SPDX identifiers anywhere. GPL-3's
+    The answer is NO, on the merits, with named re-open triggers. Measured at
+    `e95a71c`: 80 tracked `.py`, 10 tracked `.js`, and zero SPDX identifiers in
+    any source file - the only occurrences anywhere are in ADR-009 itself,
+    discussing them. GPL-3's
     "How to Apply These Terms" sits at LICENSE line 623, AFTER
     `END OF TERMS AND CONDITIONS` at line 621, so it is advisory; section 5(b)
     binds the work and a modifier rather than the file and the author. Below
@@ -103,6 +105,49 @@ version. What follows is everything the scaffold deliberately did not do.
   **Read ADR-008's method warning before doing either.** The research pass this
   supersedes was wrong in three separately checkable ways and was caught only
   because something was dispatched to refute it.
+- ~~**The suite could not run for anyone who received the repo without git.**~~
+  **DONE 2026-09-06.** `git archive` plus `pytest tests` aborted at COLLECTION,
+  exit 2, zero tests run - what a reader gets from Download-ZIP, an sdist or a
+  vendored copy. Introduced by this session's own trackedness fixes, which took
+  the number of git-dependent test files from 3 to 8 with nothing testing the
+  absent-git case. `tests/conftest.py` now provides the skip helpers, and a
+  cross-check in `tests/test_commit_trailers.py` fails if the skip path is ever
+  taken inside a real checkout. Fixing it exposed a second, pre-existing defect:
+  `tests/test_hook_interpreter.py` embedded a quoted path in an `sh -c` string,
+  which MSYS mangles at any path WITHOUT a space - so it passed here and would
+  have failed for anyone cloning to `C:\dev\ResinCompute`. Both fixed and
+  measured: archive now 692 passed, 50 skipped, exit 0.
+- **Two guards claim more than they sweep. Found by the quickstart adversary at
+  `e95a71c`, both measured.**
+  - `tests/test_ports.py` sweeps ONLY `.py` files, because it uses `ast.parse` to
+    tell a live integer literal from one inside a comment - which is the right
+    mechanism and the reason it cannot simply be widened. The gap it leaves is
+    real: `requirements.txt` stated the engine was on `:8870` in the PRESENT
+    TENSE, the pre-ADR-004 port inside a sibling project's block, and no guard
+    saw it because a `.txt` has no AST. The text is fixed; the gap is not. A
+    prose-level sweep for sibling port literals in non-Python tracked files needs
+    its own mechanism and its own two guards - the legitimate neighbours here are
+    the many DELIBERATELY historical mentions of 8870 in `docs/adr/ADR-004-port-block.md`,
+    `docs/LEDGER.md`, `core/ports.py` and `README.md`, which must survive.
+  - `tests/test_goal_spec.py` keeps unverified cost figures out of `data/` with a
+    denylist of four numeric literals plus one material name. It fires correctly -
+    proven by probe - but `docs/GOAL_SPEC_SEED_TEAM.md` section 3 carries more
+    unverified figures than the denylist names. A denylist of remembered values
+    is the same shape as the ad-hoc ignore lists this session removed. The
+    durable fix is to derive the forbidden set FROM the goal spec's own
+    unverified stamps rather than restating it by hand.
+- **One instance of the trackedness root cause is left, and it is the mild one.**
+  `tests/test_docs_consistency.py` now derives its trackedness PREDICATE from
+  `git ls-files`, but it still enumerates its docs CORPUS - which `.md` files to
+  read - with `rglob`, at lines 172, 200, 231, 295, 306, 326 and 381. Found by
+  the verification pass at `e95a71c`. This is NOT a blind spot in the dangerous
+  direction: a tracked file in a clean checkout is always present, so the walk is
+  a superset and nothing tracked escapes it. The exposure is the opposite one - a
+  contributor with an untracked scratch `.md` under `docs/` gets it graded, and a
+  red suite for a file that is in nobody's clone. Same fix as the other three:
+  ask git. Left open deliberately rather than swept in at the end of a long
+  session, because the other three were each done TDD-first with a staged red and
+  this one deserves the same.
 - **A visibility pass, once the repo is public.** Adapted from a sibling
   project's own pass, NOT copied: its topic names and its game are not ours, and
   a lever list is transferable where a keyword list is not. Ranked by leverage:

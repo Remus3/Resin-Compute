@@ -40,7 +40,7 @@ not see the main thread's context, so it is restated here in full rather than po
   quote it.** Not style: PowerShell 5.1 ANSI-decodes a no-BOM `.ps1` and turns a UTF-8
   em-dash into a string terminator, cascading into a parse failure.
 - **Never add a `Co-Authored-By: Claude` trailer**, and never file its absence as a defect.
-- **Vendor no game data.** `data/fixtures/` is synthetic only, hand-authored, and labelled
+- **Vendor no game data.** `data/fixtures/` is hand-authored, nothing vendored, and labelled
   as such. Unverified cost figures must not reach `data/` - `docs/GOAL_SPEC_SEED_TEAM.md`
   stamps every claim verified / unverified / time-sensitive and that stamp is load-bearing.
 - Do not re-derive gacha constants from a web search. They are verified and recorded in

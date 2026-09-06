@@ -14,8 +14,12 @@ ResinCompute is a NON-COMMERCIAL companion and analysis project for the game
 Genshin Impact. It is not affiliated with, endorsed by, or connected to
 HoYoverse / miHoYo / Cognosphere in any way. It is not sold, not licensed for a
 fee, and carries no advertising or other monetisation. The non-commercial
-posture is deliberate and load-bearing rather than incidental: fan-content
-permission for this kind of project is conditioned on non-commercial use.
+posture is deliberate rather than incidental, and it is stated here as a fact
+about this project - not as reliance on any permission. No first-party policy
+granting permission for software of this kind was located; see
+docs/adr/ADR-008-fan-content-posture.md, which records what was retrieved, what
+it does and does not cover, and why being outside the scope of the published
+permissions is not the same as being permitted.
 
 TRADEMARK ACKNOWLEDGEMENT. Genshin Impact, HoYoverse, miHoYo and Cognosphere are
 trademarks or registered trademarks of their respective owners. They are used

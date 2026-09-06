@@ -39,6 +39,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import require_git_repository
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 #: The heading the tree lives under. The block is found by heading rather than
@@ -129,6 +131,7 @@ def _tree_paths() -> list[str]:
 @lru_cache(maxsize=1)
 def _tracked() -> frozenset[str]:
     """Every path git actually stores, as `git ls-files` reports it."""
+    require_git_repository()
     result = subprocess.run(
         ["git", "ls-files"],
         cwd=REPO_ROOT,

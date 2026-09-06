@@ -58,6 +58,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import require_git_repository
+
 #: Resolved from this file, never from the process working directory. pytest
 #: can be invoked from anywhere, and a sweep rooted at the cwd silently scans
 #: the wrong tree - or nothing at all - and passes.
@@ -225,6 +227,7 @@ def _tracked_files() -> tuple[str, ...]:
     and sweeping them would make this test depend on whatever happens to be
     lying around.
     """
+    require_git_repository()
     completed = subprocess.run(
         ["git", "ls-files"],
         cwd=REPO_ROOT,

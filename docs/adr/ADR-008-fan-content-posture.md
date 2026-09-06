@@ -24,22 +24,40 @@ each is cheap to re-measure:
 
 - **Zero vendored game assets.** No image, audio, video, font or binary asset is
   tracked anywhere in the repository.
-- **Zero vendored game data.** Everything under `data/fixtures/` is hand-authored
-  synthetic test data, labelled as such in `data/fixtures/README.md`. That is
-  ADR-002's rule, with arms guarded by `tests/test_licence_posture.py`.
+- **Zero vendored game data.** Everything under `data/fixtures/` is
+  HAND-AUTHORED, and `data/fixtures/README.md` names which file is which kind.
+  Two of the three are verified public game facts - real avatarIds and material
+  ids - typed in one row at a time; only `enka_sample_profile.json` is invented,
+  and it alone is labelled synthetic. An earlier draft of this bullet called the
+  whole directory "synthetic test data", which the sibling file it cited as its
+  own authority declares false. Hand-authored is what ADR-002 requires, and it
+  is the stronger claim - synthetic means invented, and a verified avatarId is
+  not invented. Arms guarded by `tests/test_licence_posture.py`.
 - **No contact with the game client.** Nothing reads the game's process, memory,
   installation directory or files. There is no such code path to disable.
 - **One outbound host that the application actually fetches.**
   `https://enka.network`, reached from `ingest/enka_client.py`. No COGNOSPHERE or
   HoYoverse endpoint is contacted by any code in this repository.
-  State this precisely, because a reader will re-run the sweep and must not
-  conclude the ADR is wrong. A naive grep for `https?://` across tracked source
-  returns four hosts, and the other three are not fetches the application makes:
-  `registry.npmjs.org` and a `github.com/sponsors` link appear only in
+  STATE THE SCOPE, because a reader will re-run the sweep and must not conclude
+  the ADR is wrong. This claim is about CODE PATHS THAT FETCH, not about every
+  string in the repository, and the two give very different counts.
+  Swept over tracked files under `core/`, `engines/`, `ingest/`, `headless/`,
+  `ops/`, `surface/`, `shell/`, `agents/`, `scripts/` and `tools/`, a grep for
+  `https?://` returns four hosts. Only `enka.network` is fetched.
+  `registry.npmjs.org` and a `github.com/sponsors` link appear solely in
   `shell/package-lock.json`, which is install-time package-manager metadata;
   `schemas.microsoft.com` appears once in `ops/ResinCompute-Supervisor.xml` as an
   XML namespace identifier, which is never dereferenced. Localhost bindings are
-  `127.0.0.1` and are covered by `core/ports.py`.
+  `127.0.0.1` and are owned by `core/ports.py`.
+  Sweep ALL tracked files instead and the count rises to roughly thirteen, none
+  of them new fetch paths: `gnu.org` and `fsf.org` are inside the verbatim GPL
+  text in `LICENSE`, `example.com` and `claude.ai` are fixture strings in
+  `tests/`, and `gi.yatta.moe`, `raw.githubusercontent.com` and the two URLs
+  cited in this very ADR are prose citations in `.md` files. An earlier draft of
+  this bullet said "four hosts across tracked source" without naming the scope,
+  and a verification pass correctly refuted it. That was the THIRD claim in this
+  ADR to be refuted by re-running it, which is itself the argument for the
+  method warning below.
 - **The mechanics are re-implemented, not extracted.** Gacha constants come from
   the publisher's own published probability disclosures, cited at the point of
   use. Protocol facts and published numbers are not copyrightable; source and

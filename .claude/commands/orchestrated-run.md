@@ -276,7 +276,8 @@ discrepancies: <one line each, or none>
   - **correctness** - does the change do what the spec said, on the edge cases;
   - **licence and data posture** - ADR-002, ADR-006, `docs/LICENSE_NOTES.md`.
     Nothing under `data/` came from a licensed source, `data/fixtures/` is
-    synthetic only, and a real cost table or banner list appearing there is a
+    hand-authored only with nothing vendored, and a real cost table or banner
+    list appearing there is a
     stop-and-ask;
   - **does-it-reproduce** - run the cited command in a clean shell and read the
     exit code, do not read the claim;

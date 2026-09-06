@@ -11,9 +11,10 @@
 #   urllib.request   the Enka / Project Amber HTTP fetch. A custom User-Agent
 #                    is required by Enka policy and urllib sets headers fine,
 #                    so `requests` buys nothing here.
-#   http.server      the PityEngine local compute service on :8870. Same shape
-#                    as Riot Commander's Daemon Slayer on :8860, which is also
-#                    stdlib-only.
+#   http.server      the PityEngine local compute service on :8790, and the
+#                    dashboard surface on :8791. Ports are owned by
+#                    core/ports.py; ADR-004 records why the engine moved off
+#                    :8870, which sits inside a sibling project's block.
 #   json             every payload and every state file.
 #   dataclasses      the type contract in core/types.py. SPEC_SCAFFOLD section 1
 #                    delivers the brief's TypeScript interfaces as dataclasses,

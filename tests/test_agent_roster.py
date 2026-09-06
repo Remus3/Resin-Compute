@@ -74,6 +74,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import require_git_repository
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AGENT_DIR = REPO_ROOT / ".claude" / "agents"
 
@@ -267,7 +269,13 @@ def _git_ignores(relative_path: str) -> bool:
     moment the roster is committed, which is precisely when it must keep biting.
 
     The path need not exist on disk; check-ignore evaluates rules, not files.
+
+    Outside a repository there are no ignore rules to evaluate and git exits
+    128, which the assertion below deliberately refuses to collapse into "not
+    ignored". Skipping first keeps that refusal intact.
     """
+    require_git_repository()
+
     completed = subprocess.run(
         ["git", "check-ignore", "--no-index", "-q", relative_path],
         cwd=REPO_ROOT,
