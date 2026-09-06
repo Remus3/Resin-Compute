@@ -12,6 +12,82 @@ now.
 
 ---
 
+## 2026-09-06 - The session shape, the ritual, and three silent gates
+
+The default session here is now orchestrated, multi-agent, self-adjudicating and
+self-adversarial. ADR-007 argues it, CLAUDE.md states it as a rule, and
+`.claude/agents/` makes it executable: seven roles whose read-only halves omit
+Edit and Write from their tools list, so read-only is a mechanism rather than a
+promise. `tests/test_agent_roster.py` pins the roster, the tool scoping and the
+verdict vocabularies the orchestrator string-matches.
+
+`/done` existed in every sibling project and not here. It does now, in
+`.claude/commands/done.md`, alongside `orchestrated-run.md` and `ui-audit.md`.
+The inline fenced block is the hand-off; the Desktop file is its BACKUP, written
+by `tools/publish_next_session.py`, which reads the block out of
+`NEXT_SESSION_PROMPT.md` and never accepts prompt text as an argument - so the
+printed block, the tracked file and the Desktop copy cannot disagree. Operator
+instruction: nothing follows the fenced block, because the operator selects it by
+hand and trailing prose is text to select around.
+
+THREE GATES WERE SILENTLY NOT RUNNING, and all three had looked healthy.
+
+- **The pre-push gate had never run on this machine.** It selected `python3`,
+  which resolves here to the Microsoft Store shim and redirects to a DIFFERENT
+  interpreter carrying neither ruff nor pytest. `command -v python3` SUCCEEDS, so
+  the fallback guarded by existence never fired. Every push printed two warnings
+  and gated nothing. The same snippet was found in `pre-commit` and in
+  `commit-msg` - three copies, one root cause. `scripts/hook_python.sh` is now
+  the single shared selector and it probes CAPABILITY, not existence.
+  Verification pointer: `tests/test_hook_interpreter.py`, whose non-vacuity arm
+  runs the OLD snippet against a synthetic PATH and asserts it picks the useless
+  interpreter - without that arm the guard would pass by luck on Linux CI, where
+  `python3` IS the interpreter with the dev deps.
+- **The trailer policy was enforced on one of its two forms.** `commit-msg`
+  stripped `Co-Authored-By: Claude` and passed `Claude-Session:` straight
+  through. A history sweep found BOTH forms on two commits - the root commit and
+  one made later from the same hookless clone. Enforcement also lived only inside
+  a hook, and `core.hooksPath` is local config that is not cloned, so the policy
+  did not exist at all in a fresh clone. Verification pointer:
+  `tests/test_commit_trailers.py`, which reads history from OUTSIDE the hook and
+  skips explicitly on a shallow clone rather than sweeping one commit and
+  reporting clean.
+- **The declared line endings were half enforced.** `.gitattributes` claims
+  `eol=lf` pins the bytes in the repo AND in the working tree. Only the repo half
+  was true: 28 tracked files carried CRLF on disk while every diff looked clean,
+  because the clean filter normalises into the index. Committed blobs were always
+  correct, confirmed by `git hash-object --path` rather than assumed. Verification
+  pointer: `tests/test_line_endings.py`.
+
+History was REWRITTEN to remove the two trailer forms, on operator instruction,
+and force-pushed. Not undertaken lightly: the command was proven on a throwaway
+clone first, and both there and on the real tree the commit count was unchanged
+and every commit's TREE HASH was identical, so only messages moved.
+
+`.gitignore` stopped ignoring the command and agent docs. `.claude/` was a
+blanket ignore, so the ritual and the roster would have existed only on this
+machine - absent from a fresh clone, invisible to `docs-guards.yml`, unreviewable
+in a diff. The exclusions are on directory CONTENTS, because a negation cannot
+re-include a file whose parent directory is excluded.
+
+MEASURED THIS SESSION, and worth keeping: the four slices that built the roster,
+ADR-007 and the command docs were dispatched into the SHARED tree with no
+worktree isolation - while writing the ADR that says to isolate. No work was lost
+and no write-list was violated. It still cost accuracy in three of five agents:
+one reported a sibling's tests RED when an independent probe showed them green,
+one measured a suite polluted by files it did not own, and one watched HEAD move
+underneath it. Every one of those is a FALSE report produced by the tree rather
+than by the agent, and an orchestrator that believes one ships on a fiction.
+`orchestrated-run.md` now names the mechanism, `isolation: "worktree"`, not just
+the principle.
+
+Counts observed 2026-09-06 after the rewrite, as a reading and not a claim about
+now: ruff clean; `pytest tests` 697 passed, 1 skipped; `pytest agents/pity_engine`
+76 passed; `shell` node --test 52 passed; `scripts/qa_companion.py` 17 passed,
+0 failed, 1 skipped; headless smoke exit 0. `python -m mypy` remains red for the
+known environmental reason - it follows `_pytest` into a numpy stub using PEP 695
+syntax invalid under the pinned `python_version = 3.11` - and is advisory in CI.
+
 ## 2026-09-06 - Licence decided, and companion QA made runnable
 
 ADR-006: GPL-3.0-or-later. The sibling house pattern was the trap rather than the
