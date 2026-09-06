@@ -202,10 +202,33 @@ def test_roadmap_done_claims_name_something_that_exists():
     assert not missing, f"ROADMAP marks work DONE naming absent paths: {missing}"
 
 
+#: Control bytes a text file may legitimately contain: tab, newline, carriage
+#: return. Everything else below 0x09 is a control character with no business in
+#: prose, and everything above 0x7E leaves 7-bit ASCII.
+_ALLOWED_CONTROL = frozenset({0x09, 0x0A, 0x0D})
+
+
 def test_the_docs_are_seven_bit_ascii():
+    """Both ends of the range, and the lower end was a real blind spot.
+
+    This originally tested `byte > 0x7E` only. A BEL character - 0x07, produced
+    by a backslash-a escape in a non-raw Python string - was written into
+    docs/LEDGER.md by the very entry describing that same bug in a test, and this
+    guard said nothing. A check on one end of a range is a check with a
+    documented hole in it.
+    """
     offenders: list[str] = []
     for path in [REPO_ROOT / d for d in GOVERNING_DOCS] + sorted((REPO_ROOT / "docs").rglob("*.md")):
         raw = path.read_bytes()
-        if any(byte > 0x7E for byte in raw):
-            offenders.append(path.relative_to(REPO_ROOT).as_posix())
-    assert not offenders, f"non-ASCII in docs: {offenders}"
+        bad = sorted({b for b in raw if b > 0x7E or (b < 0x20 and b not in _ALLOWED_CONTROL)})
+        if bad:
+            offenders.append(f"{path.relative_to(REPO_ROOT).as_posix()} {bad}")
+    assert not offenders, f"non-ASCII or control bytes in docs: {offenders}"
+
+
+def test_the_ascii_guard_catches_a_control_byte():
+    """Non-vacuity, aimed at the hole that actually existed."""
+    for byte in (0x07, 0x00, 0x1B):
+        assert byte < 0x20 and byte not in _ALLOWED_CONTROL
+    for byte in (0x09, 0x0A, 0x0D):
+        assert byte in _ALLOWED_CONTROL
