@@ -18,11 +18,17 @@
 set -e
 
 ROOT="$(git rev-parse --show-toplevel)"
-PY="${PYTHON:-python3}"
 
-if ! command -v "$PY" >/dev/null 2>&1; then
-    PY=python
-fi
+# Interpreter selection is SHARED with pre-commit and pre-push. It used to be a
+# private `command -v` copy in each of the three, which is a name lookup and not
+# a capability test - see scripts/hook_python.sh for the measurement.
+#
+# No module is named here: both scripts below are stdlib-only, so any
+# interpreter that RUNS does the job. The literal `python` stays as the last
+# resort so the hook ERRORS rather than passing a message it never scanned -
+# this gate is fail-CLOSED.
+. "$ROOT/scripts/hook_python.sh"
+PY="$(resin_pick_python)" || PY=python
 
 # 1. Operator policy: never emit a `Co-Authored-By: Claude` trailer.
 #
