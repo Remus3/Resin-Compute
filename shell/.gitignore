@@ -1,0 +1,3 @@
+# The Electron package declares no postinstall and fetches its platform binary
+# lazily on the first require, so this directory is large and machine-specific.
+node_modules/
