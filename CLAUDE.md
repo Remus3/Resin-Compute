@@ -152,4 +152,10 @@ Verify by reading `ops/runtime/health.json` and confirming a new `pid` and
 Scoped sessions - each focused task is one session.
 - **Start:** read this file, `README.md`, `ROADMAP.md`, `docs/LEDGER.md`,
   and `git log`.
-- **End:** run both suites, commit, push, update `ROADMAP.md`.
+- **End:** run both suites, commit, push, update `ROADMAP.md`, then print
+  the next-session prompt inline in a fenced block.
+- **That fenced block is the LAST thing in the message.** No "what was done
+  this session" review after it, no sign-off, no offer to continue. Any
+  banner or shipped-summary goes BEFORE the block. The operator selects it
+  by hand to paste into a cold session, so trailing prose is text they have
+  to select around. Operator instruction, 2026-09-06.
