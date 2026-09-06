@@ -376,12 +376,21 @@ def test_the_notice_acknowledges_the_trademarks():
 
 
 def test_the_notice_states_the_non_commercial_posture():
-    """Load-bearing, not decoration.
+    """Load-bearing, not decoration - but NOT for the reason first written here.
 
-    Every HoYoverse fan-content permission that could be retrieved is
-    CONDITIONED on non-commercial use. A companion tool relying on that
-    permission while never stating it is non-commercial has not met the
-    condition it is relying on.
+    The original docstring said every retrievable HoYoverse fan-content
+    permission is CONDITIONED on non-commercial use, and that this project
+    therefore had to state its posture to meet a condition it was relying on.
+    ADR-008 refuted that premise: no first-party permission covering software of
+    this kind was located at all, so there is no condition being met and no
+    permission being relied on.
+
+    The arm stays because the FACT still matters. The one first-party sentence
+    that comes anywhere near this project is a non-prohibition of non-commercial
+    personal use, self-disclaimed by its author as not an approval. Whatever
+    little that is worth, it is worth nothing at all to a commercial project -
+    so if this project ever stops being non-commercial, ADR-008's analysis has
+    to be redone. Stating the posture keeps that trigger visible.
     """
     assert "non-commercial" in _flatten(_notice()).lower(), (
         "NOTICE does not state the non-commercial posture"

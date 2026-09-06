@@ -60,6 +60,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import require_git_repository
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HOOKS_DIR = REPO_ROOT / ".githooks"
 HELPER = REPO_ROOT / "scripts" / "hook_python.sh"
@@ -131,7 +133,7 @@ def _sh() -> str:
 
 def _run_sh(
     script: str, *, path_prefix: Path | None = None, env: dict[str, str] | None = None,
-    stdin: str = "",
+    stdin: str = "", argv: tuple[str, ...] = (),
 ) -> subprocess.CompletedProcess:
     """Run a snippet under the same `sh` git uses to run the hooks.
 
@@ -153,7 +155,7 @@ def _run_sh(
         environ["PATH"] = str(path_prefix) + os.pathsep + environ["PATH"]
     environ["PATH"] = environ["PATH"] + os.pathsep + str(Path(_sh()).parent)
     return subprocess.run(
-        [_sh(), "-c", script],
+        [_sh(), "-c", script, *argv],
         cwd=str(REPO_ROOT),
         input=stdin,
         capture_output=True,
@@ -209,6 +211,8 @@ def test_the_shared_helper_exists():
 
 def test_the_shared_helper_is_tracked_so_a_fresh_clone_gets_it():
     """The hooks SOURCE it. An untracked helper is three broken hooks, not one."""
+    require_git_repository()
+
     listed = subprocess.run(
         ["git", "ls-files", "--error-unmatch", "scripts/hook_python.sh"],
         cwd=str(REPO_ROOT),
@@ -394,9 +398,36 @@ def test_the_candidate_list_names_an_explicit_PYTHON_first():
 # ---------------------------------------------------------------------------
 
 
-def _run_prepush(path_prefix: Path, env: dict[str, str] | None = None):
+def _run_prepush(path_prefix: Path, env: dict[str, str] | None = None, *,
+                 needs_git: bool = True):
+    """Run the real pre-push hook under `sh`.
+
+    `needs_git` defaults True because the hook is a GIT hook: it shells out to
+    git and exits 128 outside a repository, long before reaching the
+    interpreter selection these arms actually grade. Measured in a `git
+    archive` extract, the arms then failed with git's "not a git repository"
+    in stderr, which names the wrong cause.
+
+    The escape-hatch arm is the one genuine exception - it returns before any
+    git call - so it passes `needs_git=False` and stays enforceable in a
+    Download-ZIP copy. Skipping it too would be over-skipping: a working guard
+    thrown away for no reason.
+    """
+    if needs_git:
+        require_git_repository()
+
     hook = (HOOKS_DIR / "pre-push").as_posix()
-    return _run_sh(f'"{hook}"', path_prefix=path_prefix, env=env)
+    # PASS THE PATH AS ARGV, NEVER INSIDE THE SCRIPT STRING.
+    # `_run_sh(f'"{hook}"')` embeds a quoted Windows-looking path in the `sh -c`
+    # argument, and MSYS argv conversion mangles it - the closing quote is lost
+    # and sh dies with "unexpected EOF while looking for matching quote".
+    # Measured 2026-09-06: it only bites when the repository path contains NO
+    # space, because a space suppresses the conversion. So it passed here, at
+    # `C:\Resin Compute`, and would fail for a contributor who cloned to
+    # `C:\dev\ResinCompute` - the normal case. Same root cause as the
+    # `taskkill //F //PID` rule in CLAUDE.md.
+    # As `$0`, the path is a separate argv element that sh never re-parses.
+    return _run_sh('exec "$0"', path_prefix=path_prefix, env=env, argv=(hook,))
 
 
 def test_pre_push_runs_both_halves_when_an_interpreter_carries_the_tools(
@@ -431,7 +462,7 @@ def test_pre_push_names_what_it_tried_when_it_fails_open(barren_path: Path):
 
 
 def test_the_escape_hatch_still_skips_the_whole_gate(shimmed_path: Path):
-    result = _run_prepush(shimmed_path, env={"RESIN_SKIP_PREPUSH": "1"})
+    result = _run_prepush(shimmed_path, env={"RESIN_SKIP_PREPUSH": "1"}, needs_git=False)
     assert result.returncode == 0, result.stderr
     assert "SKIPPED" in result.stdout
     assert "pre-push: OK" not in result.stdout

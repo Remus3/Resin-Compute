@@ -38,8 +38,9 @@ live version of this list; what follows is its shape.
 
 **Real, but empty:**
 
-- **The cost tables.** `data/costs/` is deliberately empty. Ascension, talent and
-  weapon costs must come from first-hand observation, and the account behind this
+- **The cost tables.** `data/costs/` holds its contract README and no data rows.
+  Ascension, talent and weapon costs must come from first-hand observation, and
+  the account behind this
   project has not been played yet, so no first-hand data exists. Figures that
   arrived from a web assistant are deliberately kept OUT of `data/`, and
   `tests/test_goal_spec.py` fails if anyone copies them in.
@@ -93,8 +94,14 @@ Requires Python 3.11 or newer.
 developed and operated on Windows and PowerShell 5.1 is the shell that ships
 with it. Where a command differs meaningfully on a POSIX shell, both are shown.
 Two differences bite immediately and are the reason the convention is stated
-rather than assumed: `export VAR=...` is not PowerShell, and `curl` in
-PowerShell 5.1 is an alias for `Invoke-WebRequest`, which has no `-s` parameter.
+rather than assumed. First, `export VAR=...` is not PowerShell - it errors with
+"the term 'export' is not recognized". Second, `curl` in PowerShell 5.1 is an
+alias for `Invoke-WebRequest`, and `curl -s <url>` fails in a way that is worse
+than a clean error: `-s` is not rejected, it BINDS, resolving unambiguously to
+`-SessionVariable` because that is the only parameter starting with "s". Your
+URL is swallowed as the session-variable name, `Uri` is then missing, and an
+interactive console PROMPTS for it - so the shell appears to hang rather than
+telling you anything. Measured on PowerShell 5.1.19041.6456.
 
 ### 1. Clone and install the hooks
 
@@ -190,26 +197,36 @@ python -m headless.runner --list-jobs
 python -m headless.runner --job forecast_pity
 ```
 
-Continuously, as a background worker:
+The four commands above each run and exit, so they belong in one console.
+**Everything from here on does not.** The daemon and the supervisor run in the
+FOREGROUND until you stop them, so each of the blocks below is a separate
+console. Read them as "leave this running, then open another window", not as a
+script to paste in one go.
+
+Continuously, as a background worker - console A:
 
 ```powershell
 python -m headless.runner --daemon --interval 300
 ```
 
-Under supervision, with restart-on-crash and a heartbeat:
+Or under supervision, with restart-on-crash and a heartbeat - also console A,
+instead of the above:
 
 ```powershell
 python -m ops.supervisor
 ```
 
-Trigger a supervised restart by writing any content to the trigger file. The
-supervisor clears it and restarts within about five seconds:
+Trigger a supervised restart from console B by writing any content to the
+trigger file. The supervisor clears it and restarts within about five seconds.
+Only existence is tested, never the bytes, so PowerShell's UTF-16LE redirect is
+harmless here:
 
 ```powershell
 echo restart > restart_trigger.txt
 ```
 
-Confirm it came back by reading the health file, not by looking at a window:
+Confirm it came back by reading the health file, not by looking at a window -
+console B again:
 
 ```powershell
 python -c "import json;print(json.dumps(json.load(open('ops/runtime/health.json')),indent=2))"
@@ -217,8 +234,16 @@ python -c "import json;print(json.dumps(json.load(open('ops/runtime/health.json'
 
 ### 6. Run the PityEngine service
 
+The engine runs in the FOREGROUND and does not return, so these are two
+consoles, not two lines. Start it in the first:
+
 ```powershell
 python -m agents.pity_engine --port 8790
+```
+
+Then, in a SECOND console:
+
+```powershell
 Invoke-RestMethod http://127.0.0.1:8790/health
 ```
 
@@ -445,9 +470,12 @@ each reserves a block. **ResinCompute reserves 8790-8809** (`rsc`).
 | 8791 | Dashboard surface |
 | 8792-8809 | unassigned |
 
-`core/ports.py` is the single owner of these numbers - no other tracked file
-restates them, and `tests/test_ports.py` pins each against the module that
-really binds it rather than re-asserting the literal.
+`core/ports.py` is the single owner of these numbers in CODE: no other tracked
+`.py` file restates them, and `tests/test_ports.py` pins each against the module
+that really binds it rather than re-asserting the literal. Prose is a different
+matter - this README quotes 8790 and 8791 in several places, and the guard does
+not sweep Markdown, so treat `core/ports.py` as the authority whenever a
+document and the module disagree.
 
 The scaffold originally put the engine on 8870, which sits inside Daemon
 Slayer's reserved 8860-8879. Nothing was listening there, so nothing broke and

@@ -84,15 +84,32 @@ the single-agent version - a retrieval that confirms what you hoped is still a
 retrieval you have to check. Both were settled the same way, by going to the
 artifact instead of counting agents.
 
-**PROCESS FAILURE, recorded rather than left to be inferred.** The adversary
-reported a FREEZE VIOLATION: the main thread merged ADR-008 into the working tree
-while the adversary was reading it, so `git status --porcelain` went from 1 line
-to 13 to 17 mid-pass. `.claude/commands/orchestrated-run.md` phase 5 requires
-candidates to be frozen before dispatch, and phase 6 inherits that requirement.
-The adversary handled it correctly by pinning its verdict to a worktree copy and
-naming the mtime, and its verdict survived independent re-probing - but that was
-luck, not process. A verdict rendered against a moving tree is a statement about
-no state at all.
+**PROCESS FAILURE, TWICE, recorded rather than left to be inferred.** Both
+adversaries dispatched this session reported a FREEZE VIOLATION, and the second
+one happened AFTER the first had been acknowledged.
+
+The first: the main thread merged ADR-008 into the working tree while the licence
+adversary was reading it, so `git status --porcelain` went from 1 line to 13 to
+17 mid-pass. The second: while the quickstart adversary was running, the main
+thread edited fourteen tracked files fixing the adjudicator's findings, and that
+adversary listed all fourteen and noted two concurrent `pytest` processes that
+were not its own.
+
+`.claude/commands/orchestrated-run.md` phase 5 requires candidates to be FROZEN
+before dispatch, and phase 6 inherits it. Both adversaries handled the violation
+correctly - the first pinned its verdict to a worktree copy and named the mtime,
+the second proved its own subject was byte-identical to `e95a71c` by sha256 and
+cloned from the committed HEAD rather than the worktree. Both verdicts therefore
+stood. That is the agents being careful, not the process being sound.
+
+**The lesson is specific and it is about the orchestrator, not the agents.** A
+read-only pass is not free to dispatch: it puts the tree under a lock the
+orchestrator has to honour, and an orchestrator that keeps merging because "they
+are only reading" has silently redefined what the verdict is about. The fix is
+mechanical rather than a resolution to be careful - dispatch read-only passes
+against a COMMITTED SHA and tell them to clone or `git archive` it, which is
+exactly what the second adversary did unprompted and what made its verdict
+survive.
 
 **One root cause had three instances, and all three are fixed.** A guard that
 tests PRESENCE when it means TRACKEDNESS. Git stores no empty directories and
@@ -213,6 +230,95 @@ Guard arms added: `tests/test_licence_posture.py` 21 to 33,
 `tests/test_docs_consistency.py` 16 to 23, `tests/test_shell_contract.py` 20 to
 23, plus `tests/test_machine_identity.py` (33 arms) and
 `tests/test_readme_tree.py` (9 arms) as new files.
+
+**THE VERIFICATION PASSES CHANGED THE WORK, WHICH IS THE POINT OF HAVING THEM.**
+Three independent passes ran against the committed tree, and two of them altered
+what shipped.
+
+- **The verifier** returned CONFIRMED WITH CORRECTIONS. Every count re-derived
+  exactly, including the "was" baselines, which it measured by exporting
+  `905fe24` with `git archive` into a scratch directory rather than mutating the
+  checkout. It found three false claims in shipped prose.
+- **The adjudicator** returned ACCEPT WITH RESERVATIONS and made the sharpest
+  observation of the session: this commit was convened because a licence gate
+  refused publication on documents making claims that were false about their own
+  contents, and it opened six more of exactly that class INSIDE the documents
+  written to close them. ADR-009 asserted that a tree-wide grep for the SPDX
+  identifier returned zero, in a sentence that contained the identifier, so the
+  grep returned that line. All six are fixed.
+- **The quickstart adversary** returned REFUTED, having actually run the README
+  in three clones, one at a space-containing path, plus an isolated venv on the
+  pinned toolchain. It verified the hooks end to end in both directions: a banned
+  glyph blocked with HEAD unchanged in a clone WITH hooks installed, and the same
+  glyph COMMITTED in a clone without them, which is the measured proof that the
+  README's "do this first" is load-bearing rather than advice.
+
+**The single most valuable finding was a blocker the orchestrator introduced.**
+Replacing filesystem walks with `git ls-files` was correct and it took the number
+of test files depending on the git oracle from 3 to 8 - measured by reading both
+commits - without anything testing what happens when that oracle is absent.
+`git archive e95a71c | tar -x` into a directory with no `.git`, then
+`python -m pytest tests`, ABORTS AT COLLECTION with exit 2 and NOT ONE TEST RUNS,
+because `tests/test_shell_contract.py` calls git inside a `parametrize` argument
+at import time. With that file skipped, 48 more fail. That is what a person gets
+from GitHub's "Download ZIP", from an sdist, or from any vendored copy - and the
+commit whose entire purpose was to make this repository publishable shipped it.
+The fix makes trackedness-dependent guards SKIP loudly when git is unusable,
+never fall back to a disk walk, with a guard that fails if the skip path is taken
+inside a real checkout.
+
+**THE BLOCKER IS FIXED, AND FIXING IT EXPOSED A SECOND ONE.**
+`tests/conftest.py` now holds three shared helpers. `git_unusable_reason()` asks
+`git rev-parse --git-dir` rather than looking for a `.git` entry on disk, because
+the disk check is wrong three ways this project actually uses - a linked worktree
+has a `.git` FILE, a submodule's lives under the superproject, and `GIT_DIR` can
+move it. `require_git_repository()` skips one test at run time;
+`skip_module_without_git()` skips a whole module at import time, which is needed
+for exactly one file - `tests/test_shell_contract.py` calls git inside a
+`parametrize` argument, so a run-time skip arrives too late and the exception
+becomes a collection ERROR that aborts everything. The guards SKIP rather than
+fail, and they never fall back to a disk walk, which would silently answer a
+different question while reporting green. Every skip names the missing repository.
+
+The dangerous failure mode is guarded: if the helper ever reported git unusable
+inside a real checkout, every git-dependent guard would evaporate at once and the
+suite would still be green. `tests/test_commit_trailers.py` cross-checks it
+against an INDEPENDENT signal - a `.git` entry on disk, deliberately not how
+detection works - and fails if the skip path is taken in a real repository.
+
+**The second blocker was masked by the first.** With collection fixed, one test
+still failed in the archive, and only at a path containing NO SPACE.
+`tests/test_hook_interpreter.py` ran the pre-push hook as `_run_sh(f'"{hook}"')`,
+embedding a quoted Windows-looking path inside an `sh -c` string. MSYS argv
+conversion mangles that and the closing quote is lost - `sh: -c: line 1:
+unexpected EOF while looking for matching quote`. A space in the path SUPPRESSES
+the conversion, which is the only reason it passed at `C:\Resin Compute`. It
+would have failed for anyone cloning to `C:\dev\ResinCompute`, which is the
+normal case. Fixed by passing the hook as an argv element and running
+`exec "$0"`, so sh never re-parses it. Same root cause as the recorded
+`taskkill //F //PID` rule.
+
+Measured after both fixes, by the main thread:
+
+```
+real checkout                         763 passed, 1 skipped   exit 0
+source archive, no .git, no spaces    692 passed, 50 skipped  exit 0
+                        was:          0 tests ran             exit 2
+```
+
+**Prose defects the adversary found that were real and are fixed:**
+`requirements.txt` stated the PityEngine runs on `:8870` in the present tense -
+the pre-ADR-004 port inside a sibling project's reserved block, in the one file
+the quickstart tells a reader to open, and the ONLY non-historical mention of
+that number in the tree. The README ran a foreground server and a client call in
+a single fenced block, so the second line could never execute, and repeated the
+shape four more times across the daemon, the supervisor, the restart trigger and
+the health read. And the README's stated REASON for its PowerShell convention was
+wrong in a way that mattered: `curl -s <url>` does not fail with "no such
+parameter", it BINDS `-s` to `-SessionVariable`, swallows the URL, and then
+prompts for the missing `Uri` - so the console appears to hang. The advice was
+right and the mechanism given for it was wrong, which is worse than saying
+nothing, because it teaches a reader to expect the wrong symptom.
 
 **Operator decisions taken this session,** so they are not re-litigated: the
 repository keeps the name `Resin-Compute` and gets "Resin Compute & Pity Engine"

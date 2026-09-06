@@ -35,7 +35,7 @@ handing the next one a running start.
 - `git status -s` and `git log --oneline -5`. Name the files YOU authored.
 - Check nothing unexpected is staged: no `.env`, no runtime state, no game data.
   Per ADR-002 and `docs/LICENSE_NOTES.md` this tree vendors no game data, and
-  `data/fixtures/` is synthetic only. A real cost table or banner list appearing
+  `data/fixtures/` is hand-authored only, nothing vendored. A real cost table or banner list appearing
   in `data/` is a stop-and-ask, not a commit.
 - **Hooks are the authoritative gate and a fresh clone has NONE.** Confirm with
   `git config core.hooksPath` - it must print `.githooks`. If it prints nothing,

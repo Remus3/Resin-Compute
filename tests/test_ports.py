@@ -27,6 +27,7 @@ from pathlib import Path
 import pytest
 
 from core import ports
+from tests.conftest import require_git_repository
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -133,6 +134,7 @@ def _git(*args: str, stdin: str | None = None, ok: tuple[int, ...] = (0,)) -> st
     directory: pytest can be invoked from anywhere and a relative git call would
     then answer about a different repository, or about none.
     """
+    require_git_repository()
     try:
         completed = subprocess.run(
             ["git", *args],

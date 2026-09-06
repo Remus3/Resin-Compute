@@ -24,6 +24,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import require_git_repository
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ADR_DIR = REPO_ROOT / "docs" / "adr"
 
@@ -122,6 +124,7 @@ def _tracked_paths() -> tuple[frozenset[str], frozenset[str]]:
     `-z` avoids core.quotePath escaping, which would otherwise mangle any path
     outside plain ASCII into a quoted form that stops matching the citation.
     """
+    require_git_repository()
     completed = subprocess.run(
         ["git", "ls-files", "-z"],
         cwd=REPO_ROOT,

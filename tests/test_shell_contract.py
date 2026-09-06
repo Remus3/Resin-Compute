@@ -34,9 +34,23 @@ from pathlib import Path
 import pytest
 
 from core import ports
+from tests.conftest import skip_module_without_git
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SHELL_DIR = REPO_ROOT / "shell"
+
+# MODULE-LEVEL, and it has to be. Every other git-dependent guard in this
+# directory calls `require_git_repository()` at run time, which is narrower and
+# keeps unrelated tests in the same module alive. That does not work HERE: the
+# sweep below is a `@pytest.mark.parametrize` argument, so git is invoked while
+# this module is being IMPORTED. A run-time skip is too late - the exception
+# escapes collection and pytest reports a collection ERROR, which aborts the
+# WHOLE RUN rather than skipping one file.
+#
+# Measured 2026-09-06 against a 147-file `git archive` extract: that is exactly
+# what happened, and NOT ONE TEST IN THE SUITE RAN - exit 2, for the public that
+# receives this repository as a Download-ZIP, an sdist or a vendored copy.
+skip_module_without_git()
 
 
 # ---------------------------------------------------------------------------

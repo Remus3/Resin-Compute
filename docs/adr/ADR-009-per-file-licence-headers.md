@@ -19,11 +19,18 @@ saying "Private. No licence granted." So the answer here is a ruling, not anothe
 
 ### What was measured, in this worktree, on 2026-09-06
 
-- **78 tracked `.py` files and 10 tracked `.js` files**, 88 together
-  (`git ls-files '*.py' | wc -l`, and the same for `*.js`).
-- **Zero SPDX identifiers anywhere in the tree.** `git grep -n
-  "SPDX-License-Identifier"` across all tracked files returns 0 matches - not
-  merely zero in `.py` and `.js`, zero everywhere.
+- **80 tracked `.py` files and 10 tracked `.js` files**, 90 together
+  (`git ls-files '*.py' | wc -l`, and the same for `*.js`). Measured at commit
+  `e95a71c`. An earlier draft of this ADR said 78 and 88; that was measured
+  before this session's two new test modules landed, and it is corrected here
+  rather than quietly - a stale count in a decision document is the same defect
+  class this session spent its time removing.
+- **Zero SPDX identifiers in any source file.**
+  `git grep -n "SPDX-License-Identifier" -- '*.py' '*.js'` returns 0 matches.
+  An earlier draft claimed zero matches TREE-WIDE, which was self-refuting: the
+  sentence asserting it contained the string, so the grep returned that line.
+  The only occurrences of the identifier anywhere in this repository are in this
+  ADR, discussing it. Stated this way the claim survives being checked.
 - `LICENSE` is 674 lines. **`END OF TERMS AND CONDITIONS` is at line 621**, and
   **"How to Apply These Terms to Your New Programs" is at line 623.** The
   header-recommending appendix sits AFTER the end of the terms. That placement
@@ -53,7 +60,7 @@ The outbound licence attaches at the REPOSITORY level, through `LICENSE` and
 `NOTICE`, both present and consistent. `tests/test_licence_posture.py` pins the
 `LICENSE` sha256 and checks that the declaration agrees across `LICENSE`,
 `NOTICE`, `README.md` and `shell/package.json`. Four files that must not
-disagree, guarded by a test, is a stronger consistency property than 88 files
+disagree, guarded by a test, is a stronger consistency property than 90 files
 that must not disagree, guarded by nothing.
 
 ## Decision
@@ -70,7 +77,7 @@ per-file notice for an original author distributing their own repository whole.
 
 ### Why, stated as the two costs that decide it
 
-**The cost of adopting.** Roughly 88 files of churn, and the churn is not free
+**The cost of adopting.** Roughly 90 files of churn, and the churn is not free
 here: this tree runs on `file:line` citations. The docs, the ledger and the ADRs
 all cite line numbers - this very ADR cites six of them - and a blanket header
 insertion shifts every citation in every file it touches, in one commit, with no
@@ -120,7 +127,7 @@ Any one of these makes per-file identifiers load-bearing and reopens this ADR.
 
 ## Rejected
 
-- **Full FSF header blocks in all 88 files.** The maximal option, and the one the
+- **Full FSF header blocks in all 90 files.** The maximal option, and the one the
   appendix describes. Rejected on the cost above: it invalidates every `file:line`
   citation in the tree at once and buys no compliance the repository-level files
   do not already supply.
@@ -139,5 +146,5 @@ Any one of these makes per-file identifiers load-bearing and reopens this ADR.
   this directory is that a decision nobody made is the most expensive kind.
 - **Treating "below best practice" as "non-compliant" and acting out of
   caution.** Rejected because it is factually wrong at the line numbers cited
-  above, and a project that churns 88 files to fix a violation that does not
+  above, and a project that churns 90 files to fix a violation that does not
   exist has learned nothing it can reuse.
