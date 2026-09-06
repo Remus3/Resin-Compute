@@ -665,7 +665,7 @@ def forecast_pity(context: JobContext) -> JobResult:
     """Forecast success probability through the compute engine.
 
     Calls the engine LIBRARY in-process. `agents.pity_engine` is a pure,
-    deterministic function of its inputs, so the library and the `:8870`
+    deterministic function of its inputs, so the library and the `:8790`
     service compute the identical answer - and the library needs no socket, no
     running daemon and no serialisation round trip. The service exists for
     callers OUTSIDE this process; a job that runs inside the same interpreter

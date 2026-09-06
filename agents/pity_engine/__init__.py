@@ -12,7 +12,7 @@ an opt-in argument that is byte-identical to the prior version at its default.
 The full per-version history lives in `CHANGELOG.md` beside this file. Future
 bumps PREPEND a new entry there and never extend a prior version's line.
 
-The engine is exposed over local HTTP on port 8870 (`python -m
+The engine is exposed over local HTTP on port 8790 (`python -m
 agents.pity_engine`), mirroring how Riot Commander exposes Daemon Slayer on
 8860. Nothing in the compute path knows the transport exists.
 

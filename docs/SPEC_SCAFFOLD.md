@@ -33,7 +33,7 @@ toolchain; the operator chose true RC inheritance instead, so:
 | CI | 3 GH Actions workflows w/ docs path-split | `ci.yml` + `docs-guards.yml` |
 | Hooks | `.githooks/` + `core.hooksPath` | same |
 | Headless lane | `ops/` supervisor + scheduled tasks | `ops/` + `headless/` |
-| Compute engine | Daemon Slayer HTTP `:8860` | PityEngine HTTP `:8870` |
+| Compute engine | Daemon Slayer HTTP `:8860` | PityEngine HTTP `:8790` (ADR-004) |
 
 **TypeScript interfaces named in the brief are delivered as Python dataclasses.**
 Python target: **3.11** (mypy pin). Ruff `target-version = "py311"`.
