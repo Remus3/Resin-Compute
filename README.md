@@ -1,117 +1,87 @@
-# ResinCompute
+# Resin Compute & Pity Engine
 
-Genshin Impact progression tracking, resource economics, goal planning and
-roster optimization. Headless-lane first: every calculation runs non-interactively
-from a CLI or a daemon, with no UI required.
+A planning engine for Genshin Impact's resource economy. It answers questions
+that are arithmetic rather than opinion: how many pulls until a character is
+reasonably safe, what a build actually costs in resin and days, and which of
+several goals to fund first.
 
-Built on the Riot Commander blueprint - same lint, test, hook and CI discipline,
-same supervisor and health-file operational model, same two-tier naming where the
-repo holds a versioned pure compute engine inside it.
+Headless-lane first. Every calculation runs non-interactively from a CLI or a
+daemon, and nothing requires a UI. There is a dashboard, but it reads the same
+computed state everything else does.
 
 - **Repo:** ResinCompute
 - **Compute engine:** PityEngine (`agents/pity_engine/`, HTTP `:8790`)
 
----
-
-## Why the stack is Python
-
-The brief that started this repo asked for TypeScript, Biome and Vitest while also
-asking it to inherit Riot Commander's complete config and testing pipeline. Those
-are mutually exclusive. Measured on 2026-09-06, Riot Commander is 2869 `.py` files
-against 1 generated `.d.ts`, with no `package.json`, no `tsconfig.json`, no Biome,
-no ESLint, no Prettier, no Vitest, no Jest and no Docker anywhere in the tree. Its
-inherited config surface IS `ruff.toml`, `pytest.ini`, `mypy.ini` and `.githooks/`.
-
-Python was chosen so the inheritance is real rather than nominal. The TypeScript
-interfaces named in the brief are delivered as Python dataclasses in
-`core/types.py`. See `docs/adr/ADR-001-stack.md`.
+**Not affiliated with, endorsed by, or connected to HoYoverse / miHoYo /
+Cognosphere.** "Genshin Impact" and all associated names, characters and
+material are their property. This is an independent, non-commercial companion
+tool. It vendors none of their data - see
+[What this deliberately does not do](#what-this-deliberately-does-not-do).
 
 ---
 
-## Repository tree
+## What state it is in
 
-```
-resin-compute/
-  README.md                     this file
-  CLAUDE.md                     agent context, hard rules, session workflow
-  ROADMAP.md                    open work
-  ruff.toml                     lint config, ported from Riot Commander
-  pytest.ini                    dual-suite config, never run `pytest .`
-  mypy.ini                      type config
-  conftest.py                   root sys.path hook, reaches BOTH suites
-  requirements.txt              runtime deps (deliberately empty, stdlib only)
-  requirements-dev.txt          ruff, pytest, mypy
+Honest, and specific. The scaffold shipped 2026-09-06. Read `ROADMAP.md` for the
+live version of this list; what follows is its shape.
 
-  .githooks/                    AUTHORITATIVE gate. A fresh clone runs NONE of
-    pre-commit                  these until install_hooks.py sets core.hooksPath
-    commit-msg
-    pre-push
+**Real and tested:**
 
-  .github/workflows/
-    ci.yml                      lint, py_compile, mypy, both suites, headless smoke
-    docs-guards.yml             fires on exactly what ci.yml declines (.md only)
+- **The forecaster.** Pity curves, soft-pity ramps, the 50/50 and its guarantee
+  behaviour, and multi-copy targets, computed with an absorbing Markov chain
+  rather than a binomial. It is correct for the current game version and its
+  three easy-to-get-wrong constants are regression-tested. See
+  [What the forecaster actually models](#what-the-forecaster-actually-models).
+- **The scaffold around it.** Both suites run, lint and types are clean, the
+  headless lane passes its smoke test, and the supervisor, health file and git
+  hooks all work end to end.
 
-  core/                         shared contract and primitives
-    types.py                    AccountState, CurrencyLedger, PityState,
-                                ObjectiveNode, ResolutionPath, EnkaMappedProfile
-    atomic_io.py                the ONLY sanctioned state-write path
-    log_setup.py                single daily log file, no rotation
-    config.py                   live-state-first env config
-    ledger.py                   event-sourced currency operations
-    resin.py                    resin regeneration, caps, condensed and fragile
-    domains.py                  weekday rotation and weekly boss reset mechanics
+**Real, but empty:**
 
-  agents/pity_engine/           PityEngine - pure deterministic forecaster
-    __init__.py                 ENGINE_VERSION, single source of truth
-    banners.py                  hazard tables for all four banner families
-    pity.py                     pity curve evaluation
-    markov.py                   absorbing Markov chain DP
-    forecast.py                 public API
-    __main__.py                 stdlib HTTP service on :8790
-    CHANGELOG.md
-    tests/                      the engine validates itself
+- **The cost tables.** `data/costs/` is deliberately empty. Ascension, talent and
+  weapon costs must come from first-hand observation, and the account behind this
+  project has not been played yet, so no first-hand data exists. Figures that
+  arrived from a web assistant are deliberately kept OUT of `data/`, and
+  `tests/test_goal_spec.py` fails if anyone copies them in.
+- **The objective DAG.** `engines/objectives.py` is mechanism only. It produces a
+  structurally correct dependency graph - the right nodes, in the right order,
+  with cycle detection and a critical path - and every material quantity in it is
+  zero, because nothing supplies them yet. Correct shapes, empty costs.
+- **The scheduler.** Resin-aware, weekday-rotation aware and weekly-lockout
+  aware, but it has no dating layer: it emits day offsets, and nothing yet turns
+  an offset into a calendar date.
 
-  engines/                      planning and optimization
-    objectives.py               goal DAG, cycle detection, critical path
-    scheduler.py                resin, weekday rotation and weekly lockout aware
-    recommend.py                what to get / who to build solver
+**Exists, mostly not wired:**
 
-  ingest/                       external data, re-implemented from protocol
-    enka_client.py              stdlib urllib, ttl-honouring, policy compliant
-    enka_mapper.py              raw payload to EnkaMappedProfile
-    static_data.py              id to name lookup over local fixtures
+- **The dashboard.** `surface/` serves it on 8791 and `shell/` is an Electron
+  companion with a system tray (ADR-005). Several panels are not live yet.
+  A panel that is not wired says what it is waiting on rather than showing a
+  placeholder number, which is a deliberate design rule and not a stopgap.
 
-  headless/                     THE headless lane
-    runner.py                   non-interactive entrypoint, CLI and daemon
-    jobs.py                     job registry, per-job isolation
+---
 
-  ops/                          supervision and operational state
-    supervisor.py               watchdog, restart_trigger.txt, bounded backoff
-    health.py                   ops/runtime/health.json contract
-    ResinCompute-Supervisor.xml Windows Scheduled Task, ONLOGON
-    install_scheduled_task.ps1
-    runtime/                    health.json lives here, gitignored
+## What this deliberately does not do
 
-  scripts/
-    bootstrap_data.py           runnable data bootstrap
-    install_hooks.py            FIRST thing to run in a fresh clone
-    precommit_pycompile.py
-    precommit_msg_check.py
+Load-bearing, not modesty. Each of these is a decision with a record behind it.
 
-  tools/
-    precommit_gate.py           banned-glyph and net-new-ruff gate
-
-  data/fixtures/                SYNTHETIC test fixtures only, nothing vendored
-
-  docs/
-    SPEC_SCAFFOLD.md            the build contract, verified constants
-    LEDGER.md                   append-only completion history, newest first
-    GOAL_SPEC_SEED_TEAM.md      the seed-team goal, every claim stamped
-    LICENSE_NOTES.md            third-party posture, read before adding a source
-    adr/                        architectural decisions
-
-  tests/                        application suite
-```
+- **It vendors no game data.** Not one row. `data/fixtures/` is a small
+  hand-authored set of publicly known identifiers for tests. The reasoning and
+  the survey of what was rejected are in `docs/LICENSE_NOTES.md` and ADR-002.
+- **It is not a wiki scrape, and it is not a wiki mirror.** No upstream dataset
+  is ingested, and the projects that would have made that easy were examined and
+  refused on licence grounds rather than overlooked.
+- **It does not automate, modify, or touch the game client.** No macros, no input
+  injection, no packet capture, no memory reading, no file patching. The only
+  external data it reads is a player's own public character showcase through
+  Enka.Network's published API.
+- **It does not enumerate UIDs.** The Enka client refuses bulk enumeration, sends
+  a required custom User-Agent, and honours the `ttl` on every response. That is
+  enforced in `ingest/enka_client.py`, not just promised here.
+- **It does not let unverified numbers into `data/`.** A figure without
+  first-hand provenance stays in prose where it can be argued with. See
+  `docs/GOAL_SPEC_SEED_TEAM.md`, which stamps every claim verified, unverified,
+  time-sensitive or refuted.
+- **It is not affiliated with HoYoverse**, and it is not commercial.
 
 ---
 
@@ -119,37 +89,45 @@ resin-compute/
 
 Requires Python 3.11 or newer.
 
+**Shell convention:** every block below is PowerShell, because this project is
+developed and operated on Windows and PowerShell 5.1 is the shell that ships
+with it. Where a command differs meaningfully on a POSIX shell, both are shown.
+Two differences bite immediately and are the reason the convention is stated
+rather than assumed: `export VAR=...` is not PowerShell, and `curl` in
+PowerShell 5.1 is an alias for `Invoke-WebRequest`, which has no `-s` parameter.
+
 ### 1. Clone and install the hooks
 
 **Do this first.** `core.hooksPath` is local git config and is not cloned, so a
 fresh clone runs **zero** hooks until you set it. The tracked `.githooks/`
 directory is inert until then.
 
-On Legion, the canonical checkout is `C:\Resin Compute`:
-
 ```powershell
-git clone https://github.com/Remus3/Resin-Compute.git "C:\Resin Compute"
-cd "C:\Resin Compute"
+git clone https://github.com/Remus3/Resin-Compute.git
+cd Resin-Compute
 python scripts/install_hooks.py
 ```
 
-The install path contains a space, deliberately, matching `C:\Riot Commander\`.
-That is verified rather than assumed: the whole tree was run from a
-space-containing path before this was written - ruff, both suites, the headless
-smoke test, the bootstrap script and the supervisor dry-run all pass, and the
-git hooks fire and block a banned glyph with HEAD unchanged.
+#### A path with a space in it is a supported, deliberately exercised case
 
-The pieces that make it safe are load-bearing, so do not "simplify" them:
+Clone anywhere you like. One thing worth knowing if you pick a path containing a
+space - `C:\Resin Compute`, say - is that this is a case the project treats as a
+test rather than as a hazard to avoid. The whole tree has been run from a
+space-containing path: ruff, both suites, the headless smoke test, the bootstrap
+script and the supervisor dry-run all pass, and the git hooks fire and block a
+banned glyph with HEAD unchanged.
 
-- `.githooks/*` quote every expansion (`"$ROOT/..."`, `"$PY"`), and `$ROOT`
-  comes from `git rev-parse --show-toplevel`, which returns the space.
+The pieces that make that work are load-bearing, so do not "simplify" them:
+
+- `.githooks/*` quote every expansion (`"$ROOT/..."`, `"$PY"`), and `$ROOT` comes
+  from `git rev-parse --show-toplevel`, which returns the space.
 - `ops/supervisor.py` builds its child command as a LIST and never passes
   `shell=True`, so nothing re-parses the path.
 - `ops/install_scheduled_task.ps1` uses `-LiteralPath` and `Join-Path`, and
   concatenates rather than interpolates.
 - `ops/ResinCompute-Supervisor.xml` keeps `<Command>`, `<Arguments>` and
-  `<WorkingDirectory>` as separate elements, so Task Scheduler handles the
-  space natively and no manual quoting is needed.
+  `<WorkingDirectory>` as separate elements, so Task Scheduler handles the space
+  natively and no manual quoting is needed.
 
 Any new script that touches the install path must hold to the same rules.
 
@@ -157,7 +135,7 @@ Any new script that touches the install path must hold to the same rules.
 
 Runtime is stdlib only. Only the dev toolchain needs installing.
 
-```bash
+```powershell
 python -m pip install -r requirements-dev.txt
 ```
 
@@ -165,24 +143,24 @@ python -m pip install -r requirements-dev.txt
 
 Two suites, run **separately**. Never `pytest .` from the root.
 
-```bash
+```powershell
 python -m pytest tests                  # application suite
 python -m pytest agents/pity_engine     # engine self-validation
 ```
 
 Lint and types:
 
-```bash
+```powershell
 python -m ruff check .
 python -m mypy
 ```
 
 ### 4. Bootstrap static data
 
-Offline by default. It normalizes the local synthetic fixtures into the internal
-schema without touching the network.
+Offline by default. It normalizes the local hand-authored fixtures into the
+internal schema without touching the network.
 
-```bash
+```powershell
 python scripts/bootstrap_data.py --offline --dry-run   # show what it would do
 python scripts/bootstrap_data.py --offline             # write it
 ```
@@ -190,16 +168,22 @@ python scripts/bootstrap_data.py --offline             # write it
 To pull a live profile you must set a User-Agent first, because upstream policy
 requires one and the client refuses to send a default:
 
-```bash
-export ENKA_USER_AGENT="ResinCompute/0.1 (contact: you@example.com)"
+```powershell
+$env:ENKA_USER_AGENT = "ResinCompute/0.1 (contact: you@example.com)"
 python scripts/bootstrap_data.py --uid 618285856
 ```
+
+On a POSIX shell the first line is `export ENKA_USER_AGENT="..."` instead.
+
+The UID above is Enka.Network's own published example UID, taken from their API
+documentation - it is not a real player's account and not an operator's, and it
+is used here so the command is copy-pasteable. Substitute your own.
 
 ### 5. Run the headless lane
 
 One pass and exit:
 
-```bash
+```powershell
 python -m headless.runner --once
 python -m headless.runner --once --dry-run     # compute and log, write nothing
 python -m headless.runner --list-jobs
@@ -208,34 +192,56 @@ python -m headless.runner --job forecast_pity
 
 Continuously, as a background worker:
 
-```bash
+```powershell
 python -m headless.runner --daemon --interval 300
 ```
 
 Under supervision, with restart-on-crash and a heartbeat:
 
-```bash
+```powershell
 python -m ops.supervisor
 ```
 
-Trigger a supervised restart the same way Riot Commander does - write any content
-to the trigger file and the supervisor clears it and restarts within about five
-seconds:
+Trigger a supervised restart by writing any content to the trigger file. The
+supervisor clears it and restarts within about five seconds:
 
-```bash
+```powershell
 echo restart > restart_trigger.txt
 ```
 
 Confirm it came back by reading the health file, not by looking at a window:
 
-```bash
+```powershell
 python -c "import json;print(json.dumps(json.load(open('ops/runtime/health.json')),indent=2))"
 ```
 
 ### 6. Run the PityEngine service
 
-```bash
+```powershell
 python -m agents.pity_engine --port 8790
+Invoke-RestMethod http://127.0.0.1:8790/health
+```
+
+A forecast is a POST. Building the body as a hashtable avoids quoting it by
+hand, which is where the POSIX `curl` form does not survive translation:
+
+```powershell
+$body = @{
+  banner                  = 'character_event'
+  pity_5star              = 74
+  has_guarantee           = $false
+  consecutive_5050_losses = 0
+  target_count            = 1
+  pull_budget             = 30
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8790/forecast `
+  -ContentType 'application/json' -Body $body
+```
+
+The POSIX equivalent, for reference:
+
+```bash
 curl -s http://127.0.0.1:8790/health
 curl -s -X POST http://127.0.0.1:8790/forecast \
   -H 'Content-Type: application/json' \
@@ -243,8 +249,136 @@ curl -s -X POST http://127.0.0.1:8790/forecast \
        "consecutive_5050_losses":0,"target_count":1,"pull_budget":30}'
 ```
 
+### 7. Run the dashboard
+
+```powershell
+python -m surface --port 8791
+```
+
 On Windows, launch background daemons with `pythonw.exe` rather than
 `python.exe` so no console window flashes.
+
+---
+
+## Repository tree
+
+Guarded by `tests/test_readme_tree.py`, which asserts that every path named here
+exists AND is stored by git. A directory that resolves on one machine but holds
+nothing git tracks is absent from every clone, so existence alone is not enough.
+
+```
+Resin-Compute/
+  README.md                        this file
+  CLAUDE.md                        agent context, hard rules, session workflow
+  ROADMAP.md                       open work, newest priorities first
+  NEXT_SESSION_PROMPT.md           operator hand-off, republished each session
+  LICENSE                          GPL-3.0-or-later, verbatim and hash-pinned
+  NOTICE                           copyright line and the game-data disclaimer
+  ruff.toml                        lint config, ported from Riot Commander
+  pytest.ini                       dual-suite config, never run pytest . at root
+  mypy.ini                         type config
+  conftest.py                      root sys.path hook, reaches BOTH suites
+  requirements.txt                 runtime deps, deliberately empty, stdlib only
+  requirements-dev.txt             ruff, pytest, mypy
+  .gitattributes                   pins eol=lf, guarded by a test
+  .gitignore                       runtime state, caches, node_modules
+
+  .claude/                         the agent roster and the session commands
+    agents/                        planner, builder, verifier, adversary, others
+    commands/                      orchestrated-run, done, ui-audit
+
+  .githooks/                       AUTHORITATIVE gate, inert until installed
+    pre-commit                     banned glyphs, py_compile, net-new ruff
+    commit-msg                     trailer policy
+    pre-push                       both suites
+
+  .github/
+    workflows/
+      ci.yml                       lint, py_compile, mypy, both suites, smoke
+      docs-guards.yml              fires on exactly what ci.yml declines
+
+  core/                            the shared contract and the primitives
+    types.py                       every dataclass the other packages agree on
+    atomic_io.py                   the ONLY sanctioned state-write path
+    state_io.py                    AccountState snapshot serialization
+    log_setup.py                   single daily log file, no rotation
+    config.py                      live-state-first env config
+    ledger.py                      event-sourced currency operations
+    resin.py                       resin regeneration, caps, condensed, fragile
+    domains.py                     weekday rotation and weekly boss resets
+    ports.py                       the single owner of this project's port block
+
+  agents/
+    pity_engine/                   PityEngine - pure deterministic forecaster
+      __init__.py                  ENGINE_VERSION, single source of truth
+      banners.py                   hazard tables and soft-pity ramps, all four
+      markov.py                    absorbing Markov chain DP
+      forecast.py                  public API
+      __main__.py                  stdlib HTTP service on 8790
+      CHANGELOG.md                 engine version history
+      tests/                       the engine validates itself
+
+  engines/                         planning and optimization, mechanism only
+    objectives.py                  goal DAG, cycle detection, critical path
+    scheduler.py                   resin, rotation and weekly lockout aware
+    recommend.py                   what to get / who to build solver
+
+  ingest/                          external data, re-implemented from protocol
+    enka_client.py                 stdlib urllib, ttl-honouring, policy bound
+    enka_mapper.py                 raw payload to EnkaMappedProfile
+    static_data.py                 id to name lookup over local fixtures
+
+  headless/                        THE headless lane
+    runner.py                      non-interactive entrypoint, CLI and daemon
+    jobs.py                        job registry, per-job isolation
+
+  surface/                         the dashboard, served on 8791
+    __main__.py                    entrypoint
+    server.py                      stdlib HTTP, no framework
+    model.py                       pure model, decides panel readiness
+    render.py                      HTML rendering
+
+  shell/                           Electron companion with a tray, ADR-005
+    main.js                        window, tray and supervisor lifecycle
+    preload.js                     the isolated bridge
+    lib/                           endpoint, geometry, state, supervisor, tray
+    test/                          node test runner, no browser
+    package.json                   devDependency on electron and nothing else
+
+  ops/                             supervision and operational state
+    supervisor.py                  watchdog, restart trigger, bounded backoff
+    health.py                      the health.json contract
+    ResinCompute-Supervisor.xml    Windows Scheduled Task, ONLOGON
+    install_scheduled_task.ps1     registers that task
+    runtime/                       health.json is written here, gitignored
+
+  scripts/
+    install_hooks.py               FIRST thing to run in a fresh clone
+    bootstrap_data.py              runnable data bootstrap
+    qa_companion.py                end-to-end probe of the companion surface
+    make_shortcut.py               desktop shortcut for the companion
+    hook_python.sh                 interpreter resolution shared by the hooks
+    precommit_pycompile.py         syntax gate
+    precommit_msg_check.py         commit message gate
+
+  tools/
+    precommit_gate.py              banned-glyph and net-new-ruff gate
+    publish_next_session.py        publishes the hand-off backup
+
+  data/
+    fixtures/                      hand-authored fixtures, nothing vendored
+    costs/                         empty on purpose, first-hand tables only
+
+  docs/
+    SPEC_SCAFFOLD.md               the build contract, verified constants
+    LEDGER.md                      append-only completion history, newest first
+    GOAL_SPEC_SEED_TEAM.md         the seed-team goal, every claim stamped
+    LICENSE_NOTES.md               inbound posture, read before adding a source
+    adr/                           architectural decisions, indexed
+
+  tests/                           the application suite
+    _parked/                       quarantined tests, deliberately not collected
+```
 
 ---
 
@@ -273,7 +407,30 @@ Markov chain over `(copies, pity, guarantee, loss_streak)`, never a binomial on
 1.6% - that figure is `1 / E[wishes per 5-star]`, a long-run average, and is not a
 per-wish probability at any point.
 
-Full derivations and sources are in `docs/SPEC_SCAFFOLD.md` section 3.
+Full derivations and sources are in `docs/SPEC_SCAFFOLD.md` section 3, and the
+corrections are recorded in ADR-003.
+
+---
+
+## Why the stack is Python
+
+Recorded in ADR-001 (`docs/adr/ADR-001-stack.md`); this is a summary of the
+decision, not an argument being had.
+
+This project inherits its entire engineering discipline - lint config, dual-suite
+test layout, git hooks, CI shape, the supervisor and health-file operational
+model - from a sibling project of the same author's. That sibling is a Python
+tree: its inherited config surface is `ruff.toml`, `pytest.ini`, `mypy.ini` and
+`.githooks/`, with no `package.json`, no Biome, no ESLint and no Vitest anywhere
+in it. Measured 2026-09-06.
+
+An early draft specified a TypeScript toolchain while also asking for that
+inheritance. The two are mutually exclusive, and Python was chosen so the
+inheritance is real rather than nominal. The interfaces that draft named are
+delivered as Python dataclasses in `core/types.py`.
+
+ADR-001 was not reopened when the dashboard landed. Its subject is the language
+of the compute tree, and the surface is Python too.
 
 ---
 
@@ -305,18 +462,22 @@ this block was checked with.
 
 ## Third-party data posture
 
-Read `docs/LICENSE_NOTES.md` before adding any data source. The short version, from
-a verification pass on 2026-09-06:
+Read `docs/LICENSE_NOTES.md` before adding any data source. The short version,
+from a verification pass on 2026-09-06:
 
-- **No game data is vendored into this repo.** `data/fixtures/` is hand-authored
-  synthetic content for tests only.
+- **No game data is vendored into this repo.** `data/fixtures/` is a small
+  hand-authored set of publicly known identifiers, for tests only.
 - `Dimbreath/GenshinData` is **404 and DMCA'd**; its live successor carries **no
   licence at all**. It is not an ingest target.
 - `genshin-db` is MIT for its author's code, but its payload derives from a
   CC BY-SA wiki and unlicensed datamined files. The MIT badge does not clear the data.
-- `enka-py` and `ambr-py` are both **GPL-3.0**. Vendoring either would relicense
-  this repo, so the Enka client here is re-implemented from the published protocol.
-  Protocol facts are not copyrightable; source is.
+- `enka-py` and `ambr-py` are both **GPL-3.0**, and this tree is now
+  GPL-3.0-or-later, so copyleft is no longer the objection - ADR-006 dissolved
+  that one and no others. They still are not vendored, for the reason that
+  always mattered: both wrap HoYoverse-copyright game data, and a licence on a
+  wrapper cannot grant rights to its payload. The Enka client here is therefore
+  re-implemented from the published protocol. Protocol facts are not
+  copyrightable; source is.
 - Every upstream wraps HoYoverse-copyright assets regardless of its own licence.
 
 The Enka client complies with published policy: it sends a required custom

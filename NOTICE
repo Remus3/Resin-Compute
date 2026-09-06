@@ -6,9 +6,22 @@ the terms of the GNU General Public License as published by the Free Software
 Foundation, either version 3 of the License, or (at your option) any later
 version. See the LICENSE file for the full terms.
 
-ResinCompute is a companion and analysis project for the game Genshin Impact.
-It is not affiliated with, endorsed by, or connected to HoYoverse / miHoYo /
-Cognosphere in any way.
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+
+ResinCompute is a NON-COMMERCIAL companion and analysis project for the game
+Genshin Impact. It is not affiliated with, endorsed by, or connected to
+HoYoverse / miHoYo / Cognosphere in any way. It is not sold, not licensed for a
+fee, and carries no advertising or other monetisation. The non-commercial
+posture is deliberate and load-bearing rather than incidental: fan-content
+permission for this kind of project is conditioned on non-commercial use.
+
+TRADEMARK ACKNOWLEDGEMENT. Genshin Impact, HoYoverse, miHoYo and Cognosphere are
+trademarks or registered trademarks of their respective owners. They are used
+here only nominatively - to identify the game this project analyses and to say
+plainly what it is not connected to. No claim of ownership over any of those
+marks is made or implied, and no endorsement by their owners is claimed.
 
 NO GAME DATA IS VENDORED IN THIS REPOSITORY. Everything under data/ is
 hand-authored by this project. Genshin Impact, its characters, item names,

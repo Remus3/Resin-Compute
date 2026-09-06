@@ -35,9 +35,17 @@ verification pass:
    has multiple copyright holders and its maintainer cannot unilaterally
    relicense it.
 
-GPL and other copyleft stays DO-NOT-VENDOR regardless of verbal clearance, because
-vendoring it would relicense this repo. BUSL-1.1 is source-available, not
-copyleft, and is DO-NOT-VENDOR anyway.
+Copyleft is no longer an automatic bar, and this rule changed with ADR-006. While
+this tree was proprietary, "vendoring GPL code would relicense this repo" ended
+the argument on its own. This tree is now GPL-3.0-or-later, so incorporating
+GPL-3 code is licence-compatible and that objection is void. What replaces it is
+narrower and harder: the question becomes what the code CARRIES. Every candidate
+in the table below wraps HoYoverse game data, and no licence on a wrapper can
+grant rights to that payload - so each one is still DO-NOT-VENDOR, on the reason
+that always governed rather than on the one that has now dissolved. A copyleft
+licence that is INCOMPATIBLE with GPL-3-or-later, such as a GPL-2-only library,
+remains an automatic bar. BUSL-1.1 is source-available rather than copyleft, and
+is DO-NOT-VENDOR anyway.
 
 The always-legal path is the one this repo already uses: re-implement the
 mechanic from observed behaviour and published protocol. Techniques and protocol
@@ -51,9 +59,9 @@ facts are not copyrightable. Source is.
 | genshin-db | `github.com/theBowja/genshin-db`, npm `genshin-db` | MIT, `Copyright (c) 2020 theBowja`, manifest agrees, no contradiction | **Code MIT. Bulk data NO.** Its own readme states the data is sourced from the Fandom wiki (**CC BY-SA 3.0**, share-alike) and from GenshinData. The MIT badge covers theBowja's code and compilation, not the payload |
 | Enka API docs | `github.com/EnkaNetwork/API-docs` | **NONE** | Protocol facts usable. `store/*.json` is **fetch-only, do not vendor** |
 | Project Amber | base URL is **`https://gi.yatta.moe/api/v2`**. `ambr.top` is the legacy name | **NONE**, and no published terms or rate limits | Fetch at own risk. Treat as unstable. Do not vendor |
-| `enka-py` (PyPI `enka`) | `github.com/seriaati/enka-py`, actively maintained | **GPL-3.0**. `pyproject.toml` points `license` at the GPL file, consistent | **DO NOT VENDOR.** Copyleft would relicense this repo |
+| `enka-py` (PyPI `enka`) | `github.com/seriaati/enka-py`, actively maintained | **GPL-3.0**. `pyproject.toml` points `license` at the GPL file, consistent | **DO NOT VENDOR** - it wraps HoYoverse game data. The copyleft objection died with ADR-006; this one did not |
 | `enkanetwork.py` | `github.com/mrwan200/EnkaNetwork.py` | MIT, `Copyright 2022 M-307` | Vendorable, but last released 2023-08-30 and effectively unmaintained |
-| `ambr-py` | `github.com/seriaati/ambr` | **GPL-3.0** | **DO NOT VENDOR** |
+| `ambr-py` | `github.com/seriaati/ambr` | **GPL-3.0** | **DO NOT VENDOR** - same reason. It wraps HoYoverse game data |
 
 The maintained Python Enka client is GPL and the permissive one is stale. That is
 why this repo re-implements a minimal client instead of taking either.

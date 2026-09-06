@@ -17,7 +17,9 @@ are really there, which is the class of error that actually accumulates.
 """
 from __future__ import annotations
 
+import functools
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -95,6 +97,64 @@ def _backticked_paths(text: str) -> set[str]:
     return found
 
 
+@functools.lru_cache(maxsize=1)
+def _tracked_paths() -> tuple[frozenset[str], frozenset[str]]:
+    """(files git stores, directories git stores something under).
+
+    Shelled out ONCE and cached, never once per candidate path.
+
+    `git ls-files` emits FILES ONLY - it never prints a directory - so a cited
+    directory such as `docs/adr/` can never match its output literally, and a
+    naive membership test against that output would call every directory in the
+    docs untracked. The directory set is therefore DERIVED by walking each
+    tracked file's parents, which is also the correct definition: git tracks a
+    directory exactly when it tracks something under it.
+
+    This reads the INDEX, not HEAD. A file that has been `git add`ed but not yet
+    committed already appears. That is deliberate and is what keeps the arms
+    below stable when several slices are merged and staged before the suite is
+    run - newly created files that the merge has staged count as tracked.
+
+    `cwd` is REPO_ROOT, computed from `__file__`, never the process working
+    directory, because pytest can be invoked from anywhere. Inside a linked
+    worktree this lists that worktree's own index, which is what we want.
+
+    `-z` avoids core.quotePath escaping, which would otherwise mangle any path
+    outside plain ASCII into a quoted form that stops matching the citation.
+    """
+    completed = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        encoding="utf-8",
+        check=True,
+    )
+    files = frozenset(entry for entry in completed.stdout.split("\0") if entry)
+    directories: set[str] = set()
+    for entry in files:
+        segments = entry.split("/")
+        for depth in range(1, len(segments)):
+            directories.add("/".join(segments[:depth]))
+    return files, frozenset(directories)
+
+
+def _is_tracked(candidate: str) -> bool:
+    """Would a FRESH CLONE have this path? `.exists()` cannot answer that.
+
+    GIT STORES NO EMPTY DIRECTORIES, so a directory can resolve on the machine
+    that wrote the doc and be absent from every clone of it. That is not a
+    hypothesis: the docs-guards CI job went red on the runner while this very
+    file was green locally, because data/costs/ existed here and existed in no
+    clone. Existence is a fact about one disk; trackedness is a fact about what
+    everybody else receives, and only the second one is what a pointer promises.
+
+    The trailing slash is stripped because the docs cite directories that way.
+    """
+    files, directories = _tracked_paths()
+    normalised = candidate.rstrip("/")
+    return normalised in files or normalised in directories
+
+
 # ---------------------------------------------------------------------------
 # Pointers resolve
 # ---------------------------------------------------------------------------
@@ -141,6 +201,100 @@ def test_every_runtime_artifact_exemption_is_still_referenced_somewhere():
     )
     for artifact in RUNTIME_ARTIFACTS:
         assert artifact in corpus, f"{artifact} is exempt but no longer referenced - drop the exemption"
+
+
+# ---------------------------------------------------------------------------
+# Pointers survive the clone
+#
+# The arms above ask whether a cited path is HERE. These ask whether it reaches
+# ANYWHERE ELSE. Both are needed and neither implies the other: a path can be
+# tracked and still be a broken pointer in some other sense, and a path can
+# resolve perfectly on this disk while git stores nothing of it. The second case
+# is the one that has actually cost this repository a red CI run.
+#
+# The exemption is not restated here. `_backticked_paths()` already drops
+# RUNTIME_ARTIFACTS before any candidate reaches these arms, so the single
+# by-name exemption with its stated reason is reused rather than duplicated -
+# and it therefore cannot widen behind this file's back.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("doc", GOVERNING_DOCS)
+def test_every_path_a_governing_doc_points_at_is_tracked_by_git(doc: str):
+    """Resolving on this machine is not the same as reaching a clone."""
+    untracked = sorted(p for p in _backticked_paths(_read(doc)) if not _is_tracked(p))
+    assert not untracked, f"{doc} points at paths git does not store, so a clone will not have them: {untracked}"
+
+
+def test_every_path_the_docs_directory_points_at_is_tracked_by_git():
+    untracked: list[str] = []
+    for path in sorted((REPO_ROOT / "docs").rglob("*.md")):
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        for candidate in _backticked_paths(path.read_text(encoding="utf-8")):
+            if not _is_tracked(candidate):
+                untracked.append(f"{rel} -> {candidate}")
+    assert not untracked, "docs/ cites paths git does not store: " + "; ".join(sorted(untracked))
+
+
+def test_the_trackedness_predicate_has_teeth():
+    """Non-vacuity, proven against the PREDICATE and without touching the tree.
+
+    There are no live violations, so the two sweeps above pass on sight and a
+    predicate that had quietly stopped recognising anything would pass with
+    them, forever. The honest way to show the guard bites is to hand it inputs
+    whose answers are known independently - not to break the checkout to watch a
+    test fail. This tree is shared with a merge and with sibling worktrees, and
+    a test that mutates it is a test that can leave residue.
+
+    Both directions are pinned, so neither a predicate stuck on True nor one
+    stuck on False can survive this arm.
+    """
+    files, directories = _tracked_paths()
+    assert len(files) > 50, f"git ls-files returned only {len(files)} entries - wrong cwd, or not a checkout"
+
+    # TRUE for a tracked file, and for a tracked directory in the trailing-slash
+    # form the docs actually use.
+    assert _is_tracked("core/types.py")
+    assert _is_tracked("docs/adr/")
+    assert _is_tracked("docs/adr")
+
+    # And this is exactly why the directory set has to be derived rather than
+    # looked up: git ls-files lists files, so the directory is not in its output.
+    assert "docs/adr" not in files, "git ls-files started emitting directories - the derivation may now be redundant"
+    assert "docs/adr" in directories
+
+    # FALSE for something that EXISTS on disk yet git stores nothing of. `.git`
+    # is chosen because git structurally refuses to track it - it is the index,
+    # not a thing in the index - so this case cannot be quietly cancelled later
+    # by somebody committing the file. It is present in a plain checkout and in
+    # a linked worktree alike, as a directory in the first and a pointer file in
+    # the second, and `.exists()` is true for both.
+    assert (REPO_ROOT / ".git").exists(), "no .git here, so this arm is not testing what it claims"
+    assert not _is_tracked(".git")
+
+    # FALSE for a plausible-looking path that is not there at all. Shaped so it
+    # would clear every filter in _backticked_paths - under a tree root, with a
+    # known suffix, no glob - which is what makes it a fair probe rather than a
+    # token the parser would have discarded anyway.
+    absent = "docs/no-such-doc-this-is-a-guard-sentinel.md"
+    assert not (REPO_ROOT / absent).exists(), f"{absent} was created - pick another sentinel"
+    assert not _is_tracked(absent)
+    assert absent in _backticked_paths(f"see `{absent}` for details")
+
+
+def test_the_trackedness_sweep_walked_a_real_corpus():
+    """A parser that recognised nothing would make both sweeps above vacuous.
+
+    So count what they actually walk. The floor is far below the corpus - it
+    measured 140 citations across 16 documents when this arm was written - and
+    is set low on purpose, because sibling slices add and reword citations
+    constantly and this arm is here to catch a parser that found NOTHING, not to
+    pin a number.
+    """
+    citations = 0
+    for path in [REPO_ROOT / d for d in GOVERNING_DOCS] + sorted((REPO_ROOT / "docs").rglob("*.md")):
+        citations += len(_backticked_paths(path.read_text(encoding="utf-8")))
+    assert citations >= 80, f"the trackedness sweep only walked {citations} citations - the parser is broken"
 
 
 # ---------------------------------------------------------------------------

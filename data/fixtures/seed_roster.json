@@ -1,5 +1,7 @@
 {
-  "_synthetic": true,
+  "_hand_authored": true,
+  "_vendored": false,
+  "_content": "Publicly known game facts, hand-authored into this file one row at a time. NOT synthetic: synthetic means invented, and these avatarIds are real and were independently verified, not made up. The compliance claim is the stronger one - no upstream dataset is vendored anywhere in this repository. See data/fixtures/README.md and docs/adr/ADR-002-data-posture.md.",
   "_note": "Hand-authored seed identity table. No upstream dataset is vendored. Only the five avatarIds verified in docs/SPEC_SCAFFOLD.md section 5 appear here - do not add a sixth without a verified id.",
   "_refuted": {
     "10000088": "Charlotte, NOT Dehya. Refuted 2026-09-06 - do not reintroduce as a Dehya id.",
