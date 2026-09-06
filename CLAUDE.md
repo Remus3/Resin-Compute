@@ -150,6 +150,6 @@ Verify by reading `ops/runtime/health.json` and confirming a new `pid` and
 ## Session workflow
 
 Scoped sessions - each focused task is one session.
-- **Start:** read this file, `README.md`, `ROADMAP.md`, `docs/ARCHITECTURE.md`,
+- **Start:** read this file, `README.md`, `ROADMAP.md`, `docs/LEDGER.md`,
   and `git log`.
 - **End:** run both suites, commit, push, update `ROADMAP.md`.

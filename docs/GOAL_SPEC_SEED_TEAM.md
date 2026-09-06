@@ -85,7 +85,7 @@ recorded here so the observation has something to confirm or correct.
 | ~180 Hero's Wit to take one character to level 60 | Same. |
 | ~150,000 Mora and ~100 Mystic Enhancement Ore for a weapon to level 60 | Same. Also introduces an item name outside the verified set. |
 
-These three are the gate on `engines/objectives.expand_character_goal` producing
+These three are the gate on `expand_character_goal` in `engines/objectives.py` producing
 a real dated task list. The schema and loader to accept them are designed; the
 numbers are not.
 

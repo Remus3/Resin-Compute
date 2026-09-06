@@ -105,7 +105,8 @@ resin-compute/
 
   docs/
     SPEC_SCAFFOLD.md            the build contract, verified constants
-    ARCHITECTURE.md
+    LEDGER.md                   append-only completion history, newest first
+    GOAL_SPEC_SEED_TEAM.md      the seed-team goal, every claim stamped
     LICENSE_NOTES.md            third-party posture, read before adding a source
     adr/                        architectural decisions
 
@@ -339,4 +340,14 @@ User-Agent, honours the `ttl` on every response, and refuses bulk UID enumeratio
 
 ## Licence
 
-Private. No licence granted. See `docs/LICENSE_NOTES.md` for third-party obligations.
+**GPL-3.0-or-later.** See `LICENSE` for the full text and `NOTICE` for the
+copyright line. ADR-006 records why.
+
+The short version: you may use, study, modify and redistribute this, including
+commercially, but any derivative you distribute must carry the same licence and
+its source must be available. It cannot be taken closed-source.
+
+That is an OUTBOUND licence and it covers this project's own code only. It
+grants nothing over Genshin Impact's data, names, statistics or assets, which
+belong to HoYoverse. For the INBOUND question - what this project is allowed to
+consume - see `docs/LICENSE_NOTES.md`, which is a separate matter.
