@@ -9,7 +9,7 @@ same supervisor and health-file operational model, same two-tier naming where th
 repo holds a versioned pure compute engine inside it.
 
 - **Repo:** ResinCompute
-- **Compute engine:** PityEngine (`agents/pity_engine/`, HTTP `:8870`)
+- **Compute engine:** PityEngine (`agents/pity_engine/`, HTTP `:8790`)
 
 ---
 
@@ -67,7 +67,7 @@ resin-compute/
     pity.py                     pity curve evaluation
     markov.py                   absorbing Markov chain DP
     forecast.py                 public API
-    __main__.py                 stdlib HTTP service on :8870
+    __main__.py                 stdlib HTTP service on :8790
     CHANGELOG.md
     tests/                      the engine validates itself
 
@@ -234,9 +234,9 @@ python -c "import json;print(json.dumps(json.load(open('ops/runtime/health.json'
 ### 6. Run the PityEngine service
 
 ```bash
-python -m agents.pity_engine --port 8870
-curl -s http://127.0.0.1:8870/health
-curl -s -X POST http://127.0.0.1:8870/forecast \
+python -m agents.pity_engine --port 8790
+curl -s http://127.0.0.1:8790/health
+curl -s -X POST http://127.0.0.1:8790/forecast \
   -H 'Content-Type: application/json' \
   -d '{"banner":"character_event","pity_5star":74,"has_guarantee":false,
        "consecutive_5050_losses":0,"target_count":1,"pull_budget":30}'
@@ -273,6 +273,32 @@ Markov chain over `(copies, pity, guarantee, loss_streak)`, never a binomial on
 per-wish probability at any point.
 
 Full derivations and sources are in `docs/SPEC_SCAFFOLD.md` section 3.
+
+---
+
+## Ports
+
+Seven projects share the Legion box and every one of them runs concurrently, so
+each reserves a block. **ResinCompute reserves 8790-8809** (`rsc`).
+
+| Port | Purpose |
+|---|---|
+| 8790 | PityEngine HTTP |
+| 8791 | Dashboard surface |
+| 8792-8809 | unassigned |
+
+`core/ports.py` is the single owner of these numbers - no other tracked file
+restates them, and `tests/test_ports.py` pins each against the module that
+really binds it rather than re-asserting the literal.
+
+The scaffold originally put the engine on 8870, which sits inside Daemon
+Slayer's reserved 8860-8879. Nothing was listening there, so nothing broke and
+nothing warned. ADR-004 records the migration, and a guard test now fails on any
+sibling port literal appearing anywhere in tracked Python source.
+
+Verify a band against the owning project's registry in source, never against a
+live scan. That rule is Clockspeed's, learned the hard way, and it is the one
+this block was checked with.
 
 ---
 

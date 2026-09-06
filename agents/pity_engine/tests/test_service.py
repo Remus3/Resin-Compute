@@ -104,8 +104,17 @@ def test_health_payload_carries_the_engine_version() -> None:
     assert payload["uptime_seconds"] >= 0.0
 
 
-def test_default_port_mirrors_daemon_slayer_convention() -> None:
-    assert DEFAULT_PORT == 8870
+def test_default_port_comes_from_the_registry_not_a_local_literal() -> None:
+    """The number lives in `core/ports.py` and nowhere else.
+
+    This deliberately does NOT restate the integer. The engine originally sat on
+    a port inside Daemon Slayer's reserved block; a literal here is exactly what
+    let that survive review. See ADR-004.
+    """
+    from core.ports import ENGINE, is_ours
+
+    assert DEFAULT_PORT == ENGINE
+    assert is_ours(DEFAULT_PORT)
     assert DEFAULT_HOST == "127.0.0.1"
 
 

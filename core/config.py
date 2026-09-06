@@ -18,9 +18,10 @@ Environment variables - all optional, defaults documented:
 
     RESIN_ENGINE_HOST      default "127.0.0.1"
         Bind / connect host for the PityEngine HTTP service.
-    RESIN_ENGINE_PORT      default 8870
-        Its port. SPEC_SCAFFOLD section 1 pins the engine to :8870, mirroring
-        Riot Commander's Daemon Slayer on :8860.
+    RESIN_ENGINE_PORT      default `core.ports.ENGINE`
+        Its port. The number itself lives in `core/ports.py`, which is the
+        single owner of every port this repository binds - see ADR-004. It is
+        NOT restated here, because a second copy is a second answer.
     RC_DATA_DIR            default "<repo>/data"
         Root for hand-authored fixtures and the runtime fetch cache.
     RC_LOG_DIR             default "<repo>/logs"
@@ -45,6 +46,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.ports import ENGINE as _ENGINE_PORT
+
 _log = logging.getLogger(__name__)
 
 # Repo root. Mirrors Riot Commander's hard rule that SCRIPT_DIR is derived from
@@ -53,7 +56,9 @@ _log = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_ENGINE_HOST = "127.0.0.1"
-DEFAULT_ENGINE_PORT = 8870
+#: Re-exported from the registry rather than restated. `tests/test_ports.py`
+#: pins this against `core.ports.ENGINE` and against the service that binds it.
+DEFAULT_ENGINE_PORT = _ENGINE_PORT
 DEFAULT_ENKA_BASE_URL = "https://enka.network"
 DEFAULT_ENKA_TIMEOUT_SECONDS = 15
 DEFAULT_LOG_LEVEL = "INFO"

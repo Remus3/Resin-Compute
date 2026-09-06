@@ -83,3 +83,7 @@ desktop.ini
 _scratch/
 tmp/
 /commit_*.txt
+
+# Cross-project correspondence channel. Notes are correspondence, not source -
+# see moon_sync_inbox/README.md and ADR-004.
+moon_sync_inbox/

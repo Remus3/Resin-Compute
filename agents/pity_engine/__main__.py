@@ -1,6 +1,6 @@
 """PityEngine local HTTP service.
 
-Stdlib only. Serves the engine on 127.0.0.1:8870 by default, mirroring how Riot
+Stdlib only. Serves the engine on 127.0.0.1:8790 by default, mirroring how Riot
 Commander exposes Daemon Slayer on 8860 - a pure compute core with a thin,
 boring transport bolted on that the compute core knows nothing about.
 
@@ -29,13 +29,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlsplit
 
+from core.ports import ENGINE as ENGINE_PORT
 from core.types import BannerKind, PityState
 
 from . import ENGINE_VERSION
 from .forecast import probability_of_success
 
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8870
+
+#: Owned by `core/ports.py`, never restated. See ADR-004 for why the engine
+#: moved off its original port.
+DEFAULT_PORT = ENGINE_PORT
 
 LOGGER = logging.getLogger("pity_engine")
 

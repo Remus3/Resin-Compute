@@ -5,7 +5,7 @@ optimization. Headless-lane first. Python 3.11, stdlib-only at runtime.
 Built on the Riot Commander blueprint (ADR-001).
 
 Two-tier naming, mirroring Riot Commander / Daemon Slayer:
-**ResinCompute** is the repo, **PityEngine** (`agents/pity_engine/`, HTTP `:8870`)
+**ResinCompute** is the repo, **PityEngine** (`agents/pity_engine/`, HTTP `:8790`)
 is the pure deterministic compute engine inside it.
 
 > **Read at session start:** `README.md` - `docs/SPEC_SCAFFOLD.md` -
