@@ -43,10 +43,19 @@ renamed it to match their convention. Two real consequences:
 - The QA now matches by target too, reusing the installer's own comparison so the
   two cannot disagree.
 
-Also fixed: a test wrote a Windows path without a raw string, so `` became a
-literal BEL and `\o` an invalid escape. The test still PASSED, because it only
-asserted inequality, so the defect was invisible until a SyntaxWarning surfaced
-it. And `test_a_stopped_server_releases_its_port_immediately` was flaky by
+Also fixed: a test wrote a Windows path without a raw string, so one backslash
+escape became a literal control character and another was an invalid escape. The
+test still PASSED, because it only asserted inequality, so the defect was
+invisible until a SyntaxWarning surfaced it.
+
+That bug then bit a second time, writing THIS entry. The sentence above was
+composed in a non-raw string and put a real control character into this file.
+The ASCII guard in tests/test_docs_consistency.py did not catch it, because it
+rejected bytes above 0x7E and said nothing about control bytes below 0x09. Both
+are now rejected. A guard that checks one end of a range and not the other is a
+guard with a documented blind spot.
+
+And `test_a_stopped_server_releases_its_port_immediately` was flaky by
 construction - dropping SO_REUSEADDR made the rebind strict, so the OS handing
 that port to another process failed a test about TIME_WAIT. Now retried, with the
 retry justified rather than papered over: a real regression fails every attempt.
