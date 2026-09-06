@@ -63,19 +63,42 @@ body {
   -webkit-user-select: none;
   user-select: none;
 }
+/* THE INVISIBLE DRAG STRIP.
+   The window is frameless, so the operating system draws no title bar and there
+   is NOTHING to grab. Without this the window can be moved only by the tray, or
+   not at all - which on a companion pinned above a game is the difference
+   between usable and abandoned.
+   It spans the full width at the very top, is completely transparent, and sits
+   ABOVE the header so the whole strip drags rather than only the gaps between
+   words. Anything that must stay clickable inside it opts out with .no-drag. */
+#dragbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 34px;
+  z-index: 9999;
+  -webkit-app-region: drag;
+  background: transparent;
+}
+/* Opt-out for interactive elements under the strip. An element that needs a
+   click must ALSO raise itself above the strip, or the strip keeps the event. */
+.no-drag {
+  position: relative;
+  z-index: 10000;
+  -webkit-app-region: no-drag;
+}
 header {
   display: flex;
   align-items: baseline;
   gap: 12px;
   margin-bottom: 14px;
-  -webkit-app-region: drag;
 }
 h1 { font-size: 16px; margin: 0; letter-spacing: 0.04em; }
 .sub { color: var(--ink-dim); font-size: 12px; }
 .meter {
   margin-left: auto;
   min-width: 190px;
-  -webkit-app-region: no-drag;
 }
 .meter-track {
   height: 6px;
@@ -166,6 +189,7 @@ def render_html(board: Dashboard) -> str:
         "<title>ResinCompute</title>"
         f"<style>{STYLESHEET}</style>"
         "</head><body>"
+        '<div id="dragbar"></div>'
         "<header>"
         "<h1>ResinCompute</h1>"
         f'<span class="sub">{generated}</span>'

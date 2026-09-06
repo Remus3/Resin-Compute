@@ -221,3 +221,58 @@ def test_the_page_loads_no_remote_resource(running_server):
     _, _, body = _get(running_server, "/")
     remote = re.findall(r'(?:src|href)\s*=\s*"(https?://[^"]+)"', body)
     assert remote == []
+
+
+# ---------------------------------------------------------------------------
+# The invisible drag strip
+# ---------------------------------------------------------------------------
+
+
+def test_the_page_carries_an_invisible_drag_strip():
+    """The window is frameless, so this strip is the ONLY way to move it.
+
+    Without a title bar the operating system draws nothing to grab, and a
+    companion pinned above a fullscreen game that cannot be repositioned is one
+    the operator stops using. So its presence is pinned rather than assumed.
+    """
+    page = render_html(board())
+    assert '<div id="dragbar"></div>' in page
+    assert "#dragbar" in page
+
+
+def test_the_drag_strip_is_transparent_and_spans_the_full_width():
+    page = render_html(board())
+    block = page.split("#dragbar {", 1)[1].split("}", 1)[0]
+    assert "position: fixed" in block
+    assert "top: 0" in block
+    assert "left: 0" in block
+    assert "right: 0" in block
+    assert "background: transparent" in block
+    assert "-webkit-app-region: drag" in block
+
+
+def test_the_drag_strip_sits_above_the_header_it_covers():
+    """It has to win the event, or only the gaps between words would drag."""
+    page = render_html(board())
+    drag_block = page.split("#dragbar {", 1)[1].split("}", 1)[0]
+    drag_z = int(drag_block.split("z-index:", 1)[1].split(";", 1)[0].strip())
+
+    nodrag_block = page.split(".no-drag {", 1)[1].split("}", 1)[0]
+    nodrag_z = int(nodrag_block.split("z-index:", 1)[1].split(";", 1)[0].strip())
+
+    # The opt-out must outrank the strip, or an element marked no-drag would
+    # still be underneath it and would still lose the click.
+    assert nodrag_z > drag_z
+
+
+def test_an_opt_out_class_exists_for_anything_clickable_under_the_strip():
+    page = render_html(board())
+    assert ".no-drag" in page
+    block = page.split(".no-drag {", 1)[1].split("}", 1)[0]
+    assert "-webkit-app-region: no-drag" in block
+
+
+def test_the_drag_strip_appears_before_any_content():
+    """It is fixed-position, but DOM order still decides paint order among peers."""
+    page = render_html(board())
+    assert page.index('id="dragbar"') < page.index("<header>")

@@ -1,0 +1,18 @@
+{
+  "name": "resincompute-shell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron companion window for ResinCompute. Node exists solely for this shell.",
+  "main": "main.js",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "44.0.0"
+  }
+}
