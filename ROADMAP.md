@@ -12,6 +12,12 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **Observe the seed-team cost table in game.** `docs/GOAL_SPEC_SEED_TEAM.md`
+  records the operator's roadmap with every claim stamped verified, unverified,
+  time-sensitive or refuted, and section 3.1 is the gate on a real dated plan.
+  The account has not been played yet, so no first-hand observation exists and
+  the three cost figures that arrived from a web assistant are deliberately NOT
+  in `data/` - `tests/test_goal_spec.py` fails if they get copied in.
 - **Persist the reconciled account state so the dashboard has a cold-start
   source.** `headless/jobs.py::reconcile_state` builds `AccountState` in memory
   each pass and nothing writes it down, so `surface/` falls back to

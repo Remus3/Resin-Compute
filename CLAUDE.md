@@ -8,8 +8,10 @@ Two-tier naming, mirroring Riot Commander / Daemon Slayer:
 **ResinCompute** is the repo, **PityEngine** (`agents/pity_engine/`, HTTP `:8790`)
 is the pure deterministic compute engine inside it.
 
-> **Read at session start:** `README.md` - `docs/SPEC_SCAFFOLD.md` -
-> `docs/ARCHITECTURE.md` - `ROADMAP.md`
+> **Read at session start:** `README.md` - `docs/SPEC_SCAFFOLD.md` - `ROADMAP.md`
+> **Before planning any character build:** `docs/GOAL_SPEC_SEED_TEAM.md` - it
+> stamps every claim verified / unverified / time-sensitive, and the unverified
+> cost figures must not reach `data/`.
 > **Before adding any data source:** `docs/LICENSE_NOTES.md`
 > **Before re-litigating a past choice:** `docs/adr/README.md`
 
