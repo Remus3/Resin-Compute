@@ -78,8 +78,15 @@ the same as ready to be read by a stranger. The open work, in order:
     with tests pinning it; extend that discipline to the docs and the README.
   - REPO RELOCATION is a PREREQUISITE for the CI half: both workflows are
     written for `resin-compute/` as the repository root.
+  - SWEEP FOR EMPTY DIRECTORIES. One was found and fixed on 2026-09-06 and the
+    class is exactly what "public" means: `data/costs/` was empty, git does not
+    store empty directories, so the path resolved on this machine and did not
+    exist in the CI checkout. docs-guards went red the first time a fresh clone
+    ever saw it. Anything a doc cites must be TRACKED, not merely present here.
+    `git ls-files <dir>` returning nothing while `ls` shows the directory is the
+    tell.
 
-STATE, verified 2026-09-06 at commit b22c945 (report what YOU observe, never
+STATE, verified 2026-09-06 at commit 1bf3845 (report what YOU observe, never
 these numbers):
   ruff                            All checks passed
   pytest tests                    697 passed, 1 skipped
@@ -134,6 +141,15 @@ TRAPS THAT HAVE ALREADY BITTEN IN THIS TREE. All measured, none hypothetical:
     naive assertion.
   - `git update-index --refresh` does NOT clear stat drift after an eol
     normalisation. `git add --renormalize .` is what settles it.
+  - A FORCE-PUSH THAT REWRITES HISTORY TRIGGERED NO WORKFLOW AT ALL. Measured
+    2026-09-06: the rewritten tip carried .py changes and neither `ci` nor
+    `docs-guards` fired for it. Do not read "no red" as "green" after a force
+    push - check `gh run list` for a run against the new SHA, and dispatch
+    `gh workflow run ci.yml --ref main` if there is none. This is the ONE case
+    where a manual dispatch is correct rather than a duplicate.
+  - AN EMPTY DIRECTORY IS NOT IN THE REPOSITORY. Git stores no empty
+    directories, so a path can resolve locally and be absent in every clone.
+    A tracked file inside it - a README that earns its place - is the fix.
   - Ports are owned by core/ports.py and nowhere else. This project holds
     8790-8809. 8870 is Daemon Slayer's. Verify a band against the owning
     project's registry IN SOURCE, never against netstat.
