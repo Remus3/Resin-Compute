@@ -253,9 +253,11 @@ version. What follows is everything the scaffold deliberately did not do.
   and pinned but NOTHING IN THIS TREE CALLS IT - see the known gap below. When a
   Claude-executor loop is built, wrap each cycle in
   `with slots.hold(int(CFG.get("max_concurrent_lanes", 2)), repo="rsc", ...)`.
-  A `SlotTimeout` is a FAILED CYCLE, never permission to proceed unslotted. Note
-  the literal 2 is only the library's fallback; the governing value is
-  `core.config.MAX_CONCURRENT_LANES`, which is 3.
+  A `SlotTimeout` is a FAILED CYCLE, never permission to proceed unslotted. The
+  literal 2 in that snippet is the `dict.get` default, reached only when the key
+  is absent; `slots.hold`'s own signature default happens to be 2 as well, but it
+  is a different 2. Neither is the governing value, which is
+  `core.config.MAX_CONCURRENT_LANES`, and that is 3.
 
 ## Later
 
@@ -277,7 +279,10 @@ version. What follows is everything the scaffold deliberately did not do.
 - **The concurrency governor is vendored but INERT, and that is deliberate.**
   `ops/loop/slots.py` and `ops/loop/winmutex.py` are byte-identical-by-contract
   with Legion Wallpaper and Riot Commander, pinned by
-  `tests/test_loop_concurrency.py`. NOTHING IN THIS TREE CALLS `slots.hold()`.
+  `tests/test_loop_concurrency.py`. NO PRODUCTION CODE PATH CALLS `slots.hold()`
+  - the only callers are the five sites inside `tests/test_loop_concurrency.py`
+  itself, which exercise the vendored module against a `tmp_path` bucket and
+  never against the shared one.
   `headless/runner.py` is a job runner whose daemon mode runs in-process job
   passes on an interval - it is not a Claude-executor loop and it spawns no
   executor. So this is a PARITY CONTRACT JOINED AHEAD OF NEED, not a live

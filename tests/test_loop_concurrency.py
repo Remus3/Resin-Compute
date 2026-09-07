@@ -4,7 +4,7 @@ WHAT IS BEING GUARDED.
 
 `ops/loop/slots.py` and `ops/loop/winmutex.py` are BYTE-IDENTICAL-BY-CONTRACT
 across three repositories - Legion Wallpaper, Riot Commander and Resin Compute.
-The three headless loops do not talk to each other over any API. They coordinate
+The participating loops do not talk to each other over any API. They coordinate
 THROUGH the on-disk protocol in `slots.py`, against ONE shared token bucket at
 `C:\ProgramData\lw-loop\slots`, and through the Win32 named-mutex namespace in
 `winmutex.py`. Both are namespaces, not interfaces: nothing checks that the
@@ -12,10 +12,20 @@ participants agree, so a divergence produces no error anywhere. It produces a
 silent concurrency bug - two loops that each believe they are inside the bound
 while together they are outside it.
 
+TWO OF THE THREE ACTUALLY ACQUIRE. Legion Wallpaper and Riot Commander both call
+`slots.hold()` from their loop controllers against the live bucket. THIS REPO
+DOES NOT: it has no executor loop, and the only callers of `hold()` here are the
+tests in this file, which run against a `tmp_path` bucket. So this file guards a
+PARITY CONTRACT JOINED AHEAD OF NEED. Do not read it as evidence that this repo
+throttles anything today.
+
 That is why the pin is on BYTES rather than on behaviour. Behaviour tests catch
 a copy that is broken; only a digest catches a copy that is merely DIFFERENT,
 which is the failure mode that actually happens when one repo lands a change and
-the others do not.
+the others do not. Note the limit of that division of labour, measured rather
+than assumed: an adversarial pass built a mutant that removed `hold()`'s queueing
+entirely and it passed every behaviour arm here until the dropped
+`assert not failures` was restored. Behaviour arms only catch what they assert.
 
 WHY THIS FILE READS NO SIBLING TREE, AND WILL NOT BE "IMPROVED" TO.
 
@@ -82,6 +92,17 @@ SHARED_GPU_MUTEX = "Global\\LW_GPU"
 # The agreed lane width. Same value in Riot Commander and Legion Wallpaper.
 EXPECTED_LANES = 3
 
+# The COMPLETE vendored set, restated as an independent literal for exactly the
+# reason the constants above are. `SHARED_SHA256` is a dict, and every guard
+# that iterates it inherits whatever it happens to contain - so DELETING one
+# entry disarms that file's presence check and its digest check together, in a
+# single edit, and the only visible trace is the collected count dropping by
+# one. Measured on an adversarial pass against db3f767: removing the
+# `winmutex.py` entry while also corrupting `winmutex.py` gave 18 passed, exit
+# 0, zero skips and zero warnings. This tuple is the second, independent witness
+# that turns that into a RED.
+VENDORED_MODULES = ("slots.py", "winmutex.py")
+
 
 # ---------------------------------------------------------------------------
 # 1. The byte pin
@@ -111,13 +132,54 @@ def test_the_vendored_governor_is_present():
     take the entire parity contract green-and-silent, which is precisely the
     renamed-directory failure described in the module docstring.
     """
-    missing = [name for name in sorted(SHARED_SHA256) if not (LOOP_DIR / name).is_file()]
+    missing = [name for name in sorted(VENDORED_MODULES) if not (LOOP_DIR / name).is_file()]
     assert not missing, (
-        f"{missing} absent from {LOOP_DIR}. This repo participates in a machine-wide "
-        "concurrency bucket shared with Legion Wallpaper and Riot Commander; without "
-        "these files its headless loop runs UNBOUNDED against a rate-limit pool the "
-        "other two are politely sharing. Re-vendor them byte-wise from a sibling tree - "
-        "do not re-author them, and do not delete this test."
+        f"{missing} absent from {LOOP_DIR}. This repo has JOINED a machine-wide "
+        "concurrency bucket shared with Legion Wallpaper and Riot Commander, both of "
+        "which acquire against it for real. This repo does not acquire yet, so losing "
+        "these files breaks no running loop here - it silently drops this repo out of "
+        "the parity contract, and the drop would surface only when an executor loop is "
+        "finally built against a governor nobody kept in sync. Re-vendor them byte-wise "
+        "from a sibling tree - do not re-author them, and do not delete this test."
+    )
+
+
+def test_the_pin_covers_every_vendored_module_and_nothing_was_added():
+    """Guards the guard: the pin must cover the DIRECTORY, not merely itself.
+
+    Three ways the contract rots with every other arm still green, all three
+    demonstrated by two independent adversarial passes against db3f767:
+
+      1. an entry is DELETED from `SHARED_SHA256`. Both the presence arm above
+         and the digest arm below iterate that one dict, so a single deleted
+         line disarms both for that file at once. Measured: delete the
+         `winmutex.py` entry AND corrupt `winmutex.py`, and the suite reports
+         18 passed, exit 0, zero skips, zero warnings. The only trace is a
+         collected count dropping by one, and this repo forbids restating suite
+         counts in docs, so nothing anywhere would notice.
+      2. `ops/loop/__init__.py` is added - forbidden in prose by the comment on
+         `_load` that nothing enforced. Measured: 19 passed, green.
+      3. a THIRD module is vendored by a sibling and not here, or a local helper
+         is dropped into the verbatim vendor drop. Measured: 19 passed, green.
+
+    One root cause - the pin named FILES instead of the DIRECTORY - so all three
+    close together. `VENDORED_MODULES` is the independent second witness; Riot
+    Commander's mirror test has always carried its own literal list for exactly
+    this reason, and the port to this tree dropped it.
+    """
+    assert sorted(SHARED_SHA256) == sorted(VENDORED_MODULES), (
+        f"SHARED_SHA256 covers {sorted(SHARED_SHA256)} but the vendored set is "
+        f"{sorted(VENDORED_MODULES)}. Do not resolve this by editing whichever side "
+        "is convenient: removing a digest disarms both the presence and the byte "
+        "guard for that file. A module joins or leaves this set only in a joint "
+        "round with Legion Wallpaper and Riot Commander."
+    )
+    on_disk = sorted(path.name for path in LOOP_DIR.glob("*.py"))
+    assert on_disk == sorted(VENDORED_MODULES), (
+        f"{LOOP_DIR} holds {on_disk}, expected {sorted(VENDORED_MODULES)}. This "
+        "directory is a byte-identical mirror of two sibling trees, so an EXTRA file "
+        "here is drift even when every pinned digest still matches - including an "
+        "__init__.py, which would also change how the modules import."
     )
 
 
@@ -320,6 +382,28 @@ def test_contending_threads_never_exceed_max_slots(slots, slot_root: Path):
         f"exercised, so this test proved nothing about it. Worker failures: {failures!r}"
     )
     assert entered >= max_slots, f"only {entered} workers were ever admitted"
+    # RESTORED after an adversarial pass REFUTED this test at db3f767. Riot
+    # Commander asserts this (its `assert not errors`); the port to this tree
+    # collected `failures` and then never asserted on it, mentioning it only
+    # inside another assertion's failure message - so it was load-bearing
+    # nowhere. The demonstrated hole: mutate `hold()` so the deadline check
+    # becomes `if deadline is not None:` and the governor stops QUEUEING
+    # entirely, raising SlotTimeout on the first full pass instead of waiting.
+    # Every arm above still passes, because the two holders the mutant does
+    # admit satisfy both `peak == max_slots` and `entered >= max_slots`, while
+    # the two starved workers land silently in `failures`. That mutant fails
+    # Riot Commander's suite and passed this one: 19 passed, exit 0.
+    #
+    # It cannot flake: a worker only reaches this list on SlotTimeout or OSError,
+    # and the adversarial pass measured `failures == []` in 200 of 200 rounds
+    # against the file as vendored. If this ever DOES go red, the governor
+    # stopped waiting - that is the finding, not a flaky test to relax.
+    assert not failures, (
+        f"{len(failures)} of {workers} workers never got a lane: {failures!r}. "
+        "The contract is that `hold()` BLOCKS with jittered backoff until a slot "
+        "frees. A SlotTimeout here means it stopped queueing, which is a failed "
+        "cycle for a caller - never permission to proceed unslotted."
+    )
 
 
 def test_a_slot_is_released_after_use(slots, slot_root: Path):
@@ -412,6 +496,50 @@ def test_a_lock_older_than_stale_after_is_reaped(slots, slot_root: Path):
 
     assert removed == 1
     assert not lock.exists()
+
+
+def test_a_corrupt_lock_cannot_wedge_the_bucket_forever(slots, slot_root: Path):
+    """The FOURTH arm of `is_stale`, and the one an adversarial pass found untested.
+
+    `is_stale` has four paths: unreadable payload, age, pid liveness, and a
+    failed stat. The three above cover age and liveness. This covers the first,
+    which is the only one that rescues a HALF-WRITTEN lock - a lockfile whose
+    holder died between `os.open` and the `json.dump` that fills it.
+
+    That file has no `pid` and no `ts`, so neither the age arm nor the liveness
+    arm can reason about it at all. Without the mtime fallback at
+    `slots.py` `_read` -> `is_stale`, an unparseable lock would occupy a lane in
+    a bucket shared with two live sibling loops until a human deleted it by
+    hand. Riot Commander tests this; the port to this tree dropped it.
+    """
+    lock = slot_root / "0.lock"
+    lock.write_text("{ not json", encoding="utf-8")
+    old = time.time() - 10_000.0
+    os.utime(lock, (old, old))
+
+    assert slots.is_stale(lock, stale_after=100.0) is True, (
+        "an unparseable lockfile older than stale_after must be reclaimable. It "
+        "carries no pid and no ts, so the mtime fallback is the ONLY thing that "
+        "can free the lane it is occupying."
+    )
+    assert slots.reap(slot_root, 2, stale_after=100.0) == 1
+    assert not lock.exists()
+
+
+def test_a_corrupt_but_recent_lock_is_left_alone(slots, slot_root: Path):
+    """The survivor arm, so the guard above cannot pass by over-reaping.
+
+    A sweep that scores full marks by deleting everything has failed. A corrupt
+    lock that is still YOUNG belongs to a holder that may be mid-write right
+    now, and stealing its lane is the double-booking the governor exists to
+    prevent.
+    """
+    lock = slot_root / "0.lock"
+    lock.write_text("{ not json", encoding="utf-8")
+
+    assert slots.is_stale(lock, stale_after=10_000.0) is False
+    assert slots.reap(slot_root, 2, stale_after=10_000.0) == 0
+    assert lock.exists()
 
 
 def test_the_lock_payload_identifies_the_holder(slots, slot_root: Path):

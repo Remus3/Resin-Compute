@@ -93,8 +93,12 @@ DEFAULT_ENKA_USER_AGENT = "ResinCompute/0.1 (local single-account planner)"
 #: pick.
 #:
 #: Three repositories on this machine - Legion Wallpaper, Riot Commander and
-#: ResinCompute - each run headless cycles, and each admits work against ONE
-#: shared lockfile slot bucket. Every participant reads its OWN copy of this
+#: ResinCompute - share ONE lockfile slot bucket. TWO of them admit work against
+#: it today: LW and RC both call `slots.hold()` from their loop controllers.
+#: ResinCompute does NOT - it has vendored and pinned the governor but has no
+#: executor loop to wrap, so its lane is reserved and unclaimed. This number is
+#: therefore a declaration joined ahead of need, not a limit this process
+#: currently enforces. Every participant reads its OWN copy of this
 #: number, so the bucket bounds the total only while all three copies AGREE. If
 #: they ever disagree, the governor silently permits max(a, b) simultaneous
 #: holders and stops being a governor at all. Riot Commander and Legion

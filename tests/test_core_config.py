@@ -20,19 +20,46 @@ changed passes just as happily when the variable never reached the code at all.
 IS env-derived through the same monkeypatch mechanism in the same process, so
 every "still 3" assertion here is known to be measuring something.
 
-The enumerated names are a guess and can only catch names someone thought of.
-`test_load_config_never_names_the_ceiling_field` is the arm that is not a
-guess: it reads `load_config` itself and fails on any wiring, under any name,
-from any source.
+THE ENUMERATED NAMES ARE A GUESS and can only catch names someone thought of.
+Two arms narrow that gap, and NEITHER of them closes it completely - stated
+plainly here because an earlier version of this docstring claimed one of them
+"fails on any wiring, under any name, from any source", and an adversarial pass
+broke that claim in one line:
+
+  * `test_load_config_never_names_the_ceiling_field` scans the SOURCE TEXT of
+    `load_config` for the field name. It is defeated by wiring that never
+    appears in that function, and the demonstrated bypass is this module's own
+    idiom - `field(default_factory=lambda: _env_int("RESIN_LANE_CEILING", ...))`
+    on the dataclass, which moves the ceiling to 9 while every guard here
+    reports green.
+  * `test_the_ceiling_field_has_no_default_factory` closes that specific bypass
+    STRUCTURALLY rather than by name, and
+    `test_a_poisoned_environment_cannot_move_the_ceiling` checks the BEHAVIOUR
+    of both `Config()` and `load_config()` under a hostile environment, which is
+    what actually matters.
+
+A guard that overstates its own reach is worse than a missing one: it tells the
+next session the surface is closed, so the next session does not look. If you
+are adding an env-derived path to this field, assume these arms do NOT catch you
+and think about the three-repo consequence instead.
 """
 from __future__ import annotations
 
 import dataclasses
 import inspect
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
 from core.config import DEFAULT_ENGINE_HOST, MAX_CONCURRENT_LANES, Config, load_config
+
+#: Repo root, so the behavioural subprocess arm below can import `core.config`
+#: the same way the suite does. Derived from __file__, never from the process
+#: working directory.
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Written out independently rather than compared against the imported constant.
 # `assert MAX_CONCURRENT_LANES == MAX_CONCURRENT_LANES` proves nothing, and a
@@ -185,14 +212,74 @@ def test_env_vars_do_reach_load_config(monkeypatch):
 
 
 def test_load_config_never_names_the_ceiling_field():
-    """The arm that is not a guess.
+    """Narrower than a name list, and NARROWER THAN IT ONCE CLAIMED TO BE.
 
-    A name list catches only the names someone thought of. This reads the body
-    of `load_config` and asserts the field is never passed at all, so wiring it
-    to os.environ under a name nobody enumerated still fails here.
+    This reads the body of `load_config` and asserts the field is never passed,
+    which catches wiring placed THERE under any name. It does not catch wiring
+    placed anywhere else - see the two arms below, which exist because an
+    adversarial pass defeated this one with a `default_factory` on the dataclass
+    that never appears in this function's source at all.
     """
     source = inspect.getsource(load_config)
     assert "max_concurrent_lanes" not in source, (
         "load_config() now sets max_concurrent_lanes. It must stay at the "
         "dataclass default so no local environment can move it. " + CONTRACT
+    )
+
+
+def test_the_ceiling_field_has_no_default_factory():
+    """Closes the demonstrated bypass STRUCTURALLY, so no name list is needed.
+
+    `field(default_factory=lambda: _env_int("RESIN_LANE_CEILING", ...))` moves
+    the ceiling on every `Config()` construction while leaving `load_config`'s
+    source text untouched. A factory is a call, and a call can read anything -
+    os.environ, a file, a socket - so for THIS field the honest requirement is
+    that there is no factory at all, only a plain constant default.
+    """
+    field = {f.name: f for f in dataclasses.fields(Config)}["max_concurrent_lanes"]
+    assert field.default_factory is dataclasses.MISSING, (
+        "max_concurrent_lanes acquired a default_factory. A factory runs on every "
+        "construction and can read the environment, which is exactly the override "
+        "path this field must not have. Use a plain constant default. " + CONTRACT
+    )
+    assert field.default == CROSS_REPO_CEILING, (
+        f"the field default is {field.default!r}, expected {CROSS_REPO_CEILING}. " + CONTRACT
+    )
+
+
+def test_a_poisoned_environment_cannot_move_the_ceiling():
+    """The BEHAVIOURAL arm - what the value actually is, not where it is written.
+
+    Runs in a child process so the poisoning cannot leak into the rest of the
+    suite, and so `core.config` is imported fresh underneath it rather than
+    reusing this process's already-imported module. Checks BOTH construction
+    paths: `Config()` catches a default_factory, `load_config()` catches wiring
+    in the loader. The name list is still a guess, but a guard that asserts on
+    the observed value fails loudly for any name it does happen to cover, where
+    a source scan can be true and useless at the same time.
+    """
+    poisoned = dict(os.environ)
+    for name in (
+        "RESIN_MAX_CONCURRENT_LANES", "MAX_CONCURRENT_LANES", "RESIN_LANES",
+        "RESIN_LANE_CEILING", "RSC_LANES", "LANES", "CONCURRENCY",
+        "RESIN_CONCURRENCY", "RC_MAX_CONCURRENT_LANES", "SLOTS", "MAX_SLOTS",
+    ):
+        poisoned[name] = "9"
+
+    probe = (
+        "from core.config import Config, load_config, MAX_CONCURRENT_LANES;"
+        "print(MAX_CONCURRENT_LANES, Config().max_concurrent_lanes,"
+        " load_config().max_concurrent_lanes)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=str(REPO_ROOT), env=poisoned, capture_output=True, text=True, timeout=120,
+    )
+
+    assert result.returncode == 0, f"probe failed: {result.stderr}"
+    observed = result.stdout.split()
+    assert observed == [str(CROSS_REPO_CEILING)] * 3, (
+        f"a poisoned environment moved the ceiling: got {observed}, expected "
+        f"{[str(CROSS_REPO_CEILING)] * 3} for (constant, Config(), load_config()). "
+        + CONTRACT
     )
