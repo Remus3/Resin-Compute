@@ -178,6 +178,84 @@ jobs:
           fi
           python tools/precommit_gate.py --expect-count "${expected}" --scan-tracked source
 
+      - name: git hook gate armed and firing
+        # THE STEP ABOVE PROVES THE RULE IS ENFORCED IN CI. THIS ONE PROVES THE
+        # COMMIT-TIME HALF IS ENFORCED AT ALL.
+        #
+        # `.githooks/` being tracked is not evidence. CLAUDE.md says it in as
+        # many words: never treat a hook's PRESENCE as proof it fires. A hook
+        # that is present, tracked, and never invoked looks identical to a
+        # working one from anywhere except a real commit - so this step runs
+        # tests/test_hook_gate.py, which stands up a throwaway `git init` under
+        # the runner's temp dir, stages a banned glyph, attempts a REAL commit,
+        # and asserts HEAD IS UNCHANGED. It carries a POSITIVE CONTROL for the
+        # same reason: a gate that refuses everything passes both refusal arms,
+        # and that is the catastrophically broken version.
+        #
+        # ARM IT FIRST. `core.hooksPath` is LOCAL config and is NOT cloned, so
+        # this runner starts with zero hooks - exactly like the fork that has
+        # never run the installer.
+        #
+        # BE PRECISE ABOUT WHAT THIS LINE BUYS, because the first version of
+        # this comment claimed more than it delivers and an adversarial pass
+        # measured it on 2026-09-06. `tests/test_hook_gate.py` builds and arms
+        # its OWN throwaway repository in `tmp_path`; it never consults this
+        # checkout's `core.hooksPath`. Unsetting `core.hooksPath` here and
+        # re-running the module gives 12 passed, exit 0. So the installer is
+        # NOT what makes the probe below meaningful, and an unconfigured clone
+        # is not a SKIP that the flag converts - it is a full pass.
+        #
+        # What arming actually buys is (a) this repository's own commit-time
+        # gate being live for anything later in the job, and (b) the installer
+        # itself failing loudly if the tracked hooks are unusable. Both worth
+        # having. Neither is the probe.
+        #
+        # RSC_REQUIRE_HOOK_GATE=1 IS THE LOAD-BEARING PART, and what it
+        # converts is AN UNMEASURABLE MACHINE - not an unconfigured clone.
+        # Without it, a runner that cannot reach a POSIX `sh`, cannot reach
+        # git, or cannot find `.githooks/pre-commit` to copy SKIPS, and A
+        # SKIPPED TEST IS A GREEN TICK. That is how a sibling repo's five hooks
+        # sat at mode 100644 for weeks with green CI while a headless run
+        # committed a banned glyph straight through the hole.
+        #
+        # Verified in both directions on 2026-09-06 by hiding
+        # `.githooks/pre-commit`: without the flag, 6 skipped with the reason
+        # naming the flag; with it, 6 errors and exit 1. The flag path raises
+        # inside a fixture, so pytest reports ERRORS rather than failures -
+        # non-zero either way, but worth knowing before reading a red log.
+        #
+        # THE HOOK SET IS ASSERTED BY NAME, NOT BY COUNT. Riot Commander's
+        # version of this step asserts `-ge 5`, which is RC's number; copying
+        # it here would be red on arrival, and a bare count drifts silently in
+        # both directions anyway. The name check runs FIRST and is also the
+        # anti-vacuity arm for the mode check below - an empty listing fails
+        # the comparison rather than passing the `awk` filter with nothing in
+        # it.
+        run: |
+          set -euo pipefail
+          python scripts/install_hooks.py
+
+          expected='.githooks/commit-msg .githooks/pre-commit .githooks/pre-push'
+          actual="$(git ls-files .githooks/ | sort | tr '\n' ' ')"
+          actual="${actual% }"
+          if [ "${actual}" != "${expected}" ]; then
+            echo "::error::tracked hooks are [${actual}], expected [${expected}]"
+            exit 1
+          fi
+
+          # 100644 is the difference between a gate and nothing on Linux, and
+          # git REPORTS NOTHING when it declines to run a non-executable hook -
+          # the commit simply succeeds. awk rather than grep -v so the filter
+          # matching nothing is not itself a non-zero exit under pipefail.
+          bad="$(git ls-files -s .githooks/ | awk '$1 != "100755" { print $1 " " $NF }')"
+          if [ -n "${bad}" ]; then
+            echo "::error::a tracked hook is not mode 100755: ${bad}"
+            exit 1
+          fi
+          echo "armed: ${actual} (all mode 100755)"
+
+          RSC_REQUIRE_HOOK_GATE=1 python -m pytest tests/test_hook_gate.py
+
       - name: mypy
         # ADVISORY, deliberately, and this is the one line to change when that
         # should stop being true.

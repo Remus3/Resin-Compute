@@ -189,6 +189,72 @@ The roster lives in `.claude/agents/`, the dispatch protocol in
 agent definition repeats this section inline, because subagent context does NOT
 inherit the main thread's.
 
+## Output constraints
+
+Keep individual responses under 500 output tokens. Break long work into multiple
+turns, or write verbose output to a file and cite the path.
+
+**Why:** the operator reads the chat to steer, not to review. A long response is
+a wall they have to scroll past to find the one line they need to rule on.
+Narration of work already visible in the tool calls is the usual offender.
+
+Speak in chat when there is something to RULE ON or to be NOTIFIED of. Measured
+results, verdicts, blockers and questions belong here. Progress commentary does
+not. Adopted from Legion Wallpaper's `CLAUDE.md` on operator instruction,
+2026-09-06.
+
+**CAVEMAN ULTRA is the default output dialect**, operator instruction
+2026-09-06. Maximum terseness in plain 7-bit ASCII: drop articles and filler,
+short clauses, no hedging, no preamble, no narrating a tool call that speaks for
+itself. Target 80-90 percent character reduction against ordinary prose.
+
+Declared by `tools/caveman_default.py`, a `SessionStart` hook whose stdout is
+injected as session context, with `tools/caveman.md` as the skill body. Both are
+Riot Commander's bytes rather than a local paraphrase; the `_BANNER` string is
+the contract and must stay byte-identical across the fleet.
+
+**Terseness is for CHAT ONLY.** Everything below stays byte-exact and is never
+compressed: file paths, shell commands, code, identifiers, machine-parsed
+tokens, and every committed repo artifact - code, docstrings, `.md`, commit
+messages, `.ps1`. Those are already governed above, and a compressed commit
+message is a worse artifact rather than a cheaper one. Answer the operator's
+clarifying questions in plain English.
+
+NOT wenyan / classical Chinese. That experiment was run and reverted the same
+day, 2026-06-27, as too lossy to skim. Do not re-derive it.
+
+## The cross-repo inbox is not optional reading
+
+**Operator instruction 2026-09-06, broadcast to all five repos.** Every session
+REVIEWS `moon_sync_inbox/` **and its subdirectories**, then INGESTS, IMPLEMENTS
+and RESPONDS. Reading the filename list is not reviewing it.
+
+- **Subdirectories carry the payload.** `moon_sync_inbox/from-RC-verbatim/`
+  held 48 real files - hooks, guards, tools, tests - while the notes beside it
+  only described them. A session that reads notes and skips the directories has
+  read the commentary and not the artifact, and will re-derive by hand what
+  arrived working. Verbatim bytes SUPERSEDE any paraphrase of them in a note.
+- **Triage every file, and record the verdict in one of four buckets:**
+  ingested, already-have-an-equivalent, not-applicable-because-X, or
+  applicable-and-not-done. The fourth bucket is the one that must reach the
+  roadmap; an untriaged file is indistinguishable from a rejected one.
+- **A verbatim file can be STALER than the prose that describes it.** Measured
+  2026-09-06: Riot Commander's end-to-end hook-gate test arrived without the
+  require-env flag that RC's own later note calls the load-bearing part. Diff
+  the ASSERTIONS against the note, never just the filenames.
+- **Never adopt a sibling's file unread.** RC's `.claude/settings.json` carries
+  11 hardcoded `C:\Users\<account>\` paths and RC-only tool references. Copying
+  it here would have re-opened the machine-identity leak this tree closed.
+  Adopt the SHAPE; copy bytes only where the bytes are the contract, as with
+  the CAVEMAN `_BANNER`.
+- **SILENCE IS NOT AGREEMENT** - Riot Commander's charter rule, adopted. An
+  unanswered charter, proposal or correction reads as dissent. Answer it, or
+  file a position saying why not.
+- **Reading is not acknowledging.** `python scripts/watch_inbox.py` reports;
+  `--mark` acknowledges, and it is a separate deliberate act. Never mark a
+  batch that was listed but not triaged - an inflated watermark is worse than
+  none.
+
 ## Session workflow
 
 Scoped sessions - each focused task is one session.
