@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import argparse
 import ctypes
-import ctypes.wintypes as wintypes
 import hashlib
 import json
 import os
@@ -89,6 +88,18 @@ GAME_PROCESS_NAMES = {"GenshinImpact.exe", "YuanShen.exe", "launcher.exe"}
 # Reading a file the game currently holds open
 # ---------------------------------------------------------------------------
 
+# WINDOWS-ONLY BELOW, AND THE GUARD IS FOR THE TYPE CHECKER AS MUCH AS
+# FOR THE INTERPRETER. `ctypes.wintypes` and `ctypes.WinDLL` are marked
+# `sys.platform == "win32"` in typeshed, so a bare import of either is
+# an ERROR when mypy runs on Linux - which is what CI runs. That error
+# stops mypy before it checks anything else, so the whole gate reads as
+# one unrelated failure. Measured 2026-09-07: the local Windows run was
+# green and CI was red on exactly this, which is the same shape as the
+# numpy stub already recorded in mypy.ini. mypy narrows on
+# `sys.platform`, so the guard is the fix rather than an ignore comment.
+if sys.platform == "win32":
+    import ctypes.wintypes as wintypes
+
 _GENERIC_READ = 0x80000000
 _FILE_SHARE_ALL = 0x00000001 | 0x00000002 | 0x00000004  # read | write | delete
 _OPEN_EXISTING = 3
@@ -111,6 +122,13 @@ def read_bytes_shared(path: Path) -> bytes | None:
         return path.read_bytes()
     except (PermissionError, OSError):
         pass
+
+    if sys.platform != "win32":
+        # There is no shared-read fallback to offer off Windows, and the caller
+        # already treats None as "record it as unreadable" rather than as
+        # "absent". This branch exists so the Windows-only calls below are
+        # narrowed for the type checker, not because the tool runs elsewhere.
+        return None
 
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateFileW.restype = wintypes.HANDLE

@@ -185,7 +185,27 @@ def test_mypy_reports_the_number_of_files_the_partition_predicts():
         "mypy did not print a source-file count, so this arm cannot compare "
         f"anything. Last line was: {tail!r}"
     )
-    reported = int(next(word for word in tail.split() if word.isdigit()))
+    # Read the count that precedes "source files", NOT the first digit on the
+    # line. When mypy is clean the tail is "Success: no issues found in N source
+    # files" and the two agree. When mypy has errors it is "Found 3 errors in 3
+    # files (checked 31 source files)" and the first digit is the ERROR count.
+    # Measured 2026-09-07: this arm reported "mypy checked 3 files but the
+    # configured roots select 31" on a CI run whose real problem was three
+    # platform errors, and the message sent the reader to look at the scope
+    # rather than at the errors. A guard that reports the wrong number is worse
+    # than one that stays quiet.
+    words = tail.split()
+    reported = None
+    for index in range(len(words) - 1):
+        if words[index] == "source" and words[index + 1].startswith("files"):
+            candidate = words[index - 1]
+            if candidate.isdigit():
+                reported = int(candidate)
+                break
+    assert reported is not None, (
+        "could not find the file count before 'source files'. Last line was: "
+        + repr(tail)
+    )
 
     roots = _configured_roots()
     pending = [
