@@ -19,6 +19,17 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/watch_inbox.py --quiet-when-empty",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

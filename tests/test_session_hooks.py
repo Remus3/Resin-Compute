@@ -90,6 +90,9 @@ SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 #: The script the SessionStart hook exists to run, repo-relative.
 WATCHER = "scripts/watch_inbox.py"
 
+#: What turns the watcher into something safe to run before EVERY prompt.
+QUIET_FLAG = "--quiet-when-empty"
+
 #: Runtime state written by `--mark`. Gitignored, and it must NOT move when a
 #: hook merely reports.
 WATERMARK = REPO_ROOT / "ops" / "runtime" / "inbox_seen.json"
@@ -137,10 +140,32 @@ BANNER_SHAPE = re.compile(
     re.MULTILINE,
 )
 
-#: script basename -> the shape its stdout must carry.
+#: What `scripts/watch_inbox.py --quiet-when-empty` prints. A THIRD hook was
+#: wired on `UserPromptSubmit`, because `SessionStart` fires ONCE and cannot see
+#: a note that lands mid-session - which is the COMMON case on this channel.
+#:
+#: It runs on every prompt, so it must print NOTHING when nothing is unread: a
+#: hook that speaks with nothing to say trains the reader to skip it, at which
+#: point it is worse than absent because it still looks wired.
+#:
+#: So the accepted output is silence OR a real report, and nothing else. The
+#: exit code carries the rest of the weight: a crashed run also prints nothing
+#: on stdout, and only `status == 0` separates the two. Stated here rather than
+#: assumed, and `test_the_user_prompt_submit_hook_speaks_when_a_note_is_unread`
+#: is the ARMED half - it proves the silence is a choice and not a broken hook.
+QUIET_SHAPE = re.compile(r"\A\s*\Z|^unread: \d+\s*$", re.MULTILINE)
+
+#: The EXACT declared command -> the shape its stdout must carry.
+#:
+#: Keyed on the whole command rather than on a script basename, because two
+#: hooks now name the same script under different flags and must be graded
+#: differently. Exact lookup also strengthens the non-vacuity property already
+#: recorded above: a hook cannot acquire a flag that changes what it prints
+#: without somebody stating the new expectation here.
 EXPECTED_SHAPE = {
-    "watch_inbox.py": REPORT_SHAPE,
-    "caveman_default.py": BANNER_SHAPE,
+    "python scripts/watch_inbox.py": REPORT_SHAPE,
+    "python scripts/watch_inbox.py --quiet-when-empty": QUIET_SHAPE,
+    "python tools/caveman_default.py": BANNER_SHAPE,
 }
 
 #: sha256 of the `_BANNER` string literal in `tools/caveman_default.py`, and its
@@ -170,19 +195,19 @@ BANNER_BYTES = 667
 
 
 def shape_for(command: str) -> re.Pattern[str]:
-    """The output shape the named script must produce.
+    """The output shape the declared command must produce.
 
-    Raises rather than defaulting. An unrecognised script is a hook nobody has
+    Raises rather than defaulting. An unrecognised command is a hook nobody has
     declared an expectation for, and grading it against a permissive default is
     how a silent hook passes.
     """
-    for name, pattern in EXPECTED_SHAPE.items():
-        if name in command:
-            return pattern
-    raise KeyError(
-        f"no output shape declared for hook command {command!r}. Add it to "
-        "EXPECTED_SHAPE - a hook with no stated expectation cannot be graded."
-    )
+    try:
+        return EXPECTED_SHAPE[command.strip()]
+    except KeyError:
+        raise KeyError(
+            f"no output shape declared for hook command {command!r}. Add it to "
+            "EXPECTED_SHAPE - a hook with no stated expectation cannot be graded."
+        ) from None
 
 
 class HookCommand(NamedTuple):
@@ -433,6 +458,44 @@ def test_a_session_start_event_is_declared():
     )
 
 
+def test_a_user_prompt_submit_event_is_declared():
+    """SessionStart FIRES ONCE and cannot see a note that lands mid-session.
+
+    That is the COMMON case on this channel: a sibling drops a correction while
+    the session is already running, and the operator finds out about it in the
+    next cold session hours later. `UserPromptSubmit` is the event that closes
+    that window, and it is why the watcher grew a quiet rendering.
+    """
+    events = sorted({hook.event for hook in _hook_commands(_load_settings())})
+    assert "UserPromptSubmit" in events, (
+        f"no UserPromptSubmit hook is declared; the events found are {events}. "
+        "SessionStart alone cannot surface a note that arrives mid-session"
+    )
+
+
+def test_user_prompt_submit_invokes_the_watcher_quietly():
+    """The per-prompt hook must be the QUIET rendering.
+
+    Without `--quiet-when-empty` it would print `unread: none` before every
+    single prompt, and a hook that speaks when it has nothing to say is one the
+    reader learns to skip - at which point the real report scrolls past too.
+    """
+    prompt = [
+        hook for hook in _hook_commands(_load_settings()) if hook.event == "UserPromptSubmit"
+    ]
+    assert len(prompt) >= 1, "UserPromptSubmit declares no command hook"
+
+    naming = [hook for hook in prompt if WATCHER in _repo_relative_command(hook.command)]
+    assert len(naming) == 1, (
+        f"{len(naming)} of {len(prompt)} UserPromptSubmit command(s) invoke {WATCHER}: "
+        f"{[hook.command for hook in prompt]}"
+    )
+    assert QUIET_FLAG in naming[0].command, (
+        f"the per-prompt hook `{naming[0].command}` omits {QUIET_FLAG}, so it "
+        "would print a report before every prompt"
+    )
+
+
 # ---------------------------------------------------------------------------
 # (b) Targets exist AND are tracked
 # ---------------------------------------------------------------------------
@@ -615,6 +678,115 @@ def test_the_session_start_hook_actually_fires(tmp_path):
         )
 
 
+class Fired(NamedTuple):
+    status: int
+    body: str
+    noise: str
+    elapsed: float
+
+
+def _fire(argv: list[str], tmp_path: Path, label: str) -> Fired:
+    """Launch `argv` at the repo root and read its streams back off disk.
+
+    FILES rather than pipes, for both reasons the existing arm gives: an exit
+    code collected from a pipeline is the pipeline's, and output read out of a
+    pipe can be truncated by a full buffer without anything saying so.
+    """
+    out_path = tmp_path / f"{label}.out"
+    err_path = tmp_path / f"{label}.err"
+    started = time.monotonic()
+    try:
+        with out_path.open("wb") as out, err_path.open("wb") as err:
+            status = subprocess.call(
+                argv, cwd=str(REPO_ROOT), stdout=out, stderr=err, stdin=subprocess.DEVNULL
+            )
+    except OSError as exc:
+        pytest.fail(f"could not launch {argv}: {type(exc).__name__}: {exc}")
+    return Fired(
+        status,
+        out_path.read_text(encoding="utf-8", errors="replace"),
+        err_path.read_text(encoding="utf-8", errors="replace"),
+        time.monotonic() - started,
+    )
+
+
+def _prompt_hooks() -> list[HookCommand]:
+    return [hook for hook in _hook_commands(_load_settings()) if hook.event == "UserPromptSubmit"]
+
+
+def test_the_user_prompt_submit_hook_actually_fires(tmp_path):
+    """It runs, it exits 0, it does not acknowledge, and it is fast.
+
+    The watermark is compared on its BYTES before and after. READING IS NOT
+    ACKNOWLEDGING is the property that stops a subagent's start - or, here, any
+    prompt the operator types - from marking a queue nobody has triaged.
+    """
+    hooks = _prompt_hooks()
+    assert len(hooks) >= 1, "UserPromptSubmit declares no command hook to fire"
+
+    for index, hook in enumerate(hooks):
+        argv = _argv(hook.command)
+        assert len(argv) >= 1, f"empty command for {hook.event}"
+
+        before = _watermark_bytes()
+        fired = _fire(argv, tmp_path, f"{hook.event}-{index}")
+
+        assert fired.status == 0, (
+            f"{hook.event} hook `{hook.command}` exited {fired.status}; this one runs "
+            f"before EVERY prompt. stderr: {fired.noise.strip()[:400]!r}"
+        )
+        assert shape_for(hook.command).search(fired.body), (
+            f"{hook.event} hook `{hook.command}` printed something that is neither "
+            f"silence nor a report: {fired.body.strip()[:400]!r}"
+        )
+        assert "marked read" not in fired.body, (
+            f"{hook.event} hook advanced the watermark at read time: "
+            f"{fired.body.strip()[:400]!r}"
+        )
+        assert _watermark_bytes() == before, (
+            f"{WATERMARK} changed during a hook that only reports; reading is not "
+            "acknowledging, and this hook fires on every prompt"
+        )
+        assert fired.elapsed < MAX_HOOK_TIMEOUT, (
+            f"{hook.event} hook took {fired.elapsed:.2f}s against a ceiling of "
+            f"{MAX_HOOK_TIMEOUT}s, and it runs before every prompt"
+        )
+
+
+def test_the_user_prompt_submit_hook_speaks_when_a_note_is_unread(tmp_path):
+    """THE ARMED HALF, and the reason the silence arm above means anything.
+
+    A hook that crashed, or that pointed at nothing, would also print nothing -
+    and `QUIET_SHAPE` accepts silence. So the declared command is fired a second
+    time against a PLANTED inbox under `tmp_path`, where a report is the only
+    correct answer. Nothing in the repository is touched: the real inbox and the
+    real watermark are never the fixture.
+    """
+    hooks = [hook for hook in _prompt_hooks() if WATCHER in _repo_relative_command(hook.command)]
+    assert len(hooks) == 1, f"expected exactly one watcher hook, found {len(hooks)}"
+
+    inbox = tmp_path / "planted_inbox"
+    inbox.mkdir()
+    (inbox / "2026-09-07-1200-from-RC-planted.md").write_bytes(b"planted\n")
+    (inbox / "from-RC-verbatim").mkdir()
+    (inbox / "from-RC-verbatim" / "gate.py").write_bytes(b"payload\n")
+    state = tmp_path / "planted_state.json"
+
+    argv = _argv(hooks[0].command) + ["--dir", str(inbox), "--state", str(state)]
+    fired = _fire(argv, tmp_path, "UserPromptSubmit-armed")
+
+    assert fired.status == 0, f"exited {fired.status}; stderr: {fired.noise.strip()[:400]!r}"
+    assert "unread: 2" in fired.body, (
+        "the quiet hook printed no report over a planted note AND a planted "
+        f"subdirectory drop, so its silence proves nothing: {fired.body!r}"
+    )
+    assert "2026-09-07-1200-from-RC-planted.md" in fired.body
+    assert "from-RC-verbatim/" in fired.body, (
+        "the drop did not surface; a subdirectory payload is a first-class entry"
+    )
+    assert not state.exists(), "a reporting run created the watermark it was handed"
+
+
 # ---------------------------------------------------------------------------
 # (f) MUTATION ARMS. Every checker above is driven with a planted blob written
 # to tmp_path, and each pairs a fires-on-the-bad-case arm with a
@@ -733,6 +905,60 @@ def test_the_report_shape_matcher_tells_a_report_from_noise():
         "python: can't open file 'scripts/watch_inbox.py'\n",
     ):
         assert not REPORT_SHAPE.search(bad), f"noise matched the report shape: {bad!r}"
+
+
+def test_the_quiet_shape_matcher_accepts_silence_and_a_report_but_not_noise():
+    """Non-vacuity for the per-prompt arm.
+
+    `QUIET_SHAPE` deliberately accepts an EMPTY body - that is the whole point
+    of the hook - so it has to reject everything else, or the firing arm would
+    pass over a broken hook that happened to print an error.
+    """
+    for good in (
+        "",
+        "\n",
+        "unread: 1\n  [recv] a.md\n",
+        "unread: 2\n  [recv] from-RC-verbatim/  (48 files)\n  [recv] a.md\n",
+    ):
+        assert QUIET_SHAPE.search(good), f"a legitimate quiet body was rejected: {good!r}"
+
+    for bad in (
+        'Traceback (most recent call last):\n  File "x", line 1\n',
+        "python: can't open file 'scripts/watch_inbox.py'\n",
+        "unread: none\n",
+        "no inbox at /opt/checkout/moon_sync_inbox - nothing to report\n",
+    ):
+        assert not QUIET_SHAPE.search(bad), f"noise matched the quiet shape: {bad!r}"
+
+
+def test_the_shape_lookup_refuses_a_command_nobody_has_graded():
+    """A hook that acquires a flag changing its output must state the new
+    expectation. Grading it against a permissive default is how a silent hook
+    passes, and an EXACT lookup is what forces the statement.
+    """
+    with pytest.raises(KeyError):
+        shape_for("python scripts/watch_inbox.py --some-future-flag")
+
+    for command in EXPECTED_SHAPE:
+        assert shape_for(command) is EXPECTED_SHAPE[command]
+
+
+def test_every_declared_command_has_a_stated_output_shape():
+    """The bridge from the table to the tree. EXPECTED_SHAPE could be complete
+    and correct while naming a command nobody declares, or the reverse.
+    """
+    commands = _hook_commands(_load_settings())
+    assert len(commands) >= 3, (
+        f"{len(commands)} hook command(s) declared; SessionStart carries two and "
+        "UserPromptSubmit carries the quiet watcher"
+    )
+    ungraded = []
+    for hook in commands:
+        try:
+            shape_for(hook.command)
+        except KeyError:
+            ungraded.append(f"{hook.event}: {hook.command}")
+    assert ungraded == [], f"declared hooks with no stated output shape: {ungraded}"
 
 
 def test_the_hook_walker_reports_a_blob_that_declares_nothing(tmp_path):
