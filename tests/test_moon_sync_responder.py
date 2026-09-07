@@ -152,6 +152,41 @@ def test_our_own_sent_notes_are_never_answered(rsp, tmp_path):
     assert rsp.pending(inbox, opted_in=("RC", "RSC"), answered=set()) == []
 
 
+def test_only_mail_that_arrived_in_the_window_is_answered(rsp, tmp_path):
+    """MEASURED BEFORE ARMING, and it would have wasted the whole trial.
+
+    With no recency bound the first cycle selected a note from the PREVIOUS DAY:
+    the answered-record starts empty, so the entire backlog is eligible and
+    `pending` returns the oldest note from an opted-in sender.
+
+    That is wrong twice. It answers a question whose sender moved on hours ago,
+    and it spends the hop budget on backlog before any new mail arrives - so the
+    trial measures a reply to yesterday and then stops on its own budget.
+    """
+    import os
+
+    inbox = tmp_path / "inbox"
+    old = _note(inbox, "2026-09-06-1000-from-RC-yesterday.md")
+    new = _note(inbox, "2026-09-07-1900-from-RC-tonight.md")
+    window_opens = 1_000_000.0
+    os.utime(old, (window_opens - 86_400, window_opens - 86_400))
+    os.utime(new, (window_opens + 60, window_opens + 60))
+
+    picked = rsp.pending(inbox, opted_in=("RC",), answered=set(), since=window_opens)
+
+    assert [p.name for p in picked] == ["2026-09-07-1900-from-RC-tonight.md"], (
+        f"backlog was eligible: {[p.name for p in picked]}"
+    )
+
+
+def test_without_a_since_bound_the_backlog_is_eligible(rsp, tmp_path):
+    """The control. Without it the arm above could pass for the wrong reason."""
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-09-06-1000-from-RC-yesterday.md")
+
+    assert len(rsp.pending(inbox, opted_in=("RC",), answered=set(), since=None)) == 1
+
+
 def test_a_note_already_answered_is_not_answered_again(rsp, tmp_path):
     inbox = tmp_path / "inbox"
     name = "2026-09-07-1900-from-RC-question.md"
@@ -265,6 +300,76 @@ def test_an_incomplete_or_expired_agreement_is_no_agreement(rsp, tmp_path, recor
 
     assert agreed is False, f"{record} was accepted as an agreement"
     assert why, "no reason was given for holding"
+
+
+def test_an_untrusted_workspace_spelling_refuses_the_spawn_loudly(rsp, tmp_path):
+    """Silent permission loss is the failure. This turns it into a refusal.
+
+    Sibling-D reported and RSC reproduced on this disk: `~/.claude.json` carries
+    two path spellings for this checkout with disagreeing trust. The keys are
+    separator-sensitive, and an untrusted workspace makes a headless run DISCARD
+    its permissions without erroring - Sibling-D lost the first two arms of a
+    hook probe to it, concluding wrongly that hooks do not fire headless.
+    """
+    config = tmp_path / "claude.json"
+    config.write_text(
+        json.dumps({"projects": {str(tmp_path / "repo"): {"hasTrustDialogAccepted": False}}})
+    )
+
+    trusted, why = rsp.workspace_trust(tmp_path / "repo", config=config)
+
+    assert trusted is False
+    assert "untrusted" in why.lower()
+
+
+def test_the_trusted_spelling_passes_and_an_absent_config_does_not_block(rsp, tmp_path):
+    """The arming half, plus the deliberate default.
+
+    An absent or unreadable config is trusted-by-default: this guard exists to
+    catch a KNOWN divergence, not to become a second gate that fails closed on a
+    fresh machine and blocks a trial for a reason nobody can see.
+    """
+    config = tmp_path / "claude.json"
+    config.write_text(
+        json.dumps({"projects": {str(tmp_path / "repo"): {"hasTrustDialogAccepted": True}}})
+    )
+    assert rsp.workspace_trust(tmp_path / "repo", config=config)[0] is True
+    assert rsp.workspace_trust(tmp_path / "repo", config=tmp_path / "nope.json")[0] is True
+
+
+def test_a_divergence_between_two_spellings_is_untrusted_from_either_side(rsp, tmp_path):
+    """The DIVERGENCE is the hazard, not one particular spelling.
+
+    This is the live shape on this machine, reproduced: one directory, two keys,
+    `False` and `True`.
+
+    Two things make the naive guard useless here. `str(Path("C:/x"))` normalises
+    to a backslash on Windows, so a lookup keyed on a `Path` can never SEE the
+    forward-slash entry and reports trusted no matter what. And which key a
+    caller lands on depends on how that caller spelled the path - a shell
+    handing over a posix-style cwd is ordinary, not exotic.
+
+    So the answer must be untrusted from EITHER side. A guard that said "trusted"
+    for the backslash spelling would be technically right about that key and
+    useless about the machine, which is the distinction this whole channel keeps
+    relearning.
+    """
+    config = tmp_path / "claude.json"
+    config.write_text(
+        json.dumps(
+            {
+                "projects": {
+                    "C:/Resin Compute": {"hasTrustDialogAccepted": False},
+                    "C:" + chr(92) + "Resin Compute": {"hasTrustDialogAccepted": True},
+                }
+            }
+        )
+    )
+
+    for spelling in (Path("C:/Resin Compute"), Path("C:" + chr(92) + "Resin Compute")):
+        trusted, why = rsp.workspace_trust(spelling, config=config)
+        assert trusted is False, f"{spelling} read as trusted despite the divergence"
+        assert "untrusted" in why.lower()
 
 
 def test_an_expired_window_stops_the_responder(rsp):

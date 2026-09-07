@@ -140,6 +140,8 @@ TERMINATIONS = (
     "refused",
     "spawn-failed",
     "unconfirmed",
+    "untrusted-workspace",
+    "no-destination",
     "budget",
     "window",
     "empty",
@@ -174,6 +176,12 @@ DEFAULT_INVOCATIONS = REPO_ROOT / "ops" / "runtime" / "responder_invocations.log
 #: agreement is a human judgement, so the operator records it - the machine only
 #: refuses to proceed without it.
 DEFAULT_CONFIRMATION = REPO_ROOT / "ops" / "runtime" / "trial_confirmed.json"
+
+#: The machine-level config carrying per-workspace trust. A DEFAULT_ so the
+#: suite's fixture redirects it like every other one - an arm that read the
+#: operator's real config would pass or fail based on the machine it ran on,
+#: which is the opposite of a test.
+DEFAULT_TRUST_CONFIG = Path.home() / ".claude.json"
 
 #: Per-host, gitignored, and the same file the poller reads. A checkout that
 #: moves goes SILENTLY quiet rather than erroring, which is Sibling-A's standing
@@ -260,7 +268,12 @@ def _read_text(path: Path) -> str:
         return ""
 
 
-def pending(inbox: Path, opted_in: tuple[str, ...], answered: set[str]) -> list[Path]:
+def pending(
+    inbox: Path,
+    opted_in: tuple[str, ...],
+    answered: set[str],
+    since: float | None = None,
+) -> list[Path]:
     """Notes from an opted-in sender that have not been answered yet.
 
     DEFAULT DENY. A sender not on the list is not answered, an unparseable name
@@ -284,6 +297,21 @@ def pending(inbox: Path, opted_in: tuple[str, ...], answered: set[str]) -> list[
             continue
         if child.name in answered:
             continue
+        if since is not None:
+            # ONLY MAIL THAT ARRIVED IN THE WINDOW. Measured before arming: with
+            # no bound, the first cycle selected a note from the PREVIOUS DAY -
+            # the oldest unanswered note from an opted-in sender - because an
+            # empty answered-record makes the entire backlog eligible.
+            #
+            # That is wrong twice over. It answers a question whose sender has
+            # long since moved on, and it spends the hop budget on backlog
+            # before any new mail arrives, so the trial measures a reply to
+            # yesterday and then stops.
+            try:
+                if child.stat().st_mtime < since:
+                    continue
+            except OSError:
+                continue
         out.append(child)
     return out
 
@@ -311,6 +339,65 @@ def hops_used(inbox: Path) -> int:
 def within_budget(inbox: Path, bounds: Bounds) -> bool:
     """Whether another automated hop is allowed."""
     return hops_used(inbox) < bounds.max_hops
+
+
+def workspace_trust(cwd: Path, config: Path | None = None) -> tuple[bool, str]:
+    """(whether this exact cwd spelling is trusted, why not if it is not).
+
+    SILENT PERMISSION LOSS IS THE FAILURE THIS PREVENTS. Sibling-D reported, and
+    RSC reproduced on this disk, that `~/.claude.json` carries TWO path
+    spellings for this checkout with DISAGREEING trust:
+
+        'C:/Resin Compute'   hasTrustDialogAccepted = False
+        'C:' + chr(92) + 'Resin Compute'   hasTrustDialogAccepted = True
+
+    Those keys are separator- and case-sensitive, and an UNTRUSTED workspace
+    makes a headless run DISCARD its permissions silently. It does not error. It
+    runs with permissions it believes it has and does not have, and Sibling-D
+    lost the first two arms of a hook probe to exactly this, concluding wrongly
+    that hooks do not fire headless.
+
+    RSC's spawn currently resolves to the TRUSTED spelling, measured - but by
+    accident of `Path.resolve()` emitting backslashes on Windows rather than by
+    design. One refactor to posix paths moves it onto the False entry and
+    nothing anywhere would say so. So the responder checks the spelling it is
+    about to use, and refuses loudly rather than running degraded.
+
+    An unreadable or absent config is TRUSTED-BY-DEFAULT here: this guard exists
+    to catch a known divergence, not to become a second gate that fails closed
+    on a fresh machine and blocks a trial for a reason nobody can see.
+    """
+    path = config or DEFAULT_TRUST_CONFIG
+    payload = read_json(path, default=None)
+    if not isinstance(payload, dict):
+        return True, "no readable config - not treating that as untrusted"
+    projects = payload.get("projects")
+    if not isinstance(projects, dict):
+        return True, "config carries no projects map"
+    # EVERY EQUIVALENT SPELLING IS CHECKED, and that is the point rather than a
+    # thoroughness flourish. `str(Path("C:/x"))` normalises to a backslash on
+    # Windows, so a lookup keyed on the Path can NEVER see the forward-slash
+    # entry - a guard written that way reports trusted and cannot do otherwise.
+    # The hazard is not one spelling, it is the DIVERGENCE: which key a caller
+    # lands on depends on how the caller spelled the path, and a shell handing
+    # over a posix-style cwd is an ordinary thing rather than an exotic one.
+    native = str(cwd)
+    spellings = {native, native.replace(chr(92), "/")}
+    untrusted = sorted(
+        k
+        for k in spellings
+        if isinstance(projects.get(k), dict)
+        and projects[k].get("hasTrustDialogAccepted") is False
+    )
+    if untrusted:
+        return False, (
+            f"the workspace spelling {untrusted[0]} is marked UNTRUSTED, which "
+            "makes a headless run discard its permissions without erroring"
+        )
+    known = [k for k in spellings if isinstance(projects.get(k), dict)]
+    if not known:
+        return True, f"no entry for any spelling of {native}"
+    return True, f"{native} is trusted under every spelling present"
 
 
 def counterparty_agreed(path: Path, now: float | None = None) -> tuple[bool, str]:
@@ -366,7 +453,13 @@ def load_roots(config: Path | None = None) -> dict[str, Path]:
     payload = read_json(config or DEFAULT_ROOTS_CONFIG, default=None)
     if not isinstance(payload, dict):
         return {}
-    raw = payload.get("repos", payload)
+    # CHANNEL CODES, NOT CODENAMES. The per-host roster keys its paths by
+    # codename (`Sibling-A`), which is deliberate - nothing tracked resolves a
+    # codename to a real project. But a note is addressed by CHANNEL CODE
+    # (`RC`), so a responder reading the roster directly looks up "RC", finds
+    # nothing, and returns no destination on every cycle. Measured before
+    # arming: silently no-op, forever.
+    raw = payload.get("channel_codes", payload.get("repos", payload))
     if not isinstance(raw, dict):
         return {}
     return {
@@ -686,7 +779,7 @@ def run_once(
         result["termination"] = "budget"
         return result
 
-    queue = pending(inbox, OPTED_IN, _answered(DEFAULT_ANSWERED))
+    queue = pending(inbox, OPTED_IN, _answered(DEFAULT_ANSWERED), since=bounds.window_opens)
     if not queue:
         result["termination"] = "empty"
         return result
@@ -696,6 +789,11 @@ def run_once(
     dests = destinations_for(note, roots)
     if not dests:
         result["reasons"] = ["no opted-in destination for this sender"]
+        # RECORDED, not left "unknown". A cycle that fell out here silently was
+        # indistinguishable from one that never ran, which is the same class as
+        # the invocation log this responder already carries.
+        result["termination"] = "no-destination"
+        log_invocation("run_once", note.name, "no-destination", now=started)
         return result
 
     if not bounds.armed:
@@ -704,6 +802,21 @@ def run_once(
             print(f"  would deliver to {dest / 'moon_sync_inbox'}")
         result["reasons"] = ["disarmed"]
         result["termination"] = "disarmed"
+        return result
+
+    trusted, why = workspace_trust(REPO_ROOT)
+    if not trusted:
+        # LOUD, not degraded. A session spawned into an untrusted workspace
+        # runs with permissions it thinks it has, produces a poorer draft or
+        # none, and says nothing about why.
+        print(f"responder: REFUSING to spawn - {why}")
+        result["reasons"] = [why]
+        result["termination"] = "untrusted-workspace"
+        log_invocation("run_once", note.name, "untrusted-workspace", now=started)
+        record_cycle(
+            DEFAULT_METRICS, note.name, hops_used(inbox), started, time.time(),
+            time.time() - started, [], False, [why], "untrusted-workspace", grammar,
+        )
         return result
 
     prompt = build_prompt(note, bounds)
