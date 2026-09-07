@@ -2,7 +2,7 @@
 #
 # EOL POLICY, and it is load-bearing rather than cosmetic.
 #
-# Riot Commander runs core.autocrlf=true on its Windows fleet and paid for it
+# Sibling-C runs core.autocrlf=true on its Windows fleet and paid for it
 # twice: 21 tracked .py files ended up with doubled CR line endings (the
 # 2026-05-19 rc_facts.py incident), and a byte-compared generated sentinel came
 # back CRLF on every fresh clone. Forcing eol=lf pins the bytes in the repo AND

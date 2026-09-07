@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Commit-time hygiene gate: banned glyphs + NET-NEW ruff findings.
 
-Ported from Riot Commander's tools/precommit_gate.py. Three modes, and the
+Ported from Sibling-C's tools/precommit_gate.py. Three modes, and the
 split between them is forced by git's own hook ordering rather than by taste:
 
   1. STAGED-CONTENT mode (default). Reads a command string on stdin. If that
@@ -25,7 +25,7 @@ split between them is forced by git's own hook ordering rather than by taste:
      which is handed the message file as $1. Splitting the gate across the two
      hooks is required, not stylistic.
 
-     Riot Commander measured the consequence of missing that on 2026-07-26:
+     Sibling-C measured the consequence of missing that on 2026-07-26:
      while the gate was invoked only from pre-commit, the staged-content and
      ruff halves still fired - so the gate LOOKED healthy - and a commit whose
      SUBJECT carried a U+2014 em-dash landed completely clean.
@@ -66,8 +66,8 @@ Any scan mode accepts a leading `--expect-count N`, which fails the run when
 the number of paths SELECTED is not N. That is the anti-vacuity arm: a gate
 that scanned nothing must never report clean.
 
-EXIT CODES. Any finding exits 1 (SPEC_SCAFFOLD / build contract). Riot
-Commander's copy exits 2 because it doubles as a Claude Code PreToolUse hook,
+EXIT CODES. Any finding exits 1 (SPEC_SCAFFOLD / build contract).
+Sibling-C's copy exits 2 because it doubles as a Claude Code PreToolUse hook,
 where 2 specifically means "block the tool call"; that contract does not exist
 here. Both values are non-zero, so a git hook treats them identically.
 
@@ -233,7 +233,7 @@ def _ascii_exempt(path: str) -> bool:
 def _glyph_hits(text: str, path: str = "") -> list[str]:
     """Named diagnostics for the six historical glyphs, then a CATCH-ALL.
 
-    The catch-all is not padding. Riot Commander's gate held exactly six
+    The catch-all is not padding. Sibling-C's gate held exactly six
     characters, so every OTHER non-ASCII codepoint passed unremarked - which is
     how a U+00D7 multiplication sign reached that repo and turned an unrelated
     ASCII-hygiene test red through a gate working exactly as written. Two rules
@@ -279,7 +279,7 @@ def _ruff_candidates() -> list[list[str]]:
 
     Resolved at CALL time on purpose. This gate runs on more than one channel -
     a git hook launched by whatever `sh` picked, a developer shell, CI - and
-    those do not share an interpreter. Riot Commander hardcoded sys.executable
+    those do not share an interpreter. Sibling-C hardcoded sys.executable
     to fix one channel and thereby broke the other, leaving the ruff half dead
     for three weeks on the AUTHORITATIVE channel while the gate still looked
     healthy. Probing beats guessing.

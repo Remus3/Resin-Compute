@@ -72,7 +72,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 SOURCE = REPO / "NEXT_SESSION_PROMPT.md"
 
-# Never derived from an argument. `RC-` is Riot Commander's on this same
+# Never derived from an argument. `RC-` belongs to a sibling on this same
 # Desktop, so ResinCompute cannot have it; `RSC-` is the disambiguation.
 TARGET_NAME = "RSC-NEXT-SESSION.txt"
 
@@ -95,7 +95,7 @@ MIN_BYTES = 2000
 #:
 #: Why that matters more here than in an ordinary file. The hand-off is pasted
 #: by hand into a cold session, quoted into notes to four sibling repos, and
-#: `NEXT_SESSION_PROMPT.md` is TRACKED in a PUBLIC repository. Legion Wallpaper
+#: `NEXT_SESSION_PROMPT.md` is TRACKED in a PUBLIC repository. Sibling-E
 #: raised exactly this and asked whether anyone gated PII more widely; this
 #: tree's honest answer was no. `tests/test_machine_identity.py` sweeps tracked
 #: files and `tests/test_no_secret_literals.py` sweeps them for credentials,

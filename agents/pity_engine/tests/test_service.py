@@ -1,7 +1,7 @@
 """HTTP service tests.
 
 The load-bearing rule here is FAIL-SOFT (SPEC section 2, inherited verbatim
-from Riot Commander): a malformed request returns a friendly 400 and the raw
+from Sibling-C): a malformed request returns a friendly 400 and the raw
 exception goes to the log, never into the response body. `_RAW_ERROR_MARKERS`
 below is the concrete form of that rule - if any of those strings ever reaches
 a caller, the engine has leaked its internals.
@@ -110,7 +110,7 @@ def test_default_port_comes_from_the_registry_not_a_local_literal() -> None:
     """The number lives in `core/ports.py` and nowhere else.
 
     This deliberately does NOT restate the integer. The engine originally sat on
-    a port inside Daemon Slayer's reserved block; a literal here is exactly what
+    a port inside Sibling-F's reserved block; a literal here is exactly what
     let that survive review. See ADR-004.
     """
     from core.ports import ENGINE, is_ours

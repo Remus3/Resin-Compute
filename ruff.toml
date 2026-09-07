@@ -1,20 +1,20 @@
 # ruff.toml - ResinCompute
 #
-# Ported from Riot Commander's ruff.toml. Two deliberate divergences from the
+# Ported from Sibling-C's ruff.toml. Two deliberate divergences from the
 # parent, both recorded in docs/SPEC_SCAFFOLD.md section 1:
 #
-#   1. target-version is py311, not py39. RC targets py39 because it has a
+#   1. target-version is py311, not py39. That sibling targets py39 because it has a
 #      deployed py39 surface. This is a new tree with none, so the UP007 /
-#      UP035 / UP045 / UP006 suppressions RC needs for py39 compatibility are
+#      UP035 / UP045 / UP006 suppressions it needs for py39 compatibility are
 #      NOT inherited - modern union and builtin-generic syntax is allowed and
 #      pyupgrade is left free to enforce it.
 #
-#   2. F401 and F841 are NOT globally ignored. RC suppresses both as "too
+#   2. F401 and F841 are NOT globally ignored. Sibling-C suppresses both as "too
 #      noisy" against an existing large tree. A greenfield tree has no such
 #      debt, and both catch real defects, so they stay on. The one place F401
 #      is genuinely expected is __init__.py re-exports, which is scoped below.
 #
-# Everything else is RC's config as-is, including the BLE ratchet.
+# Everything else is Sibling-C's config as-is, including the BLE ratchet.
 
 target-version = "py311"
 line-length = 120
@@ -45,7 +45,7 @@ exclude = [
 
 [lint.per-file-ignores]
 # One-off maintenance scripts are procedural; bugbear and import order are
-# both too strict for them, matching RC's own carve-out.
+# both too strict for them, matching Sibling-C's own carve-out.
 "scripts/*.py" = ["B", "I"]
 # __init__.py re-exports are the point of the file.
 "*/__init__.py" = ["F401"]

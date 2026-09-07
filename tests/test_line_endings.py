@@ -17,7 +17,7 @@ So the only meaningful check is the one below: read the BYTES off disk. A test
 that compared the index to the working tree would agree with itself and pass
 while the drift accumulated, which is precisely what happened.
 
-Riot Commander paid for the CRLF class of bug twice, including 21 tracked `.py`
+Sibling-C paid for the CRLF class of bug twice, including 21 tracked `.py`
 files with doubled CR endings, and `.gitattributes` cites that as the reason the
 policy exists. The `.githooks/` shims are the sharper case: they are `#!/bin/sh`
 scripts, and a CRLF shebang makes the kernel look for an interpreter named

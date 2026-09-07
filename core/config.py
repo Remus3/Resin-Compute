@@ -45,8 +45,8 @@ NOT AN ENVIRONMENT VARIABLE - and the omission is the whole point.
 the environment. It is written up here, BELOW the list and outside it, rather
 than as an entry in it, precisely so that nobody reads it as one.
 
-It is a CROSS-REPO ceiling on total concurrent executor calls, shared with Riot
-Commander and Legion Wallpaper against ONE lockfile slot bucket. Every
+It is a CROSS-REPO ceiling on total concurrent executor calls, shared with
+Sibling-C and Sibling-E against ONE lockfile slot bucket. Every
 participant reads its OWN copy of the number, so the bucket bounds nothing
 unless all three copies agree. An override on a single participant would not
 raise that participant's share - it would raise the EFFECTIVE ceiling for all
@@ -71,7 +71,7 @@ from core.ports import ENGINE as _ENGINE_PORT
 
 _log = logging.getLogger(__name__)
 
-# Repo root. Mirrors Riot Commander's hard rule that SCRIPT_DIR is derived from
+# Repo root. Mirrors Sibling-C's hard rule that SCRIPT_DIR is derived from
 # __file__ and never from the process working directory: core/config.py -> core
 # -> repo root.
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -92,17 +92,19 @@ DEFAULT_ENKA_USER_AGENT = "ResinCompute/0.1 (local single-account planner)"
 #: knob, and not named DEFAULT_* because it is not this repository's default to
 #: pick.
 #:
-#: Three repositories on this machine - Legion Wallpaper, Riot Commander and
+#: Three repositories on this machine - Sibling-E, Sibling-C and
 #: ResinCompute - share ONE lockfile slot bucket. TWO of them admit work against
-#: it today: LW and RC both call `slots.hold()` from their loop controllers.
+#: it today: the two siblings both call `slots.hold()` from their loop
+#: controllers. The codenames resolve only in the gitignored
+#: `ops/moon_sync_repos.json`; nothing tracked here resolves them.
 #: ResinCompute does NOT - it has vendored and pinned the governor but has no
 #: executor loop to wrap, so its lane is reserved and unclaimed. This number is
 #: therefore a declaration joined ahead of need, not a limit this process
 #: currently enforces. Every participant reads its OWN copy of this
 #: number, so the bucket bounds the total only while all three copies AGREE. If
 #: they ever disagree, the governor silently permits max(a, b) simultaneous
-#: holders and stops being a governor at all. Riot Commander and Legion
-#: Wallpaper both declare 3, so this tree declares 3.
+#: holders and stops being a governor at all. Sibling-C and Sibling-E
+#: both declare 3, so this tree declares 3.
 #:
 #: Changing it is a JOINT act across all three repositories in one round, never
 #: a unilateral edit here. Deliberately NOT environment-overridable - the module
@@ -117,7 +119,7 @@ class Config:
 
     Frozen so a consumer cannot mutate shared configuration behind another
     consumer's back. New fields are APPENDED with defaults, per the dataclass
-    convention inherited from Riot Commander.
+    convention inherited from Sibling-C.
     """
 
     engine_host: str = DEFAULT_ENGINE_HOST

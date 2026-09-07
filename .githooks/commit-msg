@@ -6,7 +6,7 @@
 # or directly:
 #   git config core.hooksPath .githooks
 #
-# THREE jobs, and all three must stay in THIS file. Riot Commander kept two of
+# THREE jobs, and all three must stay in THIS file. Sibling-C kept two of
 # them in two different files - the trailer strip only in the untracked
 # `.git/hooks/commit-msg`, the subject validation only in the tracked one - so
 # whichever file `core.hooksPath` resolved to, one of the two silently did not
@@ -61,7 +61,7 @@ mv "$tmp" "$1"
 # nothing to scan. Splitting the gate across the two hooks is required, not
 # stylistic.
 #
-# The failure mode is silent, which is why it survived in Riot Commander: with
+# The failure mode is silent, which is why it survived in Sibling-C: with
 # the gate invoked only from pre-commit, the staged-content and ruff halves
 # still fired - so the gate LOOKED healthy - while a U+2014 em-dash in a commit
 # SUBJECT committed clean.

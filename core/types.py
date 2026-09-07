@@ -5,7 +5,7 @@ before fan-out, and is READ-ONLY to build slices - a slice that needs a new fiel
 asks for it rather than editing this file, so parallel slices cannot conflict
 here.
 
-Convention inherited from Riot Commander: when a required field is added to a
+Convention inherited from Sibling-C: when a required field is added to a
 dataclass it is appended at the END with a default. A mid-class required field
 breaks every existing positional construction and its tests.
 

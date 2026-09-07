@@ -21,7 +21,7 @@ Exit codes:
   1  at least one job FAILed in a non-dry run
   2  usage error - an unknown --job name, or argparse rejected the arguments
 
-Inherited from Riot Commander's headless lane: a run summary lands in
+Inherited from Sibling-C's headless lane: a run summary lands in
 `ops/runtime/health.json` (CLAUDE.md "Where to find current state"), and the
 daemon shuts down cleanly on a signal rather than being killed mid-write.
 """

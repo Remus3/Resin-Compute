@@ -5,15 +5,15 @@ Two different kinds of assertion live here and the difference is the whole point
 **Positive pins, against the LIVE definition site.** `assert ENGINE == 8790`
 would pass forever while the server that actually binds quietly moved to
 something else, so these import the module that really binds and compare it to
-the registry. That is Riot Commander's refinement of Red Moon's pattern, and it
+the registry. That is Sibling-C's refinement of Sibling-B's pattern, and it
 is the arm that catches drift rather than restating it.
 
-**A negative guard, against foreign literals.** Red Moon proves disjointness
+**A negative guard, against foreign literals.** Sibling-B proves disjointness
 from the other side: no sibling project's port number may appear in tracked
 source at all. This tree carries the sibling BLOCK ranges in `core/ports.py`
 deliberately, so that one file is exempt by name - everything else is swept.
 
-Nothing here scans a live socket. Clockspeed's registry records what that costs:
+Nothing here scans a live socket. Sibling-A's registry records what that costs:
 it chose a band by probing for a free listener, the owning project's GUI happened
 to be closed, and the whole block reported clean while being someone else's.
 """
@@ -49,7 +49,7 @@ def test_the_block_is_the_one_the_registry_assigned():
 def test_every_port_this_repo_binds_is_inside_its_own_block():
     """The defect that created this module, asserted directly.
 
-    PityEngine shipped on 8870, which is inside Daemon Slayer's reserved
+    PityEngine shipped on 8870, which is inside Sibling-F's reserved
     8860-8879. Nothing was listening there so nothing broke and nothing warned.
     """
     assert ports.ALL
@@ -75,14 +75,14 @@ def test_every_declared_block_is_disjoint_from_every_other():
             assert set(ports.BLOCKS[left]).isdisjoint(set(ports.BLOCKS[right])), f"{left} overlaps {right}"
 
 
-def test_daemon_slayers_block_still_contains_the_port_this_project_abandoned():
+def test_sibling_f_block_still_contains_the_port_this_project_abandoned():
     """A regression pin on the reason for the migration.
 
     If somebody ever proposes moving the engine back to 8870, this states in one
     line why that is not available.
     """
-    assert 8870 in ports.DS_BLOCK
-    assert ports.block_for(8870) == "ds"
+    assert 8870 in ports.SF_BLOCK
+    assert ports.block_for(8870) == "sf"
     assert not ports.is_ours(8870)
 
 
@@ -234,7 +234,7 @@ def _foreign_ports() -> set[int]:
 
 
 def test_no_sibling_port_literal_appears_in_tracked_python_source():
-    """Red Moon's negative proof, applied here.
+    """Sibling-B's negative proof, applied here.
 
     An integer literal inside a sibling's block has no business in this tree.
     Parsing rather than grepping means a number inside a comment or a docstring
