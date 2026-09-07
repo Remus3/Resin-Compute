@@ -131,7 +131,7 @@ SHARED_SHA256 = {
     # hand-off note. The bucket stays at 3 participants because it models
     # ANTHROPIC ACCOUNT concurrency and the participant count did not change.
     #
-    # RE-PINNED 2026-09-07 in a joint round Amberstone proposed and this repo
+    # RE-PINNED 2026-09-07 in a joint round Sibling-C proposed and this repo
     # authored, so THIS repo carries the red window. Only the docstring's
     # opening paragraph moved: it named two sibling repos in plain text one
     # line above the sentence forbidding exactly that, and all three carriers
