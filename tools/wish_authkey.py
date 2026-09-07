@@ -127,8 +127,40 @@ from pathlib import Path
 #: does not depend on the current working directory.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-#: `%USERPROFILE%\AppData\LocalLow\miHoYo\Genshin Impact\GenshinImpact_Data\webCaches`.
-#: Each subdirectory of this is one Chromium version, e.g. "2.16.0.0".
+#: WHERE webCaches ACTUALLY LIVES, MEASURED 2026-09-07 ON A REAL FIRST RUN.
+#:
+#: This module was first written against the LocalLow path, which is where
+#: most public write-ups put it. That is WRONG for the current HoYoPlay
+#: layout and it failed in the worst possible way: `--scan` reported
+#: "no webCaches directory found yet" while the operator had the Wish
+#: History page open in front of them, so a missing directory and a wrong
+#: directory produced the same sentence. The real location on this machine
+#: is under the GAME INSTALL, not the user profile:
+#:
+#:   <install>\Genshin Impact game\GenshinImpact_Data\webCaches\2.54.0.0\
+#:       Cache\Cache_Data\data_2
+#:
+#: 15 ASCII occurrences of "authkey" were grepped out of that data_2 while
+#: the LocalLow path did not exist at all.
+#:
+#: So candidates are TRIED IN ORDER and the first one that exists wins. The
+#: LocalLow form is kept last rather than deleted, because an older install
+#: may still use it and this tool must not become correct for exactly one
+#: layout the way it just was. `RSC_WEBCACHES_ROOT` overrides everything,
+#: which is what makes the resolution testable without a game install.
+_WEBCACHES_ENV = "RSC_WEBCACHES_ROOT"
+
+#: Install roots to probe, relative to which `_WEBCACHES_TAIL` is appended.
+_INSTALL_ROOTS: tuple[str, ...] = (
+    "C:/Program Files/HoYoPlay/games/Genshin Impact game",
+    "C:/Program Files/Genshin Impact/Genshin Impact game",
+    "D:/Program Files/HoYoPlay/games/Genshin Impact game",
+    "D:/Genshin Impact/Genshin Impact game",
+)
+
+_WEBCACHES_TAIL: tuple[str, ...] = ("GenshinImpact_Data", "webCaches")
+
+#: The legacy user-profile location, kept as the LAST candidate.
 _WEBCACHES_PARTS: tuple[str, ...] = (
     "AppData",
     "LocalLow",
@@ -190,12 +222,47 @@ class RepoPathError(ValueError):
 # ---------------------------------------------------------------------------
 
 
-def _web_caches_root() -> Path:
+def _web_caches_candidates() -> list[Path]:
+    """Every place webCaches could be, in the order they are tried.
+
+    The environment override comes first so a test can point this at a
+    fixture directory. Then the game installs, because that is where the
+    current HoYoPlay layout really puts it. The user-profile form is last.
+    """
+    out: list[Path] = []
+    override = os.environ.get(_WEBCACHES_ENV, "").strip()
+    if override:
+        out.append(Path(override))
+    for install in _INSTALL_ROOTS:
+        root = Path(install)
+        for part in _WEBCACHES_TAIL:
+            root = root / part
+        out.append(root)
     userprofile = os.environ.get("USERPROFILE", "")
-    root = Path(userprofile)
-    for part in _WEBCACHES_PARTS:
-        root = root / part
-    return root
+    if userprofile:
+        root = Path(userprofile)
+        for part in _WEBCACHES_PARTS:
+            root = root / part
+        out.append(root)
+    return out
+
+
+def _web_caches_root() -> Path:
+    """The first candidate that exists, or the first candidate if none do.
+
+    Returning a non-existent path rather than None keeps every caller's
+    shape unchanged: `find_web_caches` already treats a missing directory
+    as the empty list, which is the correct answer to "has this machine
+    ever opened Wish History".
+    """
+    candidates = _web_caches_candidates()
+    for candidate in candidates:
+        try:
+            if candidate.is_dir():
+                return candidate
+        except OSError:
+            continue
+    return candidates[0]
 
 
 def find_web_caches() -> list[Path]:
