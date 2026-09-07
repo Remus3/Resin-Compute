@@ -127,7 +127,15 @@ SHARED_SHA256 = {
     # digests were re-hashed from this repo's own disk, not copied from the
     # hand-off note. The bucket stays at 3 participants because it models
     # ANTHROPIC ACCOUNT concurrency and the participant count did not change.
-    "slots.py": "629c3d511d2500f92d25fbe102a7a8c73644c027291f46b8796565a1e839f865",
+    #
+    # RE-PINNED 2026-09-07 in a joint round Amberstone proposed and this repo
+    # authored, so THIS repo carries the red window. Only the docstring's
+    # opening paragraph moved: it named two sibling repos in plain text one
+    # line above the sentence forbidding exactly that, and all three carriers
+    # are published. The mechanism is untouched. Carriers copy the new bytes
+    # BYTE-WISE and re-hash from their own disk; a digest quoted in a note is
+    # not acceptance. Before this round all three hashed 629c3d51.
+    "slots.py": "71fa2a683f2eaa04dd61feb2bebc646b5f9086e692c5acc05a9239de49d07d1b",
     "winmutex.py": "0b112a4f6bfa88cf5f537f8869225c1821ebfe97428b1e899979797ddd71a61e",
 }
 
