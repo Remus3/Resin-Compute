@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ResinCompute-Responder - Windows Scheduled Task definition.
+
+  Runs RSC's end of the cross-repo responder trial. This is NOT the supervisor
+  and it deliberately differs from ResinCompute-Supervisor.xml in four places,
+  each because a responder is a bounded experiment rather than a daemon:
+
+    - TimeTrigger, not LogonTrigger. The supervisor should come up with the
+      session and stay up. A TRIAL runs inside an agreed window and must not
+      resurrect itself at the next logon. The trigger carries an explicit
+      EndBoundary so the scheduler stops it even if nobody is watching, and the
+      responder ALSO checks the window itself - two independent stops, because
+      a kill switch that only exists in one place is one bug from absent.
+
+    - ExecutionTimeLimit PT30M, not PT0S. The supervisor must never be killed by
+      the scheduler. A responder cycle that has run for half an hour is stuck,
+      and the spawn's own 900-second ceiling should have ended it long before.
+
+    - MultipleInstancesPolicy IgnoreNew. Two responders answering the same note
+      is a doubled reply into a sibling's inbox, which is the one failure that
+      is visible to somebody else's repository rather than only to ours.
+
+    - No RestartOnFailure. The supervisor restarts because a dead supervisor is
+      the outage. A responder that failed should stay down until a person looks:
+      an unattended thing that retries into four other repositories is not a
+      thing to make self-healing.
+
+  ASCII only. The reason is in ops/install_scheduled_task.ps1 and it is
+  mechanical rather than stylistic.
+
+  PLACEHOLDERS, substituted by ops/install_responder_task.ps1 at registration:
+
+    __PYTHONW_EXE__   full path to pythonw.exe, quoted by the installer
+    __INSTALL_ROOT__  full path to the ResinCompute checkout
+    __TASK_USER__     the account the task runs as, as DOMAIN\User or a SID
+    __START_BOUNDARY__ ISO 8601 local start, the agreed window open
+    __END_BOUNDARY__   ISO 8601 local end, the agreed window close
+-->
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>ResinCompute</Author>
+    <Description>ResinCompute responder - answers one cross-repo note per cycle, inside an agreed window.</Description>
+    <URI>\ResinCompute-Responder</URI>
+  </RegistrationInfo>
+  <Principals>
+    <Principal id="Author">
+      <UserId>__TASK_USER__</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <Enabled>true</Enabled>
+    <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
+    <Hidden>true</Hidden>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <Priority>7</Priority>
+    <StartWhenAvailable>false</StartWhenAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+  </Settings>
+  <Triggers>
+    <TimeTrigger>
+      <StartBoundary>__START_BOUNDARY__</StartBoundary>
+      <EndBoundary>__END_BOUNDARY__</EndBoundary>
+      <Enabled>true</Enabled>
+      <Repetition>
+        <Interval>PT5M</Interval>
+        <StopAtDurationEnd>true</StopAtDurationEnd>
+      </Repetition>
+    </TimeTrigger>
+  </Triggers>
+  <Actions Context="Author">
+    <Exec>
+      <Command>__PYTHONW_EXE__</Command>
+      <Arguments>tools/moon_sync_responder.py --arm --window-opens __START_BOUNDARY__ --window-closes __END_BOUNDARY__</Arguments>
+      <WorkingDirectory>__INSTALL_ROOT__</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
