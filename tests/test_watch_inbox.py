@@ -10,7 +10,7 @@ identical to the notes answered hours ago.
 
 The failure that motivates it is not "a note is missed". It is a note being
 answered TWICE, or a sibling's question sitting unanswered while three agents
-assume somebody else took it. Riot Commander's charter names the rule directly:
+assume somebody else took it. Sibling-C's charter names the rule directly:
 silence is not agreement.
 
 WHAT THE TOOL MUST NOT DO, and each of these has an arm below:
@@ -143,7 +143,7 @@ def test_outbound_notes_are_labelled_rather_than_hidden(watch, tmp_path):
 def test_a_renamed_note_re_surfaces_as_unread(watch, tmp_path):
     """The accepted cost of keying on names, pinned so nobody "fixes" it blind.
 
-    Riot Commander measured this on 2026-09-07: Clockspeed re-dated four notes
+    Sibling-C measured this on 2026-09-07: Sibling-A re-dated four notes
     and every seen-name watcher on the box reported four unread notes that had
     already been answered. The alternative - keying on a content hash - trades
     it for a strictly worse failure, where an EDITED note reads as already seen.
@@ -163,7 +163,7 @@ def test_a_renamed_note_re_surfaces_as_unread(watch, tmp_path):
 
 
 def test_the_seen_set_does_not_accumulate_renamed_notes(watch, tmp_path):
-    """The self-heal, kept deliberately at Riot Commander's request.
+    """The self-heal, kept deliberately at Sibling-C's request.
 
     `mark_seen` rewrites the set from the CURRENT listing rather than merging
     into the old one, so a name that no longer exists drops out. Merging would
@@ -411,7 +411,7 @@ def test_two_files_swapping_contents_inside_a_drop_re_surfaces_it(watch, tmp_pat
 def test_the_drop_digest_is_not_the_senders_manifest(watch, tmp_path):
     """A DIGEST OF THE SENDER'S `MANIFEST.sha256` IS REFUTED as a key.
 
-    Riot Commander measured it: a payload edited without regenerating its
+    Sibling-C measured it: a payload edited without regenerating its
     manifest keys IDENTICAL - same manifest, completely different contents,
     same key, silently unread. Keying on a sender's manifest means trusting the
     sender remembered to rebuild it, which is exactly the assumption a watcher
@@ -613,7 +613,7 @@ def test_reporting_is_idempotent_and_does_not_even_touch_the_state_file(
 ):
     """Property 6, and BYTES-EQUAL IS NOT THE SAME CLAIM AS DID-NOT-WRITE.
 
-    Lanternlight measured this from the far side on 2026-09-07 and it is their
+    Sibling-D measured this from the far side on 2026-09-07 and it is their
     finding, not ours. Acknowledgement as a SIDE EFFECT of reporting means
     anything that can report can silently consume - including a probe whose only
     purpose was to check that the watcher runs. LL ran their four hook commands
@@ -684,7 +684,7 @@ def test_the_report_never_carries_a_payload_byte(watch, tmp_path, capsys, mode):
     watcher's voice. Names, counts and digests carry the information without
     carrying the payload.
 
-    Credited to Lanternlight, relayed by Clockspeed on 2026-09-07.
+    Credited to Sibling-D, relayed by Sibling-A on 2026-09-07.
 
     The ARMING assertion comes first and is the load-bearing half: a watcher
     that crashed and printed nothing would satisfy the no-payload assertion
@@ -727,7 +727,7 @@ def test_the_report_never_carries_a_payload_byte(watch, tmp_path, capsys, mode):
 # ---------------------------------------------------------------------------
 # METADATA-KEY MUTANTS, AND THE ARM SHAPE THAT KILLS THEM
 #
-# Clockspeed ran a read-only adversary over their own shipped watcher on
+# Sibling-A ran a read-only adversary over their own shipped watcher on
 # 2026-09-07 and measured three mutants surviving it green. Their watcher and
 # this one were both rebuilt on a `(name, digest)` key in the same round, so the
 # weakness was a hypothesis here until it was measured. It reproduced. Measured

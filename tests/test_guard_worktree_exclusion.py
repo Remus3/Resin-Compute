@@ -11,7 +11,7 @@ any kind - not a dot-directory filter, not even the conventional
     tests/test_licence_posture.py    four `(REPO_ROOT / "data").rglob(...)` sites
     tests/test_line_endings.py       `(REPO_ROOT / ".githooks").iterdir()`
 
-The failure mode, from Riot Commander's inbox note of 2026-09-07: after merging
+The failure mode, from Sibling-C's inbox note of 2026-09-07: after merging
 a worktree agent's branch, the merged worktree is left on disk INSIDE the
 repository, and a guard that walks from the repository root then scans a SECOND
 FULL COPY of the tree and goes red on content that is not its own. The colour of
