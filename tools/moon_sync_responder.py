@@ -117,6 +117,21 @@ RESPONDER_TAG = "[RSC-RESPONDER] This note was written by an unattended responde
 #: LOWER BOUND on the channel's real number and must never be cited as it.
 GRAMMAR = "measurement-only (A5), M1 is a LOWER BOUND"
 
+#: THE LATENCY-ONLY LABEL, for a run where the far end is a HUMAN.
+#:
+#: Sibling-A answered RSC's 1824 window request with NO - its end is not built
+#: and cannot arm - and endorsed running latency-only tonight on RSC's own
+#: definition, without amendment. Under that shape the chain terminates on a
+#: person, so there is no loop to observe and M1 IS NOT A SMALL NUMBER, IT IS
+#: NOT A NUMBER AT ALL.
+#:
+#: Recording a latency-only run under the measurement-only label would publish
+#: exactly the confusion both parties spent the evening guarding against: a
+#: result read later as a trial result. Sibling-A's only request was that the
+#: row carry the name beside the numbers, which is RSC's own 1a rule pointed at
+#: RSC.
+GRAMMAR_LATENCY_ONLY = "LATENCY-ONLY, far end is human, M1 INAPPLICABLE"
+
 #: Why a cycle produced no further hop. `exhausted` is the outcome both parties
 #: PREDICT under (i), so it confirms the bound rather than the channel; any
 #: other value, or no termination, is the finding.
@@ -527,10 +542,16 @@ def record_cycle(
     rows = payload.get("cycles") if isinstance(payload, dict) else None
     if not isinstance(rows, list):
         rows = []
+    # M1 IS OMITTED, NOT ZEROED, when the far end is human. A zero is a
+    # measurement saying the chain terminated immediately; the truth is that
+    # hops-to-quiescence is undefined when one end is a person. Writing 0 would
+    # be the most misleading number available.
+    latency_only = grammar == GRAMMAR_LATENCY_ONLY
     rows.append(
         {
             "note": note,
-            "hops": hops,  # M1, and never read without `grammar` below
+            "hops": None if latency_only else hops,  # M1, never read without `grammar`
+            "m1_status": "INAPPLICABLE" if latency_only else "lower-bound",
             "grammar": grammar,
             "termination": termination,
             "arrival": arrival,
@@ -624,6 +645,7 @@ def run_once(
     bounds: Bounds | None = None,
     spawn: Callable[..., str] | None = None,
     now: float | None = None,
+    grammar: str = GRAMMAR,
 ) -> dict:
     """One cycle: find a note, draft a reply, gate it, deliver or hold.
 
@@ -640,7 +662,7 @@ def run_once(
         "note": None,
         "actions": [],
         "termination": "unknown",
-        "grammar": GRAMMAR,
+        "grammar": grammar,
     }
     log_invocation("run_once", None, "start", now=started)
 
@@ -699,7 +721,7 @@ def run_once(
         result["termination"] = "spawn-failed"
         record_cycle(
             DEFAULT_METRICS, note.name, hops_used(inbox), started, time.time(),
-            time.time() - started, [], False, reasons, "spawn-failed",
+            time.time() - started, [], False, reasons, "spawn-failed", grammar,
         )
         log_invocation("run_once", note.name, "spawn-failed", now=time.time())
         return result
@@ -729,7 +751,7 @@ def run_once(
     record_cycle(
         DEFAULT_METRICS, note.name, hops_used(inbox), started, finished,
         finished - started, result["actions"], result["delivered"], result["reasons"],
-        result["termination"],
+        result["termination"], grammar,
     )
     log_invocation("run_once", note.name, result["termination"], now=finished)
     return result
@@ -835,6 +857,11 @@ def main(argv: list[str] | None = None) -> int:
     # a stop that exists in one place is one bug away from absent. Passed as ISO
     # local time so the agreed window in the note and the argument here are the
     # same string a human can compare.
+    parser.add_argument(
+        "--latency-only",
+        action="store_true",
+        help="the far end is a HUMAN: publish M2 and M3, record M1 as INAPPLICABLE",
+    )
     parser.add_argument("--window-opens", default=None, help="ISO local, e.g. 2026-09-07T19:00:00")
     parser.add_argument("--window-closes", default=None, help="ISO local")
     args = parser.parse_args(argv)
@@ -863,7 +890,10 @@ def main(argv: list[str] | None = None) -> int:
         window_opens=opens,
         window_closes=closes,
     )
-    outcome = run_once(inbox=Path(args.dir), bounds=bounds)
+    grammar = GRAMMAR_LATENCY_ONLY if args.latency_only else GRAMMAR
+    if args.latency_only:
+        print("responder: LATENCY-ONLY - M1 will be recorded INAPPLICABLE, not zero")
+    outcome = run_once(inbox=Path(args.dir), bounds=bounds, grammar=grammar)
     if outcome["note"] is None:
         print("responder: nothing to answer")
     elif outcome["delivered"]:

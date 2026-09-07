@@ -455,6 +455,48 @@ def test_m1_is_never_recorded_without_the_grammar_that_bounds_it(rsp, tmp_path):
     assert "lower bound" in row["grammar"].lower(), row["grammar"]
 
 
+def test_a_latency_only_run_records_m1_as_inapplicable_and_never_as_zero(rsp, tmp_path):
+    """Sibling-A answered NO to arming, and endorsed latency-only tonight.
+
+    When the far end is a HUMAN there is no loop, so hops-to-quiescence is not a
+    small number - it is undefined. Writing 0 would be the most misleading value
+    available: a zero reads as a measurement saying the chain stopped
+    immediately. Sibling-A's one request was that the row carry the name beside
+    the numbers, which is RSC's own label-travels-with-the-number rule pointed
+    back at RSC.
+    """
+    metrics = tmp_path / "runtime" / "m.json"
+    rsp.record_cycle(
+        metrics, note="n.md", hops=3, arrival=0.0, replied=9.0,
+        seconds=9.0, actions=[], delivered=True,
+        grammar=rsp.GRAMMAR_LATENCY_ONLY,
+    )
+
+    row = json.loads(metrics.read_text())["cycles"][0]
+
+    assert row["hops"] is None, f"M1 was recorded as a number under latency-only: {row['hops']}"
+    assert row["m1_status"] == "INAPPLICABLE"
+    assert "LATENCY-ONLY" in row["grammar"]
+    # M2 and M3 are the two that ARE valid under this shape.
+    assert row["reply_seconds"] == 9.0
+    assert row["cycle_seconds"] == 9.0
+
+
+def test_the_two_grammars_are_distinguishable_in_the_record(rsp, tmp_path):
+    """A latency-only row must never be readable later as a trial row."""
+    metrics = tmp_path / "runtime" / "m.json"
+    for grammar in (rsp.GRAMMAR, rsp.GRAMMAR_LATENCY_ONLY):
+        rsp.record_cycle(
+            metrics, note="n.md", hops=2, arrival=0.0, replied=1.0,
+            seconds=1.0, actions=[], delivered=True, grammar=grammar,
+        )
+
+    rows = json.loads(metrics.read_text())["cycles"]
+
+    assert rows[0]["m1_status"] != rows[1]["m1_status"]
+    assert rows[0]["hops"] == 2 and rows[1]["hops"] is None
+
+
 @pytest.mark.parametrize(
     ("scenario", "expected"),
     [("window", "window"), ("budget", "budget"), ("empty", "empty"), ("disarmed", "disarmed")],
