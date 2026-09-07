@@ -62,21 +62,37 @@ DARK_BY_DESIGN = {
 REQUIRED_ROOTS = ("core/", "engines/", "ingest/", "agents/pity_engine/", "tools/")
 
 
-def _tracked_python_files() -> tuple[str, ...]:
-    """Tracked `.py` paths, asked of GIT rather than the disk.
+def _git_python_files(*args: str) -> tuple[str, ...]:
+    """`.py` paths from GIT rather than from a filesystem walk.
 
-    A filesystem walk behind a denylist is the shape that went red in this tree
-    for any contributor who created a `.venv/`.
+    A walk behind an ad-hoc denylist is the shape that went red in this tree for
+    any contributor who created a `.venv/`.
     """
     require_git_repository()
     out = subprocess.run(
-        ["git", "ls-files", "-z", "--", "*.py"],
+        ["git", "ls-files", "-z", *args, "--", "*.py"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=True,
     ).stdout
     return tuple(sorted(p for p in out.split("\0") if p))
+
+
+def _tracked_python_files() -> tuple[str, ...]:
+    return _git_python_files()
+
+
+def _untracked_python_files() -> tuple[str, ...]:
+    """`.py` present but not yet staged, ignored files excluded.
+
+    mypy WALKS THE FILESYSTEM and git does not, so a builder part-way through a
+    slice - a new module written and not yet staged - makes the two disagree
+    legitimately. The count arm went red for exactly that on 2026-09-07, on a
+    worktree holding a new `tools/` module, and a guard that reddens for honest
+    work in progress is one a contributor learns to ignore.
+    """
+    return _git_python_files("--others", "--exclude-standard")
 
 
 def _configured_roots() -> tuple[str, ...]:
@@ -170,8 +186,19 @@ def test_mypy_reports_the_number_of_files_the_partition_predicts():
         f"anything. Last line was: {tail!r}"
     )
     reported = int(next(word for word in tail.split() if word.isdigit()))
-    assert reported == len(covered), (
+
+    roots = _configured_roots()
+    pending = [
+        rel
+        for rel in _untracked_python_files()
+        if any(rel.startswith(root) for root in roots)
+        and not (excluded_prefix and rel.startswith(excluded_prefix))
+    ]
+    expected = len(covered) + len(pending)
+    assert reported == expected, (
         f"mypy checked {reported} files but the configured roots select "
-        f"{len(covered)} tracked files. The two have drifted, so the count in "
-        "any hand-off block is describing something other than the tree."
+        f"{len(covered)} tracked plus {len(pending)} unstaged. The two have "
+        "drifted, so the count in any hand-off block is describing something "
+        "other than the tree."
+        + (f" Unstaged under the roots: {pending}" if pending else "")
     )
