@@ -124,6 +124,7 @@ TERMINATIONS = (
     "exhausted",
     "refused",
     "spawn-failed",
+    "unconfirmed",
     "budget",
     "window",
     "empty",
@@ -142,6 +143,22 @@ DEFAULT_ANSWERED = REPO_ROOT / "ops" / "runtime" / "responder_answered.json"
 #: One line per invocation. See `log_invocation` for why this is a
 #: requirement of the trial rather than an improvement filed against it.
 DEFAULT_INVOCATIONS = REPO_ROOT / "ops" / "runtime" / "responder_invocations.log"
+
+#: THE COUNTERPARTY'S WRITTEN AGREEMENT, recorded by the operator.
+#:
+#: Both CS and RSC published the same rule within an hour of each other: the
+#: trial begins when both operators have agreed a window IN WRITING, not when a
+#: note proposing one arrives. RSC's 1824 note committed to holding rather than
+#: reading silence as agreement, and silence-is-never-agreement is the charter's
+#: own rule besides.
+#:
+#: So the agreement is a PRECONDITION THE CODE CHECKS rather than a promise a
+#: person remembers. Registering the scheduled task no longer starts the trial;
+#: it makes the responder ready to start the moment the agreement is recorded,
+#: and until then every cycle holds and says why. Whether a reply constitutes
+#: agreement is a human judgement, so the operator records it - the machine only
+#: refuses to proceed without it.
+DEFAULT_CONFIRMATION = REPO_ROOT / "ops" / "runtime" / "trial_confirmed.json"
 
 #: Per-host, gitignored, and the same file the poller reads. A checkout that
 #: moves goes SILENTLY quiet rather than erroring, which is Sibling-A's standing
@@ -279,6 +296,41 @@ def hops_used(inbox: Path) -> int:
 def within_budget(inbox: Path, bounds: Bounds) -> bool:
     """Whether another automated hop is allowed."""
     return hops_used(inbox) < bounds.max_hops
+
+
+def counterparty_agreed(path: Path, now: float | None = None) -> tuple[bool, str]:
+    """(whether the trial may start, why not if it may not).
+
+    Checks that the operator has RECORDED the counterparty's written agreement,
+    and that the record has not expired. It does not parse a note: whether a
+    sibling's prose constitutes agreement is a human judgement, and a responder
+    that decided it by reading the note would be keying on exactly the
+    sender-supplied text this whole design refuses to trust.
+
+    Shape, all fields required:
+
+        {"confirmed_by": "RC", "note": "<filename>", "expires": <epoch>}
+
+    An absent, malformed or expired record means NO. The expiry exists because
+    an agreement to run tonight is not an agreement to run next week, and a
+    confirmation file left behind is otherwise a standing authorisation nobody
+    remembers granting.
+    """
+    payload = read_json(path, default=None)
+    if not isinstance(payload, dict):
+        return False, "no recorded agreement from the counterparty - the trial has not been agreed"
+    who = payload.get("confirmed_by")
+    note = payload.get("note")
+    expires = payload.get("expires")
+    if not isinstance(who, str) or not who:
+        return False, "the agreement record names no counterparty"
+    if not isinstance(note, str) or not note:
+        return False, "the agreement record cites no note, so it cannot be checked against the channel"
+    if not isinstance(expires, (int, float)):
+        return False, "the agreement record has no expiry"
+    if (time.time() if now is None else now) >= expires:
+        return False, f"the recorded agreement from {who} has expired"
+    return True, f"agreed by {who}, citing {note}"
 
 
 def window_open(bounds: Bounds, now: float | None = None) -> bool:
@@ -591,6 +643,14 @@ def run_once(
         "grammar": GRAMMAR,
     }
     log_invocation("run_once", None, "start", now=started)
+
+    agreed, why = counterparty_agreed(DEFAULT_CONFIRMATION, now=started)
+    if bounds.armed and not agreed:
+        print(f"responder: HOLDING - {why}")
+        result["reasons"] = [why]
+        result["termination"] = "unconfirmed"
+        log_invocation("run_once", None, "unconfirmed", now=started)
+        return result
 
     if not window_open(bounds, now=started):
         print("responder: the agreed trial window is not open - nothing done")
