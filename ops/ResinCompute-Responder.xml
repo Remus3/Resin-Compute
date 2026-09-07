@@ -36,6 +36,15 @@
     __TASK_USER__     the account the task runs as, as DOMAIN\User or a SID
     __START_BOUNDARY__ ISO 8601 local start, the agreed window open
     __END_BOUNDARY__   ISO 8601 local end, the agreed window close
+    __REPEAT_DURATION__ ISO 8601 duration, the window length
+
+  ELEMENT ORDER INSIDE TimeTrigger IS NOT FREE, and this file was authored
+  wrong first. Repetition must come BEFORE StartBoundary, and a Repetition with
+  StopAtDurationEnd must carry a Duration. Registering the schema-listing order
+  fails with 0x8004131a - "a value which is incorrectly formatted or out of
+  range" - which names no element and no line. The supervisor task's own comment
+  warned about exactly this and was written from a working export; this one was
+  written from a schema and cost a failed registration to find out.
 -->
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
@@ -68,13 +77,14 @@
   </Settings>
   <Triggers>
     <TimeTrigger>
+      <Repetition>
+        <Interval>PT5M</Interval>
+        <Duration>__REPEAT_DURATION__</Duration>
+        <StopAtDurationEnd>true</StopAtDurationEnd>
+      </Repetition>
       <StartBoundary>__START_BOUNDARY__</StartBoundary>
       <EndBoundary>__END_BOUNDARY__</EndBoundary>
       <Enabled>true</Enabled>
-      <Repetition>
-        <Interval>PT5M</Interval>
-        <StopAtDurationEnd>true</StopAtDurationEnd>
-      </Repetition>
     </TimeTrigger>
   </Triggers>
   <Actions Context="Author">

@@ -120,6 +120,12 @@ if ($closes -le $opens) {
 $startBoundary = $opens.ToString('yyyy-MM-ddTHH:mm:ss')
 $endBoundary = $closes.ToString('yyyy-MM-ddTHH:mm:ss')
 
+# A Repetition carrying StopAtDurationEnd must also carry a Duration, and the
+# only sane Duration is the window itself. Minutes rather than hours so a window
+# that is not a whole number of hours still registers.
+$totalMinutes = [int][math]::Ceiling(($closes - $opens).TotalMinutes)
+$repeatDuration = 'PT' + $totalMinutes + 'M'
+
 # --- Substitute and register -----------------------------------------------
 
 $xmlPath = Join-Path $InstallRoot 'ops/ResinCompute-Responder.xml'
@@ -128,11 +134,29 @@ if (-not (Test-Path -LiteralPath $xmlPath)) {
 }
 
 $xml = Get-Content -LiteralPath $xmlPath -Raw
+
+# THE DECLARATION MUST SAY UTF-16, AND THE FILE ON DISK MUST STAY ASCII.
+#
+# Register-ScheduledTask takes the XML as a .NET STRING, which is UTF-16 in
+# memory. A string whose declaration says encoding="UTF-8" makes the parser
+# refuse with "The task XML is malformed. (1,40)::ERROR: unable to switch" -
+# an error naming the XML declaration and nothing about the task.
+#
+# ops/ResinCompute-Supervisor.xml carries a comment arguing the opposite: that
+# because the API takes text, the on-disk encoding is ours to choose. The first
+# half is right and the conclusion is wrong, and this cost two failed
+# registrations to find. That task is not registered on this machine, so the
+# claim had never been tested. Measured 2026-09-07.
+#
+# The file stays 7-bit ASCII per the repo rule; only the string handed to the
+# API is relabelled.
+$xml = $xml -replace '^\s*<\?xml[^>]*\?>', '<?xml version="1.0" encoding="UTF-16"?>' 
 $xml = $xml.Replace('__PYTHONW_EXE__', $PythonwExe)
 $xml = $xml.Replace('__INSTALL_ROOT__', $InstallRoot)
 $xml = $xml.Replace('__TASK_USER__', $TaskUser)
 $xml = $xml.Replace('__START_BOUNDARY__', $startBoundary)
 $xml = $xml.Replace('__END_BOUNDARY__', $endBoundary)
+$xml = $xml.Replace('__REPEAT_DURATION__', $repeatDuration)
 
 if ($xml -match '__[A-Z_]+__') {
     throw ('a placeholder was left unsubstituted: ' + $Matches[0])
@@ -143,7 +167,7 @@ Write-Step ('interpreter  : ' + $PythonwExe)
 Write-Step ('task user    : ' + $TaskUser)
 Write-Step ('window opens : ' + $startBoundary)
 Write-Step ('window closes: ' + $endBoundary)
-Write-Step  'cadence      : every 5 minutes, stopping at the window end'
+Write-Step ('cadence      : every 5 minutes for ' + $repeatDuration + ', stopping at the window end')
 Write-Step  'kill switch  : -Remove, or Disable-ScheduledTask'
 
 if ($WhatIfOnly) {
