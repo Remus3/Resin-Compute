@@ -15,8 +15,18 @@ break. This is enforced by `tools/precommit_gate.py` and the git hooks.
 - Two-tier naming deliberately mirrors Riot Commander (repo) / Daemon Slayer
   (engine). Do not rename either half.
 - Trademark posture: no HoYoverse-coined proper noun appears in a module name,
-  package name, class name or CLI verb. Game data VALUES (character names, item
-  names) are fine as data; they are not identifiers.
+  package name, class name or CLI verb. That is the whole of the rule, and it is
+  the part that is checkable.
+  An earlier draft added "Game data VALUES (character names, item names) are
+  fine as data; they are not identifiers." The first clause is right and the
+  second is FALSE as written, so it is removed rather than softened: `PRIMOGEM`,
+  `INTERTWINED_FATE`, `STARGLITTER` and `HEROS_WIT` are enum MEMBER names in
+  `core/types.py`, which makes them identifiers by any reading. They are none of
+  the four things the rule actually names, so the posture holds and no rename is
+  called for - nominative use of item names inside a fan tool is ordinary. The
+  defect was the overclaim, not the code.
+  `docs/LICENSE_NOTES.md` carried the same sentence and was corrected in the
+  same pass; the two are siblings of one root cause and were fixed together.
 
 ## 1. Stack (inherited from Riot Commander, measured 2026-09-06)
 
