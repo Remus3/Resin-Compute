@@ -61,224 +61,221 @@ DO NOT ADD -q TO ANY OF THOSE. pytest.ini addopts ALREADY carries -q. A second
 count and cannot report what you did not see.
 
 =====================================================================
-THE ACCOUNT NOW EXISTS. THIS IS THE BIG CHANGE SINCE THE LAST HAND-OFF.
+THE TREE IS CODENAMED NOW. THIS IS THE BIG CHANGE SINCE THE LAST HAND-OFF.
 =====================================================================
 
-Genshin Impact was installed and launched for the FIRST TIME on 2026-09-07,
-and a capture lane was standing before it launched. Everything it produced is
-in C:\rsc-first-run\ - OUTSIDE this git tree, on purpose, because the game's
-logs carry the account UID and the miHoYo registry subtree carries a login
-token.
+This repository is PUBLIC - the GitHub API returns "private": false, measured
+2026-09-07. It had been flipped public with no name scrub, and its tracked files
+named six sibling projects of the same operator's 451 times across 74 files.
 
-WHAT IS IN THE STORE, measured 2026-09-07 at shutdown:
-  events.jsonl              6062 file events
-  blobs/                    5971 distinct content-addressed blobs
-  screens/                  1542 screenshots kept of 2036 index lines
-  video/                    29 mkv segments, 15fps, 2560x1440
-  observations.jsonl        10 recorded observations, each with evidence
-  evidence/                 9 stamped PNGs with sha256 recorded
-  webcache_snapshots/       2
-  wish/                     the gacha URL, raw bodies, 10 pull attempts
-  account.json              UID, region, nickname, traveller
-  TOTAL                     15 GB
+Every one of them is now an opaque codename, Sibling-A through Sibling-F. The
+resolution map is ops/moon_sync_repos.json, which is GITIGNORED, and NOTHING
+TRACKED RESOLVES A CODENAME TO A PROJECT. Do not put the mapping in a tracked
+file, a commit message, or a doc. The inbox is gitignored and is where sibling
+correspondence lives.
 
-ACCOUNT FACTS, all verified from capture, all recorded in account.json:
-  UID           692912734, read FOUR ways that do not share one input - two
-                pixel reads of one crop (that is ONE fact), plus the game's own
-                UidInfo.txt bytes and the BeyondLocal/<uid> directory it made
-  region        os_usa (America, UTC-5), VERIFIED from the game writing
-                security_server_default_iplist_os_usa.txt itself
-  traveller     Lumine, female. OCR caught "the god took away my brother"
-  nickname      xMoonbeam, recovered from the VIDEO at seg_20260907_025348.mkv
-                +108s. The 4-second screenshot lane missed that screen entirely
-  roster        8 slots. Moonbeam (Manekin, Miliastra Wonderland, 6 GREY stars,
-                red card, DEF 147 > ATK 106, EM 0), Amber, Noelle, Dehya,
-                Traveler, Sucrose, Kuki Shinobu, Yaoyao
+STATE THE SEVERITY THE WAY THE OPERATOR DID, NOT HIGHER. The ruling was "they
+are not secrets, it just needs to be altered to be ambiguous". This removed a
+plain-text roster from a public repo. It does NOT make the fleet unlearnable to
+anyone who already knows it. An over-claimed rationale outlives a wrong line of
+code, and this tree tracks that failure class hardest.
 
-THE UID MUST NEVER ENTER THIS TREE. A sweep over all 164 tracked files for any
-nine-digit run hashing to it found 0, and the checker was proven to fire on a
-planted control first.
+LETTERS ARE DELIBERATELY NOT MONOTONIC. core/ports.py publishes four sibling
+block ranges as literals, so an assignment ordered by port or alphabet would let
+one confirmed hit de-anonymise the whole fleet. Do not "tidy" them into order.
 
-THE CAPTURE LANE IS STOPPED. All four processes were shut down cleanly at the
-end of the session and the game is closed. To bring it back up:
-  python tools/first_run_capture.py --root C:/rsc-first-run --interval 2
-  python tools/screen_capture.py --root C:/rsc-first-run --interval 4
-  python tools/capture_supervisor.py --root C:/rsc-first-run --interval 15
-  ffmpeg -f gdigrab -framerate 15 -offset_x 0 -offset_y 0 -video_size 2560x1440
-    -i desktop -c:v h264_nvenc -preset p4 -cq 28 -g 30 -pix_fmt yuv420p
-    -f segment -segment_time 300 -reset_timestamps 1 -strftime 1
-    "seg_%Y%m%d_%H%M%S.mkv"
+THE DELETE-AND-RECREATE IS AGREED AND NOT YET RUN. The working tree is clean but
+27 of 64 commit MESSAGES still name a sibling and prior blobs stay retrievable
+by SHA. Measured here: 0 refs/pull/*/head, 0 stars, 0 forks, 0 issues.
+THE ORDERING TRAP, and it is the whole point: THE SCRUB COMMIT PUBLISHES A DIFF
+THAT IS THE MAPPING. Scrub, push, then delete would publish the key, and
+deleting afterwards does not unpublish it. The order is: rewrite history so no
+commit ever held a sibling name AND no commit is the scrub itself, then delete
+the remote, recreate under the same name, push once. The round was put to the
+fleet and had not answered when this was written.
 
-STATE, measured 2026-09-07 at commit 7e807a0 (report what YOU observe, never
+STATE, measured 2026-09-07 at commit 3323481 (report what YOU observe, never
 these numbers):
   licence QA                      41 passed
   docs QA                         23 passed
   scripts/qa_companion.py         17 passed, 0 failed, 1 skipped
   ruff                            All checks passed
-  pytest tests                    1095 passed, 1 skipped
+  pytest tests                    1187 passed, 1 skipped
   pytest agents/pity_engine       80 passed
   shell node --test               52 pass, 0 fail
   headless --once --dry-run       exit 0
-  python -m mypy                  Success: no issues found in 31 source files
+  python -m mypy                  Success: no issues found in 32 source files
   git worktree list | tail -n +2 | wc -l                    0
+  git branch -a                   main + remotes/origin/main only
   The single skip is the opt-in network test in tests/test_ingest_client.py.
 
   THE INTERPRETER HERE IS PYTHON 3.14.4, while CLAUDE.md, mypy.ini and ruff.toml
   all declare 3.11. Green means green on 3.14 ONLY. CI pins 3.11 and passes.
-  The 3.11 declaration is load-bearing rather than cosmetic: it is what makes
-  numpy's PEP 695 stub a syntax error.
 
-  MYPY NOW CHECKS 31 FILES AND ITS Success IS STILL NOT EVIDENCE ABOUT THE REST.
+  MYPY NOW CHECKS 32 FILES AND ITS Success IS STILL NOT EVIDENCE ABOUT THE REST.
   files= covers core/ engines/ ingest/ agents/pity_engine/ tools/ only. tests/,
   scripts/, surface/, ops/, headless/ and conftest.py are DARK.
   tests/test_mypy_scope.py goes red if a root leaves the list.
 
-  MYPY NEEDED A NUMPY OVERRIDE THIS SESSION AND IT IS NOT THE THING mypy.ini
-  ALREADY REJECTED. tools/screen_capture.py imports Pillow, whose type hints
-  reference numpy, whose __init__.pyi is a syntax error under python_version
-  3.11, and one third-party stub error stops all further checking. The fix is
-  follow_imports = skip PLUS follow_imports_for_stubs = True, scoped to numpy.
-  skip alone does NOT apply to .pyi files - that was measured. The earlier
-  rationale in mypy.ini rejected silencing numpy for a DIFFERENT entry path, a
-  test directory, where there was a directory to drop. Here there is not.
-
 SETTLED. DO NOT REDO:
   - THE FORK-PR RISK IS CLOSED. approval_policy is "first_time_contributors".
-  - THE HOOK GATE IS PROVEN ON A REAL RUNNER, 12 passed, ran not skipped.
+  - THE HOOK GATE IS PROVEN ON A REAL RUNNER, ran not skipped.
   - THE WATCHER FIRES, at SessionStart AND UserPromptSubmit.
-  - CAVEMAN ULTRA adopted on operator instruction. _BANNER is a FLEET CONTRACT
-    and its sha256 is pinned in tests/test_session_hooks.py.
+  - CAVEMAN ULTRA adopted. _BANNER is a FLEET CONTRACT, sha256 pinned in
+    tests/test_session_hooks.py. All four sibling names near it were in the
+    docstring ABOVE it; the banner bytes are unchanged.
   - EVERY API KEY IS A MACHINE ENV VAR. tests/test_no_secret_literals.py.
-  - THE GOVERNOR IS CURRENT AND STILL INERT ON PURPOSE.
   - UID 618285856 IS NOT A LEAK. It is Enka.Network's OWN published example UID.
-    Two agents flagged it and BOTH WERE WRONG. Do not "fix" it. It is NOT the
-    operator's UID, which is a different number and is not in this tree at all.
-  - THE VERBATIM DROP IS GONE AND THAT IS CORRECT. Containment was MEASURED.
-  - THE PICKAXE CHECK WAS RUN, ARMED, 2026-09-07. Account name 0 across refs.
-  - WEBCACHES IS UNDER THE GAME INSTALL, NOT THE USER PROFILE. Fixed in
-    f930263 and pinned by tests/test_wish_authkey_paths.py, which pins the
-    candidate ORDER and not merely the membership. Do not "restore" the
-    LocalLow path to the front.
-  - _HOST_NEW IS NO LONGER UNVERIFIED. public-operation-hk4e-sg.hoyoverse.com
-    /gacha_info/api/getGachaLog answered retcode 0 on the live account.
+    Two agents flagged it and BOTH WERE WRONG. It is NOT the operator's UID.
+  - THE OPERATOR UID MUST NEVER ENTER THIS TREE. A sweep for any nine-digit run
+    hashing to it found 0, and the checker fired on a planted control first.
+  - WEBCACHES IS UNDER THE GAME INSTALL, NOT THE USER PROFILE.
+    tests/test_wish_authkey_paths.py pins the candidate ORDER, not membership.
+  - THE FOUR ROOT-WALKING GUARDS ARE FIXED, proven against REAL worktrees.
+  - core/atomic_io.py NO LONGER TRANSLATES NEWLINES, and the five sibling
+    writers are fixed with an ast guard against a sixth.
+  - THE PROVENANCE SCHEMA EXISTS. core/provenance.py, before any row landed.
+  - NOELLE IS FOUND. 09:07:38.533Z, and the old "not found" record is superseded
+    in place rather than rewritten.
+  - THE SLOTS RE-PIN IS CLOSED. All three carriers hash 71fa2a68, measured on
+    three disks by three parties plus a fourth that vendors none of them.
+  - THE WATCHER MUTATION ARMS ARE SOUND, including against the nanosecond key.
+    Re-measured after a sibling warned about float os.utime; already correct.
 
 THE HIGHEST-VALUE WORK NOW, in ROADMAP.md order:
-  - ROW-SCOPED PROVENANCE SCHEMA FOR data/, BEFORE THE FIRST ROW LANDS. Every
-    value must carry what it was read from, its sha256, and whether it was read
-    by eye, by OCR, or from the game's own bytes. That distinction already
-    earned its keep: two pixel reads of one crop are ONE fact.
-  - RE-SWEEP FOR NOELLE'S ACQUISITION FRAME AT FULL RATE. NOT FOUND AT 1 FPS IS
-    NOT NOT PRESENT. Window 09:20:44Z to 09:42:59Z on 2026-09-07, recording is
-    15fps, only one frame in fifteen was examined. Do it before any segment is
-    pruned.
-  - ENKA IS NOW REACHABLE IN PRINCIPLE and ingest/enka_client.py has never met
-    a real profile. It needs Adventure Rank 10 AND an OPEN showcase, neither of
-    which is true yet. It is the only route to a real roster payload rather
-    than an OCR'd one.
-  - FIX THE FOUR ROOT-WALKING GUARDS that cannot see a nested checkout:
-    test_docs_consistency.py, test_goal_spec.py, test_licence_posture.py,
-    test_line_endings.py. Measured across 39 modules - 1 excluded, 4 not, 34
-    structurally immune because their corpus is git ls-files. The cheapest fix
-    is the exclusion tests/test_loop_concurrency.py already has.
-  - THE CLAIM GATE IS LANDED BUT DELIBERATELY UNWIRED. tools/stop_claim_gate.py,
-    no Stop hook declared. Before arming it: an INDEPENDENT pass must measure
-    the false rate (55.5 percent was measured by the agent that wrote the
-    chaining), somebody must CLASSIFY the residual false positives, and
-    TRANSCRIPT_PATH_KEY and BLOCK_EXIT_CODE are GUESSES.
-  - SIBLING-C OWES THE CLAIM-GATE SPEC, asked 2026-09-07, unanswered.
+  - THE OTHER NINE OBSERVATIONS IN THE CAPTURE STORE HAVE NOT BEEN RE-CHECKED.
+    Only line 9 was. Every other one was recorded by the same process that got
+    line 9 wrong. Do it before any of them is trusted into data/, and before any
+    video segment is pruned.
+  - THE PROVENANCE SCHEMA HAS NO PRODUCER. Nothing writes a row yet, so it has
+    never met a real value. The first consumer is the next real slice.
+  - ENKA still needs Adventure Rank 10 AND an OPEN showcase. ingest/enka_client.py
+    has never met a real profile. Only route to a real roster rather than an OCR'd one.
+  - THE CROSS-CARRIER PARITY ARM DOES NOT EXIST. SHARED_SHA256 hashes only this
+    repo's disk, so the suite reads green while the contract is divergent.
+  - swept_files LIVES IN A TEST MODULE and four guards import it from there.
+    tests/conftest.py is its home. Small, self-contained.
+  - THE UN-CLEARABLE-WITHDRAWAL CHECK HAS NOT BEEN RUN HERE. One command, not a
+    test: report, acknowledge, report again.
+  - THE "Legion box" MACHINE NAME NEEDS AN OPERATOR RULING. Only guessable token
+    left. It is a machine name, not a project name, so it was out of scope.
+  - THE BOOTSTRAP OUTPUT DIRECTORY UNDER data/ IS NOT GITIGNORED, and an account
+    snapshot is exactly the shape of thing that must never be committed.
   - BRING ONE MORE ROOT INTO MYPY. surface/ 1 error, headless/ 3, ops/ 8,
     scripts/ BLOCKED by a duplicate-module-name refusal needing __init__.py.
-  - Close the fan-content evidence hole. Three first-party PDFs were never read
-    and their URLs are recorded NOWHERE. pdftotext 4.00 IS on PATH.
+  - THE CLAIM GATE IS LANDED BUT DELIBERATELY UNWIRED. TRANSCRIPT_PATH_KEY and
+    BLOCK_EXIT_CODE are GUESSES and the false rate was measured by the agent
+    that wrote it.
 
 TRAPS THAT HAVE ALREADY BITTEN IN THIS TREE. All measured, none hypothetical:
 
-  - A WRONG PATH AND A MISSING ONE CAN PRINT THE SAME SENTENCE. wish_authkey
-    said "no webCaches directory found yet. Has Genshin Impact ever been
-    launched on this machine?" while the operator had Wish History open and the
-    cache held 15 occurrences of "authkey". The message was accurate about what
-    it checked and wrong about what it implied, which sent the reader to look
-    at the game rather than at the path.
-  - A TRUNCATED CREDENTIAL LOOKS LIKE AN EXPIRED ONE. A 1500-byte cap on a
-    1755-byte URL cut a 1452-byte authkey in half and the endpoint answered
-    "retcode -100: authkey error". The instinct was to go get a fresh key
-    rather than to look at the scanner.
-  - OCR RETURNS A CONFIDENT ZERO ON STYLISED GAME TEXT. Tesseract found 166
-    hits across 1328 frames and MISSED "Obtained New Character / Dehya"
-    entirely. Use OCR to NARROW a corpus, never to conclude an absence from it.
-  - NOT FOUND AT 1 FPS IS NOT NOT PRESENT. Report the sampling rate in the same
+  - A CORPUS IS A SNAPSHOT, AND A LONG SESSION MOVES THE TREE UNDER IT. Two
+    parallel scrub slices each reported their half complete and both were
+    telling the truth; a tree-wide sweep after the merge still found 11 hits in
+    three files that were on NEITHER write-list, because the session's own
+    merges created or rewrote them after the corpus was built. One was a comment
+    the merger itself had authored. RE-DERIVE THE CORPUS AT MERGE TIME.
+  - A LINE-BASED GREP CANNOT SEE A WRAPPED CALL OR A WRAPPED NAME. Two of seven
+    "CRLF offenders" were false positives that already passed newline= on the
+    CONTINUATION LINE, and 16 sibling names hid across a wrap. Parse with ast,
+    or use whitespace-tolerant patterns. A per-name grep also missed 183 BARE
+    INITIALS and undercounted the corpus by 1.79x.
+  - A SHAPE ARM READS AS COVERAGE AND IS NOT. It pins the FORMAT of a key, never
+    its INPUT. A literal st_mtime_ns substitution died on a "digest is 64 hex"
+    arm; hashing the metadata restored the shape and walked straight past it.
+  - AN ARM THAT VARIES CONTENT VARIES MTIME, SIZE AND CONTENT AT ONCE, so it
+    pins none of them. Edit IN PLACE at CONSTANT BYTE LENGTH and RESTORE the
+    timestamp. Restore with os.utime(path, ns=(...)) - a FLOAT pair does not
+    restore st_mtime_ns - and assert the mtime actually MOVED before restoring,
+    or the arm is unarmed and passes for the wrong reason.
+  - ASSERT THE MUTATION SITE MATCHED BEFORE TRUSTING A MUTANT VERDICT. A quoted
+    heredoc collapsed a NUL escape, the search matched ZERO times, the mutation
+    was a silent no-op, and the harness was about to report SURVIVED. A broken
+    harness is indistinguishable from a weak arm.
+  - A CAVEAT THAT IS CORRECT CAN STILL BE THE WRONG EXPLANATION. "Not found at
+    1 fps" was true and irrelevant: the recorded window was 13 minutes past the
+    event because a banner reading of 20/20 was attributed to a timestamp where
+    it actually read 10/20. A plausible explanation stops the search.
+  - A RESIDUAL INFERENCE CHANNEL IS NOT LESS OF ONE FOR BEING A FACT ABOUT A
+    PORT. After every name was codenamed, core/ports.py still identified a
+    sibling by naming a third-party API whose vendor name is the first word of
+    that project's name.
+  - A GUARD THAT ASKS "DOES EVERYTHING EXIST?" FAILS GREEN ON A LEFTOVER
+    WORKTREE. A duplicate tree only ADDS files, so a "does anything match?"
+    guard goes falsely RED and announces itself while an existence guard goes
+    falsely GREEN and never does. Run the worktree test in BOTH directions.
+  - A ROOT-WALKING GUARD CANNOT SEE A NESTED CHECKOUT, but one whose corpus is
+    git ls-files is STRUCTURALLY IMMUNE, because git does not descend into one.
+    34 of 39 modules here were immune for exactly that reason. A linked
+    worktree's .git is a FILE, so test with .exists() and not .is_dir().
+  - RENAMING A NEEDLE A TEST MATCHES ON TURNS A REAL GUARD VACUOUS. That is
+    worse than the leak the rename was for.
+  - pathlib.Path.write_text CONVERTS LF TO CRLF ON WINDOWS SILENTLY, and
+    .gitattributes eol=lf HIDES it from every diff. read_text converts it BACK
+    on the way in, so a broken writer looks correct - ASSERT ON RAW BYTES. A
+    caller who supplies CRLF gets CR-CR-LF.
+  - A HEREDOC MANGLES BACKSLASHES EVEN WHEN QUOTED. Use a real file, written
+    with the Write tool, for any script containing one.
+  - AGENT WORKTREES FORK FROM THE SESSION'S ORIGINAL HEAD, not from current
+    main. An agent dispatched to measure recent work may not have the commit
+    that carries it, and would measure an empty file as a pass. State the commit
+    and have the agent verify it is on it.
+  - core.hooksPath IS SHARED GIT CONFIG and points at the MAIN checkout, so a
+    passing commit inside a worktree is NOT proof the hook ran on those bytes.
+  - THE DOCS GUARD FIRES ON A BACKTICKED PATH THAT IS NOT TRACKED. It caught two
+    of this session's own ledger and roadmap lines. Name a gitignored path in
+    plain text.
+  - TESSERACT RETURNS A CONFIDENT ZERO ON STYLISED GAME TEXT. Use OCR to NARROW
+    a corpus, never to conclude an absence from it.
+  - NOT FOUND AT A SAMPLED RATE IS NOT NOT PRESENT. Report the rate in the same
     sentence as any negative taken over a recording.
-  - AN IN-PROGRESS .mp4 WILL NOT OPEN - "moov atom not found", the index is
-    written when the muxer closes. Matroska decodes to the last complete
-    cluster. Proven at shutdown: a FORCE-KILLED mkv segment still decoded to a
-    frame with mean 66.6 and stdev 18.2.
-  - THE GAME HOLDS ITS CACHE FILES LOCKED. Direct reads of Cache_Data/data_2
-    get Permission denied while a filesystem COPY of the same file succeeds.
-    Snapshot first, scan the snapshot.
-  - MATCHING A DAEMON BY SUBSTRING OVER ITS WHOLE COMMAND LINE IS WRONG. A
-    probe process whose own source names two daemons matches both. It briefly
-    killed every real watcher while the probe survived. Match argv[1] only.
-  - A HEREDOC MANGLES BACKSLASHES EVEN WHEN QUOTED. It bit THREE more times on
-    2026-09-07, once turning a redaction regex into "unterminated character
-    set" AFTER nine real candidates had printed - a redaction that fails open
-    is how a credential reaches a transcript - and once as a unicodeescape
-    SyntaxError. Use a real file for any script containing backslashes.
-  - A GREEN LOCAL GATE ON WINDOWS SAYS NOTHING ABOUT THE LINUX RUNNER.
-    `ctypes.wintypes`, `ctypes.WinDLL`, `subprocess.DETACHED_PROCESS` and
-    `CREATE_NEW_PROCESS_GROUP` are all `sys.platform == "win32"` in typeshed, so
-    a bare reference is a mypy ERROR on Linux and one error stops mypy checking
-    anything else. mypy NARROWS on `sys.platform`, so an `if sys.platform ==
-    "win32":` guard is the fix. `hasattr` guards the INTERPRETER and does NOT
-    narrow for the checker - use `getattr(mod, "NAME", 0)`.
-  - A TEST OF AN ORDERING MUST NOT READ THE REAL ENVIRONMENT. USERPROFILE is
-    unset on Linux, so a candidate-order test asserted the absence of something
-    the code was right not to produce. Set it to tmp_path - NOT to a literal
-    home-shaped string, which test_machine_identity.py forbids and caught.
-  - A GUARD CAN REPORT A NUMBER THAT IS NOT THE NUMBER IT NAMES.
-    test_mypy_scope.py read the FIRST digit off mypy's tail line. Clean that is
-    the file count; with errors the line is "Found 3 errors in 3 files (checked
-    31 source files)" and the first digit is the ERROR count. The failure read
-    "mypy checked 3 files but the roots select 31" and sent the reader to the
-    scope while the real problem was three platform errors.
-  - VERIFY AN ENVIRONMENT FIX BY DELETING THE ENVIRONMENT. Re-running the two
-    affected modules in a subprocess with USERPROFILE and RSC_WEBCACHES_ROOT
-    removed is what distinguished a fix from a platform accident.
+  - AN IN-PROGRESS .mp4 WILL NOT OPEN - "moov atom not found". Matroska decodes
+    to the last complete cluster.
+  - THE GAME HOLDS ITS CACHE FILES LOCKED. Snapshot first, scan the snapshot.
+  - A TRUNCATED CREDENTIAL LOOKS LIKE AN EXPIRED ONE.
+  - A WRONG PATH AND A MISSING ONE CAN PRINT THE SAME SENTENCE.
+  - MATCHING A DAEMON BY SUBSTRING OVER ITS WHOLE COMMAND LINE IS WRONG. Match
+    argv[1] only.
+  - A GREEN LOCAL GATE ON WINDOWS SAYS NOTHING ABOUT THE LINUX RUNNER. Guard
+    with `if sys.platform == "win32":` - mypy NARROWS on that and hasattr does
+    not; use getattr(mod, "NAME", 0).
+  - A TEST OF AN ORDERING MUST NOT READ THE REAL ENVIRONMENT.
+  - A GUARD CAN REPORT A NUMBER THAT IS NOT THE NUMBER IT NAMES. mypy's tail
+    line starts with the ERROR count when there are errors, not the file count.
+  - VERIFY AN ENVIRONMENT FIX BY DELETING THE ENVIRONMENT.
   - WITHOUT A POSITIVE CONTROL, A CLEAN RESULT AND AN UNARMED CHECK LOOK
     IDENTICAL. This is the single most productive rule in this tree.
-  - TWO NUMBERS CONSISTENT WITH A HYPOTHESIS ARE NOT EVIDENCE FOR IT. Dehya was
-    recorded as a TRIAL character on Level 17 plus Friendship 1. She was not.
-    The card colour answered it directly and was on screen the whole time.
-  - ZERO OUT OF ZERO READS AS A PASS. Every checker returns (checked, offenders)
-    and every test asserts the CHECKED COUNT before the offender list.
+  - TWO NUMBERS CONSISTENT WITH A HYPOTHESIS ARE NOT EVIDENCE FOR IT.
+  - ZERO OUT OF ZERO READS AS A PASS. Return (checked, offenders) and assert the
+    CHECKED COUNT before the offender list.
   - A GUARD CAN BE WRONG IN THE DIRECTION OF FALSE RED.
-  - A ROOT-WALKING GUARD CANNOT SEE A NESTED CHECKOUT, but one whose corpus is
-    git ls-files is structurally immune, because git does not descend into one.
-  - A DOCUMENT DESCRIBING A PATH SHAPE DOES NOT NEED TO RENDER THE PATH. A
-    triage doc wrote a bracketed account segment inside a literal Windows path
-    and the machine-identity guard went red. The guard was right. The regex was
-    NOT widened.
   - A WRONG RATIONALE OUTLIVES A WRONG LINE OF CODE.
-  - A CONFIG COMMENT CAN EXPLAIN THE WRONG LINE.
+  - A FINDING SENT ONWARD IS NOT A FINDING APPLIED TO YOURSELF.
+  - AN ARM THAT PROVES A THING APPEARS IS NOT THE ARM THAT PROVES IT CAN GO AWAY.
   - BYTES-EQUAL IS NOT THE SAME FACT AS DID-NOT-WRITE.
   - THE WATCHER'S STDOUT IS A PRIVILEGED SURFACE. Names, counts and digests -
-    NEVER a payload byte.
+    NEVER a payload byte. An absence assertion on ONE string is defeated by
+    truncation; assert over every WINDOW of the payload.
   - THE STANDING REF CHECK IS `git branch -a`, NOT `git worktree list`.
-  - A FORCE-PUSH DOES NOT PURGE OBJECTS FROM GITHUB.
+  - A FORCE-PUSH DOES NOT PURGE OBJECTS FROM GITHUB, and refs/pull/N/head is
+    PERMANENT and survives a rewrite. A sibling found 13 of them, one carrying a
+    pre-rotation credential. This repo has 0, measured.
   - NOTE FILENAME TIMESTAMPS ARE FICTIONAL and drift by up to SIX HOURS.
   - AN UNWIRED SCRIPT IS NOT A WATCHER. Prove it by EXECUTING the command.
-  - NEVER ADOPT A SIBLING'S CONFIG UNREAD.
+  - NEVER ADOPT A SIBLING'S CONFIG UNREAD. Adopt the SHAPE; copy bytes only
+    where the bytes are the contract.
   - A DETECTOR'S OWN PATTERN TRIPS ITS OWN SWEEP.
   - A GATE THAT QUOTES WHAT IT CAUGHT PUBLISHES IT.
   - A SKIPPED TEST IS A GREEN TICK. RSC_REQUIRE_HOOK_GATE=1.
-  - AGENT WORKTREES FORK FROM THE PRE-DISPATCH HEAD.
-  - SendMessage MAY BE DISABLED. Write a MERGE_TODO file instead.
-  - pathlib.Path.write_text CONVERTS LF TO CRLF ON WINDOWS silently.
-  - AN EXIT CODE READ THROUGH A PIPE IS THE PIPE'S. Redirect to a file.
+  - SendMessage MAY BE DISABLED. Report the file list in chat instead.
+    MERGE_TODO.md is GITIGNORED now - it was committed once and then collided
+    add/add with the next slice twice.
+  - AN EXIT CODE READ THROUGH A PIPE IS THE PIPE'S. Redirect to a file. A
+    chained `cmd | grep && cd ..` silently skips the cd when grep matches
+    nothing, and the next command runs in the wrong directory.
   - xargs SPLITS ON WHITESPACE and this repo's path contains a space.
   - `taskkill /F /PID` DOES NOT WORK in the Bash tool - write `taskkill //F
-    //PID <pid>`. But inside a PYTHON subprocess call it is `/F` again, because
-    that does not go through MSYS. Getting this backwards silently killed
-    nothing on 2026-09-07 while printing "killing <pid>".
+    //PID <pid>`. Inside a PYTHON subprocess call it is `/F` again.
   - `python3` here RUNS but has NO pytest - it is the Store alias.
   - AGREEMENT BETWEEN TWO AGENTS IS NOT EVIDENCE. Find the SHARED INPUT.
   - A SWEEP NEEDS TWO GUARDS: the bad thing is gone, the neighbours survived.

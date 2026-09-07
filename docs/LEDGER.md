@@ -12,6 +12,254 @@ now.
 
 ---
 
+## 2026-09-07 - The corpus was a snapshot and the session moved the tree under it
+
+Both scrub halves reported complete and both were telling the truth. A tree-wide
+sweep after the merge still found 11 full-name hits across three files that were
+on NEITHER write-list: `tests/test_guard_worktree_exclusion.py`,
+`tests/test_watch_inbox.py` and one line of `tests/test_loop_concurrency.py`.
+
+None was an oversight. The corpus was computed by `git grep` at `4781de1` and
+dispatched against; all three files were created or rewritten by this session's
+own merges AFTER that point. The third is a comment the merger itself authored
+in the slots re-pin, on a line the code slice's fork point predates, so that
+slice could not have seen it even in principle.
+
+**A CORPUS IS A SNAPSHOT, AND A LONG SESSION MOVES THE TREE UNDER IT.** A sweep
+dispatched against a file list is correct about the tree that existed when the
+list was built and says nothing about the tree at merge time. Re-derive after
+the merges. Fixed in `3323481`; the checker asserts a NON-EMPTY corpus before
+asserting zero survivors, because zero out of zero reads as a pass.
+
+A second residual was caught by the code slice and ruled on by the merger rather
+than by the producer: after every name was codenamed, `core/ports.py` still
+explained a sibling's 2999 reservation by naming a third-party API whose vendor
+name is the first word of that project's name. The mechanism is kept, the vendor
+is not named, and the reason is recorded at the site so nobody restores it.
+**A residual inference channel is not less of one for being a fact about a port.**
+
+---
+
+## 2026-09-07 - The only sanctioned write path in this repo emitted CRLF
+
+`core/atomic_io.py` called `tmp.write_text` with no `newline=` argument, so
+Python translated every LF to `os.linesep`. `CLAUDE.md` names this module as the
+only sanctioned state-write path, which means it was the write path everything
+else is told to use.
+
+Measured before the fix: `atomic_write_text(p, "a" + LF + "b" + LF)` returned
+CR-LF-separated bytes, and `atomic_write_json` produced 7 CRLF pairs on a
+two-key object. Worse, and the reason the contract is "no translation" rather
+than "normalise to LF": a caller who supplied CRLF got back CR-CR-LF, the CR
+kept and the LF expanded underneath it. Fixed in `e1b20e6`, verified by
+main-thread probe after merge rather than by the producer's own report.
+
+`.gitattributes` carries `eol=lf` and `tests/test_line_endings.py` fails a
+tracked file holding CRLF, so the first TRACKED file written through this
+function would have gone red with nothing in `git diff` to explain it.
+
+Then the sibling sweep, `b739f02`. Seven candidate sites, and **two were false
+positives**: two `tools/` modules already passed `newline=` on the CONTINUATION
+LINE of a wrapped call, which the line-based grep that built the corpus could
+not see. The guard added in `tests/test_no_crlf_writers.py` parses with `ast`
+rather than scanning lines, takes its corpus from `git ls-files` so a leftover
+worktree cannot poison it, asserts the checked count before the offender list,
+and plants a real offender as a positive control. It needs no self-exemption:
+it never calls the function it searches for, and `ast` cannot see a literal
+inside a string.
+
+Live corruption measured, not hypothesised: the inbox seen-state file under the
+gitignored runtime directory - not backticked here, because a backticked path
+under a tree root must be tracked and that one must never be - held 98 CRLF
+pairs, and a capture-store artefact outside the tree held 5. The first
+self-heals on the next `--mark`; the second was renormalised only after
+measuring that no manifest pinned its digest and it was not in the
+content-addressed blob store.
+
+**Verification pointer:** `tests/test_core_atomic_io.py`,
+`tests/test_no_crlf_writers.py`.
+
+---
+
+## 2026-09-07 - Four root-walking guards could not tell a nested checkout from this tree
+
+Fixed in `ffce5a9`, and the verification is the part worth recording. The
+builder proved its fix against a hand-planted `gitdir:` marker file and said so.
+A marker file is not a worktree, so an independent verifier planted REAL linked
+worktrees under `data/` and `docs/` with `git worktree add --detach`:
+
+```
+builder branch, real worktrees planted   1106 passed, 1 skipped, exit 0
+main 353e3c1, identical worktrees        6 failed, 1089 passed, exit 1
+```
+
+Downstream output changed, so the fix acts on the real thing. **A linked
+worktree's `.git` entry is a FILE of 53 bytes beginning with a gitdir pointer**,
+measured on this machine - the predicate uses `.exists()` for that reason and
+`.is_dir()` would have failed silently.
+
+Two corrections the verifier made to the slice as claimed, both kept in the
+merge message rather than smoothed away: `tests/test_line_endings.py` was NOT
+nested-checkout-blind as shipped, because its `iterdir()` plus `is_file()`
+skipped a directory outright - making it recursive is a genuine coverage
+widening but fixed no live defect and belonged in its own slice. And "asserts
+the checked count" is really `len(checked) > 0`, which is non-emptiness rather
+than a pinned number; the anti-vacuity intent holds and the wording overstated
+it.
+
+The misclassification was INHERITED: `tests/test_guard_worktree_blindness.py`
+already listed that module among the four despite its own criterion requiring a
+recursive loop.
+
+**The transferable half, sent to the fleet:** 34 of 39 test modules here were
+structurally immune because their corpus is `git ls-files`, and git does not
+descend into a nested checkout. That single question triages a whole suite
+before anything is measured.
+
+---
+
+## 2026-09-07 - The digest-key arms were green against an mtime key and a size key
+
+A sibling measured two mutants surviving their whole watcher suite and asked
+every repo on the channel to check its own. Checked here by applying each
+mutation to `scripts/watch_inbox.py` in an isolated worktree, running the suite
+against each, and recording survived-or-killed before and after. Three survived,
+all now killed, `35a8565`.
+
+**The refinement is sharper than the report.** The LITERAL substitutions were
+killed here, but only by SHAPE arms - one asserting a readable file's digest is
+a plain sha256, and a length assertion. Hashing the metadata restores the shape
+and walks straight past both. Moving the substitution to the entry-key site or
+to the manifest line needs even less. **A shape arm reads as coverage and is
+not: it pins the FORMAT of the key, never its INPUT.**
+
+`scripts/watch_inbox.py` was CORRECT and is untouched. Every survivor survived
+because the arm was weak.
+
+A later note from the same sibling reported a second layer - that `os.utime`
+with float seconds does not restore `st_mtime_ns`, so an arm can assert it
+restored the timestamp, read as armed to a reviewer, and still leave a
+nanosecond-reading key moved. **Re-measured here rather than re-read, and the
+arms were already sound**: one restore site, already using `ns=`, already
+asserting in nanoseconds, written that way an hour before the note arrived. All
+four mutants killed against a green pristine floor. Nothing was changed and
+nothing was committed - an arm that is already sound does not get hardened to
+have shipped something.
+
+**The finding from that measurement is in the harness, not the arms.** The first
+mutation harness used a quoted heredoc, a NUL escape collapsed inside it, and
+the drop-site search matched ZERO times. The mutation was a silent no-op and the
+harness would have reported SURVIVED on both drop mutants - a confident false
+confirmation of the sibling's own finding. An `assert source.count(old) == 1`
+uniqueness guard caught it. **Assert the mutation site matched before trusting
+the verdict, or a broken harness is indistinguishable from a weak arm.**
+
+**Verification pointer:** `tests/test_watch_inbox.py`, 43 arms.
+
+---
+
+## 2026-09-07 - Noelle was found, and the recorded search window was wrong
+
+`observations.jsonl` line 9 recorded her acquisition as NOT-FOUND and attributed
+the failure to a 1 fps sampling rate over the window 09:20:44Z to 09:42:59Z.
+
+Re-swept at 15.000 fps - every frame of all 29 readable segments, 129180 frames
+against the prior sweep's 1384. She was acquired at 09:07:38.533Z to
+09:07:39.667Z as card 1 of the first Beginners' Wish 10-pull, a 4-star Geo
+character card tagged New, bracketed on both sides by the banner counter reading
+20/20 at 09:07:24.000Z and 10/20 at 09:07:46.000Z.
+
+**The correction matters more than the find. The recorded bound was FALSE.** At
+09:12:09Z the banner reads 10/20, not 20/20; the last 20/20 frame is before
+09:07:26Z. The 20/20 reading was correct at 09:07:24Z and stale by the time it
+was attributed to 09:12:09Z. That wrong bound placed the search window about
+thirteen minutes AFTER the event, so no sampling rate applied to that window
+could ever have found her - re-sweeping the SAME window at 15 fps returns
+nothing but Miliastra Wonderland.
+
+So "not found at 1 fps" was never mainly a sampling problem. The sampling rate
+was the explanation that came to hand, and it was true and irrelevant at once.
+**A caveat that is correct can still be the wrong explanation, and a plausible
+one stops the search.**
+
+Detection was non-OCR, with two positive controls: the Dehya splash known to be
+present in the same corpus, and a transfer control on a different character over
+a different background. Both fire.
+
+The record was corrected without rewriting it: all eight original fields are
+preserved byte-identical and four supersession fields were added, with the
+resolving observation appended as a new record carrying read method, sampling
+rate, both controls, five evidence digests and the one unswept interval. A
+record of what was believed is worth keeping; a record readable as current truth
+when it is false is not.
+
+---
+
+## 2026-09-07 - A row-scoped provenance schema, before the first row lands in data/
+
+`core/provenance.py` and `docs/PROVENANCE_SCHEMA.md`, merged as `62ee019`,
+authored while `data/` still holds nothing but hand-authored fixtures. The
+ordering is the point: a schema written after the first row is a schema fitted
+to whatever the first row happened to have.
+
+Every value entering `data/` carries what it was read FROM, that source's
+sha256, and HOW it was read - by eye, by OCR, or from the game's own bytes. Each
+of those exists because of a measured failure this session or the last:
+independence is COMPUTABLE through `parent_sha256` so two crops of one frame
+collapse to one witness; a NOT_FOUND row without a sampling rate is refused; a
+row carrying a forbidden key is refused, because the capture store holds an
+account UID and a login token deliberately outside this tree and the schema is
+what decides which values may cross that line.
+
+**Built against a null skeleton first** - real types, degenerate functions -
+which gave 43 failed and 16 passed with each arm failing for its own reason
+rather than the whole file failing on one import error. That is the difference
+between a suite that is red and a suite that is armed.
+
+`core/types.py` was not touched. It is the shared contract and a merge surface,
+and a contract with no consumers has no business in it.
+
+Documented limitation rather than a papered-over one: whether a row came from an
+OCR SWEEP is not decidable from the record, so the sampling requirement is
+enforced only on the two decidable cases. No field was invented to pretend
+otherwise.
+
+**Verification pointer:** `tests/test_provenance.py`.
+
+---
+
+## 2026-09-07 - The shared governor docstring named two siblings one line above forbidding it
+
+`ops/loop/slots.py` opened by naming three projects in plain text and closed the
+same paragraph with "Nothing here may reference ANY of them". All carriers are
+published repositories, so the contradiction was also an exposure.
+
+A sibling proposed the replacement wording and this repo authored the bytes,
+which meant this repo carried the red window. Committed as `02d5d93`; all three
+carriers subsequently converged on `71fa2a68`, measured on three disks by three
+parties plus a fourth that vendors none of them.
+
+Only the docstring's opening paragraph moved. An adversary proved it by
+reconstructing the HEAD blob with lines 4-8 swapped in from disk: the
+reconstruction matched exactly, and the differing 1-based line indices across
+all 247 lines were [4, 5, 6, 7, 8] and nothing else.
+
+**Two corrections went back up the channel and both were accepted.** The
+proposal's claim that the new wording matched `winmutex.py` exactly was false in
+three places, and the claim that `winmutex.py` was clean of every sibling name
+was false at one line - confirmed independently from a third disk, and in the
+SHARED bytes rather than in one tree's drift, so it is everyone's or nobody's
+and cannot be scrubbed unilaterally.
+
+**What this round did NOT close, disclosed rather than fixed:** `SHARED_SHA256`
+hashes only this repo's own disk. There is no cross-carrier arm, so the suite
+reads green while the byte-identity contract is divergent. A guard that can only
+see its own disk cannot detect divergence.
+
+**Verification pointer:** `tests/test_loop_concurrency.py`, 22 arms.
+
+---
+
 ## 2026-09-07 - Sibling project names replaced by codenames across the tracked tree
 
 This repository is public. Before this pass its tracked files named six sibling
