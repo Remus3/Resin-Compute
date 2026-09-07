@@ -214,6 +214,27 @@ class _ExclusiveHTTPServer(ThreadingHTTPServer):
     listening socket is closed on shutdown, so TIME_WAIT does not apply to it and
     an immediate restart still works; `tests/test_surface_render.py` pins that,
     because turning off address reuse is exactly the change that could break it.
+
+    WHICH HALF ACTUALLY CLOSES IT, measured 2026-09-06 rather than reasoned. The
+    paragraph above credits SO_EXCLUSIVEADDRUSE. The full nine-cell bind matrix
+    against a LISTENING socket on win32 says otherwise - only one cell ever
+    double-binds:
+
+        first=none  second=reuse -> refused 13     first=reuse second=reuse -> BOTH BIND
+        first=excl  second=reuse -> refused 13     every other cell          -> refused 10048
+
+    The `first=none` and `first=excl` columns are IDENTICAL, so with
+    `allow_reuse_address = False` already set, adding SO_EXCLUSIVEADDRUSE changes
+    no observable outcome here. `allow_reuse_address = False` is the load-bearing
+    half; two stock servers are the `reuse`/`reuse` cell, which is the defect.
+
+    The setsockopt is KEPT - it is correct, it is the documented Windows spelling
+    of the intent, and it would matter if a future caller re-enabled reuse on the
+    first socket. But NO TEST CAN PIN IT on this platform, because no observable
+    behaviour distinguishes the two columns, so do not write an arm that claims
+    to. Recorded so the next reader does not mistake an unpinnable line for a
+    tested one. The same class was ported to `agents/pity_engine/__main__.py`,
+    which carries this matrix too.
     """
 
     allow_reuse_address = False
