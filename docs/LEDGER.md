@@ -79,6 +79,20 @@ release for a lock still on disk, and the lane is not reclaimed for 4.5 hours.
 Re-pinning is a JOINT act, so the file was not touched; the reproduction went to
 both siblings through `moon_sync_inbox/`.
 
+**The leak DISARMS ITS OWN REAPER, and this half is deterministic rather than
+statistical.** An orphaned lockfile keeps the payload written at `hold()` entry,
+so if the leaking holder is still alive both of `is_stale`'s fast arms answer
+"not stale" - the pid IS alive and the ts IS recent - and `reap()` skips it.
+Measured directly, no race needed: `is_stale` False, `reap` removed 0, ghost
+still on disk, and only the 4.5-hour age arm ever clears it. That points
+straight at a long-lived controller running many cycles under ONE pid, where a
+lane leaked in cycle N is unreapable for the life of the process and narrows the
+bucket for the other two repos. Reported as an addendum the same evening. The
+rate figures are bounded honestly in that note: 107 of 200 rounds at
+`backoff=0.02`, and a 30-of-30 fully-wedged result that ran at `backoff=0.0` and
+is a demonstration of the terminal state, NOT a rate. The production defaults
+are `backoff=2.0, jitter=2.0` and that rate was not measured.
+
 **Errors made and corrected in-session, recorded because the next reader deserves
 them.** The `db3f767` commit message cited
 `test_a_missing_vendored_file_is_a_failure_not_a_skip`, a test that has never
