@@ -94,13 +94,13 @@ commit ever held a sibling name AND no commit is the scrub itself, then delete
 the remote, recreate under the same name, push once. The round was put to the
 fleet and had not answered when this was written.
 
-STATE, measured 2026-09-07 at commit 3323481 (report what YOU observe, never
+STATE, measured 2026-09-07 at commit 06ce247 (report what YOU observe, never
 these numbers):
   licence QA                      41 passed
   docs QA                         23 passed
   scripts/qa_companion.py         17 passed, 0 failed, 1 skipped
   ruff                            All checks passed
-  pytest tests                    1187 passed, 1 skipped
+  pytest tests                    1195 passed, 1 skipped
   pytest agents/pity_engine       80 passed
   shell node --test               52 pass, 0 fail
   headless --once --dry-run       exit 0
@@ -132,6 +132,13 @@ SETTLED. DO NOT REDO:
   - WEBCACHES IS UNDER THE GAME INSTALL, NOT THE USER PROFILE.
     tests/test_wish_authkey_paths.py pins the candidate ORDER, not membership.
   - THE FOUR ROOT-WALKING GUARDS ARE FIXED, proven against REAL worktrees.
+  - THE SCRUB IS GUARDED NOW. tests/test_no_sibling_names.py asserts the
+    property a one-off sweep could only assert once. Its corpus is git ls-files,
+    it is case-insensitive, it strips comment markers so a WRAPPED name cannot
+    hide, and its positive controls are the four real escapes.
+  - THE SCRUB'S OWN COMPLETENESS CLAIM WAS REFUTED ONCE ALREADY. "Zero hits" was
+    wrong by four, and they shipped green because nothing guarded the property.
+    Do not restate a sweep as complete without a tracked guard behind it.
   - core/atomic_io.py NO LONGER TRANSLATES NEWLINES, and the five sibling
     writers are fixed with an ast guard against a sixth.
   - THE PROVENANCE SCHEMA EXISTS. core/provenance.py, before any row landed.
