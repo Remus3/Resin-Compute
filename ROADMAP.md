@@ -94,6 +94,13 @@ version. What follows is everything the scaffold deliberately did not do.
   it. The order is: rewrite history so no commit ever held a sibling name AND no
   commit is the scrub itself, then delete the remote, recreate, push once. The
   round was put to the fleet and has not answered yet.
+- **NEW 2026-09-07 (third session). THE CODENAME LETTERS ARE A ONE-GUESS RULE.**
+  The assignment is not monotonic by port or by alphabet, which is what was
+  claimed - but an adversary observed the permutation of letter indices is
+  even-letters-ascending then odd-letters-ascending. Recorded rather than
+  re-shuffled, because re-lettering now rewrites 74 files to buy ambiguity the
+  operator has already ruled is not the point. If the delete-and-recreate goes
+  ahead, re-letter in the SAME pass - it is free there and expensive later.
 - **NEW 2026-09-07 (third session). One guessable token survives the scrub and
   needs an operator ruling**: the shared machine is called "the Legion box" in
   `README.md` and `docs/adr/ADR-004-port-block.md`. That is a MACHINE name, not
