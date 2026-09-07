@@ -11,22 +11,29 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-09-07 (second session). The first-run capture happened and the
-  store is 15 GB at `C:/rsc-first-run/`, OUTSIDE this tree.** 6062 file events
-  over 5971 distinct blobs, 1542 screenshots, 29 video segments, 10
-  observations. Nothing in `data/` yet, deliberately. The next step is a
-  ROW-SCOPED PROVENANCE SCHEMA before the first row lands, so that every value
-  that enters `data/` carries the frame or file it was read from, its sha256,
-  and whether it was read by eye, by OCR or from the game's own bytes. That
-  distinction already earned its keep this session: two pixel reads of one crop
-  are ONE fact, while the game's `UidInfo.txt` agreeing with them is a second.
-- **NEW 2026-09-07 (second session). Noelle's acquisition frame is NOT FOUND
-  and the search was only 1 fps.** She is in the roster from 09:42:59Z; the
-  Beginners' Wish banner read 20/20 remaining at 09:12:09Z; the gap is
-  09:20:44Z to 09:42:59Z. The recording is 15 fps and one frame in fifteen was
-  examined. **NOT FOUND AT 1 FPS IS NOT NOT PRESENT** - re-sweep that window at
-  full frame rate before concluding anything, and do it before the segments are
-  ever pruned.
+- **DONE 2026-09-07 (third session). The row-scoped provenance schema landed
+  BEFORE the first row.** `core/provenance.py`, `docs/PROVENANCE_SCHEMA.md`,
+  `data/README.md`, proven by `tests/test_provenance.py`. Independence is
+  computable rather than asserted, a NOT_FOUND row without a sampling rate is
+  refused, and a row carrying a forbidden key is refused. `core/types.py` was
+  not touched. THE REMAINING WORK is the first real consumer: nothing writes a
+  row yet, and a schema with no producer has never met a real value.
+- **DONE 2026-09-07 (third session). Noelle was found, and the recorded window
+  was the reason she was not.** 09:07:38.533Z to 09:07:39.667Z, card 1 of the
+  first Beginners' Wish 10-pull, swept at 15.000 fps over 129180 frames with
+  two non-OCR positive controls. `observations.jsonl` line 9 claimed the banner
+  read 20/20 at 09:12:09Z; it reads 10/20. That false bound put the search
+  window about thirteen minutes AFTER the event, so no sampling rate could have
+  found her. The record was superseded in place with all eight original fields
+  preserved byte-identical. **A CAVEAT THAT IS CORRECT CAN STILL BE THE WRONG
+  EXPLANATION, and a plausible one stops the search.**
+- **NEW 2026-09-07 (third session). The remaining capture-store work is the
+  OTHER nine observations.** Only line 9 was re-measured. The store is still
+  15 GB at `C:/rsc-first-run/` outside this tree, 6062 file events over 5971
+  blobs, 1542 screenshots, 29 video segments. Every other observation was
+  recorded by the same process that got line 9 wrong and none has been
+  re-checked against the full-rate sweep. Do that before any of them is trusted
+  into `data/`, and do it before any segment is pruned.
 - **NEW 2026-09-07 (second session). An OCR-only extractor returns a confident
   zero on the most important frame in the corpus.** Tesseract missed
   "Obtained New Character / Dehya" entirely - stylised font over a full-screen
@@ -39,13 +46,36 @@ version. What follows is everything the scaffold deliberately did not do.
   lagging server. Any future ingest must model the two as separate lanes with
   separate freshness, and must record `retcode 0 with total 0` as a measured
   zero rather than as a missing file.
-- **NEW 2026-09-07 (second session). Four root-walking guards still cannot see a
-  nested checkout**: `tests/test_docs_consistency.py`, `tests/test_goal_spec.py`,
-  `tests/test_licence_posture.py`, `tests/test_line_endings.py`. Measured across
-  39 test modules - 1 excluded, 4 not, 34 structurally immune via `git ls-files`.
-  `tests/test_guard_worktree_blindness.py` proves the defect with the shipped
-  guard's own code. Fixing the four is the remaining work; the cheapest shape is
-  to give each the same exclusion `tests/test_loop_concurrency.py` already has.
+- **DONE 2026-09-07 (third session). The four root-walking guards can see a
+  nested checkout now**, proven by `tests/test_guard_worktree_exclusion.py`
+  against REAL `git worktree add` checkouts rather than a planted marker file.
+  On main without the fix, identical worktrees drove 6 failures; with it, none.
+  A linked worktree's `.git` is a FILE, so the predicate uses `.exists()`.
+  REMAINING: the shared `swept_files` predicate lives in a TEST MODULE and four
+  guards import it from there. `tests/conftest.py` is its right home and that is
+  a small self-contained slice.
+- **NEW 2026-09-07 (third session). A guard that asks "does everything EXIST?"
+  fails GREEN on a leftover worktree, and nobody here has swept for that
+  direction.** A sibling measured it: a duplicate tree only ever ADDS files, so
+  a guard asking "does anything match?" goes falsely RED and announces itself,
+  while a guard asking "does everything exist?" goes falsely GREEN and never
+  does. Only one of the two is caught by leaving a worktree in place and running
+  the suite. This tree has not been triaged in that direction.
+- **NEW 2026-09-07 (third session). `SHARED_SHA256` hashes only this repo's own
+  disk, so the suite reads green while the byte-identity contract is
+  divergent.** There is no cross-carrier arm at all. A guard that can only see
+  its own disk cannot detect divergence, and the whole point of that pin is a
+  property of three disks. A sibling's arm reads carrier roots from a gitignored
+  per-host config and SKIPS when none is present - which still reads as green,
+  so the shape needs care rather than copying.
+- **NEW 2026-09-07 (third session). The un-clearable-withdrawal check has NOT
+  been run here.** A sibling shipped a withdrawal report whose four arms all
+  passed and which could never be CLEARED, because the acknowledgement pruned
+  the seen record and not the report record the withdrawal set derives from.
+  Their arms asserted a withdrawal REPORTS and never that it STOPS reporting.
+  The check is one command rather than a test: report, acknowledge, report
+  again. **AN ARM THAT PROVES A THING APPEARS IS NOT THE ARM THAT PROVES IT CAN
+  GO AWAY.**
 - **NEW 2026-09-07 (second session). Enka is now reachable in principle.** The
   UID is known and verified four ways, the region is `os_usa` verified from the
   game's own iplist filename. Enka still needs Adventure Rank 10 and an OPEN
@@ -53,6 +83,35 @@ version. What follows is everything the scaffold deliberately did not do.
   unexercised against a real profile. That is the first thing to try next
   session, and it is the only route to a real roster payload rather than an
   OCR'd one.
+- **NEW 2026-09-07 (third session). THE DELETE-AND-RECREATE IS PLANNED, AGREED
+  BY THE OPERATOR, AND NOT YET RUN.** This repository is public and was flipped
+  public without a name scrub. The tracked tree is now codenamed and carries 0
+  full-name hits, but that is only the working tree: 27 of 64 commit MESSAGES
+  still name a sibling, and prior blobs stay retrievable by SHA. Measured here:
+  0 `refs/pull/*/head` on the remote, 0 stars, 0 forks, 0 issues. **THE ORDERING
+  TRAP: the scrub commit publishes a diff that IS the mapping.** Scrub, push,
+  then delete would publish the key and deleting afterwards would not unpublish
+  it. The order is: rewrite history so no commit ever held a sibling name AND no
+  commit is the scrub itself, then delete the remote, recreate, push once. The
+  round was put to the fleet and has not answered yet.
+- **NEW 2026-09-07 (third session). One guessable token survives the scrub and
+  needs an operator ruling**: the shared machine is called "the Legion box" in
+  `README.md` and `docs/adr/ADR-004-port-block.md`. That is a MACHINE name, not
+  a project name, so it was outside both scrub slices' stated instruction - and
+  `tests/test_machine_identity.py` already records in a comment that the word
+  names both this machine and a sibling project. Widening a scrub past its
+  stated scope is how a guard's regex gets quietly broadened, so this was raised
+  rather than done.
+- **NEW 2026-09-07 (third session). The bootstrap output directory under `data/`
+  is not gitignored.** `.gitignore` excludes only the cache directory, the tmp
+  glob and the account-state file - none of them named here with backticks,
+  because a backticked path under a tree root must be tracked and these must
+  never be. `scripts/bootstrap_data.py` writes its default account snapshot into
+  a bootstrap directory under `data/`. The CRLF half of that hazard is fixed and
+  guarded,
+  but the file is still TRACKABLE, and an account snapshot is exactly the shape
+  of thing that must never be committed. Decide whether it is ignored or whether
+  the writer is forced outside the tree the way `tools/wish_authkey.py` is.
 
 
 - **NEW 2026-09-07. Two guards were fixed and a THIRD class was opened: a guard
