@@ -11,6 +11,59 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- ~~**The publish sweep, the history rewrite and the remote rebuild.**~~
+  **DONE 2026-09-06.** Six adversaries on distinct lenses, ALL SIX REFUTED. Four
+  builder slices on a proven-disjoint write-list, 12 files, zero violations.
+  Full detail in `docs/LEDGER.md`; the parts that change what a future session
+  should do:
+  - **A force-push does NOT purge objects from GitHub.** Two commits
+    force-pushed away still served a `Claude-Session:` URL, and the account path
+    sat in 8 of 33 pushed commits. The fix was rewrite locally, DELETE the
+    remote, recreate, push clean. Verified server-side: HTTP 422 on the orphans,
+    404 on the blob, and a cold clone carrying 0 account-path blobs of 291. If
+    anything must ever leave this history again, that is the only procedure that
+    works.
+  - **An object purge is true only at the instant it is measured.** The leaked
+    blob returned three times - a `FETCH_HEAD` from a bundle fetch, a
+    `refs/remotes/origin/main` surviving in `.git/packed-refs`, and agent
+    worktrees checking out the pre-rewrite commit into the shared object store.
+    Re-verify after anything that can create a ref.
+  - `shell/package-lock.json` had declared the project unlicensed since the
+    GPL-3 switch, and the guard added in that same commit swept 5 files of 153.
+    Now derived from `git ls-files`; that file went 33 arms to 41.
+  - Both CI ASCII gates passed any path containing a space, and 14 tracked files
+    were scanned by neither gate. Coverage is now 153 of 153, uncovered set
+    empty, halves disjoint.
+  - The exclusive-bind fix was ported to `agents/pity_engine/__main__.py`, which
+    had kept the stock server since the surface fix landed at one call site.
+- **Check the fork-PR approval setting the moment the repo goes public.**
+  `gh api repos/Remus3/Resin-Compute/actions/permissions/fork-pr-contributor-approval`
+  returns 422 while private, so it CANNOT be checked in advance. If approval is
+  not required, a stranger's first pull request editing `requirements-dev.txt`
+  gets code execution on the runner through `pip install`. Blast radius is
+  bounded - `permissions: contents: read`, no secrets, PR-scoped cache,
+  ephemeral runner - but it is the one publication risk that opens AT the flip
+  rather than before it.
+- **Prose accuracy is structurally unguarded, and three of this session's
+  findings were prose.** `tests/test_docs_consistency.py` says so in its own
+  header: it checks that pointers RESOLVE, never that a sentence is TRUE. The
+  false unlicensed-lockfile claim, the false "synthetic fixtures" claim and the
+  "one thing that writes outside the tree" claim were all caught by a human-shaped
+  read, not by a gate. No test can express "this sentence is false" in general,
+  but the specific shape that recurs here IS checkable: a document asserting a
+  property of a file that the file itself contradicts. Worth one guard over the
+  claims that name a path.
+- **`agents/pity_engine/CHANGELOG.md` needs an entry for the exclusive bind.**
+  The engine's behaviour changed - a second bind of its port now fails with a
+  documented exit code - and the changelog is the engine's own record. Flagged
+  by the builder, which correctly did not reach outside its write-list.
+- **Answer Riot Commander's charter, round by round.** v3 is ADOPTED with one
+  dissent filed and accepted; v4 arrived at the end of this session and is
+  UNREAD. `scripts/watch_inbox.py` exists now, so the next session can see what
+  is genuinely new: `python scripts/watch_inbox.py`. The watermark was
+  deliberately NOT marked at the end of this session - 42 notes are listed and
+  roughly ten were actually processed, and an inflated watermark is worse than
+  none. Triage, then `--mark`.
 - ~~**QA the repo for going public.**~~ **DONE 2026-09-06.** The audit ran at
   commit `57f8894` and every gate was green before a line was touched, so none of
   it was a broken build - each item was a defect a stranger would meet. Every one
