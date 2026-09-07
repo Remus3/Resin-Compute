@@ -36,14 +36,101 @@ version. What follows is everything the scaffold deliberately did not do.
     empty, halves disjoint.
   - The exclusive-bind fix was ported to `agents/pity_engine/__main__.py`, which
     had kept the stock server since the surface fix landed at one call site.
-- **Check the fork-PR approval setting the moment the repo goes public.**
+- ~~**Check the fork-PR approval setting the moment the repo goes public.**~~
+  **DONE 2026-09-07. The risk was already closed.**
   `gh api repos/Remus3/Resin-Compute/actions/permissions/fork-pr-contributor-approval`
-  returns 422 while private, so it CANNOT be checked in advance. If approval is
-  not required, a stranger's first pull request editing `requirements-dev.txt`
-  gets code execution on the runner through `pip install`. Blast radius is
-  bounded - `permissions: contents: read`, no secrets, PR-scoped cache,
-  ephemeral runner - but it is the one publication risk that opens AT the flip
-  rather than before it.
+  returns `{"approval_policy":"first_time_contributors"}`. A stranger's first
+  pull request requires manual approval before any workflow runs, so the
+  `pip install -r requirements-dev.txt` route to runner code execution is gated
+  by a human click rather than open at the flip. Re-check it if anyone ever
+  loosens it: the setting is invisible while a repo is private (422), which is
+  why this could not be verified in advance.
+- ~~**Prove the hook gate fires, in CI.**~~ **DONE 2026-09-07, and it ran on a
+  real runner.** `tests/test_hook_gate.py` stands up a throwaway `git init`,
+  copies the real hook bodies plus the four dependencies they source, and
+  asserts on HEAD: a clean ASCII commit LANDS, a banned glyph in staged content
+  is REFUSED, a banned glyph in the commit message is REFUSED. Without the
+  positive control a gate that refused everything would pass both negatives.
+  Observed on `ubuntu-latest`:
+  `armed: .githooks/commit-msg .githooks/pre-commit .githooks/pre-push (all mode 100755)`
+  then `12 passed in 0.75s` - ran, not skipped.
+  - **An adversarial pass then REFUTED four claims made ABOUT that work, and all
+    four are corrected in the tree.** `RSC_REQUIRE_HOOK_GATE` does NOT convert
+    an unconfigured clone: the fixture arms its own throwaway repo and never
+    reads the host checkout's `core.hooksPath`, so an unconfigured clone passes
+    12 of 12. What the flag converts is an UNMEASURABLE MACHINE - no POSIX `sh`,
+    no git, or a missing hook file to copy. The dependency scan matched `$ROOT/`
+    but not `${ROOT}/`, so a brace-form dependency would have gone uncopied while
+    the rot guard stayed green. The positive control went RED when the pinned
+    interpreter could not `import ruff`, blaming the gate for a contributor's
+    venv layout. And the docstring claimed a `GIT_*` scrub wider than it
+    performs, citing a mechanism `git 2.53` does not exhibit.
+- ~~**Wire the inbox watcher so it actually fires.**~~ **DONE 2026-09-07.**
+  `scripts/watch_inbox.py` was correct and connected to NOTHING - there was no
+  `.claude/settings.json` in this tree at all, so it ran only when a human typed
+  it. A declared hook is not a firing hook, and the quieter predecessor is that
+  an unwired script is not a watcher. Now a `SessionStart` hook, with
+  `.gitignore` gaining `!.claude/settings.json` so the wiring reaches a fresh
+  clone rather than living on one box. `tests/test_session_hooks.py` EXECUTES
+  each declared command rather than resolving its target.
+- ~~**CAVEMAN ULTRA as the default chat dialect.**~~ **DONE 2026-09-07**, on
+  operator instruction, after RSC filed a dissent that the operator overruled.
+  `tools/caveman_default.py` and `tools/caveman.md` are Riot Commander's bytes,
+  not a paraphrase; the `_BANNER` string is a FLEET CONTRACT and its sha256 is
+  pinned as a literal in `tests/test_session_hooks.py` rather than diffed
+  against the copy in `moon_sync_inbox/`, which is gitignored and would take the
+  guard silent in every fresh clone. Terseness is CHAT ONLY - committed
+  artifacts stay byte-exact.
+- ~~**Gate the hand-off write for credentials and account paths.**~~
+  **DONE 2026-09-07.** Legion Wallpaper asked whether anyone gated the hand-off
+  more widely than ASCII and truncation; this tree's honest answer was no, and
+  it was MEASURED: a block carrying an inline API key and a block naming the
+  real account each published clean to the Desktop. That is the one write that
+  leaves the toolchain - pasted into cold sessions, quoted into four sibling
+  repos, from a public repo. `tools/publish_next_session.py` now refuses both,
+  and the refusal never echoes what it caught.
+- ~~**No tracked file may carry a credential.**~~ **DONE 2026-09-07.**
+  `tests/test_no_secret_literals.py` sweeps 160 tracked files for
+  vendor-prefixed tokens and for known secret names bound to literals. It
+  deliberately does NOT flag the sha256 governor pins, the base64 tray icon or
+  an environment lookup - a guard that flagged those would be deleted within a
+  day. All five repos were swept and were already clean; the one real key lived
+  in the user-level `~/.claude/settings.json` and is now a Machine environment
+  variable.
+
+- **Port Riot Commander's claim gate. This is the one genuinely missing CLASS of
+  guard in this tree.** RC's `stop_claim_gate.py` (550 lines) plus its 966-line test audit a finished session's claims
+  against its own evidence: a test count asserted with no run, a CI-green claim
+  with no fetch. RSC has no `Stop` hook and no claim gate at all. The verbatim
+  file is account-path clean and trackable as-is; its TEST carries one
+  hardcoded interpreter path at line 825 that must become `sys.executable`
+  before it is tracked here. Own session - it is 1500 lines.
+- **Three smaller ports from `moon_sync_inbox/from-RC-verbatim/`, triaged
+  2026-09-07.** RC's `pytest_guard.py` (117 lines, `PostToolUse` py_compile on
+  edited files - RSC has ZERO PostToolUse hooks and its only compile gate fires
+  at commit time). RC's `edit_lint_check.py` (102 lines, ruff plus glyph scan
+  on edit) - but its glyph half must CALL `tools/precommit_gate.py`'s engine
+  rather than restate the six codepoints, or this tree gains a third
+  independent declaration of one rule. Two checks out of RC's
+  `drift_guard.py`, not the file: `check_counted_claims` and
+  `check_untracked_authored`, about 60 lines together; the rest is RC-only and
+  the file hardcodes an account path.
+  - **Do NOT port RC's `md_guard_selector.py` or its ASCII source sweep.**
+    Triaged and rejected: this tree's `docs-guards.yml` already derives the
+    md-reading guard set from `git ls-files` with an unbucketed hard-fail, and
+    `ci.yml` already sweeps tracked source through `precommit_gate.py
+    --expect-count --scan-tracked source`. RC's ASCII file is a ratchet over a
+    frozen 50-file baseline, strictly weaker than what runs here, and RC's own
+    docstring credits this tree for the shape.
+- **Answer the reserved-slot design once RSC actually acquires a slot.** RSC
+  concurred with a stated reservation on 2026-09-07: nothing in this tree
+  acquires, `headless/runner.py` is a job runner rather than a Claude-executor
+  loop, so a guaranteed lane reserved for RSC is capacity removed from the four
+  repos that really contend. Revisit if that changes.
+- **`moon_sync_inbox/` and its SUBDIRECTORIES are session reading now**, per
+  operator instruction 2026-09-07 recorded in `CLAUDE.md`. The 2026-09-06
+  session read notes and skipped `from-RC-verbatim/`, which held 49 real files
+  while the notes beside it only described them.
 - **Prose accuracy is structurally unguarded, and three of this session's
   findings were prose.** `tests/test_docs_consistency.py` says so in its own
   header: it checks that pointers RESOLVE, never that a sentence is TRUE. The

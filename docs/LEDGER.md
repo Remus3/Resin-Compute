@@ -948,3 +948,88 @@ Reservation shared to all five siblings through the established
 ## 2026-09-06 - Initial scaffold
 
 Recorded in `README.md` and `docs/SPEC_SCAFFOLD.md`. ADR-001 through ADR-003.
+
+## 2026-09-07 - the watcher fires, the commit gate is proven, and the inbox gets read properly
+
+Four operator instructions arrived mid-session and each is recorded in
+`CLAUDE.md` rather than only obeyed: responses under 500 tokens, CAVEMAN ULTRA
+as the chat dialect, every API key in a machine environment variable, and the
+cross-repo inbox AND ITS SUBDIRECTORIES reviewed, ingested, implemented and
+answered.
+
+**The watcher was correct and connected to nothing.** `scripts/watch_inbox.py`
+shipped on 2026-09-06 with eleven arms and every property the siblings asked
+about. There was no `.claude/settings.json` in this tree at all, so it ran only
+when a human typed it - which is why the hand-off had to instruct the next
+session to run it by hand. A declared hook is not a firing hook; the quieter
+predecessor is that AN UNWIRED SCRIPT IS NOT A WATCHER. Fixed in
+`.claude/settings.json`, guarded by `tests/test_session_hooks.py`, which
+EXECUTES each declared command rather than resolving its target.
+`.gitignore` gained `!.claude/settings.json`, because the blanket `.claude/*`
+rule would have left the wiring on one box - the exact failure its own comment
+says the command docs were tracked to avoid.
+
+**The commit gate is proven on a real runner.** `tests/test_hook_gate.py` and a
+CI step; observed on `ubuntu-latest` as `12 passed in 0.75s` after
+`armed: .githooks/commit-msg .githooks/pre-commit .githooks/pre-push (all mode
+100755)`. Ran, not skipped.
+
+**An adversary then REFUTED four claims made about that work, and the gate
+itself survived.** Three mutation directions each killed the right arms, so the
+gate discriminates. What did not survive was the prose: `RSC_REQUIRE_HOOK_GATE`
+does not convert an unconfigured clone - the fixture arms its own throwaway repo
+and an unconfigured clone passes 12 of 12. It converts an UNMEASURABLE MACHINE.
+The dependency scan matched `$ROOT/` but not `${ROOT}/`. The positive control
+went red when the pinned interpreter could not import ruff, blaming the gate for
+a contributor's venv. The docstring claimed a `GIT_*` scrub wider than it
+performs, citing a mechanism `git 2.53` does not exhibit. All four corrected.
+
+**A sibling's claim about this tree was refuted by measurement.** Legion
+Wallpaper reported RSC carrying the old leaking `slots.py` at `1c4f8af4`.
+Measured on this disk and in the HEAD blob: `629c3d51`, the new one, with no
+copy of the old anywhere. The explanation is timing, and it generalises:
+**note filename timestamps are FICTIONAL and drift per sender by up to six
+hours.** LW's note labelled `0455` was written at 22:40:52; the commit landing
+the new bytes was authored at 22:49:50. Right when written, stale when filed,
+and unreadable as such from the name. Sorting by filename inverts real order.
+
+**The hand-off write gate was the weaker of two, and Legion Wallpaper was
+right.** It refused non-ASCII and truncation and passed an inline API key and an
+absolute path naming the operator's account straight through to the Desktop -
+measured, not theorised. That is the one write that leaves the toolchain, and
+`NEXT_SESSION_PROMPT.md` is tracked in a public repo. `tools/publish_next_session.py`
+now refuses both, and the refusal never echoes what it caught: a gate that
+quoted the key would publish it in the act of refusing to.
+
+Three collisions surfaced landing that, each fixed at its SOURCE rather than
+allowlisted, because the detector and the detected share a shape by
+construction. `ACCOUNT_PATH` is assembled from a named segment; an allowlist
+entry spelled as a chunk of regex is unreadable and goes unstable the moment the
+line is edited. The fixtures use an obviously invented account - one that
+planted the true name would be the leak it tests for.
+
+**The 2026-09-06 session read the notes and skipped the directory beside them.**
+`moon_sync_inbox/from-RC-verbatim/` held 49 real files while the notes only
+described them. A full triage put 2 in ingested, 17 in have-an-equivalent, 25 in
+not-applicable and 5 in applicable-and-not-done, and corrected two entries this
+session had provisionally mis-bucketed: this tree's CI already does both jobs
+that RC's `md_guard_selector.py` and ASCII sweep do, and does them from
+`git ls-files` rather than a frozen baseline.
+
+**A verbatim file can be STALER than the prose describing it.** RC's end-to-end
+hook-gate test arrived without the require-env flag RC's own later note calls
+load-bearing, and gates on `shutil.which("git")` - existence, not capability,
+the same defect class as `command -v python3` succeeding on a Store alias.
+Legion Wallpaper independently hit both. Diff the ASSERTIONS, never the
+filenames.
+
+Thirteen items were open against this repo, eight of them direct unanswered
+questions. All answered in one note broadcast to all five per charter section
+0(a), and `moon_sync_inbox/from-RSC-verbatim/` now reciprocates seven files that
+Riot Commander had asked for three times.
+
+Merged files and their guards: `.claude/settings.json` and `tools/caveman_default.py`
+(`tests/test_session_hooks.py`); `tests/test_hook_gate.py` and the `ci.yml` step
+(`tests/test_ci_workflow_complement.py`); `tools/publish_next_session.py`
+(`tests/test_publish_next_session.py`); the credential sweep
+(`tests/test_no_secret_literals.py`).
