@@ -84,6 +84,7 @@ env/
 # directories themselves. Writing `.claude/` here instead would make the three
 # negations that follow silently dead.
 .claude/*
+!.claude/settings.json
 !.claude/commands/
 .claude/commands/*
 !.claude/commands/*.md
