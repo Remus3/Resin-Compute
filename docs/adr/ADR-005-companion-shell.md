@@ -24,8 +24,9 @@ identical, from the outside, to one that decomposes them correctly.
 ## Decision
 
 Build an **Electron companion window** that loads a **local HTTP dashboard
-surface**, on the Clockspeed model, which is the sibling project that already
-solved this and whose patterns are proven on this machine.
+surface**, on the Sibling-A model - the sibling project that already solved
+this, an Electron shell over a local HTTP dashboard whose patterns are proven
+on this machine.
 
 Three parts, and the split is the decision:
 
@@ -43,7 +44,7 @@ is Python too. Node exists in this repository solely to host a window. The
 runtime dependency list for everything under `core/`, `engines/`, `ingest/`,
 `headless/` and `surface/` remains empty.
 
-## The rule the shell is built under, inherited from Clockspeed
+## The rule the shell is built under, inherited from Sibling-A
 
 **`shell/main.js` is wiring only.** It imports Electron, so nothing can load it
 in a test, so nothing that makes a decision may live there. What the window IS,
@@ -51,7 +52,7 @@ where it opens, what the tray shows and what is remembered between launches all
 live in `shell/lib/*.js` as pure modules with no Electron import, each graded by
 `shell/test/*.test.js` under `node --test` on a machine with no display server.
 
-Clockspeed records exactly what happens when that rule is broken: its certificate
+Sibling-A records exactly what happens when that rule is broken: its certificate
 verdict map lived in `main.js`, nothing could load the file, so no test graded the
 argument handed to the verification callback, and changing it to a blanket accept
 left the whole gate green. The rule is not style.
@@ -77,8 +78,8 @@ table is not a neutral placeholder, it is a wrong answer displayed confidently.
   without it.
 - `surface/` is stdlib-only and is covered by the ordinary `tests` suite.
 - The surface binds 8791 from the block reserved in ADR-004, on loopback.
-- Unlike Clockspeed, this surface is **plain HTTP, not HTTPS with a pinned
-  certificate.** Clockspeed's dashboard carries data worth pinning a certificate
+- Unlike Sibling-A, this surface is **plain HTTP, not HTTPS with a pinned
+  certificate.** Sibling-A's dashboard carries data worth pinning a certificate
   over; this one renders a Genshin roster and a resin count on loopback. If it
   ever leaves loopback that decision is revisited, and it gets its own ADR.
 

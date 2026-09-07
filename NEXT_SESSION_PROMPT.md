@@ -185,7 +185,7 @@ THE HIGHEST-VALUE WORK NOW, in ROADMAP.md order:
     the false rate (55.5 percent was measured by the agent that wrote the
     chaining), somebody must CLASSIFY the residual false positives, and
     TRANSCRIPT_PATH_KEY and BLOCK_EXIT_CODE are GUESSES.
-  - RC OWES THE CLAIM-GATE SPEC, asked 2026-09-07, unanswered.
+  - SIBLING-C OWES THE CLAIM-GATE SPEC, asked 2026-09-07, unanswered.
   - BRING ONE MORE ROOT INTO MYPY. surface/ 1 error, headless/ 3, ops/ 8,
     scripts/ BLOCKED by a duplicate-module-name refusal needing __init__.py.
   - Close the fan-content evidence hole. Three first-party PDFs were never read
