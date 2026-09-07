@@ -35,5 +35,33 @@ audited origin exists yet.
   licence on a wrapper grants rights only to that author's own compilation.
   ADR-006 dissolved the copyleft objection to two of them and nothing else.
 
+## Where `source` now comes from
+
+**It is DERIVED, and it is no longer a free string.** The row-scoped provenance
+schema - `docs/PROVENANCE_SCHEMA.md`, implemented in `core/provenance.py` -
+makes every row carry a tuple of receipts, and `render_source` renders the
+`source` summary from that tuple. The two therefore cannot disagree, and a
+hand-written `source` that contradicts the receipts is REFUSED rather than
+reported.
+
+A receipt names the artefact a number was read from, that artefact's sha256, and
+HOW it was read. What that buys this directory specifically:
+
+- **A number without an origin cannot enter at all.** A row with an empty
+  provenance tuple is refused before any file is written.
+- **"I saw it in two places" is now arithmetic.** Two reads of one screenshot
+  are ONE witness, because both receipts name the same parent artefact. Two
+  numbers merely consistent with each other were never two facts, and the
+  count no longer depends on an author remembering that.
+- **A retraction has somewhere to live.** Operator testimony is a recordable
+  read method, so a number that was refuted stops counting as support instead
+  of quietly staying in the table.
+
+The first-hand-observation gate above is UNCHANGED. The schema describes how a
+first-hand number carries its receipt; it does not widen what counts as one.
+
 `tests/_parked/` holds the complete, TDD-first test file waiting for these
-numbers, with its own README saying how to unpark it.
+numbers, with its own README saying how to unpark it. Note for whoever unparks
+it: it writes a single nested JSON document, and provenance rows are JSON Lines,
+one row and one receipt set per line. Nothing has to migrate - no row exists -
+but its loader arms will need revising.
