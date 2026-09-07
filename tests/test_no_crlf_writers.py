@@ -80,7 +80,7 @@ EXCLUDED_PREFIXES = ("tests/",)
 
 #: The floor the sweep must clear before its offender list means anything.
 #: Zero out of zero reads as a pass, so the count is asserted FIRST. Measured
-#: 2026-09-07: 45 tracked non-test `.py` files. The floor is set below that so
+#: 2026-09-07: 58 tracked non-test `.py` files. The floor is set below that so
 #: ordinary growth and pruning do not redden it, but a corpus that collapsed to
 #: a handful - a broken `git ls-files`, a wrong root, a bad filter - cannot slip
 #: through as a green run.
