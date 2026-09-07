@@ -12,17 +12,18 @@ count is a hypothesis, not a fact. Session topic, if given: $ARGUMENTS
 
 ## The shape, and what was deliberately not ported
 
-This is Riot Commander's ritual adapted to this tree, not transcribed from it.
+This is Sibling-C's ritual adapted to this tree, not transcribed from it.
 Three things were dropped on purpose, and each should stay dropped:
 
-- **No four-phase CI overlap.** RC pushes early so ~15 minutes of paperwork can
-  run against a ~27-minute suite. This tree's suites finish in seconds, so the
-  overlap optimises a cost that does not exist here and would only add ordering
-  rules to get wrong.
-- **No `WAKEUP_NOTES.md`.** RC and RedMoon keep a rolling session log plus an
-  archive. Here `NEXT_SESSION_PROMPT.md` is the hand-off, `docs/LEDGER.md` is
-  the closed-work history and `ROADMAP.md` is the open-work list. Three files
-  already cover it; a fourth would just be a fourth place to go stale.
+- **No four-phase CI overlap.** Sibling-C pushes early so ~15 minutes of
+  paperwork can run against a ~27-minute suite. This tree's suites finish in
+  seconds, so the overlap optimises a cost that does not exist here and would
+  only add ordering rules to get wrong.
+- **No `WAKEUP_NOTES.md`.** Sibling-C and Sibling-B keep a rolling session log
+  plus an archive. Here `NEXT_SESSION_PROMPT.md` is the hand-off,
+  `docs/LEDGER.md` is the closed-work history and `ROADMAP.md` is the open-work
+  list. Three files already cover it; a fourth would just be a fourth place to
+  go stale.
 - **No drift guard script.** `tests/test_docs_consistency.py` is this tree's
   equivalent and it already runs in both CI workflows and in section 1.
 
@@ -188,7 +189,9 @@ specifically so that nothing at all follows the fenced block in section 11.
   copy, so the printed block and the Desktop file cannot disagree.
 - It writes `RSC-NEXT-SESSION.txt` and only that. The Desktop is shared with
   five sibling projects that own the `CS-`, `LL-`, `LW-`, `RC-` and `RM-`
-  prefixes; `RC-` is Riot Commander's, which is why this tree is `RSC-`.
+  prefixes - those five basenames are observed on disk and are deliberately not
+  codenamed, because a guard that compares against invented filenames is
+  vacuous. `RSC-` is chosen to be unconfusable with any of them.
 - Report the byte count it prints. **A refusal is a failure of the ritual** -
   fix `NEXT_SESSION_PROMPT.md` and re-run. Never hand-write the Desktop copy.
 - `--check` reports drift and writes nothing, if you want to look first.

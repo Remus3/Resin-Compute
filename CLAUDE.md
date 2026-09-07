@@ -2,9 +2,11 @@
 
 Genshin Impact progression, resource economics, goal planning and roster
 optimization. Headless-lane first. Python 3.11, stdlib-only at runtime.
-Built on the Riot Commander blueprint (ADR-001).
+Built on the Sibling-C blueprint (ADR-001) - a sibling Python tree of the same
+author's whose `ruff.toml`, `pytest.ini`, `mypy.ini` and `.githooks/` this tree
+inherits, measured 2026-09-06.
 
-Two-tier naming, mirroring Riot Commander / Daemon Slayer:
+Two-tier naming, mirroring Sibling-C / Sibling-F:
 **ResinCompute** is the repo, **PityEngine** (`agents/pity_engine/`, HTTP `:8790`)
 is the pure deterministic compute engine inside it.
 
@@ -211,7 +213,7 @@ Narration of work already visible in the tool calls is the usual offender.
 
 Speak in chat when there is something to RULE ON or to be NOTIFIED of. Measured
 results, verdicts, blockers and questions belong here. Progress commentary does
-not. Adopted from Legion Wallpaper's `CLAUDE.md` on operator instruction,
+not. Adopted from Sibling-E's `CLAUDE.md` on operator instruction,
 2026-09-06.
 
 **CAVEMAN ULTRA is the default output dialect**, operator instruction
@@ -221,7 +223,7 @@ itself. Target 80-90 percent character reduction against ordinary prose.
 
 Declared by `tools/caveman_default.py`, a `SessionStart` hook whose stdout is
 injected as session context, with `tools/caveman.md` as the skill body. Both are
-Riot Commander's bytes rather than a local paraphrase; the `_BANNER` string is
+Sibling-C's bytes rather than a local paraphrase; the `_BANNER` string is
 the contract and must stay byte-identical across the fleet.
 
 **Terseness is for CHAT ONLY.** Everything below stays byte-exact and is never
@@ -240,8 +242,8 @@ day, 2026-06-27, as too lossy to skim. Do not re-derive it.
 REVIEWS `moon_sync_inbox/` **and its subdirectories**, then INGESTS, IMPLEMENTS
 and RESPONDS. Reading the filename list is not reviewing it.
 
-- **Subdirectories carry the payload.** `moon_sync_inbox/from-RC-verbatim/`
-  held 48 real files - hooks, guards, tools, tests - while the notes beside it
+- **Subdirectories carry the payload.** A sibling's verbatim subdirectory,
+  `moon_sync_inbox/from-<sibling>-verbatim/`, held 48 real files - hooks, guards, tools, tests - while the notes beside it
   only described them. A session that reads notes and skips the directories has
   read the commentary and not the artifact, and will re-derive by hand what
   arrived working. Verbatim bytes SUPERSEDE any paraphrase of them in a note.
@@ -250,15 +252,17 @@ and RESPONDS. Reading the filename list is not reviewing it.
   applicable-and-not-done. The fourth bucket is the one that must reach the
   roadmap; an untriaged file is indistinguishable from a rejected one.
 - **A verbatim file can be STALER than the prose that describes it.** Measured
-  2026-09-06: Riot Commander's end-to-end hook-gate test arrived without the
-  require-env flag that RC's own later note calls the load-bearing part. Diff
+  2026-09-06: Sibling-C's end-to-end hook-gate test arrived without the
+  require-env flag that Sibling-C's own later note calls the load-bearing part.
+  Diff
   the ASSERTIONS against the note, never just the filenames.
-- **Never adopt a sibling's file unread.** RC's `.claude/settings.json` carries
-  11 hardcoded `C:\Users\<account>\` paths and RC-only tool references. Copying
+- **Never adopt a sibling's file unread.** Sibling-C's `.claude/settings.json`
+  carries 11 hardcoded `C:\Users\<account>\` paths and sibling-only tool
+  references. Copying
   it here would have re-opened the machine-identity leak this tree closed.
   Adopt the SHAPE; copy bytes only where the bytes are the contract, as with
   the CAVEMAN `_BANNER`.
-- **SILENCE IS NOT AGREEMENT** - Riot Commander's charter rule, adopted. An
+- **SILENCE IS NOT AGREEMENT** - Sibling-C's charter rule, adopted. An
   unanswered charter, proposal or correction reads as dissent. Answer it, or
   file a position saying why not.
 - **Reading is not acknowledging.** `python scripts/watch_inbox.py` reports;

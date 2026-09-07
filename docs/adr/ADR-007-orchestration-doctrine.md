@@ -23,7 +23,7 @@ This tree already carries a rule that presupposes the fix: never trust a
 subagent's claim about test counts, green CI or file existence without an
 independent probe. That assumes subagents, an independent prober, and someone
 holding the plan while they run. The shape it assumes was never written down. A
-read-only investigation of Clockspeed and of Riot Commander on 2026-09-06
+read-only investigation of Sibling-A and of Sibling-C on 2026-09-06
 supplied the evidence below, including one measurement that reverses the obvious
 conclusion about worktrees.
 
@@ -88,7 +88,7 @@ Stated explicitly because the intuition runs the other way. If you want an
 independent review, ask a different model. That is the obvious move and it is
 wrong.
 
-Riot Commander ran a two-vendor loop and then rejected it. Operator decision,
+Sibling-C ran a two-vendor loop and then rejected it. Operator decision,
 2026-08-01, recorded in that tree's adjudicator module: independence comes from
 THE PRODUCER NOT GRADING ITS OWN WORK, and a second vendor supplies nothing else.
 A second vendor grading its own output is exactly as dependent as the first. A
@@ -102,7 +102,7 @@ to help cannot.
 ### A proven-disjoint write-list does NOT make worktrees optional
 
 The strongest single piece of evidence in this record, and it is measured rather
-than argued. It is recorded in Clockspeed's own memory file and was read there on
+than argued. It is recorded in Sibling-A's own memory file and was read there on
 2026-09-06.
 
 A disjointness proof bounds where agents DECLARE they will write. It bounds
@@ -113,7 +113,7 @@ So builders reach outside their write-list, break a file, observe the failure an
 restore it - and they do not classify any of that as "writing", because when they
 are finished nothing has changed.
 
-**Two builders did exactly that in one Clockspeed session.** Both restored
+**Two builders did exactly that in one Sibling-A session.** Both restored
 correctly and left no residue, so the proof was never violated in the sense it
 was written to mean. Both nonetheless turned an unrelated suite red WHILE A
 VERIFIER WAS MEASURING IT, and that verifier's reading described a tree which had
@@ -168,7 +168,7 @@ both touching this tree's most-warned-about surface:
   obvious - `.githooks/`, `scripts/install_hooks.py`, `tools/precommit_gate.py`,
   `LICENSE` - but WHICH files are frozen is an operator decision rather than an
   agent's, and a freeze nobody agreed to is only an obstacle.
-- **A lane mutex.** Riot Commander coordinates eight lanes and needs one. **This
+- **A lane mutex.** Sibling-C coordinates eight lanes and needs one. **This
   tree has one lane of work, and a lane registry with one entry is ceremony.**
 
 ## Rejected
@@ -176,7 +176,7 @@ both touching this tree's most-warned-about surface:
 - **Solo main-thread work, the status quo.** The producer grades its own output,
   the one arrangement guaranteed to miss the error class that matters most, and
   it parks the operator's session behind every long run.
-- **A second vendor for "independent review".** Rejected on Riot Commander's
+- **A second vendor for "independent review".** Rejected on Sibling-C's
   measured 2026-08-01 finding above. Independence is prompt-level; a second
   vendor adds spend and a coordination surface and supplies none of it that the
   producer-does-not-grade rule has not already supplied.
