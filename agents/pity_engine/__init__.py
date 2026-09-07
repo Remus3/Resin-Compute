@@ -13,7 +13,7 @@ The full per-version history lives in `CHANGELOG.md` beside this file. Future
 bumps PREPEND a new entry there and never extend a prior version's line.
 
 The engine is exposed over local HTTP on port 8790 (`python -m
-agents.pity_engine`), mirroring how Riot Commander exposes Daemon Slayer on
+agents.pity_engine`), mirroring how Sibling-C exposes Sibling-F on
 8860. Nothing in the compute path knows the transport exists.
 
 Every domain constant traces to `docs/SPEC_SCAFFOLD.md` section 3. Three

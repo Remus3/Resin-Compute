@@ -24,7 +24,7 @@
 # WHY IT MATTERS
 # --------------
 # The headless lane and the engine service both have to start on a bare
-# interpreter with no install step. Riot Commander has a standing ban on a
+# interpreter with no install step. Sibling-C has a standing ban on a
 # dep-less interpreter running a tracked invocation precisely because the two
 # channels there disagree about which Python owns the packages; a zero-runtime-
 # dependency tree cannot have that class of bug at all.

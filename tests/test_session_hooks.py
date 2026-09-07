@@ -173,10 +173,10 @@ EXPECTED_SHAPE = {
 #:
 #: WHY A CONSTANT HERE RATHER THAN A COMPARISON AGAINST THE SIBLING COPY.
 #:
-#: The banner is a FLEET CONTRACT: Riot Commander, Legion Wallpaper and this
+#: The banner is a FLEET CONTRACT: Sibling-C, Sibling-E and this
 #: tree must all emit the identical string, or four repos have quietly forked
 #: one dialect while appearing to share it. The obvious guard is to diff against
-#: Riot Commander's copy, which arrived under
+#: the sibling copy, which arrived under
 #: `moon_sync_inbox/from-RC-verbatim/tools/caveman_default.py`.
 #:
 #: THAT GUARD WOULD GO SILENT RATHER THAN RED. `moon_sync_inbox/` is gitignored
@@ -1014,7 +1014,7 @@ def test_the_caveman_banner_matches_the_pinned_fleet_contract():
     banner = _banner_literal()
     assert len(banner) == BANNER_BYTES, (
         f"the CAVEMAN banner is {len(banner)} bytes, pinned at {BANNER_BYTES}. "
-        "It is a fleet contract shared with Riot Commander and Legion Wallpaper; "
+        "It is a fleet contract shared with Sibling-C and Sibling-E; "
         "changing it forks the dialect. Update BANNER_SHA256 and BANNER_BYTES in "
         "the same commit, and tell the siblings."
     )

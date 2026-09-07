@@ -1,6 +1,6 @@
 """PityEngine test suite.
 
-Run as its own unit, matching Riot Commander's dual-suite convention:
+Run as its own unit, matching Sibling-C's dual-suite convention:
 
     python -m pytest agents/pity_engine -q
 

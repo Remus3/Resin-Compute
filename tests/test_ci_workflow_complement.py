@@ -13,7 +13,7 @@ looking for.
 
 `ci.yml` already carries a COMMENT instructing the author to add the matching
 entry in the same commit. An instruction is not a guard: it is read only by
-someone who already opened the right file. Riot Commander enforces this
+someone who already opened the right file. Sibling-C enforces this
 mechanically in CI (its "docs-guard complement is wired" step); this tree had
 the comment and no enforcement until now.
 

@@ -36,8 +36,8 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-#: Kill switch for every upstream fetch, modelled on Riot Commander's
-#: `RC_DUO_SYNERGY_LIVE=0`. Set it to 1 and `sync_profile` SKIPs instead of
+#: Kill switch for every upstream fetch, modelled on Sibling-C's own
+#: live-fetch env switch. Set it to 1 and `sync_profile` SKIPs instead of
 #: reaching the network. It is what lets a live (non-dry) pass be exercised in
 #: a test or on a disconnected machine without inventing a fake transport, and
 #: it exists because "--dry-run" and "do not touch the network" are different

@@ -8,7 +8,7 @@
 #
 #   1. Test modules that READ tracked .md off disk and assert on its CONTENT
 #      can be turned RED by a prose edit. With no workflow firing, nothing is
-#      watching. Riot Commander hit this exactly: one docs-only commit pushed a
+#      watching. Sibling-C hit this exactly: one docs-only commit pushed a
 #      table past a byte cap and broke a guard, and the docs-only FIX for it
 #      also ran no CI, so the fix's own green was never machine-confirmed.
 #   2. The 7-bit-ASCII hard rule reaches .md as much as it reaches .py, and the
@@ -67,7 +67,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
-# Read-only, and it stays that way. Riot Commander elevated its equivalent job
+# Read-only, and it stays that way. Sibling-C elevated its equivalent job
 # to `contents: write` for an auto-repair-and-push step; that is a real answer
 # to a real problem there, and it is not this tree's problem yet. Do not
 # elevate this without a recorded reason.

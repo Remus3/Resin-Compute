@@ -120,7 +120,7 @@ from tests.conftest import git_unusable_reason
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HOOKS_DIR = REPO_ROOT / ".githooks"
 
-# MEASURED against this tree, not copied from a sibling. Riot Commander's
+# MEASURED against this tree, not copied from a sibling. Sibling-C's
 # equivalent step asserts five hooks; asserting five here would be red on
 # arrival. Named rather than counted, because a bare count drifts silently in
 # either direction.

@@ -1,7 +1,7 @@
 """PityEngine local HTTP service.
 
-Stdlib only. Serves the engine on 127.0.0.1:8790 by default, mirroring how Riot
-Commander exposes Daemon Slayer on 8860 - a pure compute core with a thin,
+Stdlib only. Serves the engine on 127.0.0.1:8790 by default, mirroring how
+Sibling-C exposes Sibling-F on 8860 - a pure compute core with a thin,
 boring transport bolted on that the compute core knows nothing about.
 
 Routes:

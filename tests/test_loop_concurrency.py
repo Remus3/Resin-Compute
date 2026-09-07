@@ -3,7 +3,10 @@ r"""Cross-repo parity guard for the vendored headless-loop concurrency governor.
 WHAT IS BEING GUARDED.
 
 `ops/loop/slots.py` and `ops/loop/winmutex.py` are BYTE-IDENTICAL-BY-CONTRACT
-across three repositories - Legion Wallpaper, Riot Commander and Resin Compute.
+across three repositories - Sibling-E, Sibling-C and Resin Compute.
+The two sibling codenames are opaque here on purpose; they resolve only in the
+GITIGNORED `ops/moon_sync_repos.json`, which is where a maintainer acting on any
+assertion message below goes first.
 The participating loops do not talk to each other over any API. They coordinate
 THROUGH the on-disk protocol in `slots.py`, against ONE shared token bucket at
 `C:\ProgramData\lw-loop\slots`, and through the Win32 named-mutex namespace in
@@ -12,7 +15,7 @@ participants agree, so a divergence produces no error anywhere. It produces a
 silent concurrency bug - two loops that each believe they are inside the bound
 while together they are outside it.
 
-TWO OF THE THREE ACTUALLY ACQUIRE. Legion Wallpaper and Riot Commander both call
+TWO OF THE THREE ACTUALLY ACQUIRE. Sibling-E and Sibling-C both call
 `slots.hold()` from their loop controllers against the live bucket. THIS REPO
 DOES NOT: it has no executor loop, and the only callers of `hold()` here are the
 tests in this file, which run against a `tmp_path` bucket. So this file guards a
@@ -29,9 +32,9 @@ entirely and it passed every behaviour arm here until the dropped
 
 WHY THIS FILE READS NO SIBLING TREE, AND WILL NOT BE "IMPROVED" TO.
 
-Riot Commander's equivalent module compares this repo's copies against the live
-`C:\Legion Wallpaper` tree. Its own comments record what that cost: Legion
-Wallpaper's directory was renamed, the comparison's path stopped resolving, the
+Sibling-C's equivalent module compares this repo's copies against another
+sibling's live checkout by absolute path. Its own comments record what that
+cost: that sibling's directory was renamed, the comparison's path stopped resolving, the
 guards degraded to a SKIP, and both of them sat silently green from the rename
 until 2026-09-06 while pointing at a directory that no longer existed. A guard
 that skips itself when its subject disappears is not a guard.
@@ -86,18 +89,18 @@ SHARED_BUCKET = Path(r"C:\ProgramData\lw-loop\slots")
 # keys: two repos spelling them differently do not collide and do not error -
 # they serialize against nothing at all, each holding a private lock while
 # believing it holds the shared one.
-# ROTATED 2026-09-07 in the joint round LW announced at 04:15. The retired
+# ROTATED 2026-09-07 in the joint round Sibling-E announced at 04:15. The retired
 # values were "Global\\LWRC_GEMINI" and "Global\\LW_GPU". They are DEAD NAMES,
-# not secrets - they sat in LW's public repository for five weeks - so nothing
+# not secrets - they sat in that sibling's public repository for five weeks - so nothing
 # here tries to hide them. They are recorded because a judge or log parser keyed
 # on a fragment of the OLD name now matches nothing and reports GREEN ON NO
-# EVIDENCE, which is how LW's own P5 probe failed. RSC was swept for that and
+# EVIDENCE, which is how that sibling's own P5 probe failed. RSC was swept for that and
 # holds no such consumer; these two literals and the shared file are the only
 # sites, and this one is the independent second witness for the assertion below.
 SHARED_GEMINI_MUTEX = "Global\\MX-7C41A9E2"
 SHARED_GPU_MUTEX = "Global\\MX-2E58D3B6"
 
-# The agreed lane width. Same value in Riot Commander and Legion Wallpaper.
+# The agreed lane width. Same value in Sibling-C and Sibling-E.
 EXPECTED_LANES = 3
 
 # The COMPLETE vendored set, restated as an independent literal for exactly the
@@ -122,7 +125,7 @@ VENDORED_MODULES = ("slots.py", "winmutex.py")
 # from its OWN disk, and nobody trusts a digest quoted in a hand-off note.
 SHARED_SHA256 = {
     # Vendored 2026-09-06, when Resin Compute took the slot vacated by the
-    # archived Red Moon. Legion Wallpaper authored the bytes and carried the
+    # archived Sibling-B. Sibling-E authored the bytes and carried the
     # red window; this repo copied them BYTE-WISE off the live tree and these
     # digests were re-hashed from this repo's own disk, not copied from the
     # hand-off note. The bucket stays at 3 participants because it models
@@ -151,12 +154,14 @@ def test_the_vendored_governor_is_present():
     missing = [name for name in sorted(VENDORED_MODULES) if not (LOOP_DIR / name).is_file()]
     assert not missing, (
         f"{missing} absent from {LOOP_DIR}. This repo has JOINED a machine-wide "
-        "concurrency bucket shared with Legion Wallpaper and Riot Commander, both of "
+        "concurrency bucket shared with Sibling-E and Sibling-C, both of "
         "which acquire against it for real. This repo does not acquire yet, so losing "
         "these files breaks no running loop here - it silently drops this repo out of "
         "the parity contract, and the drop would surface only when an executor loop is "
         "finally built against a governor nobody kept in sync. Re-vendor them byte-wise "
-        "from a sibling tree - do not re-author them, and do not delete this test."
+        "from a sibling tree - do not re-author them, and do not delete this test.\n"
+        "Resolve the sibling codenames in the gitignored ops/moon_sync_repos.json, "
+        "and coordinate the round through moon_sync_inbox/."
     )
 
 
@@ -179,8 +184,8 @@ def test_the_pin_covers_every_vendored_module_and_nothing_was_added():
          is dropped into the verbatim vendor drop. Measured: 19 passed, green.
 
     One root cause - the pin named FILES instead of the DIRECTORY - so all three
-    close together. `VENDORED_MODULES` is the independent second witness; Riot
-    Commander's mirror test has always carried its own literal list for exactly
+    close together. `VENDORED_MODULES` is the independent second witness;
+    Sibling-C's mirror test has always carried its own literal list for exactly
     this reason, and the port to this tree dropped it.
     """
     assert sorted(SHARED_SHA256) == sorted(VENDORED_MODULES), (
@@ -188,7 +193,8 @@ def test_the_pin_covers_every_vendored_module_and_nothing_was_added():
         f"{sorted(VENDORED_MODULES)}. Do not resolve this by editing whichever side "
         "is convenient: removing a digest disarms both the presence and the byte "
         "guard for that file. A module joins or leaves this set only in a joint "
-        "round with Legion Wallpaper and Riot Commander."
+        "round with Sibling-E and Sibling-C. Resolve the codenames in the "
+        "gitignored ops/moon_sync_repos.json and coordinate through moon_sync_inbox/."
     )
     on_disk = sorted(path.name for path in LOOP_DIR.glob("*.py"))
     assert on_disk == sorted(VENDORED_MODULES), (
@@ -206,8 +212,9 @@ def test_vendored_module_matches_the_pinned_cross_repo_digest(name: str):
     actual = hashlib.sha256(path.read_bytes()).hexdigest()
     expected = SHARED_SHA256[name]
     assert actual == expected, (
-        f"{name} no longer hashes to the digest this repo agreed with Legion Wallpaper "
-        f"and Riot Commander.\n"
+        f"{name} no longer hashes to the digest this repo agreed with Sibling-E "
+        f"and Sibling-C. Those are codenames, and they resolve in the gitignored "
+        f"ops/moon_sync_repos.json - the round is coordinated through moon_sync_inbox/.\n"
         f"  expected {expected}\n"
         f"  actual   {actual}\n"
         f"  file     {path}\n"
@@ -408,7 +415,7 @@ def test_contending_threads_never_exceed_max_slots(slots, slot_root: Path):
     # Every arm above still passes, because the two holders the mutant does
     # admit satisfy both `peak == max_slots` and `entered >= max_slots`, while
     # the two starved workers land silently in `failures`. That mutant fails
-    # Riot Commander's suite and passed this one: 19 passed, exit 0.
+    # Sibling-C's suite and passed this one: 19 passed, exit 0.
     #
     # It cannot flake: a worker only reaches this list on SlotTimeout or OSError,
     # and the adversarial pass measured `failures == []` in 200 of 200 rounds
@@ -526,7 +533,7 @@ def test_a_corrupt_lock_cannot_wedge_the_bucket_forever(slots, slot_root: Path):
     arm can reason about it at all. Without the mtime fallback at
     `slots.py` `_read` -> `is_stale`, an unparseable lock would occupy a lane in
     a bucket shared with two live sibling loops until a human deleted it by
-    hand. Riot Commander tests this; the port to this tree dropped it.
+    hand. Sibling-C tests this; the port to this tree dropped it.
     """
     lock = slot_root / "0.lock"
     lock.write_text("{ not json", encoding="utf-8")
@@ -719,10 +726,11 @@ def test_the_lane_width_matches_the_other_repos():
     correctly bounded by its own belief, and the bucket is bounded by nobody.
     """
     assert core_config.MAX_CONCURRENT_LANES == EXPECTED_LANES, (
-        f"core.config.MAX_CONCURRENT_LANES is {core_config.MAX_CONCURRENT_LANES}, but Riot "
-        f"Commander and Legion Wallpaper both pass {EXPECTED_LANES}. Changing this is a "
+        f"core.config.MAX_CONCURRENT_LANES is {core_config.MAX_CONCURRENT_LANES}, but "
+        f"Sibling-C and Sibling-E both pass {EXPECTED_LANES}. Changing this is a "
         "three-repo agreement, not a local tuning knob: the bucket models ANTHROPIC ACCOUNT "
-        "concurrency, which is one pool for all three."
+        "concurrency, which is one pool for all three. The codenames resolve in the "
+        "gitignored ops/moon_sync_repos.json; the round runs through moon_sync_inbox/."
     )
 
 
@@ -740,8 +748,8 @@ def test_the_config_dataclass_defaults_to_the_agreed_lane_width():
         default = field.default_factory()
     assert default == core_config.MAX_CONCURRENT_LANES == EXPECTED_LANES, (
         f"Config.max_concurrent_lanes defaults to {default!r}, MAX_CONCURRENT_LANES is "
-        f"{core_config.MAX_CONCURRENT_LANES!r}, and the width agreed with Riot Commander and "
-        f"Legion Wallpaper is {EXPECTED_LANES!r}. All three must be the same number: two "
+        f"{core_config.MAX_CONCURRENT_LANES!r}, and the width agreed with Sibling-C and "
+        f"Sibling-E is {EXPECTED_LANES!r}. All three must be the same number: two "
         "answers to one question is how the agreed value gets quietly bypassed by whichever "
         "surface a caller happens to reach for."
     )
@@ -783,12 +791,12 @@ def test_every_json_config_declaring_a_lane_count_declares_the_agreed_one():
 
     Measured 2026-09-06: this tree contains ZERO `config*.json` files, so this
     sweep inspects nothing and passes on an empty set. It is written now because
-    Riot Commander drives its loop from exactly such a file surface, and if that
+    Sibling-C drives its loop from exactly such a file surface, and if that
     surface is ever ported here the lane width would arrive in JSON - a second
     place for the number to live, and the first place it would drift.
 
-    DELIBERATELY NO `assert found`. Riot Commander's copy has that arm because
-    Riot Commander has the files; asserting non-emptiness here would be red on
+    DELIBERATELY NO `assert found`. Sibling-C's copy has that arm because
+    that sibling has the files; asserting non-emptiness here would be red on
     arrival and would say nothing about lane parity. The non-vacuous half of
     this guard is `test_the_lane_width_matches_the_other_repos` above, which
     reads a constant that does exist. When the first config file lands, add the

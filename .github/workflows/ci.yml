@@ -13,7 +13,7 @@
 # the whole suite, and in a repo where a large share of commits are the
 # per-session notes sync that is most of the CI bill.
 #
-# It also opens a hole, and Riot Commander fell in it twice in a row. Test
+# It also opens a hole, and Sibling-C fell in it twice in a row. Test
 # modules that READ tracked .md off disk and assert on its CONTENT go red on a
 # docs-only commit - which triggers NO workflow at all, so nothing is watching.
 # The docs-only FIX then also ran no CI, so its own green was never confirmed
@@ -67,7 +67,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      # Action majors match Riot Commander's, which is the tree these
+      # Action majors match Sibling-C's, which is the tree these
       # workflows are ported from and the one where they are proven green.
       - uses: actions/checkout@v6
         with:
@@ -224,8 +224,8 @@ jobs:
         # inside a fixture, so pytest reports ERRORS rather than failures -
         # non-zero either way, but worth knowing before reading a red log.
         #
-        # THE HOOK SET IS ASSERTED BY NAME, NOT BY COUNT. Riot Commander's
-        # version of this step asserts `-ge 5`, which is RC's number; copying
+        # THE HOOK SET IS ASSERTED BY NAME, NOT BY COUNT. Sibling-C's
+        # version of this step asserts `-ge 5`, which is that sibling's number; copying
         # it here would be red on arrival, and a bare count drifts silently in
         # both directions anyway. The name check runs FIRST and is also the
         # anti-vacuity arm for the mode check below - an empty listing fails

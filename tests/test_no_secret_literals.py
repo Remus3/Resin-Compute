@@ -112,7 +112,7 @@ ENV_REFERENCE = re.compile(
 #: value merely CONTAINING one, and `"abc$key"` - a real literal with a variable
 #: spliced in - would go quiet. The arms below hold both halves.
 #:
-#: Reported by Legion Wallpaper on 2026-09-07 against its own ported copy:
+#: Reported by Sibling-E on 2026-09-07 against its own ported copy:
 #: `$env:GEMINI_API_KEY = $key` was flagged although `$key` had been read from
 #: `GetEnvironmentVariable` on the line above. That is the CORRECT destination
 #: and the guard called it a leak. Latent here rather than live - this tree
@@ -285,7 +285,7 @@ def test_the_detector_would_fail_on_this_file_without_its_exemption():
     )
 
 
-#: The PowerShell shape Legion Wallpaper measured: a variable holding a value
+#: The PowerShell shape Sibling-E measured: a variable holding a value
 #: already read from the environment, assigned to the env destination. Built
 #: from `chr(36)` so this module's own text does not carry the literal binding
 #: it is describing.
@@ -296,7 +296,7 @@ _TRAILING_LITERAL = f'GEMINI_API_KEY={_DOLLAR}key"abc123"'
 
 
 def test_a_value_that_is_wholly_a_variable_reference_is_a_lookup():
-    """The false positive LW reported, closed - and the check is ARMED first.
+    """The false positive Sibling-E reported, closed - and the check is ARMED first.
 
     Asserting only that nothing was flagged would pass for a module whose
     binding pattern had stopped matching altogether, which is the vacuous-pass

@@ -1,6 +1,6 @@
 """The watchdog.
 
-Inherited wholesale from Riot Commander's `ops/rc_supervisor.py`, minus the
+Inherited wholesale from Sibling-C's own supervisor module, minus the
 parts that only make sense for a project with an Electron overlay. The three
 behaviours that carry over verbatim, because each one was paid for:
 
