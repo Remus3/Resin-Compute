@@ -88,9 +88,23 @@ MEASURED_CAPTURED_URL_BYTES = 1755
 MEASURED_AUTHKEY_VALUE_BYTES = 1452
 
 
-def test_the_candidate_list_puts_an_install_root_before_the_user_profile():
-    """Order is the property. Membership alone would pass with the bug intact."""
+def test_the_candidate_list_puts_an_install_root_before_the_user_profile(tmp_path, monkeypatch):
+    """Order is the property. Membership alone would pass with the bug intact.
+
+    USERPROFILE is set explicitly rather than read from the environment. On
+    Linux it is unset, so the module correctly appends no user-profile
+    candidate and an environment-reading version of this test asserted the
+    absence of something the code was right not to produce. It passed on
+    Windows and failed on CI. A test of an ORDERING has to control the inputs
+    that decide the ordering.
+    """
     module = _load_module()
+    # tmp_path and NOT a literal home-shaped path. A literal one is exactly
+    # what tests/test_machine_identity.py forbids in a tracked file, and it
+    # caught this line on the first run. The guard was right: a test that
+    # needs SOME home directory does not need a plausible-looking one.
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.delenv(module._WEBCACHES_ENV, raising=False)
     candidates = [str(path).replace("\\", "/") for path in module._web_caches_candidates()]
     assert candidates, "no candidates at all, so the comparison would be vacuous"
 
@@ -141,23 +155,49 @@ def test_the_environment_override_wins_and_actually_resolves(tmp_path, monkeypat
     )
 
 
-def test_an_absent_override_does_not_hijack_resolution(tmp_path, monkeypatch):
-    """An override naming a path that does not exist must fall through, not win.
+def test_a_missing_candidate_does_not_beat_a_later_one_that_exists(tmp_path, monkeypatch):
+    """The selection rule, pinned without depending on this machine's installs.
 
-    A resolver that trusted the override blindly would answer with a directory
-    nobody can read, and `find_web_caches` would return the empty list - which
-    is the SAME answer as "the game has never run". That collapse of two
-    different facts into one answer is the defect this module is named after.
+    The candidate list is monkeypatched rather than derived, because the real
+    list names absolute install paths that cannot be planted on a CI runner.
+    What is being tested is the RULE - first existing wins, earlier entries
+    that do not exist are skipped - and that rule is the whole fix.
+
+    An earlier version of this test asserted that a non-existent override is
+    never returned at all. That contradicted the module's documented fallback
+    of returning the first candidate when NONE exist, so it passed on a machine
+    with a Genshin install and failed on a runner without one. Asserting a
+    behaviour the code deliberately does not have is not a stricter test, it is
+    a wrong one.
     """
     module = _load_module()
-    monkeypatch.setenv(module._WEBCACHES_ENV, str(tmp_path / "nope" / "webCaches"))
-    candidates = module._web_caches_candidates()
-    assert len(candidates) > 1, (
-        "with an override set there must still be fallbacks behind it"
-    )
+    missing = tmp_path / "nope" / "webCaches"
+    planted = tmp_path / "real" / "webCaches"
+    (planted / "1.2.3.4").mkdir(parents=True)
+
+    monkeypatch.setattr(module, "_web_caches_candidates", lambda: [missing, planted])
+    assert not missing.exists(), "the control path was accidentally created"
+
     resolved = module._web_caches_root()
-    assert resolved != candidates[0] or resolved.is_dir(), (
-        "a non-existent override was returned as the resolved root"
+    assert resolved == planted, (
+        "a non-existent earlier candidate beat a later one that exists. "
+        "Resolved to " + repr(str(resolved))
+    )
+
+
+def test_with_nothing_on_disk_the_first_candidate_is_returned(tmp_path, monkeypatch):
+    """The documented fallback, pinned so nobody 'fixes' it into returning None.
+
+    Returning a non-existent path keeps every caller's shape unchanged, because
+    `find_web_caches` already treats a missing directory as the empty list.
+    """
+    module = _load_module()
+    first = tmp_path / "a" / "webCaches"
+    second = tmp_path / "b" / "webCaches"
+    monkeypatch.setattr(module, "_web_caches_candidates", lambda: [first, second])
+    assert module._web_caches_root() == first
+    assert module.find_web_caches() == [], (
+        "a non-existent root must walk to the empty list, not raise"
     )
 
 

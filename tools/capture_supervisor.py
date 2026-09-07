@@ -106,9 +106,14 @@ def spawn_detached(argv: list[str], cwd: Path, log: Path) -> int:
     """Start a process that outlives this supervisor, appending to `log`."""
     log.parent.mkdir(parents=True, exist_ok=True)
     handle = log.open("ab")
-    flags = 0
-    if hasattr(subprocess, "DETACHED_PROCESS"):
-        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    # getattr and not attribute access, and that is a type-checker fix rather
+    # than a runtime one. `hasattr` guards the interpreter but does NOT narrow
+    # for mypy, and both constants are Windows-only in typeshed, so a bare
+    # `subprocess.DETACHED_PROCESS` is an error when mypy runs on Linux. CI runs
+    # Linux. Measured 2026-09-07.
+    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(
+        subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+    )
     proc = subprocess.Popen(
         argv, cwd=str(cwd), stdout=handle, stderr=handle,
         stdin=subprocess.DEVNULL, creationflags=flags,
