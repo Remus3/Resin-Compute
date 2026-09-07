@@ -104,11 +104,13 @@ version. What follows is everything the scaffold deliberately did not do.
 - **NEW 2026-09-07 (third session). One guessable token survives the scrub and
   needs an operator ruling**: the shared machine is called "the Legion box" in
   `README.md` and `docs/adr/ADR-004-port-block.md`. That is a MACHINE name, not
-  a project name, so it was outside both scrub slices' stated instruction - and
-  `tests/test_machine_identity.py` already records in a comment that the word
-  names both this machine and a sibling project. Widening a scrub past its
-  stated scope is how a guard's regex gets quietly broadened, so this was raised
-  rather than done.
+  a project name, so it was outside both scrub slices' stated instruction.
+  Widening a scrub past its stated scope is how a guard's regex gets quietly
+  broadened, so this was raised rather than done. The comment in
+  `tests/test_machine_identity.py` that used to spell out WHY the word is
+  ambiguous has been removed: an explanation of why a token was kept
+  republishes the token, which is the same defect as a gate quoting the
+  credential it caught.
 - **NEW 2026-09-07 (third session). The bootstrap output directory under `data/`
   is not gitignored.** `.gitignore` excludes only the cache directory, the tmp
   glob and the account-state file - none of them named here with backticks,
