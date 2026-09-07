@@ -36,6 +36,29 @@ _log = get_logger(__name__)
 
 _ENCODING = "utf-8"
 
+# Newline policy on the temp write. `Path.write_text` defaults to
+# `newline=None`, which is NOT "leave the text alone" - it translates every
+# "\n" the caller passed into `os.linesep`, so on Windows this module used to
+# emit CRLF for text the caller wrote with LF. Measured in this tree:
+# `atomic_write_text(p, "a\nb\n")` produced `b'a\r\nb\r\n'`, and a caller who
+# deliberately passed CRLF got `b'a\r\r\nb\r\r\n'` - the CR kept, the LF
+# expanded underneath it.
+#
+# That matters here rather than being a style point. `.gitattributes` declares
+# `* text=auto eol=lf` and `tests/test_line_endings.py` fails any tracked file
+# that declares eol=lf and carries CRLF on disk. This module is named by
+# CLAUDE.md as the ONLY sanctioned state-write path, so the first TRACKED file
+# anything wrote through it would have turned the suite red - and `git diff`
+# would have shown nothing at all, because the index normalises the ending
+# away on the way in.
+#
+# `newline="\n"` disables the translation layer outright: what the caller
+# handed in is what lands on disk. It is deliberately NOT a normalisation - a
+# caller who passes CRLF still gets CRLF, because rewriting a caller's bytes is
+# the defect being fixed, not the fix. `os.linesep` would reintroduce exactly
+# the platform dependence this removes.
+_NEWLINE = "\n"
+
 
 def _temp_path(target: Path) -> Path:
     """Return a unique sibling temp path.
@@ -61,12 +84,15 @@ def atomic_write_text(path: str | os.PathLike[str], text: str) -> bool:
 
     Creates parent directories as needed. On any OS-level failure the target is
     left exactly as it was, the temp file is removed, and False is returned.
+
+    The bytes on disk are the caller's bytes. `newline=_NEWLINE` is what makes
+    that true, and it is load-bearing rather than cosmetic - see `_NEWLINE`.
     """
     target = Path(path)
     tmp = _temp_path(target)
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(text, encoding=_ENCODING)
+        tmp.write_text(text, encoding=_ENCODING, newline=_NEWLINE)
         tmp.replace(target)
         return True
     except OSError as exc:

@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+import core.atomic_io
 from core.atomic_io import atomic_write_json, atomic_write_text, read_json
 
 
@@ -122,3 +123,117 @@ def test_write_to_an_unwritable_path_degrades_to_false(tmp_path):
     assert atomic_write_text(target, "nope") is False
     assert target.is_dir()
     assert _sibling_temps(tmp_path) == []
+
+
+# ---------------------------------------------------------------------------
+# Line endings
+#
+# `Path.write_text` opens with `newline=None`, which translates every newline
+# the caller passed into `os.linesep`. On Windows that is CRLF, so the
+# sanctioned write path silently rewrote the caller's bytes. `.gitattributes`
+# declares `* text=auto eol=lf` and `tests/test_line_endings.py` fails a
+# tracked file that carries CRLF, so the first TRACKED file written through
+# this module would have turned the suite red - and `git diff` would have
+# shown nothing, because the index normalises the ending away.
+#
+# Every assertion below reads RAW BYTES. `Path.read_text` translates CRLF back
+# to a newline on the way in, so a text-level assertion cannot see the defect
+# at all and would have passed against the broken writer.
+# ---------------------------------------------------------------------------
+
+_CRLF = b"\r\n"
+
+
+def _crlf_offenders(path: Path, label: str) -> list[str]:
+    """Return one offender string when `path` carries a CRLF pair, else none.
+
+    Separated from the tests that use it so the detector itself can be armed
+    against a planted control. A checker never observed to fire and a clean
+    tree look identical.
+    """
+    raw = path.read_bytes()
+    if _CRLF in raw:
+        return [f"{label}: {raw.count(_CRLF)} CRLF pair(s) in {path.name}"]
+    return []
+
+
+# Every public writer in the module, with a call that produces a newline.
+# `test_every_public_writer_is_covered_by_the_sweep` fails if the module grows
+# a writer this registry does not name, so the sweep cannot silently narrow.
+_PUBLIC_WRITERS = {
+    "atomic_write_text": lambda p: atomic_write_text(p, "a\nb\n"),
+    "atomic_write_json": lambda p: atomic_write_json(p, {"a": 1, "b": [2, 3]}),
+}
+
+
+def test_atomic_write_text_does_not_translate_a_newline(tmp_path):
+    """The writer transports bytes; it does not rewrite them."""
+    target = tmp_path / "state.txt"
+    assert atomic_write_text(target, "a\nb\n") is True
+    assert target.read_bytes() == b"a\nb\n"
+
+
+def test_atomic_write_json_writes_lf_only(tmp_path):
+    """`atomic_write_json` funnels through `atomic_write_text`, indent and all."""
+    target = tmp_path / "state.json"
+    assert atomic_write_json(target, {"a": 1}) is True
+    raw = target.read_bytes()
+    assert _CRLF not in raw
+    assert raw == b'{\n  "a": 1\n}\n'
+
+
+def test_a_caller_supplied_crlf_survives_verbatim(tmp_path):
+    """The contract is NO TRANSLATION, not "normalise everything to LF".
+
+    This is the surviving-neighbour arm. A writer that replaced CRLF with LF
+    would score full marks on the two tests above while silently corrupting a
+    caller who deliberately wants CRLF - a `.ps1` or a fixture, say. Both arms
+    are needed; either one alone is passable by a wrong implementation.
+    """
+    target = tmp_path / "crlf.txt"
+    assert atomic_write_text(target, "a\r\nb\r\n") is True
+    assert target.read_bytes() == b"a\r\nb\r\n"
+
+
+def test_a_lone_cr_survives_verbatim(tmp_path):
+    """A bare carriage return is a newline to `newline=None` too."""
+    target = tmp_path / "cr.txt"
+    assert atomic_write_text(target, "a\rb") is True
+    assert target.read_bytes() == b"a\rb"
+
+
+def test_every_public_writer_is_covered_by_the_sweep():
+    """The sweep's registry must name every `atomic_write_*` the module exports."""
+    exported = {name for name in dir(core.atomic_io) if name.startswith("atomic_write")}
+    assert exported == set(_PUBLIC_WRITERS), (
+        "core.atomic_io exports a writer the CRLF sweep does not exercise: "
+        f"exported={sorted(exported)} swept={sorted(_PUBLIC_WRITERS)}"
+    )
+
+
+def test_no_public_writer_emits_crlf(tmp_path):
+    """The sweep. Checked count is asserted BEFORE the offender list."""
+    checked = 0
+    offenders: list[str] = []
+    for name, invoke in sorted(_PUBLIC_WRITERS.items()):
+        target = tmp_path / f"{name}.out"
+        assert invoke(target) is True
+        checked += 1
+        offenders.extend(_crlf_offenders(target, name))
+
+    assert checked == len(_PUBLIC_WRITERS)
+    assert checked > 0, "zero out of zero is not a pass"
+    assert offenders == [], f"writers emitted CRLF: {offenders}"
+
+
+def test_the_crlf_detector_fires_on_a_planted_offender(tmp_path):
+    """Non-vacuity. An unarmed detector and a clean tree look identical."""
+    planted = tmp_path / "planted.txt"
+    planted.write_bytes(b"a\r\nb\r\n")
+    assert _crlf_offenders(planted, "planted") == [
+        "planted: 2 CRLF pair(s) in planted.txt"
+    ]
+
+    clean = tmp_path / "clean.txt"
+    clean.write_bytes(b"a\nb\n")
+    assert _crlf_offenders(clean, "clean") == []
