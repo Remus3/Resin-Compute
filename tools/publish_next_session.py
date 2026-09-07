@@ -64,6 +64,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -84,6 +85,70 @@ FENCE = "`" * 3
 # The hand-off has never been under a few thousand bytes. Anything near this
 # floor is a truncation or a stub, not a prompt.
 MIN_BYTES = 2000
+
+#: THE HAND-OFF IS A PUBLICATION SURFACE, and until 2026-09-07 this gate did
+#: not treat it as one. It refused non-ASCII and truncation - both real - and
+#: passed a live API key and an absolute path naming the operator's account
+#: straight through to the Desktop. Measured, not theorised: a block carrying
+#: an inline Nimble key, and one carrying
+#: `C:\Users\<account>\AppData\...` were each published clean.
+#:
+#: Why that matters more here than in an ordinary file. The hand-off is pasted
+#: by hand into a cold session, quoted into notes to four sibling repos, and
+#: `NEXT_SESSION_PROMPT.md` is TRACKED in a PUBLIC repository. Legion Wallpaper
+#: raised exactly this and asked whether anyone gated PII more widely; this
+#: tree's honest answer was no. `tests/test_machine_identity.py` sweeps tracked
+#: files and `tests/test_no_secret_literals.py` sweeps them for credentials,
+#: but both run over the COMMITTED tree - neither sees a block on its way out
+#: to the Desktop, which is the one path that leaves the toolchain.
+#:
+#: Vendor prefixes only, deliberately. A digest, a git SHA and a base64 blob
+#: all look random; only a real credential carries one of these. The same
+#: reasoning, and the same list, as `tests/test_no_secret_literals.py` - stated
+#: in both places because a hand-off gate that imported from the test suite
+#: would be a tool depending on tests to run.
+SECRET_PREFIXES = (
+    "sk-ant-",
+    "sk-",
+    "ghp_",
+    "github_pat_",
+    "AIza",
+    "RGAPI-",
+    "xoxb-",
+    "xoxp-",
+)
+
+#: Secret-bearing variable names bound to a literal. The NAME is the evidence;
+#: the value's entropy is irrelevant, which is what catches a short key.
+SECRET_NAMES = (
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_USAGE_KEY",
+    "NIMBLE_API_KEY",
+    "GEMINI_API_KEY",
+    "RIOT_API_KEY",
+    "GITHUB_PERSONAL_ACCESS_TOKEN",
+)
+
+#: An absolute path under a Windows user profile, in the three spellings this
+#: box actually produces: native, MSYS/Git-Bash, and WSL. `<account>` and other
+#: angle-bracket placeholders are legal - the hand-off is allowed to SHOW the
+#: shape it is refusing.
+#: ASSEMBLED FROM PARTS, and that is not style. Written as one literal, this
+#: pattern's own source is an account-shaped path, so
+#: `tests/test_machine_identity.py` sweeps it up, and the only remedies then
+#: are to allowlist a regex fragment or to loosen that guard. Both are worse
+#: than a constant: an allowlist entry spelled as a chunk of regex is
+#: unreadable and goes unstable the moment this line is edited, and loosening
+#: the sweep is how it stops catching a real account. Naming the segment
+#: removes the collision instead of negotiating with it.
+_USERS = "Users"
+ACCOUNT_PATH = re.compile(
+    r"(?:[A-Za-z]:[\\/]" + _USERS + r"[\\/]"
+    r"|/c/" + _USERS + r"/"
+    r"|/mnt/c/" + _USERS + r"/)"
+    r"(?P<who>[^\\/\s\"']+)",
+    re.IGNORECASE,
+)
 
 # Fixed remedies. These are the strings a refusal shows the operator, and none
 # of them may name a path.
@@ -140,7 +205,69 @@ def extract_prompt(source_text: str) -> str:
             + ", ".join(f"U+{ord(ch):04X}" for ch in offenders),
         )
 
+    for leak in scan_for_leaks(block):
+        raise Refusal(*leak)
+
     return block
+
+
+def scan_for_leaks(block: str) -> list[tuple[str, str]]:
+    """`(reason, detail)` for every credential or account path in `block`.
+
+    A LIST rather than a raise, so the arms that prove this has teeth can call
+    it directly on a planted string without building a whole hand-off, and so a
+    caller can report every offender rather than only the first.
+
+    THE DETAIL NEVER ECHOES THE SECRET. It names the prefix or the variable and
+    stops. A refusal message is printed to a terminal and pasted into notes, so
+    a gate that quoted the key it caught would publish it in the act of
+    refusing to publish it.
+    """
+    found: list[tuple[str, str]] = []
+
+    for prefix in SECRET_PREFIXES:
+        for match in re.finditer(re.escape(prefix) + r"[A-Za-z0-9_\-]{16,}", block):
+            found.append(
+                (
+                    "secret_literal",
+                    f"the block carries what looks like a live credential "
+                    f"(prefix {prefix!r}, {len(match.group(0))} chars). Move it to a "
+                    "machine environment variable and reference it by name.",
+                )
+            )
+
+    for name in SECRET_NAMES:
+        for match in re.finditer(
+            re.escape(name) + r"\"?\s*[:=]\s*(?P<v>\"[^\"]*\"|'[^']*'|[^\s,}]+)", block
+        ):
+            value = match.group("v")
+            # An environment REFERENCE is the destination of the rule, not a
+            # violation of it. `${NAME}`, `%NAME%`, `$env:NAME`, `os.environ[...]`
+            # and an angle-bracket placeholder all stay legal.
+            if re.search(r"\$\{?[A-Z_]+\}?|%[A-Z_]+%|environ|getenv|<[^>]*>", value):
+                continue
+            found.append(
+                (
+                    "secret_literal",
+                    f"the block binds {name} to a literal value. Reference the "
+                    "machine environment variable instead.",
+                )
+            )
+
+    for match in ACCOUNT_PATH.finditer(block):
+        who = match.group("who")
+        if who.startswith("<") or who.upper() in {"PUBLIC", "DEFAULT", "ALL USERS"}:
+            continue
+        found.append(
+            (
+                "account_path",
+                f"the block names a real user profile ({match.group(0)!r}). The "
+                "hand-off is pasted into cold sessions and quoted into sibling "
+                "repos, and this tree is public - use <account> instead.",
+            )
+        )
+
+    return found
 
 
 def target_path(desktop: Path) -> Path:
