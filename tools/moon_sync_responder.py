@@ -111,6 +111,17 @@ OPTED_IN: tuple[str, ...] = ("RC",)
 #: hop budget has something to count.
 RESPONDER_TAG = "[RSC-RESPONDER] This note was written by an unattended responder."
 
+#: The output bound in force, written into every metrics row beside M1.
+#: Disposition (i), ruled by both operators: the trial runs under A5 and M1 is
+#: published as hops-to-quiescence under a MEASUREMENT-ONLY grammar, which is a
+#: LOWER BOUND on the channel's real number and must never be cited as it.
+GRAMMAR = "measurement-only (A5), M1 is a LOWER BOUND"
+
+#: Why a cycle produced no further hop. `exhausted` is the outcome both parties
+#: PREDICT under (i), so it confirms the bound rather than the channel; any
+#: other value, or no termination, is the finding.
+TERMINATIONS = ("exhausted", "refused", "budget", "window", "empty", "disarmed", "delivered")
+
 #: Building is not arming. See the module docstring.
 ARMED_BY_DEFAULT = False
 
@@ -417,9 +428,31 @@ def record_cycle(
     actions: list[str],
     delivered: bool,
     reasons: list[str] | None = None,
+    termination: str = "unknown",
+    grammar: str = GRAMMAR,
 ) -> bool:
-    """Append one cycle's M1-M5 row. APPENDS - a trial that overwrites its own
-    record has measured its last cycle only."""
+    """Append one cycle's M1-M6 row. APPENDS - a trial that overwrites its own
+    record has measured its last cycle only.
+
+    THE GRAMMAR TRAVELS WITH THE NUMBER. Sibling-A's disposition (i) is that M1
+    be published labelled as a lower bound under a measurement-only grammar. A
+    caveat in a note does not travel with an integer in a file, and this channel
+    has named that failure three times in a week: a count in a doc going stale
+    unguarded, a `Success:` line silent about the files it did not walk, a
+    present-tense measurement read as a claim about a file's past. Each is a
+    value that outlived its qualifier. So the bound is written into the same row
+    as the number it qualifies, and M1 is never emitted bare.
+
+    THE TERMINATION REASON IS THE INFORMATIVE FIELD, NOT M1. Under (i) both
+    parties PREDICT the chain terminates because a measurement-only responder
+    runs out of things to say. If it does, the trial has confirmed its own bound
+    and learned nothing about the channel, and - Sibling-A's words - it would
+    look exactly like the reassuring result. The reading is asymmetric:
+    `exhausted` is the predicted artifact, and any other reason, or no
+    termination at all, is a finding that argues for the wider grammar
+    immediately rather than after a safe run. A bare integer cannot tell those
+    apart afterwards.
+    """
     payload = read_json(metrics, default=None)
     rows = payload.get("cycles") if isinstance(payload, dict) else None
     if not isinstance(rows, list):
@@ -427,7 +460,9 @@ def record_cycle(
     rows.append(
         {
             "note": note,
-            "hops": hops,  # M1
+            "hops": hops,  # M1, and never read without `grammar` below
+            "grammar": grammar,
+            "termination": termination,
             "arrival": arrival,
             "replied": replied,
             "reply_seconds": replied - arrival,  # M2
@@ -529,21 +564,31 @@ def run_once(
     bounds = bounds or Bounds()
     roots = load_roots() if roots is None else roots
     started = time.time() if now is None else now
-    result: dict = {"delivered": False, "reasons": [], "note": None, "actions": []}
+    result: dict = {
+        "delivered": False,
+        "reasons": [],
+        "note": None,
+        "actions": [],
+        "termination": "unknown",
+        "grammar": GRAMMAR,
+    }
     log_invocation("run_once", None, "start", now=started)
 
     if not window_open(bounds, now=started):
         print("responder: the agreed trial window is not open - nothing done")
         result["reasons"] = ["the trial window is not open"]
+        result["termination"] = "window"
         return result
 
     if not within_budget(inbox, bounds):
         print(f"responder: hop budget of {bounds.max_hops} reached - nothing done")
         result["reasons"] = [f"hop budget of {bounds.max_hops} reached"]
+        result["termination"] = "budget"
         return result
 
     queue = pending(inbox, OPTED_IN, _answered(DEFAULT_ANSWERED))
     if not queue:
+        result["termination"] = "empty"
         return result
 
     note = queue[0]
@@ -558,6 +603,7 @@ def run_once(
         for dest in dests:
             print(f"  would deliver to {dest / 'moon_sync_inbox'}")
         result["reasons"] = ["disarmed"]
+        result["termination"] = "disarmed"
         return result
 
     prompt = build_prompt(note, bounds)
@@ -569,9 +615,10 @@ def run_once(
         reasons = ["the session did not return a draft"]
         _hold(DEFAULT_STAGING, note.name, "", reasons)
         result["reasons"] = reasons
+        result["termination"] = "refused"
         record_cycle(
             DEFAULT_METRICS, note.name, hops_used(inbox), started, time.time(),
-            time.time() - started, [], False, reasons,
+            time.time() - started, [], False, reasons, "refused",
         )
         return result
 
@@ -580,19 +627,29 @@ def run_once(
     if reasons:
         _hold(DEFAULT_STAGING, note.name, draft, reasons)
         result["reasons"] = reasons
+        # EXHAUSTED IS THE PREDICTED OUTCOME AND IS RECORDED SEPARATELY. A
+        # measurement-only responder with nothing further to report produces an
+        # empty draft, which the gate refuses. That is the bound working, not a
+        # malfunction, and conflating it with a genuine refusal would hide the
+        # one distinction disposition (i) exists to preserve.
+        empty_only = all("empty" in r for r in reasons)
+        result["termination"] = "exhausted" if empty_only else "refused"
     else:
         written = deliver(draft, reply_name, [d / "moon_sync_inbox" for d in dests])
         # Our own copy, so a cold session sees both halves of the conversation.
         deliver(draft, reply_name, [inbox])
         result["delivered"] = all(ok for ok, _ in written) and bool(written)
         result["actions"] = ["A5"]
+        result["termination"] = "delivered"
         _remember_answered(DEFAULT_ANSWERED, note.name)
 
     finished = time.time()
     record_cycle(
         DEFAULT_METRICS, note.name, hops_used(inbox), started, finished,
         finished - started, result["actions"], result["delivered"], result["reasons"],
+        result["termination"],
     )
+    log_invocation("run_once", note.name, result["termination"], now=finished)
     return result
 
 
