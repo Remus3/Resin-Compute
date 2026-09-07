@@ -120,7 +120,16 @@ GRAMMAR = "measurement-only (A5), M1 is a LOWER BOUND"
 #: Why a cycle produced no further hop. `exhausted` is the outcome both parties
 #: PREDICT under (i), so it confirms the bound rather than the channel; any
 #: other value, or no termination, is the finding.
-TERMINATIONS = ("exhausted", "refused", "budget", "window", "empty", "disarmed", "delivered")
+TERMINATIONS = (
+    "exhausted",
+    "refused",
+    "spawn-failed",
+    "budget",
+    "window",
+    "empty",
+    "disarmed",
+    "delivered",
+)
 
 #: Building is not arming. See the module docstring.
 ARMED_BY_DEFAULT = False
@@ -150,6 +159,15 @@ _ACCOUNT_PATH = re.compile(
 
 #: A raw traceback is the error string this repo forbids on a reported surface.
 _TRACEBACK = re.compile(r"Traceback \(most recent call last\)", re.IGNORECASE)
+
+
+class SpawnFailed(RuntimeError):
+    """The session could not be run at all, as distinct from having nothing to say.
+
+    These are two different facts and only one of them is a finding about the
+    channel. See `_spawn_headless` for what conflating them would have
+    published.
+    """
 
 
 class Bounds(NamedTuple):
@@ -612,14 +630,18 @@ def run_once(
     except Exception:  # noqa: BLE001 - a responder must survive ANY session failure
         # The raw string never reaches a reported surface. A responder that
         # tracebacks out of a scheduled task surfaces nothing at all.
-        reasons = ["the session did not return a draft"]
+        reasons = ["the session could not be run"]
         _hold(DEFAULT_STAGING, note.name, "", reasons)
         result["reasons"] = reasons
-        result["termination"] = "refused"
+        # NEVER `exhausted`. A session that could not RUN is not a session with
+        # nothing to say, and under disposition (i) `exhausted` is the label
+        # that means the bound worked as predicted.
+        result["termination"] = "spawn-failed"
         record_cycle(
             DEFAULT_METRICS, note.name, hops_used(inbox), started, time.time(),
-            time.time() - started, [], False, reasons, "refused",
+            time.time() - started, [], False, reasons, "spawn-failed",
         )
+        log_invocation("run_once", note.name, "spawn-failed", now=time.time())
         return result
 
     reasons = validate_draft(draft, bounds)
@@ -660,16 +682,82 @@ def _reply_name(note: Path) -> str:
     return f"{stamp}-from-{SELF_CODE}-auto-reply-to-{stem}.md"
 
 
-def _spawn_headless(prompt: str, bounds: Bounds) -> str:
-    """The real session. Deliberately NOT wired, and this is not an oversight.
+#: The headless session command. `{}` is not interpolated - the prompt is passed
+#: on stdin, never on the command line, because a note is untrusted text and a
+#: command line is a place where untrusted text becomes arguments.
+#:
+#: THE SESSION IS GRANTED NO WRITE TOOLS, AND THAT IS THE POINT. Under
+#: disposition (i) the responder's whole job is A1 measurement and A2 running its
+#: own suite, then reporting. The draft comes back on STDOUT and this module does
+#: every write. So the spawned session needs read and measurement authority and
+#: nothing else, and giving it less is not a restriction on the trial - it is the
+#: trial's actual shape. `--dangerously-skip-permissions` is deliberately absent.
+SPAWN_COMMAND: tuple[str, ...] = (
+    "claude",
+    "-p",
+    "--allowed-tools",
+    "Read,Grep,Glob,Bash(python -m pytest:*),Bash(git log:*),Bash(git status:*)",
+)
 
-    Arming is a separate act from building, and the command that starts an
-    unattended agent with write authority in this tree is the single most
-    consequential line in this file. It is left for the operator to write, with
-    the timeout below already enforced by the caller's bounds, so that turning
-    this on is a deliberate edit by a person rather than a default someone
-    inherits.
+
+def _spawn_headless(prompt: str, bounds: Bounds) -> str:
+    """Run one headless session and return whatever it printed.
+
+    ARMING IS A SEPARATE ACT FROM BUILDING and this function existing does not
+    arm anything: `run_once` reaches it only when `bounds.armed` is True, which
+    `Bounds()` never is by default.
+
+    Three properties, each chosen against a specific failure:
+
+    - THE PROMPT GOES ON STDIN, never on the command line. It contains a note
+      written by another agent, and a command line is where untrusted text turns
+      into arguments.
+    - THE TIMEOUT IS ENFORCED HERE, from the agreed bounds. A session that hangs
+      must end the cycle, not the trial; a scheduled task with no ceiling is a
+      process nobody notices is still running.
+    - A FAILURE RETURNS EMPTY RATHER THAN RAISING PAST THE GATE. An empty draft
+      is refused by `validate_draft` and recorded as `exhausted`, so the failure
+      path leads into the gate rather than around it.
     """
+    import shutil
+    import subprocess
+
+    # RESOLVE THE EXECUTABLE. On Windows the entry point is a `.CMD` shim and
+    # `subprocess` will not launch a bare `claude`. Measured here: the first
+    # live spawn raised FileNotFoundError, which is section 2's whole story.
+    exe = shutil.which(SPAWN_COMMAND[0])
+    if exe is None:
+        raise SpawnFailed("the session command was not found on PATH")
+
+    try:
+        done = subprocess.run(
+            [exe, *SPAWN_COMMAND[1:]],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=bounds.spawn_timeout_seconds,
+            cwd=str(REPO_ROOT),
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        # RAISED, NEVER RETURNED AS EMPTY, and that distinction is the point.
+        # The first version of this returned "" on failure. An empty draft is
+        # refused by the gate and recorded as `exhausted` - which under
+        # disposition (i) is the label meaning "the bound worked, as both
+        # parties predicted". So a spawn that never ran would have been recorded
+        # as the reassuring result, every cycle, and the trial would have
+        # published a confirmation of its own bound produced by a broken
+        # subprocess call. That is the exact failure this channel keeps naming:
+        # a negative that is a statement about the instrument rather than the
+        # world. The class of `exc` is used, never its text.
+        raise SpawnFailed(exc.__class__.__name__) from None
+    if done.returncode != 0 and not done.stdout:
+        raise SpawnFailed(f"the session exited {done.returncode} with no output")
+    return done.stdout or ""
+
+
+def _spawn_unwired(prompt: str, bounds: Bounds) -> str:
+    """Kept so a caller can assert the disarmed shape explicitly."""
     raise NotImplementedError(
         "the headless spawn is not wired - arming is a separate, operator-gated act"
     )
@@ -682,9 +770,39 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dir", default=str(DEFAULT_INBOX), help="inbox directory")
     parser.add_argument("--arm", action="store_true", help="actually spawn and deliver")
     parser.add_argument("--max-hops", type=int, default=Bounds().max_hops)
+    # THE WINDOW IS THE RESPONDER'S OWN HALF OF THE KILL SWITCH. The scheduled
+    # task carries an EndBoundary too, and the two are deliberately independent:
+    # a stop that exists in one place is one bug away from absent. Passed as ISO
+    # local time so the agreed window in the note and the argument here are the
+    # same string a human can compare.
+    parser.add_argument("--window-opens", default=None, help="ISO local, e.g. 2026-09-07T19:00:00")
+    parser.add_argument("--window-closes", default=None, help="ISO local")
     args = parser.parse_args(argv)
 
-    bounds = Bounds(armed=args.arm, max_hops=args.max_hops)
+    def _stamp(text: str | None) -> float | None:
+        if not text:
+            return None
+        try:
+            return time.mktime(time.strptime(text, "%Y-%m-%dT%H:%M:%S"))
+        except (ValueError, OverflowError):
+            # An unparseable window is treated as CLOSED rather than absent. A
+            # typo must not silently widen the trial to unbounded.
+            print("responder: could not read the window - treating it as closed")
+            return time.time() + 1.0 if text else None
+
+    opens = _stamp(args.window_opens)
+    closes = _stamp(args.window_closes)
+    if args.arm and (opens is None or closes is None):
+        print("responder: --arm requires --window-opens and --window-closes")
+        print("  a trial with no agreed end is not a trial - nothing was done")
+        return 2
+
+    bounds = Bounds(
+        armed=args.arm,
+        max_hops=args.max_hops,
+        window_opens=opens,
+        window_closes=closes,
+    )
     outcome = run_once(inbox=Path(args.dir), bounds=bounds)
     if outcome["note"] is None:
         print("responder: nothing to answer")

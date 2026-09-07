@@ -609,6 +609,45 @@ def test_a_spawn_that_raises_is_a_held_cycle_and_not_a_crash(rsp, tmp_path):
     )
 
 
+def test_a_spawn_that_never_ran_is_not_recorded_as_exhausted(rsp, tmp_path):
+    """The distinction that a broken trial would otherwise publish as a success.
+
+    MEASURED, not hypothetical. The first live spawn in this tree raised
+    FileNotFoundError, because on Windows the session entry point is a `.CMD`
+    shim that `subprocess` will not launch by bare name. The first version of
+    the spawn returned "" on failure; an empty draft is refused by the gate and
+    recorded as `exhausted`, which under disposition (i) is precisely the label
+    meaning "the chain stopped because a measurement-only responder ran out of
+    things to say, exactly as both operators predicted".
+
+    So a subprocess call that never ran would have produced the reassuring
+    result, every cycle, and the trial would have published a confirmation of
+    its own bound manufactured by a broken invocation. That is this channel's
+    own class one more time: a negative that is a statement about the instrument
+    rather than about the world.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-09-07-1900-from-RC-question.md")
+    (tmp_path / "rc" / "moon_sync_inbox").mkdir(parents=True)
+
+    def never_ran(*a, **k):
+        raise rsp.SpawnFailed("FileNotFoundError")
+
+    result = rsp.run_once(
+        inbox=inbox,
+        roots={"RC": tmp_path / "rc"},
+        bounds=rsp.Bounds(armed=True),
+        spawn=never_ran,
+    )
+
+    assert result["termination"] == "spawn-failed", (
+        "a session that could not run was recorded as something else. If that "
+        f"value is 'exhausted' the trial reports its own bound as confirmed: {result}"
+    )
+    assert result["termination"] != "exhausted"
+    assert json.loads(rsp.DEFAULT_METRICS.read_text())["cycles"][-1]["termination"] == "spawn-failed"
+
+
 # ---------------------------------------------------------------------------
 # THE CALLER MUST HONOUR THE BOUND, WHICH IS A DIFFERENT FACT FROM THE BOUND
 # BEING CORRECT.
