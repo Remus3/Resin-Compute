@@ -5,8 +5,8 @@ Most of what follows is a plain field-and-default check. One arm is not:
 rather than a behaviour, and it is the reason this file exists at all.
 
 MAX_CONCURRENT_LANES is a ceiling on total concurrent executor calls SHARED
-with two sibling repositories on this machine - Legion Wallpaper and Riot
-Commander - which admit work against one lockfile slot bucket. Each repository
+with two sibling repositories on this machine - Sibling-E and
+Sibling-C - which admit work against one lockfile slot bucket. Each repository
 reads its OWN copy of the number. The bucket therefore bounds nothing unless
 all three copies agree, and an environment override on any single participant
 raises the EFFECTIVE ceiling for all three, because each side admits holders
@@ -68,12 +68,14 @@ CROSS_REPO_CEILING = 3
 
 CONTRACT = (
     "MAX_CONCURRENT_LANES is a CROSS-REPO ceiling on total concurrent executor "
-    "calls, shared with Riot Commander and Legion Wallpaper against ONE lockfile "
+    "calls, shared with Sibling-C and Sibling-E against ONE lockfile "
     "slot bucket at C:/ProgramData/lw-loop/slots. Each repository reads its own "
     "copy, so all three must declare the SAME number - if they disagree the "
-    "governor silently admits max(a, b) holders and becomes theatre. Riot "
-    "Commander and Legion Wallpaper both declare 3. Changing it is a joint act "
-    "across all three repositories in one round, never a unilateral edit here."
+    "governor silently admits max(a, b) holders and becomes theatre. Sibling-C "
+    "and Sibling-E both declare 3. Changing it is a joint act "
+    "across all three repositories in one round, never a unilateral edit here. "
+    "Resolve the codenames in the gitignored ops/moon_sync_repos.json and "
+    "coordinate the round through moon_sync_inbox/."
 )
 
 # Names a future contributor might plausibly reach for while wiring this to the

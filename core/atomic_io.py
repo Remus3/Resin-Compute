@@ -1,6 +1,6 @@
 """Atomic state IO - the ONLY sanctioned write path for state files.
 
-The rule, inherited verbatim from Riot Commander (docs/SPEC_SCAFFOLD.md section
+The rule, inherited verbatim from Sibling-C (docs/SPEC_SCAFFOLD.md section
 2):
 
     Atomic writes only: `tmp.write_text(...); tmp.replace(target)`. Never write

@@ -2,7 +2,7 @@
 <!--
   ResinCompute-Supervisor - Windows Scheduled Task definition.
 
-  Modelled on Riot Commander's ops/RC-Supervisor.xml, which is the shape that
+  Modelled on Sibling-C's own supervisor task definition, which is the shape that
   is actually in production on that fleet. Inherited properties, each load
   bearing:
 

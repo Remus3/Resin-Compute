@@ -1,11 +1,12 @@
-"""Regression proof for RC's inbox finding on nested worktrees blinding guards.
+"""Regression proof for a sibling's inbox finding on nested worktrees blinding guards.
 
-moon_sync_inbox/2026-09-07-0710-from-RC-four-watcher-defects-withdrawal-property-and-ops38-generalised.md
-section 5 (from Riot Commander, 2026-09-07T07:10): after merging a worktree
-agent's branch, RC left the merged worktree on disk inside the repo, and two
+Source: the 2026-09-07-0710 note in `moon_sync_inbox/` from Sibling-C,
+section 5 (2026-09-07T07:10). Codenames resolve only in the gitignored
+`ops/moon_sync_repos.json`. After merging a worktree agent's branch, that
+sibling left the merged worktree on disk inside the repo, and two
 guards that `rglob` from the repo root scanned the second full copy of the
-tree and went red on content that was not theirs. RC measured 10 of 15
-root-walking guards in RC's own `tests/` with no worktree exclusion, and only
+tree and went red on content that was not theirs. It measured 10 of 15
+root-walking guards in its own `tests/` with no worktree exclusion, and only
 2 of those 10 actually fired that night because only 2 happened to match
 content in the duplicate - the other 8 were latent, waiting for the day their
 particular content showed up inside a stray worktree.
@@ -79,10 +80,10 @@ does not.
 
     1 + 4 + 34 = 39.
 
-THE HONEST CAVEAT ON RC'S FRAMING, stated rather than smoothed over. This
+THE HONEST CAVEAT ON THAT FRAMING, stated rather than smoothed over. This
 repo's own worktrees live at `.claude/worktrees/`, a SIBLING of `data/` and
 `docs/`, never a descendant of either. So the four NOT-excluded guards above
-cannot reproduce RC's exact scenario - "a merged worktree agent's branch left
+cannot reproduce the sibling's exact scenario - "a merged worktree agent's branch left
 on disk got scanned as a duplicate checkout" - unless a worktree, or literally
 anything else, were ever created inside `data/` or `docs/`, which is not this
 repo's convention and has never happened per `git worktree list` at the time
@@ -103,7 +104,7 @@ is the POSITIVE CONTROL AND THE VULNERABILITY PROOF in one: the guard passes
 on the clean tree, then fails once the planted file exists, proving both that
 the planted content is well-formed (it really does trip the guard when the
 guard is pointed at it) and that the guard cannot tell "my own data/" from "a
-nested checkout's data/ that happens to be lying around" - RC's defect,
+nested checkout's data/ that happens to be lying around" - the sibling's defect,
 reproduced against a real guard in this tree rather than a hypothetical one.
 `test_lane_declarations_excludes_a_nested_dot_directory_probe` is the CONTRAST
 arm: the one guard this tree measured as already excluding nested

@@ -8,7 +8,7 @@ therefore the part kept smallest.
 
 LOOPBACK ONLY, AND THAT IS NOT A DEFAULT TO OVERRIDE CASUALLY. The page renders
 account state and carries no authentication of any kind. ADR-005 records the
-decision to serve plain HTTP rather than Clockspeed's pinned-certificate HTTPS,
+decision to serve plain HTTP rather than Sibling-A's pinned-certificate HTTPS,
 and that decision rests entirely on never leaving 127.0.0.1.
 
 EVERY HANDLER IS TOTAL. A state provider that raises, a model that raises, a

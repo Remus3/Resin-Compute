@@ -11,7 +11,7 @@ this repo runs ZERO hooks until someone sets it, which defeats the tracked
 
 WHY THIS SCRIPT MUST NEVER WRITE A HOOK FILE
 --------------------------------------------
-Riot Commander's installer used to write `.git/hooks/pre-commit` containing
+Sibling-C's installer used to write `.git/hooks/pre-commit` containing
 only one of its steps, overwriting whatever was there. `.git/hooks/` is not
 version controlled, so that clobbered the tracked hooks and nothing pointed the
 two at each other. Measured consequence, found 2026-07-26: the tracked and
@@ -53,7 +53,7 @@ def _ensure_executable(hooks_dir: Path) -> list[str]:
 
     A hook that is not executable is not an error git reports - git simply
     declines to run it and says nothing, so the entire commit-time gate goes
-    missing while CI stays green. Riot Commander shipped all five of its hooks
+    missing while CI stays green. Sibling-C shipped all five of its hooks
     mode 100644 for a while and found out the day a banned glyph committed
     straight through the hole.
 

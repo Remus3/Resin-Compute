@@ -12,7 +12,7 @@
 # not reach a fresh clone, another machine, or CI. THIS directory is tracked,
 # and `core.hooksPath` must point at it.
 #
-# Riot Commander proved what happens otherwise. Its tracked hook and its active
+# Sibling-C proved what happens otherwise. Its tracked hook and its active
 # `.git/hooks/pre-commit` diverged for long enough that three tracked guards
 # silently stopped running, and both generated artifacts had drifted by the
 # time anyone noticed. The cause was an installer that WROTE `.git/hooks/
@@ -55,7 +55,7 @@ PY="$(resin_pick_python ruff)" || PY="$(resin_pick_python)" || PY=python
 #
 # A git-level gate is channel-independent: a human at a terminal, a headless
 # agent run, and a scripted commit all get it. An editor-side or agent-side
-# hook does not - Riot Commander measured a headless run committing a banned
+# hook does not - Sibling-C measured a headless run committing a banned
 # em-dash straight through while these git hooks caught it.
 #
 # The gate reads a COMMAND STRING on stdin and self-gates on it, so "git

@@ -6,8 +6,8 @@ session. `moon_sync_inbox/` is gitignored on purpose - a note is correspondence,
 not source - so a cold session inherits no record of what it already answered,
 and an overnight note looks exactly like one dealt with hours ago. The failure
 that costs real time is not a missed note; it is a note answered TWICE, or a
-sibling's question left sitting while every agent assumes another took it. Riot
-Commander's charter states the rule: silence is not agreement.
+sibling's question left sitting while every agent assumes another took it.
+Sibling-C's charter states the rule: silence is not agreement.
 
 So the durable half is a WATERMARK on disk, and this script is how a session
 reads and advances it.
@@ -69,7 +69,7 @@ not re-derive them:
   inside_a_drop_re_surfaces_it` pins it, and asserts the count did NOT move so
   the arm cannot pass under a count-keyed watcher.
 
-  A DIGEST OF THE SENDER'S `MANIFEST.sha256` is refuted. Riot Commander
+  A DIGEST OF THE SENDER'S `MANIFEST.sha256` is refuted. Sibling-C
   measured a payload edited without regenerating its manifest: same manifest,
   completely different contents, same key, silently unread. Keying on a
   sender's manifest means trusting the sender remembered to rebuild it, which
@@ -80,8 +80,8 @@ AN EMPTY DROP IS STILL REPORTED. A drop is an entry because of its NAME, never
 because it has content to hash. That is the fleet's standing one-line test: put
 an empty directory in the inbox and see whether the next report mentions it.
 
-A RENAME STILL RESURFACES, and that is the accepted cost, unchanged. Riot
-Commander measured it 2026-09-07: Clockspeed re-dated four notes and every
+A RENAME STILL RESURFACES, and that is the accepted cost, unchanged.
+Sibling-C measured it 2026-09-07: Sibling-A re-dated four notes and every
 seen-name watcher on the box reported four unread notes already answered. A
 false "new mail" costs one glance; a missed correction costs whatever the
 correction was for.
@@ -317,8 +317,8 @@ def mark_seen(inbox: Path, state: Path) -> bool:
 
     THE SET IS REWRITTEN FROM THE CURRENT LISTING, NOT MERGED INTO. That is
     deliberate rather than incidental: a key that no longer exists drops out,
-    so a re-dated batch cannot accumulate two entries per note forever. Riot
-    Commander found the same property in its own implementation by accident and
+    so a re-dated batch cannot accumulate two entries per note forever.
+    Sibling-C found the same property in its own implementation by accident and
     asked that it be kept on purpose. `test_the_seen_set_does_not_accumulate_
     renamed_notes` pins it.
 

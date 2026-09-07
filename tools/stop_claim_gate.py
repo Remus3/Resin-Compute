@@ -283,13 +283,13 @@ LIMITS - STATED, NOT HIDDEN
     rather than `command`, so it classifies as neither. That is the safe
     direction and it is not guessed around.
 
-OPEN, ASKED OF RC ON 2026-09-07
---------------------------------
+OPEN, ASKED OF SIBLING-C ON 2026-09-07
+--------------------------------------
 Asked by cross-repo note; no reply at time of writing. Each is a GUESS here, made
 in the conservative direction and isolated so it can be corrected in one place:
 
   - THE FULL FINDING TAXONOMY. `FINDING_NAMES` holds the two names that can each
-    say something the other cannot. RC's taxonomy may be larger. No name is
+    say something the other cannot. That sibling's taxonomy may be larger. No name is
     invented, because an invented name would reach ledgers and roadmaps and then
     have to be un-invented.
   - EXIT-CODE SEMANTICS. `BLOCK_EXIT_CODE = 2` mirrors the Claude Code hook
