@@ -28,8 +28,10 @@ from pathlib import Path
 import pytest
 
 from tests.conftest import require_git_repository
+from tests.test_guard_worktree_exclusion import swept_files
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = REPO_ROOT / "data"
 
 #: SPDX identifier this project declares. One string, checked everywhere.
 SPDX = "GPL-3.0-or-later"
@@ -340,10 +342,12 @@ def test_no_data_file_is_large_enough_to_be_a_bulk_dump():
     human deciding it is legitimate rather than a silent commit.
     """
     limit = 64 * 1024
+    checked = swept_files(DATA_DIR)
+    assert checked, "the sweep of data/ found nothing - zero out of zero is not a pass"
     oversized = [
         f"{p.relative_to(REPO_ROOT).as_posix()} ({p.stat().st_size} bytes)"
-        for p in (REPO_ROOT / "data").rglob("*")
-        if p.is_file() and p.stat().st_size > limit
+        for p in checked
+        if p.stat().st_size > limit
     ]
     assert not oversized, f"suspiciously large files under data/: {oversized}"
 
@@ -380,7 +384,7 @@ def test_the_licence_notes_point_at_the_outbound_decision():
 
 
 def test_the_inbound_sweep_is_not_vacuous():
-    data_files = [p for p in (REPO_ROOT / "data").rglob("*") if p.is_file()]
+    data_files = swept_files(DATA_DIR)
     assert len(data_files) >= 3, f"only found {len(data_files)} data files"
     assert (REPO_ROOT / "requirements.txt").is_file()
 
@@ -589,7 +593,7 @@ def test_the_notice_states_the_non_commercial_posture():
 def test_no_data_fixture_contradicts_itself_about_being_synthetic():
     """See `_self_contradiction` for the defect and the rule."""
     offenders: list[str] = []
-    for path in sorted((REPO_ROOT / "data").rglob("*.json")):
+    for path in swept_files(DATA_DIR, "*.json"):
         document = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(document, dict):
             continue
@@ -632,7 +636,7 @@ def test_the_self_contradiction_detector_actually_fires():
 
 def test_the_data_fixture_sweep_reaches_every_json():
     """A predicate that scans nothing passes for free."""
-    scanned = sorted(p.name for p in (REPO_ROOT / "data").rglob("*.json"))
+    scanned = sorted(p.name for p in swept_files(DATA_DIR, "*.json"))
     for expected in ("enka_sample_profile.json", "seed_materials.json", "seed_roster.json"):
         assert expected in scanned, f"the fixture sweep did not reach {expected}: {scanned}"
 

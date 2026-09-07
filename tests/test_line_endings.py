@@ -35,6 +35,7 @@ from pathlib import Path
 import pytest
 
 from tests.conftest import require_git_repository
+from tests.test_guard_worktree_exclusion import swept_files
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -112,6 +113,22 @@ def test_no_file_declared_eol_lf_carries_crlf_in_the_working_tree():
     )
 
 
+def _githook_files() -> list[Path]:
+    """Every file under `.githooks/` that this working tree actually owns.
+
+    RECURSIVE, where this used to be a one-level `iterdir()`. A shim that
+    sources a helper out of `.githooks/lib/` would have carried the silent
+    broken-shebang defect this guard exists to catch, and the old sweep could
+    not see one directory down.
+
+    EXCLUDED, because recursion is what makes a stray nested checkout reachable.
+    `swept_files` drops dot-directories and any directory carrying a `.git`
+    entry; note that `.githooks` is itself a dot-directory and is the sweep
+    ROOT, which the predicate never applies to itself - see its docstring.
+    """
+    return swept_files(REPO_ROOT / ".githooks")
+
+
 def test_the_githooks_shims_are_lf_because_a_crlf_shebang_breaks_them():
     """Called out separately because the failure here is a SILENT missing gate.
 
@@ -120,9 +137,11 @@ def test_the_githooks_shims_are_lf_because_a_crlf_shebang_breaks_them():
     and a gate that is absent without saying so is the whole thing this
     scaffold exists to prevent.
     """
-    for shim in sorted((REPO_ROOT / ".githooks").iterdir()):
-        if shim.is_file():
-            assert CRLF not in shim.read_bytes(), f".githooks/{shim.name} has CRLF"
+    checked = _githook_files()
+    assert checked, ".githooks/ swept to nothing - zero out of zero is not a pass"
+    for shim in checked:
+        rel = shim.relative_to(REPO_ROOT).as_posix()
+        assert CRLF not in shim.read_bytes(), f"{rel} has CRLF"
 
 
 # ---------------------------------------------------------------------------
