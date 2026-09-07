@@ -12,6 +12,61 @@ are byte-identical to the prior version at their defaults.
 
 ---
 
+## Service changes at engine revision 0.1.0
+
+`ENGINE_VERSION` is the COMPUTE revision. It is returned to every caller as
+`engine_version` and a consumer reads it to decide whether a cached forecast is
+still valid. The entries in this section changed the SERVICE around the compute
+and left every forecast byte-identical, so the revision deliberately did NOT
+move - bumping it would have signalled a compute change that did not happen and
+invalidated correct caches. A change that alters a number this engine returns
+bumps the revision and gets its own section above this one.
+
+### The port is now bound EXCLUSIVELY, and a second bind fails loudly
+
+`ThreadingHTTPServer` inherits `allow_reuse_address = True`, which sets
+`SO_REUSEADDR`. On POSIX that only relaxes TIME_WAIT, but on Windows
+`SO_REUSEADDR` permits two live sockets to bind the same address, and the second
+bind SUCCEEDS while the first process keeps serving. A second engine started by
+accident therefore came up silently, answered nothing, and left the operator
+reading a health file that said `alive`.
+
+`_ExclusiveHTTPServer` drops `SO_REUSEADDR` and sets `SO_EXCLUSIVEADDRUSE` on
+Windows instead - the flag that means on Windows what `SO_REUSEADDR` means on
+POSIX. The observable change for a caller:
+
+- `build_server()` now RAISES `OSError` rather than quietly binding a port
+  another process holds.
+- `main()` exits **2** when the port it needs is already held. 0 remains a clean
+  shutdown.
+- The listening socket is still closed on shutdown, so TIME_WAIT does not apply
+  to it and an immediate restart works. The engine runs in the FOREGROUND and
+  ctrl-C then restart is its ordinary edit loop, so that is pinned by
+  `agents/pity_engine/tests/test_service.py` - turning off address reuse is
+  exactly the change that could have broken it.
+
+The full nine-cell matrix of first-socket and second-socket flag combinations is
+reproduced in `agents/pity_engine/tests/test_service.py`. Exactly one cell
+double-binds - `SO_REUSEADDR` on BOTH sockets - and the `first=none` and
+`first=exclusive` rows are kept as the controls that prove the matrix is not
+simply refusing everything.
+
+**Which half is load-bearing was MEASURED, and it is not the one the name
+suggests.** `first=none` and `first=exclusive` are identical columns, so with
+`allow_reuse_address = False` already set, adding `SO_EXCLUSIVEADDRUSE` changes
+no observable outcome against a listening socket on win32. Dropping
+`SO_REUSEADDR` is the half that closes the defect; two stock servers are the
+`reuse`/`reuse` cell. The `setsockopt` is kept because it is correct, because it
+is the documented Windows spelling of the intent, and because it would matter if
+a future caller re-enabled reuse - not because it is what fixed this.
+
+This landed at one call site first, in `surface/server.py`, and reached
+`agents/pity_engine/__main__.py` later because the engine had kept the stock
+server. The two are now the same shape; the engine's version is derived from
+that sibling fix rather than independently invented.
+
+---
+
 ## 0.1.0 - initial engine
 
 Shipped:
