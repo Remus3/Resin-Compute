@@ -30,10 +30,29 @@ Everything here is a guard, because every failure mode is silent:
   test.
 
 `core/atomic_io.py` is the sanctioned state-write path and is deliberately NOT
-used here: it writes inside the repository, and this is the one thing in the
-tree that writes outside it. The temp file must be created in the DESTINATION
-directory because `os.replace` is only atomic within a filesystem, and the
-Desktop need not share one with the repo.
+used here: it writes inside the repository, and this writes outside it. It is
+NOT the only thing in the tree that does. An earlier version of this docstring
+claimed it was, which made an audit-by-docstring miss two real siblings:
+
+- `scripts/make_shortcut.py` writes a `.lnk` under the Desktop, building a
+  PowerShell script that drives the `WScript.Shell` COM object and calls
+  `.Save()`, then running it.
+- `ops/install_scheduled_task.ps1` writes into the Windows Task Scheduler store
+  via `Register-ScheduledTask`. That one OUTLIVES THE CHECKOUT - deleting the
+  clone does not remove the task - so README carries the removal command next
+  to the install.
+
+A third route opens only when an operator asks for it: `RC_DATA_DIR` can point
+`data/` anywhere, through `_env_path` in `core/config.py`.
+
+Those are what a sweep for Desktop, `USERPROFILE` and scheduler writes turned
+up. Treat the list as the known set, not as a proof of exhaustiveness - the
+mistake corrected here was precisely a claim of exhaustiveness that nothing
+checked.
+
+The temp file must be created in the DESTINATION directory because
+`os.replace` is only atomic within a filesystem, and the Desktop need not share
+one with the repo.
 
 Usage:
     python tools/publish_next_session.py            # publish
