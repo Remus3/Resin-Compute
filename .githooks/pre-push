@@ -30,9 +30,23 @@
 
 set -e
 
-# Drain the ref list git writes to our stdin. We gate the whole push rather
-# than per-ref, so the content is unused - but leaving it unread is untidy.
-cat > /dev/null
+# READ the ref list git writes to our stdin. It used to be drained to
+# /dev/null with a comment calling the content unused. It is not unused: it is
+# the only statement of WHAT IS BEING PUSHED, and a gate that does not know that
+# is grading something it has not identified.
+#
+# Sibling-C measured the consequence in its own tree on 2026-09-07: its hook ran
+# a full suite, printed green, git reported the ref update, and the remote
+# ended at a LATER commit created while the hook was still running. The gate's
+# verdict named one commit and the remote held another.
+#
+# THIS TREE HAS A STRONGER FORM OF IT AND IT NEEDS NO CONCURRENCY. The suites
+# below run against the WORKING TREE, not against the commit being pushed, so
+# whenever the tree is dirty the verdict is about code that is not shipping.
+# Measured 2026-09-07: this gate takes 28 seconds, which is the race window, but
+# the dirty-tree case is not a race at all - it is the ordinary state of a
+# working checkout.
+PUSH_REFS="$(cat)"
 
 if [ "${RESIN_SKIP_PREPUSH:-0}" = "1" ]; then
     echo "pre-push: SKIPPED via RESIN_SKIP_PREPUSH=1 - CI is now your only gate."
@@ -75,4 +89,37 @@ else
     echo "  pip install -r requirements-dev.txt" >&2
 fi
 
-echo "pre-push: OK"
+# --- Say WHAT was graded, so a green line is never ambiguous ----------------
+#
+# Neither check below refuses a push on its own judgement of the tree's
+# cleanliness - that is the author's call. What they refuse to do is let a
+# green line stand for a claim it does not support.
+
+HEAD_SHA="$(git rev-parse HEAD)"
+
+# A local sha in the push list that is not HEAD means the gate graded a
+# different commit from the one shipping. That is Sibling-C's incident exactly,
+# and it is the one case worth refusing outright: the verdict is not merely
+# imprecise, it is about another commit.
+echo "$PUSH_REFS" | while read -r _localref localsha _remoteref _remotesha; do
+    [ -z "$localsha" ] && continue
+    case "$localsha" in
+        *[!0]*) ;;
+        *) continue ;;
+    esac
+    if [ "$localsha" != "$HEAD_SHA" ]; then
+        echo "pre-push REFUSED: the suites graded HEAD $HEAD_SHA" >&2
+        echo "  but this push ships $localsha - a different commit." >&2
+        echo "  The local ref moved while the gate was running." >&2
+        exit 1
+    fi
+done || exit 1
+
+DIRTY_COUNT="$(git status --porcelain | wc -l | tr -d ' ')"
+if [ "$DIRTY_COUNT" != "0" ]; then
+    echo "pre-push: OK for the WORKING TREE, which is not what you are pushing."
+    echo "  $DIRTY_COUNT uncommitted path(s). The suites ran against the tree on"
+    echo "  disk; the commit shipping is $HEAD_SHA. Those differ."
+else
+    echo "pre-push: OK - clean tree, graded $HEAD_SHA"
+fi
