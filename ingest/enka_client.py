@@ -382,7 +382,11 @@ class EnkaClient:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_suffix(".json.tmp")
-            tmp.write_text(json.dumps(envelope), encoding="utf-8")
+            # newline="\n" disables the translation layer. Compact json.dumps
+            # emits no LF today, so nothing changes on disk right now - but the
+            # site is one `indent=` away from writing CRLF into the cache, and
+            # core/atomic_io.py already paid for that exact omission.
+            tmp.write_text(json.dumps(envelope), encoding="utf-8", newline="\n")
             tmp.replace(path)
         except OSError:
             # A cache that cannot be written is a degraded optimisation, never a

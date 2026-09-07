@@ -145,7 +145,11 @@ def verify_config(config: SupervisorConfig) -> list[str]:
     try:
         runtime.mkdir(parents=True, exist_ok=True)
         probe = runtime / ".supervisor_write_probe"
-        probe.write_text("ok", encoding="utf-8")
+        # Same CLASS as the core/atomic_io.py defect, but it cannot manifest
+        # here: the payload is the literal "ok" and contains no LF to translate.
+        # Pinned anyway so the site does not become a real one the day someone
+        # writes a diagnostic line into the probe.
+        probe.write_text("ok", encoding="utf-8", newline="\n")
         probe.unlink()
     except OSError as exc:
         log.warning("runtime dir probe failed at %s: %s", runtime, exc)

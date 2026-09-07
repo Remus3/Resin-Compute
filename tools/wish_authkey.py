@@ -501,7 +501,11 @@ def _atomic_write_text(path: Path, text: str) -> None:
     tmp = path.with_name(path.name + ".tmp")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(text, encoding="utf-8")
+        # newline="\n" - without it every LF became CRLF on Windows. Measured
+        # 2026-09-07: an already-written captured_url.json under the capture
+        # root held 1945 bytes with 5 CRLF pairs and 0 lone LF, from the
+        # indent=2 payload at the capture site. Same defect as core/atomic_io.py.
+        tmp.write_text(text, encoding="utf-8", newline="\n")
         tmp.replace(path)
     except OSError:
         pass

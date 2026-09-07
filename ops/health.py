@@ -150,7 +150,9 @@ def _fallback_atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     try:
-        tmp.write_text(text, encoding="utf-8")
+        # newline="\n" or the indent=2 payload above lands as CRLF on Windows.
+        # This one manifests: health.json is multi-line by construction.
+        tmp.write_text(text, encoding="utf-8", newline="\n")
         os.replace(tmp, path)
     finally:
         # A crash between write_text and replace would otherwise leave a
