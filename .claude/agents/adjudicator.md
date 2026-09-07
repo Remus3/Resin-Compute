@@ -77,7 +77,13 @@ reading `git log`. Never edit, create, move, delete, stage, commit or push.
    - ports drawn from `core/ports.py` inside the block ADR-004 reserves
    - a panel that is not ready says what it is waiting on and never renders a plausible
      zero (`docs/adr/ADR-005-companion-shell.md`)
-   - two suites run separately, plus `python -m ruff check .` and `python -m mypy`
+   - two suites run separately, plus `python -m ruff check .`
+   - `python -m mypy` ONLY where it applies. Its `files=` list covers `core/`,
+     `engines/`, `ingest/`, `agents/pity_engine/` and `tools/` - 26 of 92
+     tracked `.py`. For a candidate anywhere else its Success is zero out of
+     zero and is NOT evidence about that candidate. A candidate that cites it
+     as a done-gate over an uncovered slice is making exactly the unevidenced
+     claim you are here to catch.
 5. Check `docs/adr/README.md` and the accepted ADRs. A candidate that re-litigates a
    settled decision is rejected on that ground alone - name the fence it crossed. If the
    candidate makes a genuinely new argument, the route is a superseding ADR, not a quiet
