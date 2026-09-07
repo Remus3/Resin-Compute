@@ -160,6 +160,54 @@ into `unterminated character set` AFTER nine real candidates had been printed -
 a redaction that fails open is how a credential reaches a transcript - and once
 as a `unicodeescape` SyntaxError. Both were fixed by writing a real file.
 
+### CI went RED on this session's work, and the local gate could not have caught it
+
+`f930263` and `1e8c140` both failed on the runner while every local gate was
+green. Fixed in `7e807a0`. Three failures, three different ways for a green
+local run to mean nothing, and the local box being Windows while the runner is
+Linux is the common cause.
+
+**Windows-only symbols are a TYPE error on Linux, not only an import error.**
+`ctypes.wintypes` and `ctypes.WinDLL` are marked `sys.platform == "win32"` in
+typeshed, and one error in one module stops mypy before it checks anything else.
+That is the same failure shape `mypy.ini` already records for numpy's PEP 695
+stub. mypy narrows on `sys.platform`, so the fix is a real guard rather than an
+ignore comment. `subprocess.DETACHED_PROCESS` is the same class with an extra
+trap: **`hasattr` guards the interpreter but does NOT narrow for mypy**, so that
+code was already correct at runtime and still an error under the checker.
+
+**A test of an ORDERING read the real environment.** `USERPROFILE` is unset on
+Linux, so the module correctly appended no user-profile candidate and the test
+asserted the absence of something the code was right not to produce. It now sets
+the variable to `tmp_path` - and NOT to a literal home-shaped string, because
+`tests/test_machine_identity.py` forbids exactly that and caught the first
+attempt. The guard was right: a test that needs SOME home directory does not
+need a plausible-looking one.
+
+**A test asserted a behaviour the module deliberately does not have.**
+`_web_caches_root` documents returning the FIRST candidate when none exist. The
+old test asserted a non-existent override is never returned, which is true on a
+machine with a Genshin install and false on a runner without one. Asserting a
+behaviour the code deliberately does not have is not a stricter test, it is a
+wrong one. Replaced by two tests that monkeypatch the candidate list, so neither
+depends on this machine.
+
+**And a guard reported a number that was not the number it named.**
+`tests/test_mypy_scope.py` took the FIRST digit off mypy's tail line. Clean,
+that is the file count. With errors the line is
+`Found 3 errors in 3 files (checked 31 source files)` and the first digit is the
+ERROR count, so the CI failure read "mypy checked 3 files but the configured
+roots select 31" and sent the reader to look at the SCOPE while the real problem
+was three platform errors. It now reads the count immediately before
+`source files` and fails loudly if it cannot find one. **A guard that reports the
+wrong number is worse than one that stays quiet**, because it answers the
+reader's question wrongly before they ask it - the same lesson as the wrong
+rationale, in numeric form.
+
+The fix was verified by DELETING `USERPROFILE` and `RSC_WEBCACHES_ROOT` from a
+subprocess environment and re-running the two affected modules there: 14 passed.
+Running them the ordinary way cannot distinguish a fix from a platform accident.
+
 ### Verification, measured 2026-09-07 at `f930263`
 
 `ruff` All checks passed. `pytest tests` 1094 passed, 1 skipped. `pytest

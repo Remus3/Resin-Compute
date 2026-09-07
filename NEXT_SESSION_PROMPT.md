@@ -109,13 +109,13 @@ end of the session and the game is closed. To bring it back up:
     -f segment -segment_time 300 -reset_timestamps 1 -strftime 1
     "seg_%Y%m%d_%H%M%S.mkv"
 
-STATE, measured 2026-09-07 at commit f930263 (report what YOU observe, never
+STATE, measured 2026-09-07 at commit 7e807a0 (report what YOU observe, never
 these numbers):
   licence QA                      41 passed
   docs QA                         23 passed
   scripts/qa_companion.py         17 passed, 0 failed, 1 skipped
   ruff                            All checks passed
-  pytest tests                    1094 passed, 1 skipped
+  pytest tests                    1095 passed, 1 skipped
   pytest agents/pity_engine       80 passed
   shell node --test               52 pass, 0 fail
   headless --once --dry-run       exit 0
@@ -223,6 +223,26 @@ TRAPS THAT HAVE ALREADY BITTEN IN THIS TREE. All measured, none hypothetical:
     set" AFTER nine real candidates had printed - a redaction that fails open
     is how a credential reaches a transcript - and once as a unicodeescape
     SyntaxError. Use a real file for any script containing backslashes.
+  - A GREEN LOCAL GATE ON WINDOWS SAYS NOTHING ABOUT THE LINUX RUNNER.
+    `ctypes.wintypes`, `ctypes.WinDLL`, `subprocess.DETACHED_PROCESS` and
+    `CREATE_NEW_PROCESS_GROUP` are all `sys.platform == "win32"` in typeshed, so
+    a bare reference is a mypy ERROR on Linux and one error stops mypy checking
+    anything else. mypy NARROWS on `sys.platform`, so an `if sys.platform ==
+    "win32":` guard is the fix. `hasattr` guards the INTERPRETER and does NOT
+    narrow for the checker - use `getattr(mod, "NAME", 0)`.
+  - A TEST OF AN ORDERING MUST NOT READ THE REAL ENVIRONMENT. USERPROFILE is
+    unset on Linux, so a candidate-order test asserted the absence of something
+    the code was right not to produce. Set it to tmp_path - NOT to a literal
+    home-shaped string, which test_machine_identity.py forbids and caught.
+  - A GUARD CAN REPORT A NUMBER THAT IS NOT THE NUMBER IT NAMES.
+    test_mypy_scope.py read the FIRST digit off mypy's tail line. Clean that is
+    the file count; with errors the line is "Found 3 errors in 3 files (checked
+    31 source files)" and the first digit is the ERROR count. The failure read
+    "mypy checked 3 files but the roots select 31" and sent the reader to the
+    scope while the real problem was three platform errors.
+  - VERIFY AN ENVIRONMENT FIX BY DELETING THE ENVIRONMENT. Re-running the two
+    affected modules in a subprocess with USERPROFILE and RSC_WEBCACHES_ROOT
+    removed is what distinguished a fix from a platform accident.
   - WITHOUT A POSITIVE CONTROL, A CLEAN RESULT AND AN UNARMED CHECK LOOK
     IDENTICAL. This is the single most productive rule in this tree.
   - TWO NUMBERS CONSISTENT WITH A HYPOTHESIS ARE NOT EVIDENCE FOR IT. Dehya was
