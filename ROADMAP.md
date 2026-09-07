@@ -249,6 +249,18 @@ version. What follows is everything the scaffold deliberately did not do.
   reconciliation job.
 - **Chronicled Wish support in the service route.** The engine models it; the HTTP
   route does not expose it.
+- **Prove the git hook gate FIRES, in CI.** `CLAUDE.md` says a hook's PRESENCE is
+  never proof it fires, and that the only valid test is end-to-end: stage a
+  banned glyph, attempt a real commit, assert HEAD unchanged. Nothing automates
+  that. `tests/test_hook_interpreter.py` proves the hooks pick a working
+  interpreter and `tests/test_commit_trailers.py` proves no trailer reached
+  history, but a clean history is equally consistent with "the hook stripped it"
+  and "nobody added one". The end-to-end check was run BY HAND on 2026-09-06 and
+  passed; a manual pass expires the moment someone edits a hook. Amberstone has
+  a working `git hook gate armed and firing` CI step and has been asked for it
+  through `moon_sync_inbox/`. Needs BOTH directions: a banned glyph must be
+  rejected AND a clean commit must still succeed, or a gate that rejects
+  everything passes the first arm while broken.
 - **Acquire a slot when an executor loop exists.** `ops/loop/slots.py` is vendored
   and pinned but NOTHING IN THIS TREE CALLS IT - see the known gap below. When a
   Claude-executor loop is built, wrap each cycle in
