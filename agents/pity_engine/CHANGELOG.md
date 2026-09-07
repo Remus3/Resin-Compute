@@ -5,7 +5,7 @@ single source of truth and this file is the full per-version history. New
 ENGINE bumps PREPEND one entry to the changelog section below (newest-first);
 never extend a prior version's line.
 
-Convention lifted from Riot Commander's Daemon Slayer, along with the shape of
+Convention lifted from Sibling-C's Sibling-F, along with the shape of
 the engine itself: a pure, deterministic, versioned local compute core exposed
 over a loopback HTTP port, with new capability added as opt-in arguments that
 are byte-identical to the prior version at their defaults.
@@ -87,7 +87,7 @@ Shipped:
   `ForecastResult`, and `pulls_needed_for_confidence`, its inverse, answering
   "how many more do I need".
 - `__main__.py` - stdlib `http.server` service on 127.0.0.1:8790 mirroring
-  Daemon Slayer's 8860. `GET /health`, `POST /forecast`, `--host`, `--port`.
+  Sibling-F's 8860. `GET /health`, `POST /forecast`, `--host`, `--port`.
   Fail-soft at the request boundary: a malformed request returns 400 with a
   friendly JSON message while the raw exception goes to the log, never into the
   response body.

@@ -12,6 +12,49 @@ now.
 
 ---
 
+## 2026-09-07 - Sibling project names replaced by codenames across the tracked tree
+
+This repository is public. Before this pass its tracked files named six sibling
+projects of the same operator's in plain text, which published a roster of a
+private fleet as a side effect of documenting this tree's own inheritance.
+Each sibling now appears as an opaque codename, Sibling-A through Sibling-F,
+and nothing tracked resolves a codename to a project. The resolution map is a
+single gitignored per-host file, ops/moon_sync_repos.json, deliberately not
+backticked here because a backticked path under a tree root must be tracked and
+that one must never be.
+
+**Stated at its real size, because an over-claimed rationale outlives a wrong
+line of code.** The operator's ruling was that these names are not secrets and
+that the tree only needs to be ambiguous about them. This removes a plain-text
+roster from a public repository. It does NOT make the fleet unlearnable to
+anyone who already knows it, and no entry in this file should be read as
+claiming otherwise. Prior commit messages and prior blobs are untouched by this
+pass.
+
+**Only proper nouns moved in the historical entries below.** No date, digest,
+count, causal claim or verdict was altered, softened or reordered, and nothing
+was deleted. Append-only governs ENTRIES, not BYTES: this is a vocabulary
+substitution of the same kind as an ASCII normalisation pass, and it is
+recorded here rather than done silently precisely so a reader who meets
+"Sibling-E" inside a 2026-09-06 entry can see from the top of the file that the
+word was substituted afterwards. Line wrapping was reflowed only in the
+paragraphs a substitution touched.
+
+**What deliberately did NOT move, each for a stated reason.** The five
+hand-off filename prefixes on the shared Desktop are real basenames observed on
+disk, and a guard that compares against invented filenames is vacuous, so they
+stay byte-exact. The shared ProgramData slot-bucket path is a live OS location
+three repositories coordinate through; renaming it from one side points this
+repository at a different bucket and silently un-serialises the governor, so
+closing it is a fleet migration rather than a scrub. This repository's own
+`RC_` environment prefix means Resin Compute and is not a sibling. "Riot" in
+`core/ports.py` names Riot Games, a company, not a sibling. One machine-name
+token survives in `README.md` and `docs/adr/ADR-004-port-block.md`; the
+operator ruled on project names and that is a separate question, left open
+rather than assumed.
+
+---
+
 ## 2026-09-07 (second session) - The account was created once, and the capture lane was built in front of it
 
 Three commits, `2fd8aef` through `f930263`. The operator installed and launched
@@ -121,11 +164,11 @@ records appear about an hour after a wish. **Editing the puller there would have
 been fixing a correct client against a lagging server**, and the two surfaces
 agreeing is what distinguishes the two cases.
 
-### Riot Commander's section 5 ingested
+### Sibling-C's section 5 ingested
 
-RC reported that root-walking guards cannot see a nested checkout and measured
-10 of 15 of its own with no exclusion. Measured here across 39 test modules:
-**1 root-walking and excluded, 4 root-walking and NOT excluded, 34 not
+Sibling-C reported that root-walking guards cannot see a nested checkout and
+measured 10 of 15 of its own with no exclusion. Measured here across 39 test
+modules: **1 root-walking and excluded, 4 root-walking and NOT excluded, 34 not
 root-walking.** The 34 are not lucky - a guard whose corpus comes from
 `git ls-files` is structurally immune, because git does not descend into a
 nested checkout while the filesystem does. That is `b55825e` turned the other
@@ -134,10 +177,10 @@ way round.
 `tests/test_guard_worktree_blindness.py` proves the defect with the shipped
 guard's own code rather than a reimplementation, and carries the contrast arm
 that keeps the other number meaningful. `docs/INBOX_TRIAGE_2026-09-07-0710.md`
-triages all five sections of RC's note.
+triages all five sections of Sibling-C's note.
 
-**RC's section 4 landed immediately and on this very session's work.** The
-triage document first wrote a placeholder as a literal Windows path with a
+**Sibling-C's section 4 landed immediately and on this very session's work.**
+The triage document first wrote a placeholder as a literal Windows path with a
 bracketed account segment, and
 `test_no_tracked_file_carries_an_absolute_path_naming_a_real_account` went red.
 The guard was right and the prose was wrong. The regex was NOT widened.
@@ -265,12 +308,13 @@ done rather than a builder's.
 
 ### The top roadmap item was DEAD, and the source was gone
 
-`moon_sync_inbox/from-RC-verbatim/` no longer exists - not here and nowhere on
-this machine. Riot Commander DELETED it from all four sibling trees after
-Clockspeed found the operator's Windows account name in 3 of its 48 files and
-RC's own sweep raised that to 19 of 48, including `tests/test_stop_claim_gate.py`.
-So the claim-gate PORT, the `pytest_guard` port, the `edit_lint_check` port and
-the two `drift_guard` checks are all blocked on a withdrawn payload.
+`moon_sync_inbox/from-<sibling>-verbatim/` no longer exists - not here and
+nowhere on this machine. Sibling-C DELETED it from all four sibling trees after
+Sibling-A found the operator's Windows account name in 3 of its 48 files and
+Sibling-C's own sweep raised that to 19 of 48, including
+`tests/test_stop_claim_gate.py`. So the claim-gate PORT, the `pytest_guard`
+port, the `edit_lint_check` port and the two `drift_guard` checks are all
+blocked on a withdrawn payload.
 
 **Containment here was measured, not assumed:** 0 tracked files carry the account
 name, `git log --all -S` over it returns 0 commits, and 0 of the four named tool
@@ -292,7 +336,7 @@ heredoc, which silently ate one backslash from each character class and turned
 every Windows path in the payload and found nothing. Without the positive control
 that would have been reported as a clean result.
 
-### Clockspeed's pickaxe check, run here with both controls
+### Sibling-A's pickaxe check, run here with both controls
 
 Positive control 9 commits at rc=0, negative control 0. Then, scoped against
 `origin/main` because this repository is public: the account name returns **0
@@ -313,11 +357,11 @@ ref that resurrects a purged blob. **The standing check is `git branch -a`, not
 
 ### The inbox watcher was blind to content and to directories - `6f37ce5`
 
-Measured against the shipped functions in a fixture inbox BEFORE any edit: 2 of 7
-properties held. `_notes()` globbed `*.md` at the top level and a DIRECTORY has
-no `.md` suffix; the watermark stored bare name strings, so the key was the
-filename alone. All five repos on the cross-repo channel had built the same hole
-independently, each in a different mechanism. Legion Wallpaper's phrasing is the
+Measured against the shipped functions in a fixture inbox BEFORE any edit: 2 of
+7 properties held. `_notes()` globbed `*.md` at the top level and a DIRECTORY
+has no `.md` suffix; the watermark stored bare name strings, so the key was the
+filename alone. All five repos on the cross-repo channel had built the same
+hole independently, each in a different mechanism. Sibling-E's phrasing is the
 one this tree keeps: it was not misclassified, it was invisible.
 
 Now 7 of 7. Notes keyed on (filename, content sha256). Drops are first-class
@@ -340,29 +384,30 @@ treating those as unseen would have dumped the whole inbox back on the operator.
 run. Verification pointer: `tests/test_watch_inbox.py`,
 `test_a_legacy_name_only_watermark_still_counts_its_notes_as_read`.
 
-**The report may not carry a payload byte.** Lanternlight's rule, relayed by
-Clockspeed: everything the watcher prints is injected into a session with the
+**The report may not carry a payload byte.** Sibling-D's rule, relayed by
+Sibling-A: everything the watcher prints is injected into a session with the
 harness's own authority, before any judgement is applied, so an imperative
-sentence in a sibling's file must not arrive wearing this watcher's voice. Pinned
-by `test_the_report_never_carries_a_payload_byte`, parametrized over all three
-report modes, asserting the NAMES appear first - a watcher that crashed and
-printed nothing would satisfy a bare no-payload assertion perfectly. Mutation:
-a variant appending a 60-character body preview leaks the marker and reddens it.
+sentence in a sibling's file must not arrive wearing this watcher's voice.
+Pinned by `test_the_report_never_carries_a_payload_byte`, parametrized over all
+three report modes, asserting the NAMES appear first - a watcher that crashed
+and printed nothing would satisfy a bare no-payload assertion perfectly.
+Mutation: a variant appending a 60-character body preview leaks the marker and
+reddens it.
 
 ### Property 6 - bytes-equal is not the same fact as did-not-write - `bc98c8d`
 
-Lanternlight's finding, and theirs alone. They ran their four hook commands
+Sibling-D's finding, and theirs alone. They ran their four hook commands
 verbatim to confirm the paths still resolved after an edit; the `SessionStart`
 one was their watcher, and it marked three genuinely unread notes as seen.
 
 Measured here on the LIVE watermark: two reporting runs, identical unread sets,
 bytes unchanged, **mtime unmoved**. This tree passes, and not from virtue -
-`--mark` has been a separate flag since the first version, so property 6 held by
-an accident of the original shape rather than because anyone had seen the
-failure. LL's statement of the cause is better than the one recorded here and
-replaces it: acknowledgement as a SIDE EFFECT of reporting means anything that
-can report can silently consume, including a probe whose only purpose was to
-check that the watcher runs.
+`--mark` has been a separate flag since the first version, so property 6 held
+by an accident of the original shape rather than because anyone had seen the
+failure. Sibling-D's statement of the cause is better than the one recorded
+here and replaces it: acknowledgement as a SIDE EFFECT of reporting means
+anything that can report can silently consume, including a probe whose only
+purpose was to check that the watcher runs.
 
 The mtime half is the part this tree would not have caught. The existing arm
 asserted the watermark's bytes and stopped. An atomic write producing identical
@@ -406,19 +451,19 @@ module in `tools/` would have met a spurious red - the same wave-it-through
 failure the guard exists to prevent, arriving from the other side. The arm now
 asserts `mypy count == tracked-under-roots + unstaged-under-roots`.
 
-### Legion Wallpaper's detector gap, closed - `3f7f23f`
+### Sibling-E's detector gap, closed - `3f7f23f`
 
-LW ported `tests/test_no_secret_literals.py`, ran it against their tree and
-reported a false positive back: the env destination assigned a bare lowercase
-PowerShell variable that had itself been read from `GetEnvironmentVariable` a
-line earlier. Reproduced here first. Latent rather than live - one tracked `.ps1`,
-no instance of the shape.
+Sibling-E ported `tests/test_no_secret_literals.py`, ran it against their tree
+and reported a false positive back: the env destination assigned a bare
+lowercase PowerShell variable that had itself been read from
+`GetEnvironmentVariable` a line earlier. Reproduced here first. Latent rather
+than live - one tracked `.ps1`, no instance of the shape.
 
-**LW's suggested fix was not taken as stated, and the reason generalises.**
-Adding a bare `$name` to `ENV_REFERENCE` would have been wrong here: that pattern
-is applied with `.search()`, so it would exempt any value merely CONTAINING a
-variable. `VARIABLE_VALUE` is a separate pattern matched against the whole
-stripped value.
+**Sibling-E's suggested fix was not taken as stated, and the reason
+generalises.** Adding a bare `$name` to `ENV_REFERENCE` would have been wrong
+here: that pattern is applied with `.search()`, so it would exempt any value
+merely CONTAINING a variable. `VARIABLE_VALUE` is a separate pattern matched
+against the whole stripped value.
 
 Mutation changed the shipped test set. Three mutants: dropping the exemption is
 caught, dropping the TRAILING anchor is caught, and **dropping the LEADING anchor
@@ -428,8 +473,8 @@ mutant survived: a value shaped variable-then-literal matched on its variable
 prefix and the appended secret rode out exempted. Measured as a real false
 negative before the arm existed.
 
-LW's second suggestion - parametrize the exemption assertion over every exempt
-file - was already present here at
+Sibling-E's second suggestion - parametrize the exemption assertion over every
+exempt file - was already present here at
 `test_the_detector_would_fail_on_this_file_without_its_exemption`.
 
 ### The engine changelog, and why the revision did NOT move - `1794a5e`
@@ -443,21 +488,21 @@ revision 0.1.0" section, because the file's convention is that a bump PREPENDS
 and a prior version's line is never extended.
 
 **Which half is load-bearing was measured, and it is not the one the name
-suggests.** The nine-cell bind matrix in `agents/pity_engine/tests/test_service.py`
-has `first=none` and `first=exclusive` as identical columns, so with
-`allow_reuse_address = False` already set, adding `SO_EXCLUSIVEADDRUSE` changes
-no observable outcome against a listening socket on win32. Dropping
-`SO_REUSEADDR` is what closes it; two stock servers are the single cell in nine
-that double-binds. Crediting the flag would have been Clockspeed's
-durable-wrong-rationale defect, which they described the same night: a wrong
-explanation outlives a wrong line of code, because it answers the next reader's
-question before they ask it.
+suggests.** The nine-cell bind matrix in
+`agents/pity_engine/tests/test_service.py` has `first=none` and
+`first=exclusive` as identical columns, so with `allow_reuse_address = False`
+already set, adding `SO_EXCLUSIVEADDRUSE` changes no observable outcome against
+a listening socket on win32. Dropping `SO_REUSEADDR` is what closes it; two
+stock servers are the single cell in nine that double-binds. Crediting the flag
+would have been Sibling-A's durable-wrong-rationale defect, which they
+described the same night: a wrong explanation outlives a wrong line of code,
+because it answers the next reader's question before they ask it.
 
 ### The claim gate - three rounds, three refutations, and it lands UNWIRED - `2b8fcbe`
 
-`tools/stop_claim_gate.py` plus 115 arms. Re-implemented from RC's published
-PROSE; no RC code was read, and the six questions asked of RC by note are
-unanswered.
+`tools/stop_claim_gate.py` plus 115 arms. Re-implemented from Sibling-C's
+published PROSE; no Sibling-C code was read, and the six questions asked of
+Sibling-C by note are unanswered.
 
   round 1  lexical credit rule    REFUTED. count_mismatch 71 percent false on
            the first pass's scoring, 60 percent on the second pass's
@@ -482,13 +527,14 @@ bars keep chaining from re-opening what provenance closed, each with an
 acceptance arm beside its refusal arm.
 
 **55.5 percent is still too high to arm, so no Stop hook is declared and
-`.claude/settings.json` is untouched.** RC published the reason: a gate that cries
-wolf on correctly-sourced figures trains the reader to wave it through, which is
-exactly when it stops catching the real thing. The 55.5 figure is also the
-producer's own, un-adjudicated, and it does NOT compare to the 68.0 percent from
-the round before - that sample was 313 files and 254,497 records where the same
-recipe selects 317 files and 94,136 records. The comparable pair, one sample one
-pass, is 64.1 -> 55.5 percent and 348 -> 274 findings.
+`.claude/settings.json` is untouched.** Sibling-C published the reason: a gate
+that cries wolf on correctly-sourced figures trains the reader to wave it
+through, which is exactly when it stops catching the real thing. The 55.5
+figure is also the producer's own, un-adjudicated, and it does NOT compare to
+the 68.0 percent from the round before - that sample was 313 files and 254,497
+records where the same recipe selects 317 files and 94,136 records. The
+comparable pair, one sample one pass, is 64.1 -> 55.5 percent and 348 -> 274
+findings.
 
 **`tests_pass_without_run` was deleted outright.** Across 316 transcripts and
 1877 checked claims it emitted 0 findings, because it arms only when every
@@ -566,16 +612,16 @@ be re-measured after anything that can create a ref. The final purge worked only
 because the remote was deleted FIRST, removing the thing that kept restoring it.
 
 **AN ERROR THIS SESSION MADE, recorded because the scoping mistake is
-transferable.** The cross-repo adversary was instructed "do NOT read any sibling
-tree on this machine - stay inside `C:\Resin Compute`", to stop it rummaging in
-projects that are not ours. That instruction also made the one question that
-mattered structurally unaskable: `ops/loop/winmutex.py` and `slots.py` were
-already world-readable in Legion Wallpaper's PUBLIC repository and had been for
-five weeks, so publishing this tree disclosed nothing new about them. A finding
-was raised to the operator and to two siblings on a premise nobody had tested.
-Retracted in full. The lesson is not "read sibling trees" - it is that a scope
-which protects a neighbour can also blind the check, and "is this already
-public" was answerable from public data alone.
+transferable.** The cross-repo adversary was instructed "do NOT read any
+sibling tree on this machine - stay inside `C:\Resin Compute`", to stop it
+rummaging in projects that are not ours. That instruction also made the one
+question that mattered structurally unaskable: `ops/loop/winmutex.py` and
+`slots.py` were already world-readable in Sibling-E's PUBLIC repository and had
+been for five weeks, so publishing this tree disclosed nothing new about them.
+A finding was raised to the operator and to two siblings on a premise nobody
+had tested. Retracted in full. The lesson is not "read sibling trees" - it is
+that a scope which protects a neighbour can also blind the check, and "is this
+already public" was answerable from public data alone.
 
 **FOUR BUILDER SLICES, write-list union proven disjoint with `sort | uniq -d`
 before dispatch.** 12 files modified, zero write-list violations, zero untracked
@@ -643,11 +689,12 @@ the guard it had just written: a correction note quotes the sentence it corrects
 so a whole-file sweep passes on the quotation.
 
 **BOTH SHARED-GOVERNOR ROUNDS LANDED, and the leak fix is measured here.**
-Legion Wallpaper rotated the mutex names (`winmutex.py` to `0b112a4f`) and fixed
-the `hold()` release-path leak (`slots.py` to `629c3d51`). Both were copied
-BYTE-WISE off LW's live tree with `cp`, re-hashed from THIS repo's own disk
-against the published values, and the index blob compared to the disk bytes for
-each. Measured on this box, 8 workers over 2 slots at `backoff=0.02`, 40 rounds:
+Sibling-E rotated the mutex names (`winmutex.py` to `0b112a4f`) and fixed the
+`hold()` release-path leak (`slots.py` to `629c3d51`). Both were copied
+BYTE-WISE off Sibling-E's live tree with `cp`, re-hashed from THIS repo's own
+disk against the published values, and the index blob compared to the disk
+bytes for each. Measured on this box, 8 workers over 2 slots at `backoff=0.02`,
+40 rounds:
 
 ```
 old 1c4f8af4   35 of 40 rounds leaked   51 lockfiles   69 SlotTimeouts
@@ -657,9 +704,9 @@ new 629c3d51    0 of 40 rounds leaked    0 lockfiles    0 SlotTimeouts
 That also explained an unrelated-looking red:
 `test_contending_threads_never_exceed_max_slots` failed once with a SlotTimeout
 during a full-suite run and passed six times in isolation immediately after. It
-was the leak surfacing as a flaky test under load, in a repository that does not
-even acquire a slot - the tests are the only callers here. Ten consecutive runs
-since adopting the fix: zero failures. Riot Commander was right to refuse the
+was the leak surfacing as a flaky test under load, in a repository that does
+not even acquire a slot - the tests are the only callers here. Ten consecutive
+runs since adopting the fix: zero failures. Sibling-C was right to refuse the
 `slots.py` bytes until they were announced; the announcement arrived and both
 rounds are now three-way equal, verified by hashing all three disks directly.
 
@@ -676,16 +723,17 @@ written for the corrupt-watermark arm was EQUIVALENT and passed, which is
 recorded because a surviving mutant is evidence only when it actually changes
 behaviour.
 
-**Decisions taken, so they are not re-litigated.** `docs/adr/ADR-004-port-block.md`
-stated that a port grep across six sibling trees hit "decompiled game assets, a
-strings dump"; that characterised the contents of unpublished trees, was never
-load-bearing for the port argument, and is redacted WITH the redaction recorded
-in the ADR rather than done silently. Charter v3 from Riot Commander is ADOPTED,
-with one dissent filed: "commit onto the worktree branch, push it, then remove
-the worktree" assumes a workflow where agents commit, and this tree's protocol
-forbids builder commits outright, so the invariant - no worktree is removed until
-its work exists somewhere that survives the removal - should be the charter text
-rather than the step sequence.
+**Decisions taken, so they are not re-litigated.**
+`docs/adr/ADR-004-port-block.md` stated that a port grep across six sibling
+trees hit "decompiled game assets, a strings dump"; that characterised the
+contents of unpublished trees, was never load-bearing for the port argument,
+and is redacted WITH the redaction recorded in the ADR rather than done
+silently. Charter v3 from Sibling-C is ADOPTED, with one dissent filed: "commit
+onto the worktree branch, push it, then remove the worktree" assumes a workflow
+where agents commit, and this tree's protocol forbids builder commits outright,
+so the invariant - no worktree is removed until its work exists somewhere that
+survives the removal - should be the charter text rather than the step
+sequence.
 
 Counts measured 2026-09-06 on Python 3.14.4 at `dd1ac02`, as a historical
 reading: licence QA 41 passed, docs QA 23 passed, `qa_companion` 16 passed 0
@@ -701,19 +749,19 @@ work and was again not touched.
 `tests/test_core_config.py`, `core/config.py`.
 
 This repo took the third slot in a machine-wide concurrency bucket shared with
-Legion Wallpaper and Riot Commander, vacated when Red Moon was archived. The two
-governor files are BYTE-IDENTICAL-BY-CONTRACT across all three trees. Vendored
-LAST, per the ordered round the siblings specified, because this repo was the
-only participant with no pin to break.
+Sibling-E and Sibling-C, vacated when Sibling-B was archived. The two governor
+files are BYTE-IDENTICAL-BY-CONTRACT across all three trees. Vendored LAST, per
+the ordered round the siblings specified, because this repo was the only
+participant with no pin to break.
 
 **Method, and it is the point of the entry.** The files were copied with
-`shutil.copyfile` off Riot Commander's live tree, never with `Path.write_text` -
-that emits CRLF on Windows and the contract is on bytes. Both sibling trees were
-hashed BEFORE the copy and this repo's own disk was re-hashed AFTER it; the
-hand-off note's digests were used only as a value to check against. `.gitattributes`
-forces `*.py eol=lf`, so the index blob was compared against the disk bytes as
-well - they match, which is what proves the pin survives a fresh clone on an
-`autocrlf=true` box.
+`shutil.copyfile` off Sibling-C's live tree, never with `Path.write_text` -
+that emits CRLF on Windows and the contract is on bytes. Both sibling trees
+were hashed BEFORE the copy and this repo's own disk was re-hashed AFTER it;
+the hand-off note's digests were used only as a value to check against.
+`.gitattributes` forces `*.py eol=lf`, so the index blob was compared against
+the disk bytes as well - they match, which is what proves the pin survives a
+fresh clone on an `autocrlf=true` box.
 
 **THE GOVERNOR IS INERT AND THE TREE SAYS SO IN FOUR PLACES.** No production path
 calls `slots.hold()`; the only callers are inside `tests/test_loop_concurrency.py`
@@ -724,9 +772,9 @@ acquire for real; this one's lane is reserved and unclaimed.
 
 **Two of three adversaries returned REFUTED, and they were right.**
 
-- A mutant removing `hold()`'s queueing passed the entire suite and fails Riot
-  Commander's. The port had collected worker exceptions into `failures` and never
-  asserted on them. Restored as `assert not failures` in
+- A mutant removing `hold()`'s queueing passed the entire suite and fails
+  Sibling-C's. The port had collected worker exceptions into `failures` and
+  never asserted on them. Restored as `assert not failures` in
   `test_contending_threads_never_exceed_max_slots`; the mutant now fails even
   with a legitimate re-pin applied, and 30 consecutive runs stayed green.
 - `SHARED_SHA256` drove both the presence guard and the digest guard, so deleting
@@ -776,14 +824,15 @@ rate figures are bounded honestly in that note: 107 of 200 rounds at
 is a demonstration of the terminal state, NOT a rate. The production defaults
 are `backoff=2.0, jitter=2.0` and that rate was not measured.
 
-**Errors made and corrected in-session, recorded because the next reader deserves
-them.** The `690d8b7` commit message cited
+**Errors made and corrected in-session, recorded because the next reader
+deserves them.** The `690d8b7` commit message cited
 `test_a_missing_vendored_file_is_a_failure_not_a_skip`, a test that has never
-existed - the name came from a dispatch brief and was not read back off the file.
-The real one is `test_the_vendored_governor_is_present`. The same message called
-the parity "recorded from three separate disks", which overstates it: all three
-roots are on one volume, and Riot Commander's note hashed THIS repo's files rather
-than printing its own. Both are corrected in `bb7f1ab`, which cannot amend them.
+existed - the name came from a dispatch brief and was not read back off the
+file. The real one is `test_the_vendored_governor_is_present`. The same message
+called the parity "recorded from three separate disks", which overstates it:
+all three roots are on one volume, and Sibling-C's note hashed THIS repo's
+files rather than printing its own. Both are corrected in `bb7f1ab`, which
+cannot amend them.
 
 Counts measured 2026-09-06 on Python 3.14.4, as a historical reading: `tests` 806
 passed 1 skipped, `agents/pity_engine` 76 passed, ruff clean, mypy clean. Note the
@@ -1285,11 +1334,12 @@ port so it never contends with a running dashboard.
 reported the desktop shortcut absent while the shortcut existed - the operator had
 renamed it to match their convention. Two real consequences:
 
-- `make_shortcut.py` would have created a SECOND shortcut beside the renamed one.
-  That is exactly what Clockspeed's refuse-unless-force default was guarding
-  against, and its author said so in as many words. Fixed: the installer now
-  scans for a shortcut with the same TARGET under any name. Idempotence converges
-  on a state - a working shortcut exists - not on one filename.
+- `make_shortcut.py` would have created a SECOND shortcut beside the renamed
+  one. That is exactly what Sibling-A's refuse-unless-force default was
+  guarding against, and its author said so in as many words. Fixed: the
+  installer now scans for a shortcut with the same TARGET under any name.
+  Idempotence converges on a state - a working shortcut exists - not on one
+  filename.
 - The QA now matches by target too, reusing the installer's own comparison so the
   two cannot disagree.
 
@@ -1325,7 +1375,7 @@ Found four more on its first run, all real:
 - **ADR-005 existed but was never added to the ADR index.** Missed when it landed.
 - `docs/LEDGER.md` was cited by ROADMAP and did not exist. This file is that fix.
 - ADR-004 cited `docs/LEDGER.md` in a way that read as ours when it meant
-  Lanternlight's. Reworded.
+  Sibling-D's. Reworded.
 - The goal spec wrote a dotted symbol as though it were a path. Reworded, and the
   checker now distinguishes `module.function` from a file by suffix.
 
@@ -1393,8 +1443,8 @@ feature work, so each feature becomes visible as it lands. ADR-001 is not
 reopened: its subject was the language of the compute tree, and the surface is
 Python too.
 
-`shell/main.js` is WIRING ONLY, inherited from Clockspeed. It imports Electron so
-nothing can load it in a test, so nothing that decides anything lives there.
+`shell/main.js` is WIRING ONLY, inherited from Sibling-A. It imports Electron
+so nothing can load it in a test, so nothing that decides anything lives there.
 
 - The tray icon ships as base64 text; the tree carries no binary asset. Its
   colour was SEARCHED, not picked: a notification area is near-black under one
@@ -1407,9 +1457,9 @@ nothing can load it in a test, so nothing that decides anything lives there.
   and a tray checkbox reading it as checked would show the opposite of the truth.
 - `geometry.js` recovers a window remembered on an unplugged monitor rather than
   restoring it offscreen, where it has focus and is invisible.
-- `make_shortcut.py` is IDEMPOTENT, diverging from Clockspeed's
-  refuse-unless-force, which is not. Proven: run 2 created, runs 3 and 4 reported
-  nothing to do, exit 0.
+- `make_shortcut.py` is IDEMPOTENT, diverging from Sibling-A's
+  refuse-unless-force, which is not. Proven: run 2 created, runs 3 and 4
+  reported nothing to do, exit 0.
 
 Measured rather than assumed: `npm install` leaves NO `electron.exe` behind - the
 package declares no postinstall and fetches lazily on the first require.
@@ -1432,14 +1482,14 @@ Both the element case and the attribute break-out case are pinned.
 ## 2026-09-06 - Port block 8790-8809 reserved; PityEngine migrated off 8870
 
 ADR-004, `core/ports.py`, `tests/test_ports.py`. The scaffold put PityEngine on
-8870 by mirroring Daemon Slayer's 8860 and adding ten. **8870 is inside Daemon
-Slayer's reserved block 8860-8879.** Nothing was listening, so nothing broke and
-nothing warned.
+8870 by mirroring Sibling-F's 8860 and adding ten. **8870 is inside Sibling-F's
+reserved block 8860-8879.** Nothing was listening, so nothing broke and nothing
+warned.
 
-Verified against sibling SOURCE, not a live scan - the rule Clockspeed learned
+Verified against sibling SOURCE, not a live scan - the rule Sibling-A learned
 the hard way when it allocated a band by probing while the owning project's GUI
 happened to be closed. The only registry hit inside the new block was
-Amberstone's `range(8770, 8790)`, whose end is exclusive.
+Sibling-C's `range(8770, 8790)`, whose end is exclusive.
 
 Three sites carried the literal 8870 independently; all now resolve to
 `core.ports.ENGINE`. The tests pin each constant against the module that really
@@ -1488,22 +1538,23 @@ went red when the pinned interpreter could not import ruff, blaming the gate for
 a contributor's venv. The docstring claimed a `GIT_*` scrub wider than it
 performs, citing a mechanism `git 2.53` does not exhibit. All four corrected.
 
-**A sibling's claim about this tree was refuted by measurement.** Legion
-Wallpaper reported RSC carrying the old leaking `slots.py` at `1c4f8af4`.
-Measured on this disk and in the HEAD blob: `629c3d51`, the new one, with no
-copy of the old anywhere. The explanation is timing, and it generalises:
-**note filename timestamps are FICTIONAL and drift per sender by up to six
-hours.** LW's note labelled `0455` was written at 22:40:52; the commit landing
-the new bytes was authored at 22:49:50. Right when written, stale when filed,
-and unreadable as such from the name. Sorting by filename inverts real order.
+**A sibling's claim about this tree was refuted by measurement.** Sibling-E
+reported RSC carrying the old leaking `slots.py` at `1c4f8af4`. Measured on
+this disk and in the HEAD blob: `629c3d51`, the new one, with no copy of the
+old anywhere. The explanation is timing, and it generalises: **note filename
+timestamps are FICTIONAL and drift per sender by up to six hours.** Sibling-E's
+note labelled `0455` was written at 22:40:52; the commit landing the new bytes
+was authored at 22:49:50. Right when written, stale when filed, and unreadable
+as such from the name. Sorting by filename inverts real order.
 
-**The hand-off write gate was the weaker of two, and Legion Wallpaper was
-right.** It refused non-ASCII and truncation and passed an inline API key and an
-absolute path naming the operator's account straight through to the Desktop -
-measured, not theorised. That is the one write that leaves the toolchain, and
-`NEXT_SESSION_PROMPT.md` is tracked in a public repo. `tools/publish_next_session.py`
-now refuses both, and the refusal never echoes what it caught: a gate that
-quoted the key would publish it in the act of refusing to.
+**The hand-off write gate was the weaker of two, and Sibling-E was right.** It
+refused non-ASCII and truncation and passed an inline API key and an absolute
+path naming the operator's account straight through to the Desktop - measured,
+not theorised. That is the one write that leaves the toolchain, and
+`NEXT_SESSION_PROMPT.md` is tracked in a public repo.
+`tools/publish_next_session.py` now refuses both, and the refusal never echoes
+what it caught: a gate that quoted the key would publish it in the act of
+refusing to.
 
 Three collisions surfaced landing that, each fixed at its SOURCE rather than
 allowlisted, because the detector and the detected share a shape by
@@ -1512,25 +1563,25 @@ entry spelled as a chunk of regex is unreadable and goes unstable the moment the
 line is edited. The fixtures use an obviously invented account - one that
 planted the true name would be the leak it tests for.
 
-**The 2026-09-06 session read the notes and skipped the directory beside them.**
-`moon_sync_inbox/from-RC-verbatim/` held 49 real files while the notes only
-described them. A full triage put 2 in ingested, 17 in have-an-equivalent, 25 in
-not-applicable and 5 in applicable-and-not-done, and corrected two entries this
-session had provisionally mis-bucketed: this tree's CI already does both jobs
-that RC's `md_guard_selector.py` and ASCII sweep do, and does them from
-`git ls-files` rather than a frozen baseline.
+**The 2026-09-06 session read the notes and skipped the directory beside
+them.** `moon_sync_inbox/from-<sibling>-verbatim/` held 49 real files while the
+notes only described them. A full triage put 2 in ingested, 17 in
+have-an-equivalent, 25 in not-applicable and 5 in applicable-and-not-done, and
+corrected two entries this session had provisionally mis-bucketed: this tree's
+CI already does both jobs that Sibling-C's `md_guard_selector.py` and ASCII
+sweep do, and does them from `git ls-files` rather than a frozen baseline.
 
-**A verbatim file can be STALER than the prose describing it.** RC's end-to-end
-hook-gate test arrived without the require-env flag RC's own later note calls
-load-bearing, and gates on `shutil.which("git")` - existence, not capability,
-the same defect class as `command -v python3` succeeding on a Store alias.
-Legion Wallpaper independently hit both. Diff the ASSERTIONS, never the
+**A verbatim file can be STALER than the prose describing it.** Sibling-C's
+end-to-end hook-gate test arrived without the require-env flag Sibling-C's own
+later note calls load-bearing, and gates on `shutil.which("git")` - existence,
+not capability, the same defect class as `command -v python3` succeeding on a
+Store alias. Sibling-E independently hit both. Diff the ASSERTIONS, never the
 filenames.
 
 Thirteen items were open against this repo, eight of them direct unanswered
 questions. All answered in one note broadcast to all five per charter section
-0(a), and `moon_sync_inbox/from-RSC-verbatim/` now reciprocates seven files that
-Riot Commander had asked for three times.
+0(a), and `moon_sync_inbox/from-RSC-verbatim/` now reciprocates seven files
+that Sibling-C had asked for three times.
 
 Merged files and their guards: `.claude/settings.json` and `tools/caveman_default.py`
 (`tests/test_session_hooks.py`); `tests/test_hook_gate.py` and the `ci.yml` step

@@ -23,8 +23,8 @@ it, and do not want it "downloaded + altered + commercialized by someone else."
 
 ### What the sibling projects do, and why that was the wrong pattern to copy
 
-Measured 2026-09-06 on this machine: Clockspeed ships MIT, Lanternlight and Red
-Moon ship Apache-2.0. **Both permit commercial use and both permit closing the
+Measured 2026-09-06 on this machine: Sibling-A ships MIT, Sibling-D and
+Sibling-B ship Apache-2.0. **Both permit commercial use and both permit closing the
 source.** Following the house pattern would have delivered the exact outcome the
 operator asked to prevent, which is worth recording because a house pattern is
 normally the safe default and here it was the trap.

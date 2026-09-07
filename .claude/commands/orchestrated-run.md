@@ -28,25 +28,25 @@ result - if the operator asks before it lands, say it is still running.
 
 ## The shape, and what was deliberately not ported
 
-This is Clockspeed's dispatch protocol and Riot Commander's lane mechanism
+This is Sibling-A's dispatch protocol and Sibling-C's lane mechanism
 adapted to this tree, not transcribed from either. Five things were dropped on
 purpose, and each should stay dropped until the thing it guards exists here:
 
-- **No frozen-file gate.** Clockspeed's phase 2 confirms that no slice touches a
+- **No frozen-file gate.** Sibling-A's phase 2 confirms that no slice touches a
   frozen file without an adjudicator grant. This tree has no frozen-file list,
   and declaring one is an operator decision rather than an agent's. The
   candidates are obvious - `.githooks/`, `scripts/install_hooks.py`,
   `tools/precommit_gate.py`, `LICENSE` - so when the operator names them, phase
   2 is where the check belongs.
-- **No memory-projection recall tool.** Clockspeed phase 0 queries a projection
+- **No memory-projection recall tool.** Sibling-A phase 0 queries a projection
   tool over a memory store. Nothing of the kind exists here, so phase 0 names
   the four places that actually hold closed work in this tree. A phase that
   names a tool nobody has is a phase that gets skipped, and a skipped recall is
   how settled work gets rebuilt.
-- **No lane registry and no mutex.** Riot Commander runs eight named lanes
+- **No lane registry and no mutex.** Sibling-C runs eight named lanes
   behind one mutual-exclusion lock. ResinCompute has one lane of work; a lane
   registry with a single entry is ceremony that then has to be kept accurate.
-- **No machine truth-gate yet.** Riot Commander re-runs the suite from a claims
+- **No machine truth-gate yet.** Sibling-C re-runs the suite from a claims
   JSON and exits non-zero on any claim it cannot reproduce, which is the right
   shape, because a verdict a machine computes cannot be rationalised by the
   agent claiming it. It is a tool, and a command doc cannot conjure one. Until

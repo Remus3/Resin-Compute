@@ -1,7 +1,7 @@
 # Third-party data posture
 
 Read this before adding any external data source, library or dataset. Verified
-2026-09-06 against primary sources. Inherited from Riot Commander's third-party
+2026-09-06 against primary sources. Inherited from Sibling-C's third-party
 lift rule.
 
 > **This file answers the INBOUND question only:** what may this project

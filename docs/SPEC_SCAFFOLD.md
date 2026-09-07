@@ -12,8 +12,8 @@ break. This is enforced by `tools/precommit_gate.py` and the git hooks.
 
 - Repo / product: **ResinCompute**
 - Compute sub-engine: **PityEngine** (lives in `agents/pity_engine/`)
-- Two-tier naming deliberately mirrors Riot Commander (repo) / Daemon Slayer
-  (engine). Do not rename either half.
+- Two-tier naming deliberately mirrors Sibling-C (repo) / Sibling-F (engine).
+  Do not rename either half.
 - Trademark posture: no HoYoverse-coined proper noun appears in a module name,
   package name, class name or CLI verb. That is the whole of the rule, and it is
   the part that is checkable.
@@ -28,14 +28,14 @@ break. This is enforced by `tools/precommit_gate.py` and the git hooks.
   `docs/LICENSE_NOTES.md` carried the same sentence and was corrected in the
   same pass; the two are siblings of one root cause and were fixed together.
 
-## 1. Stack (inherited from Riot Commander, measured 2026-09-06)
+## 1. Stack (inherited from Sibling-C, measured 2026-09-06)
 
-Riot Commander is Python. Measured: 2869 `.py` against 1 generated `.d.ts`. It
+Sibling-C is Python. Measured: 2869 `.py` against 1 generated `.d.ts`. It
 carries NO `package.json`, `tsconfig.json`, Biome, ESLint, Prettier, Vitest,
 Jest, Dockerfile or docker-compose. The original brief asked for a TypeScript
-toolchain; the operator chose true RC inheritance instead, so:
+toolchain; the operator chose true Sibling-C inheritance instead, so:
 
-| Concern | RC tool | ResinCompute tool |
+| Concern | Sibling-C tool | ResinCompute tool |
 |---|---|---|
 | Lint | `ruff.toml` | `ruff.toml` (ported) |
 | Tests | `pytest.ini` + `conftest.py` | same |
@@ -43,15 +43,15 @@ toolchain; the operator chose true RC inheritance instead, so:
 | CI | 3 GH Actions workflows w/ docs path-split | `ci.yml` + `docs-guards.yml` |
 | Hooks | `.githooks/` + `core.hooksPath` | same |
 | Headless lane | `ops/` supervisor + scheduled tasks | `ops/` + `headless/` |
-| Compute engine | Daemon Slayer HTTP `:8860` | PityEngine HTTP `:8790` (ADR-004) |
+| Compute engine | Sibling-F HTTP `:8860` | PityEngine HTTP `:8790` (ADR-004) |
 
 **TypeScript interfaces named in the brief are delivered as Python dataclasses.**
 Python target: **3.11** (mypy pin). Ruff `target-version = "py311"`.
-RC targets py39; we do not inherit that constraint because this is a new tree
-with no py39 deployment surface. This is a deliberate, recorded divergence.
+Sibling-C targets py39; we do not inherit that constraint because this is a new
+tree with no py39 deployment surface. This is a deliberate, recorded divergence.
 
-No Docker in this scaffold. RC has none, so there is nothing to inherit. If
-containers are wanted later that is a new decision, recorded as an ADR.
+No Docker in this scaffold. Sibling-C has none, so there is nothing to inherit.
+If containers are wanted later that is a new decision, recorded as an ADR.
 
 ## 2. Hard rules inherited verbatim
 
@@ -63,7 +63,7 @@ containers are wanted later that is a new decision, recorded as an ADR.
 - **No em-dashes or en-dashes, ever**, in any authored text including code,
   comments, docstrings, `.md` and commit messages.
 - **Never add a `Co-Authored-By: Claude` trailer.** `.githooks/commit-msg`
-  strips it, matching RC operator policy.
+  strips it, matching Sibling-C operator policy.
 - **A fresh clone runs zero hooks.** `core.hooksPath` is local config and is not
   cloned. First action in any fresh clone is `python scripts/install_hooks.py`.
 - **State assumptions explicitly before coding.**
