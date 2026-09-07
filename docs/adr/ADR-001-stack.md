@@ -8,16 +8,16 @@
 The originating brief asked for two things at once:
 
 1. "Inherits the complete design system, automation, testing pipelines, configs,
-   and architectural patterns of an existing project called riot commander."
+   and architectural patterns of an existing project called [Sibling-C]."
 2. "Maintain the exact configuration style, linting, code quality hooks, and test
-   runners from riot commander (e.g. Biome/ESLint/Prettier, TypeScript strict
+   runners from [Sibling-C] (e.g. Biome/ESLint/Prettier, TypeScript strict
    mode, Vitest/Jest)" plus a `Dockerfile` and `docker-compose.yml`.
 
 These are mutually exclusive. Measured against the live Sibling-C tree on
 2026-09-06:
 
 - 2869 `.py` files against 1 `.ts` file, and that one is a generated
-  `daemon_slayer_bundle.d.ts` inside a handoff mirror.
+  bundle declaration file inside a handoff mirror, named after Sibling-F.
 - No `package.json`, `tsconfig.json`, `biome.json`, `.eslintrc*`, `.prettierrc`,
   `vitest.config.*` or `jest.config.*` anywhere in the tree.
 - No `Dockerfile` and no `docker-compose.yml` anywhere in the tree.
