@@ -95,6 +95,21 @@ def _note(inbox: Path, name: str, body: str = "please measure your suite\n") -> 
     return path
 
 
+def _agree(rsp) -> None:
+    """Record the counterparty's agreement, as the operator would.
+
+    Called EXPLICITLY by every arm that drives an armed cycle, rather than being
+    written by the fixture. A fixture that pre-agreed would hide the
+    precondition: the arms below would pass whether or not the gate existed, and
+    the one arm that proves holding-without-agreement would be the only thing
+    keeping it alive.
+    """
+    rsp.DEFAULT_CONFIRMATION.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_CONFIRMATION.write_text(
+        json.dumps({"confirmed_by": "RC", "note": "agreed.md", "expires": 9_999_999_999})
+    )
+
+
 def _draft(rsp, body: str) -> str:
     """A draft that passes every rule, so an arm varies exactly one thing."""
     return rsp.RESPONDER_TAG + "\n\n" + body
@@ -169,6 +184,87 @@ def test_the_hop_budget_stops_the_chain(rsp, tmp_path):
     assert rsp.hops_used(inbox) == 3
     assert rsp.within_budget(inbox, rsp.Bounds(max_hops=4)) is True
     assert rsp.within_budget(inbox, rsp.Bounds(max_hops=3)) is False
+
+
+# ---------------------------------------------------------------------------
+# THE COUNTERPARTY'S AGREEMENT IS A PRECONDITION THE CODE CHECKS.
+#
+# CS and RSC published the same rule within an hour of each other: the trial
+# begins when both operators have agreed a window IN WRITING, not when a note
+# proposing one arrives. RSC's 1824 note committed to holding rather than
+# reading silence as agreement.
+#
+# A commitment a person has to remember is not a control. Registering the task
+# therefore does not start the trial - it makes the responder ready to start the
+# moment the agreement is recorded, and until then every cycle holds and says so
+# in the invocation log.
+# ---------------------------------------------------------------------------
+
+
+def test_an_armed_run_holds_until_the_counterparty_has_agreed(rsp, tmp_path):
+    """No recorded agreement means no trial, however armed the responder is."""
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-09-07-1900-from-RC-question.md")
+    rc_inbox = tmp_path / "rc" / "moon_sync_inbox"
+    rc_inbox.mkdir(parents=True)
+    calls = []
+
+    result = rsp.run_once(
+        inbox=inbox,
+        roots={"RC": tmp_path / "rc"},
+        bounds=rsp.Bounds(armed=True),
+        spawn=lambda *a, **k: calls.append(1) or _draft(rsp, "body\n"),
+    )
+
+    assert calls == [], "a session was spawned before the counterparty agreed"
+    assert result["termination"] == "unconfirmed", result
+    assert list(rc_inbox.iterdir()) == [], "a reply went out before the trial was agreed"
+
+
+def test_a_recorded_agreement_lets_the_trial_run(rsp, tmp_path):
+    """The arming half. Without this the arm above passes for the wrong reason."""
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-09-07-1900-from-RC-question.md")
+    (tmp_path / "rc" / "moon_sync_inbox").mkdir(parents=True)
+    rsp.DEFAULT_CONFIRMATION.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_CONFIRMATION.write_text(
+        json.dumps({"confirmed_by": "RC", "note": "x.md", "expires": 9_999_999_999})
+    )
+
+    result = rsp.run_once(
+        inbox=inbox,
+        roots={"RC": tmp_path / "rc"},
+        bounds=rsp.Bounds(armed=True),
+        spawn=lambda *a, **k: _draft(rsp, "exit 0, 12 passed\n"),
+    )
+
+    assert result["delivered"] is True, result
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {},
+        {"confirmed_by": "RC", "note": "x.md"},
+        {"confirmed_by": "", "note": "x.md", "expires": 9_999_999_999},
+        {"confirmed_by": "RC", "note": "", "expires": 9_999_999_999},
+        {"confirmed_by": "RC", "note": "x.md", "expires": 1},
+    ],
+)
+def test_an_incomplete_or_expired_agreement_is_no_agreement(rsp, tmp_path, record):
+    """Absent, malformed and EXPIRED all mean no.
+
+    The expiry is the one that is easy to leave out. An agreement to run tonight
+    is not an agreement to run next week, and a confirmation file left behind
+    otherwise becomes a standing authorisation nobody remembers granting.
+    """
+    path = tmp_path / "conf.json"
+    path.write_text(json.dumps(record))
+
+    agreed, why = rsp.counterparty_agreed(path)
+
+    assert agreed is False, f"{record} was accepted as an agreement"
+    assert why, "no reason was given for holding"
 
 
 def test_an_expired_window_stops_the_responder(rsp):
@@ -372,6 +468,7 @@ def test_each_way_a_cycle_stops_is_recorded_distinctly(rsp, tmp_path, scenario, 
     termination, is the finding - and a bare integer cannot tell them apart
     afterwards.
     """
+    _agree(rsp)
     inbox = tmp_path / "inbox"
     inbox.mkdir(parents=True)
     bounds = rsp.Bounds(armed=True)
@@ -408,6 +505,7 @@ def test_a_responder_with_nothing_left_to_say_is_exhausted_not_refused(rsp, tmp_
     malfunction, and recording it as a plain refusal would erase exactly the
     signal the trial is being run to read.
     """
+    _agree(rsp)
     inbox = tmp_path / "inbox"
     _note(inbox, "2026-09-07-1900-from-RC-q.md")
     (tmp_path / "rc" / "moon_sync_inbox").mkdir(parents=True)
@@ -543,6 +641,7 @@ def test_an_armed_run_delivers_a_valid_draft_and_records_the_cycle(rsp, tmp_path
     model, and the seam it exercises is exactly the one that matters: the draft
     comes back as TEXT and every decision about it is made out here.
     """
+    _agree(rsp)
     inbox = tmp_path / "inbox"
     _note(inbox, "2026-09-07-1900-from-RC-question.md")
     rc_inbox = tmp_path / "rc" / "moon_sync_inbox"
@@ -568,6 +667,7 @@ def test_an_armed_run_holds_an_invalid_draft_for_the_operator(rsp, tmp_path):
     A responder that discards what it will not send is a withdrawal with no
     trace, which is the defect this channel spent a night on.
     """
+    _agree(rsp)
     inbox = tmp_path / "inbox"
     _note(inbox, "2026-09-07-1900-from-RC-question.md")
     rc_inbox = tmp_path / "rc" / "moon_sync_inbox"
@@ -589,6 +689,7 @@ def test_an_armed_run_holds_an_invalid_draft_for_the_operator(rsp, tmp_path):
 
 def test_a_spawn_that_raises_is_a_held_cycle_and_not_a_crash(rsp, tmp_path):
     """A hook or a task that tracebacks surfaces nothing at all."""
+    _agree(rsp)
     inbox = tmp_path / "inbox"
     _note(inbox, "2026-09-07-1900-from-RC-question.md")
     (tmp_path / "rc" / "moon_sync_inbox").mkdir(parents=True)
@@ -626,6 +727,7 @@ def test_a_spawn_that_never_ran_is_not_recorded_as_exhausted(rsp, tmp_path):
     own class one more time: a negative that is a statement about the instrument
     rather than about the world.
     """
+    _agree(rsp)
     inbox = tmp_path / "inbox"
     _note(inbox, "2026-09-07-1900-from-RC-question.md")
     (tmp_path / "rc" / "moon_sync_inbox").mkdir(parents=True)
@@ -667,6 +769,7 @@ def test_a_spawn_that_never_ran_is_not_recorded_as_exhausted(rsp, tmp_path):
 
 def test_an_armed_run_stops_at_the_hop_budget(rsp, tmp_path):
     """The budget has to bind the cycle, not merely be computable."""
+    _agree(rsp)
     inbox = tmp_path / "inbox"
     for i in range(3):
         _note(inbox, f"2026-09-07-180{i}-from-RC-hop.md", _draft(rsp, "auto\n"))
@@ -687,6 +790,7 @@ def test_an_armed_run_stops_at_the_hop_budget(rsp, tmp_path):
 
 def test_an_armed_run_outside_the_window_does_nothing(rsp, tmp_path):
     """A kill switch nothing consults is a number in a config file."""
+    _agree(rsp)
     inbox = tmp_path / "inbox"
     _note(inbox, "2026-09-07-1900-from-RC-question.md")
     rc_inbox = tmp_path / "rc" / "moon_sync_inbox"
