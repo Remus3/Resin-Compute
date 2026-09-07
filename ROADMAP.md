@@ -11,6 +11,50 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-09-07 (second session). The first-run capture happened and the
+  store is 15 GB at `C:/rsc-first-run/`, OUTSIDE this tree.** 6062 file events
+  over 5971 distinct blobs, 1542 screenshots, 29 video segments, 10
+  observations. Nothing in `data/` yet, deliberately. The next step is a
+  ROW-SCOPED PROVENANCE SCHEMA before the first row lands, so that every value
+  that enters `data/` carries the frame or file it was read from, its sha256,
+  and whether it was read by eye, by OCR or from the game's own bytes. That
+  distinction already earned its keep this session: two pixel reads of one crop
+  are ONE fact, while the game's `UidInfo.txt` agreeing with them is a second.
+- **NEW 2026-09-07 (second session). Noelle's acquisition frame is NOT FOUND
+  and the search was only 1 fps.** She is in the roster from 09:42:59Z; the
+  Beginners' Wish banner read 20/20 remaining at 09:12:09Z; the gap is
+  09:20:44Z to 09:42:59Z. The recording is 15 fps and one frame in fifteen was
+  examined. **NOT FOUND AT 1 FPS IS NOT NOT PRESENT** - re-sweep that window at
+  full frame rate before concluding anything, and do it before the segments are
+  ever pruned.
+- **NEW 2026-09-07 (second session). An OCR-only extractor returns a confident
+  zero on the most important frame in the corpus.** Tesseract missed
+  "Obtained New Character / Dehya" entirely - stylised font over a full-screen
+  fire effect. Any roster or acquisition extractor built from here must combine
+  OCR with something else, and an OCR zero over game splash text must never be
+  reported as an absence.
+- **NEW 2026-09-07 (second session). The wish-history API lags about an hour and
+  the roster does not.** Both were pulled and both were right; editing the
+  puller to chase the lag would have been fixing a correct client against a
+  lagging server. Any future ingest must model the two as separate lanes with
+  separate freshness, and must record `retcode 0 with total 0` as a measured
+  zero rather than as a missing file.
+- **NEW 2026-09-07 (second session). Four root-walking guards still cannot see a
+  nested checkout**: `tests/test_docs_consistency.py`, `tests/test_goal_spec.py`,
+  `tests/test_licence_posture.py`, `tests/test_line_endings.py`. Measured across
+  39 test modules - 1 excluded, 4 not, 34 structurally immune via `git ls-files`.
+  `tests/test_guard_worktree_blindness.py` proves the defect with the shipped
+  guard's own code. Fixing the four is the remaining work; the cheapest shape is
+  to give each the same exclusion `tests/test_loop_concurrency.py` already has.
+- **NEW 2026-09-07 (second session). Enka is now reachable in principle.** The
+  UID is known and verified four ways, the region is `os_usa` verified from the
+  game's own iplist filename. Enka still needs Adventure Rank 10 and an OPEN
+  showcase, neither of which is true yet, so `ingest/enka_client.py` remains
+  unexercised against a real profile. That is the first thing to try next
+  session, and it is the only route to a real roster payload rather than an
+  OCR'd one.
+
+
 - **NEW 2026-09-07. Two guards were fixed and a THIRD class was opened: a guard
   whose scope is narrower than the scope its instructions imply.** `mypy` checked
   26 of 92 tracked `.py` while `.claude/agents/builder.md` told every builder to

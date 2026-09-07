@@ -12,6 +12,201 @@ now.
 
 ---
 
+## 2026-09-07 (second session) - The account was created once, and the capture lane was built in front of it
+
+Three commits, `2fd8aef` through `f930263`. The operator installed and launched
+Genshin Impact for the first time on this machine during the session, so the
+work was done against a clock: every artefact a first run produces is either
+overwritten later or never produced again. The chat surface was kept for
+instructions to the operator and for verdicts, per their instruction.
+
+### What was standing before the game launched
+
+Four processes, built and positive-controlled first, then started:
+
+- `tools/first_run_capture.py` - polls the filesystem and registry write
+  surfaces every two seconds and content-addresses every distinct generation,
+  so an overwrite ADDS a blob rather than replacing one. Reads through
+  `CreateFileW` with `FILE_SHARE_DELETE` when a plain read fails, because a
+  rotation is both the moment worth capturing and the moment the handle is
+  contended.
+- `tools/screen_capture.py` - screenshot daemon with a 64-bit mean-hash dedupe
+  that still writes an index line on a deduped tick. "No new PNG" is the
+  daemon's steady state AND what a dead daemon looks like; those two must not
+  be indistinguishable.
+- `tools/wish_authkey.py` - recovers the wish-history authkey URL and pulls the
+  gacha log. Refuses to write anywhere inside this git tree.
+- `tools/capture_supervisor.py` - keeps the lane alive and reports to a file,
+  not to chat. Measures CONTENT and not only liveness, because ffmpeg keeps
+  writing frames when a Direct3D title has handed it a blank surface.
+
+Plus an ffmpeg screen recorder at 15fps, 2560x1440, nvenc, 300-second segments.
+
+**Measured at the end of the run:** 6062 file events over 5971 distinct blobs,
+1542 screenshots kept out of 2036 index lines, 29 video segments, 2 webCaches
+snapshots, 10 wish-pull attempts, 7 recorded observations, 15 GB.
+`output_log.txt` alone was captured at 47 distinct generations, so the whole
+first-run log history survives rather than only its final state.
+
+### The capture store is not in this tree, and the absence was proven
+
+`C:/rsc-first-run/` holds the bytes. Genshin's logs carry the account UID and
+the miHoYo registry subtree carries a login token. A sweep over all 164 tracked
+files for any nine-digit run hashing to the account UID found 0, and the checker
+was proven to fire on a planted control first, because a clean result and an
+unarmed check look identical.
+
+### Four facts recovered, and the one that needed the second lane
+
+The account UID was read four ways that do NOT share one input: two pixel reads
+off one crop, which is one fact rather than two, plus the game's own
+`UidInfo.txt` bytes and the directory it created under `BeyondLocal/`. The
+region was stamped UNVERIFIED as an inference from the UID prefix, then
+promoted to VERIFIED when the game wrote
+`security_server_default_iplist_os_usa.txt` itself.
+
+**The traveller nickname was missed entirely by the 4-second screenshot lane and
+recovered from the 15fps video** at `seg_20260907_025348.mkv +108s`. That is the
+only point in the session where the two lanes were not redundant, and it is the
+justification for carrying both.
+
+### A recorded inference was refuted by the operator's next action
+
+Dehya was recorded as a TRIAL character on the strength of Level 17 with
+Friendship 1. The operator then levelled her with EXP books, which a trial
+character cannot be. The inference was retracted in `observations.jsonl` with
+what replaced it: her card is GOLD, the owned 5-star colour, and the genuinely
+anomalous slot was a different one whose card is RED. **Two numbers consistent
+with a hypothesis are not evidence for it, and the card colour was on screen the
+whole time.**
+
+That red slot turned out to be `Moonbeam`, a Manekin from Miliastra Wonderland -
+6 GREY stars, DEF 147 above ATK 106, Elemental Mastery exactly 0. Every rarity
+heuristic that worked on the other seven roster slots fails on it. Declining to
+name it from portrait art was correct: it is not in the standard roster at all.
+Two traps are recorded for any future mapper - the name probably being
+player-assigned rather than a game identifier, and the grid icon disagreeing
+with the model because a Manekin is customisable.
+
+### The defect that matters most, because it did not look like one
+
+`tools/wish_authkey.py` looked for the Chromium cache under
+`%USERPROFILE%/AppData/LocalLow/...`. It is under the GAME INSTALL. `--scan`
+printed "no webCaches directory found yet. Has Genshin Impact ever been launched
+on this machine?" while the operator had Wish History open and that `data_2`
+held 15 ASCII occurrences of `authkey`. **A wrong directory and a missing one
+collapsed into one sentence**, and the sentence sent the reader to look at the
+game rather than at the path.
+
+Fixed in `f930263` as an ordered candidate list with the user-profile form
+demoted rather than deleted. `tests/test_wish_authkey_paths.py` pins the ORDER
+and not the membership, because the list can contain the right directory and
+still try the wrong one first.
+
+A second measurement is pinned in the same module though it never shipped: a
+scratch extractor capped candidates at 1500 bytes against a real URL of 1755
+with a 1452-byte authkey, so it truncated the credential and the endpoint
+answered `retcode -100: authkey error` - which reads as an expired key rather
+than as a scanner bug. The module's own cap is 4096 and was never vulnerable;
+pinning it stops 4096 being a round number. The long-URL arm's own guard fired
+on its first run, refusing itself at 1632 bytes against the measured 1755.
+
+### End to end on the live account
+
+After the fix, all six `gacha_type` values returned `retcode: 0, message: "OK",
+region: "os_usa"`, which promotes `_HOST_NEW` from UNVERIFIED to verified
+against a real 200. The history is empty and that is a TRUE ZERO: the game's own
+Wish History page rendered "No record" in the same minute and states that
+records appear about an hour after a wish. **Editing the puller there would have
+been fixing a correct client against a lagging server**, and the two surfaces
+agreeing is what distinguishes the two cases.
+
+### Riot Commander's section 5 ingested
+
+RC reported that root-walking guards cannot see a nested checkout and measured
+10 of 15 of its own with no exclusion. Measured here across 39 test modules:
+**1 root-walking and excluded, 4 root-walking and NOT excluded, 34 not
+root-walking.** The 34 are not lucky - a guard whose corpus comes from
+`git ls-files` is structurally immune, because git does not descend into a
+nested checkout while the filesystem does. That is `b55825e` turned the other
+way round.
+
+`tests/test_guard_worktree_blindness.py` proves the defect with the shipped
+guard's own code rather than a reimplementation, and carries the contrast arm
+that keeps the other number meaningful. `docs/INBOX_TRIAGE_2026-09-07-0710.md`
+triages all five sections of RC's note.
+
+**RC's section 4 landed immediately and on this very session's work.** The
+triage document first wrote a placeholder as a literal Windows path with a
+bracketed account segment, and
+`test_no_tracked_file_carries_an_absolute_path_naming_a_real_account` went red.
+The guard was right and the prose was wrong. The regex was NOT widened.
+
+### Two mechanical traps paid for again
+
+An in-progress `.mp4` segment will not open - `moov atom not found`, because the
+index is written when the muxer closes. Matroska decodes to the last complete
+cluster. The recorder was switched to `.mkv` mid-setup, and the proof arrived at
+shutdown: the force-killed final segment still decoded to a frame with mean 66.6
+and standard deviation 18.2.
+
+Matching a daemon by substring over its whole joined command line is wrong. A
+probe process whose own source text names two daemons matches both, and it
+briefly killed every real watcher while the probe survived.
+`find_python_daemon` matches `argv[1]` only.
+
+**The heredoc backslash trap bit twice more**, once turning a redaction regex
+into `unterminated character set` AFTER nine real candidates had been printed -
+a redaction that fails open is how a credential reaches a transcript - and once
+as a `unicodeescape` SyntaxError. Both were fixed by writing a real file.
+
+### Verification, measured 2026-09-07 at `f930263`
+
+`ruff` All checks passed. `pytest tests` 1094 passed, 1 skipped. `pytest
+agents/pity_engine` 80 passed. `shell node --test` 52 pass, 0 fail. `headless
+--once --dry-run` exit 0. `mypy` Success, 31 source files. Licence QA 41,
+docs QA 23, `qa_companion.py` 17 passed, 0 failed, 1 skipped.
+
+`mypy` required one config change to stay honest: `tools/` is a `files=` root
+and `tools/screen_capture.py` imports Pillow, whose type hints reference numpy,
+whose `__init__.pyi` uses a PEP 695 statement that is a syntax error under the
+pinned `python_version = 3.11`. One third-party stub error stops all further
+checking, so the gate would have read as a single unrelated failure rather than
+as coverage. `follow_imports = skip` plus `follow_imports_for_stubs = True`,
+scoped to numpy only, with the existing rationale extended rather than replaced -
+that rationale rejected silencing numpy for a DIFFERENT entry path, a test
+directory, where there was a directory to drop. Here there is not.
+`screen_capture.py` also dropped numpy entirely; the mean-hash it computes is
+byte-identical to the numpy one, checked against a captured frame.
+
+### The roster sweep found one thing and honestly failed to find another
+
+A read-only agent OCR'd 1328 screenshots (166 keyword hits) and 1384 video
+frames sampled at 1fps.
+
+**Dehya's acquisition WAS found**, at 09:20:40.561091Z: "Obtained New Character
+/ Dehya", 5 gold stars, Pyro, followed four seconds later by an Invite Character
+screen reading "Dehya has been invited". That is a real acquisition plus an
+event party invite, which is consistent with the retraction above rather than
+with the trial hypothesis it replaced.
+
+**Tesseract missed that frame completely** - zero keyword hits on a frame whose
+text says "Obtained New Character" in plain view, because the splash is a
+stylised font over a full-screen fire effect. An OCR-only sweep returned a
+confident zero on the single most important frame in the corpus. Any future
+roster extractor must not be OCR-only, and an OCR zero over game splash text is
+not an absence.
+
+**Noelle's acquisition moment is NOT FOUND and was not inferred.** She is in the
+party roster from 09:42:59Z, and the Beginners' Wish banner still read "Chances
+Remaining: 20/20" at 09:12:09Z; two 10-pull reveals at 09:12:25 and 09:17:26
+were on the Standard banner and did not contain her. The gap is 09:20:44Z to
+09:42:59Z. **NOT FOUND AT 1 FPS IS NOT THE SAME FACT AS NOT PRESENT** - the
+recording is 15fps and one frame in fifteen was examined, a wish reveal is
+short, and the frame is most likely still on disk. It stays open.
+
+---
+
 ## 2026-09-07 - Three guards that overstated their reach, and a claim gate that took three rounds to become honest
 
 Seven commits, `3f7f23f` through `2b8fcbe`. Four agents dispatched worktree
