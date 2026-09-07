@@ -38,6 +38,27 @@ Environment variables - all optional, defaults documented:
         Per-request timeout in seconds.
     RESIN_LOG_LEVEL        default "INFO"
         Level applied to both the console and file handlers.
+
+NOT AN ENVIRONMENT VARIABLE - and the omission is the whole point.
+
+`MAX_CONCURRENT_LANES` is the one value in this module that is NOT read from
+the environment. It is written up here, BELOW the list and outside it, rather
+than as an entry in it, precisely so that nobody reads it as one.
+
+It is a CROSS-REPO ceiling on total concurrent executor calls, shared with Riot
+Commander and Legion Wallpaper against ONE lockfile slot bucket. Every
+participant reads its OWN copy of the number, so the bucket bounds nothing
+unless all three copies agree. An override on a single participant would not
+raise that participant's share - it would raise the EFFECTIVE ceiling for all
+three to max(3, N), because each side admits holders against its own reading
+and none of them can see what the others decided. A ceiling one side can raise
+alone is not a ceiling, it is theatre.
+
+Live-state-first is the right rule for a value this process owns. This value is
+not owned by this process, so the rule does not reach it, and making it
+env-derived would hand one local shell variable the power to lift a limit two
+other repositories are relying on. Changing it is a JOINT act across all three
+repositories in one round.
 """
 from __future__ import annotations
 
@@ -67,6 +88,24 @@ DEFAULT_LOG_LEVEL = "INFO"
 # is expected to override this via ENKA_USER_AGENT with a contactable value.
 DEFAULT_ENKA_USER_AGENT = "ResinCompute/0.1 (local single-account planner)"
 
+#: CROSS-REPO SHARED CEILING on total concurrent executor calls. Not a local
+#: knob, and not named DEFAULT_* because it is not this repository's default to
+#: pick.
+#:
+#: Three repositories on this machine - Legion Wallpaper, Riot Commander and
+#: ResinCompute - each run headless cycles, and each admits work against ONE
+#: shared lockfile slot bucket. Every participant reads its OWN copy of this
+#: number, so the bucket bounds the total only while all three copies AGREE. If
+#: they ever disagree, the governor silently permits max(a, b) simultaneous
+#: holders and stops being a governor at all. Riot Commander and Legion
+#: Wallpaper both declare 3, so this tree declares 3.
+#:
+#: Changing it is a JOINT act across all three repositories in one round, never
+#: a unilateral edit here. Deliberately NOT environment-overridable - the module
+#: docstring above records why an override on one side raises the effective
+#: ceiling for every side.
+MAX_CONCURRENT_LANES = 3
+
 
 @dataclass(frozen=True)
 class Config:
@@ -86,6 +125,11 @@ class Config:
     enka_timeout_seconds: int = DEFAULT_ENKA_TIMEOUT_SECONDS
     log_level: str = DEFAULT_LOG_LEVEL
     user_agent_is_default: bool = True
+    # APPENDED AT THE END with a default, per the convention above. Note also
+    # that `load_config()` never assigns this field: it is the one value that
+    # must NOT move with the environment, so it is left to reach every caller
+    # through this class default alone.
+    max_concurrent_lanes: int = MAX_CONCURRENT_LANES
 
     @property
     def engine_url(self) -> str:

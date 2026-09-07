@@ -376,6 +376,9 @@ Resin-Compute/
     ResinCompute-Supervisor.xml    Windows Scheduled Task, ONLOGON
     install_scheduled_task.ps1     registers that task
     runtime/                       health.json is written here, gitignored
+    loop/                          shared cross-repo concurrency governor
+      slots.py                     BYTE-IDENTICAL across three repos, never edit alone
+      winmutex.py                  BYTE-IDENTICAL across three repos, never edit alone
 
   scripts/
     install_hooks.py               FIRST thing to run in a fresh clone

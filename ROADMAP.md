@@ -249,6 +249,13 @@ version. What follows is everything the scaffold deliberately did not do.
   reconciliation job.
 - **Chronicled Wish support in the service route.** The engine models it; the HTTP
   route does not expose it.
+- **Acquire a slot when an executor loop exists.** `ops/loop/slots.py` is vendored
+  and pinned but NOTHING IN THIS TREE CALLS IT - see the known gap below. When a
+  Claude-executor loop is built, wrap each cycle in
+  `with slots.hold(int(CFG.get("max_concurrent_lanes", 2)), repo="rsc", ...)`.
+  A `SlotTimeout` is a FAILED CYCLE, never permission to proceed unslotted. Note
+  the literal 2 is only the library's fallback; the governing value is
+  `core.config.MAX_CONCURRENT_LANES`, which is 3.
 
 ## Later
 
@@ -267,6 +274,17 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Known gaps, stated honestly
 
+- **The concurrency governor is vendored but INERT, and that is deliberate.**
+  `ops/loop/slots.py` and `ops/loop/winmutex.py` are byte-identical-by-contract
+  with Legion Wallpaper and Riot Commander, pinned by
+  `tests/test_loop_concurrency.py`. NOTHING IN THIS TREE CALLS `slots.hold()`.
+  `headless/runner.py` is a job runner whose daemon mode runs in-process job
+  passes on an interval - it is not a Claude-executor loop and it spawns no
+  executor. So this is a PARITY CONTRACT JOINED AHEAD OF NEED, not a live
+  throttle: the shared bucket is three wide with two real acquirers, and this
+  repository's slot is reserved but unclaimed. No loop controller was invented to
+  justify the file. Do not read the pinned digests as evidence that this repo
+  throttles anything yet.
 - **The weapon banner micro-curve is not pinned by public data.** Increments of
   7.0%, 6.6%, 6.0% and 5.8% all overshoot the published 1.850% consolidated rate.
   The increment is exposed as a tunable rather than hidden behind a constant. If a
