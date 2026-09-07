@@ -104,6 +104,22 @@ ENV_REFERENCE = re.compile(
     r"|secrets\.|vars\.|MOVED-TO-|<[^>]*>|xxx|XXX|placeholder|PLACEHOLDER)",
 )
 
+#: A bound value that IS a variable reference in its ENTIRETY - PowerShell or
+#: shell `$key` - is a lookup rather than a literal.
+#:
+#: Anchored deliberately, and kept OUT of `ENV_REFERENCE`. That pattern is
+#: applied with `.search()`, so folding a bare `$name` into it would exempt any
+#: value merely CONTAINING one, and `"abc$key"` - a real literal with a variable
+#: spliced in - would go quiet. The arms below hold both halves.
+#:
+#: Reported by Legion Wallpaper on 2026-09-07 against its own ported copy:
+#: `$env:GEMINI_API_KEY = $key` was flagged although `$key` had been read from
+#: `GetEnvironmentVariable` on the line above. That is the CORRECT destination
+#: and the guard called it a leak. Latent here rather than live - this tree
+#: tracks one `.ps1` and no instance of the shape - and a false positive is
+#: worth closing before it teaches a reader to wave the guard through.
+VARIABLE_VALUE = re.compile(r"^\$[A-Za-z_][A-Za-z0-9_]*$")
+
 #: Files whose JOB is to carry these patterns. Exempt BY NAME so the exemption
 #: stays a short visible list rather than a rule that quietly widens.
 #:
@@ -139,6 +155,8 @@ def scan_text(text: str) -> list[str]:
     for match in SECRET_BINDING.finditer(text):
         value = match.group("value")
         if ENV_REFERENCE.search(value):
+            continue
+        if VARIABLE_VALUE.match(value.strip("\"'")):
             continue
         hits.append(f"secret name bound to a literal: {match.group(0)[:48]}")
     return hits
@@ -264,4 +282,73 @@ def test_the_detector_would_fail_on_this_file_without_its_exemption():
     assert scan_text(own), (
         "this module no longer trips its own detector, so SELF_EXEMPT is "
         "unnecessary - remove the exemption rather than leaving a hole"
+    )
+
+
+#: The PowerShell shape Legion Wallpaper measured: a variable holding a value
+#: already read from the environment, assigned to the env destination. Built
+#: from `chr(36)` so this module's own text does not carry the literal binding
+#: it is describing.
+_DOLLAR = chr(36)
+_WHOLE_VARIABLE = f"{_DOLLAR}env:GEMINI_API_KEY = {_DOLLAR}key"
+_SPLICED_VARIABLE = f'GEMINI_API_KEY = "abc{_DOLLAR}key"'
+_TRAILING_LITERAL = f'GEMINI_API_KEY={_DOLLAR}key"abc123"'
+
+
+def test_a_value_that_is_wholly_a_variable_reference_is_a_lookup():
+    """The false positive LW reported, closed - and the check is ARMED first.
+
+    Asserting only that nothing was flagged would pass for a module whose
+    binding pattern had stopped matching altogether, which is the vacuous-pass
+    shape. So the arming assertion comes first: the binding must actually fire
+    on this text before its absence from the offender list means anything.
+    """
+    armed = SECRET_BINDING.search(_WHOLE_VARIABLE)
+    assert armed is not None, (
+        "the binding pattern no longer matches the assignment shape, so this "
+        "arm proves nothing about the variable-value exemption"
+    )
+    assert armed.group("value") == f"{_DOLLAR}key"
+    assert scan_text(_WHOLE_VARIABLE) == [], (
+        "a value that is entirely a variable reference is a lookup, not a "
+        "literal, and flagging it teaches the reader to wave the guard through"
+    )
+
+
+def test_a_value_that_merely_contains_a_variable_is_still_a_literal():
+    """Why the exemption is anchored rather than folded into ENV_REFERENCE.
+
+    `ENV_REFERENCE` is applied with `.search()`. A bare `$name` added to it
+    would exempt every value that merely CONTAINS one, and this line - a real
+    literal with a variable spliced into it - would go quiet. The refusal and
+    the acceptance above are the pair; without this one, an exemption that
+    swallowed everything would still pass the test above.
+    """
+    armed = SECRET_BINDING.search(_SPLICED_VARIABLE)
+    assert armed is not None, "the binding pattern did not fire, so this arm is vacuous"
+    assert scan_text(_SPLICED_VARIABLE) != [], (
+        "a literal with a variable spliced into it is still a literal; the "
+        "variable-value exemption must stay anchored to the WHOLE value"
+    )
+
+
+def test_a_variable_followed_by_a_literal_is_still_a_literal():
+    """The arm that makes the TRAILING anchor load-bearing.
+
+    The leading anchor is redundant - `.match()` already anchors at the start -
+    so a mutant that drops only `^` is EQUIVALENT and this pair would not catch
+    it. The trailing anchor is the half that does work: without it the value
+    below matches on its `$key` prefix, the appended literal is never looked at,
+    and the secret rides out of the tree exempted. Measured as a false negative
+    before this arm was written.
+    """
+    armed = SECRET_BINDING.search(_TRAILING_LITERAL)
+    assert armed is not None, "the binding pattern did not fire, so this arm is vacuous"
+    assert armed.group("value") == f'{_DOLLAR}key"abc123"', (
+        "the value capture changed shape, so this arm no longer exercises a "
+        "variable prefix followed by a literal"
+    )
+    assert scan_text(_TRAILING_LITERAL) != [], (
+        "a variable prefix does not launder the literal appended to it; the "
+        "exemption must match the value end to end"
     )
