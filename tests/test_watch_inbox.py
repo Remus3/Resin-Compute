@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -722,4 +723,410 @@ def test_the_report_never_carries_a_payload_byte(watch, tmp_path, capsys, mode):
             "into a session with the harness's authority before any judgement "
             "is applied, so a payload byte reaching it is an injection route. "
             "Report names, counts and digests instead."
+        )
+# ---------------------------------------------------------------------------
+# METADATA-KEY MUTANTS, AND THE ARM SHAPE THAT KILLS THEM
+#
+# Clockspeed ran a read-only adversary over their own shipped watcher on
+# 2026-09-07 and measured three mutants surviving it green. Their watcher and
+# this one were both rebuilt on a `(name, digest)` key in the same round, so the
+# weakness was a hypothesis here until it was measured. It reproduced. Measured
+# in this worktree, against the arms above, before any of the arms below existed:
+#
+#   the note key computed from `st_mtime_ns` instead of the content   SURVIVED
+#   the drop manifest line carrying `st_size` instead of the content  SURVIVED
+#   a 16-character preview of a payload appended to the report        SURVIVED
+#
+# The two literal forms - `_file_digest` itself returning `str(st_mtime_ns)` or
+# `str(st_size)` - were killed, but only by `test_a_readable_file_digest_is_a_
+# plain_sha256` and by the 64-character length assertion in
+# `test_marking_upgrades_a_legacy_watermark_to_the_keyed_shape`. Those are SHAPE
+# arms. Hashing the metadata instead of returning it raw restores the shape and
+# walks straight past them, and moving the substitution to the entry-key site or
+# to the manifest line walks past them without even that much effort. A shape
+# arm on a primitive is not a behavioural arm on the key.
+#
+# THE ROOT CAUSE IS THE SAME ONE IN ALL THREE CASES, and it is a property of the
+# ARMS rather than of the module: an arm that varies content varies mtime, size
+# and content AT ONCE, so it pins none of them individually. `write_bytes` of a
+# longer corrected sentence moves all three, and every metadata key moves with
+# it, so the arm passes under a watcher that never looked at a byte.
+#
+# TO PIN THE CONTENT LEG, HOLD EVERYTHING ELSE CONSTANT:
+#
+#   edit IN PLACE at CONSTANT BYTE LENGTH, and RESTORE THE MTIME.
+#
+# That is not a contrived shape. `cp -p`, `rsync -t`, `tar -p` and every restore
+# from an archive preserve the modification time, and a policy value flipping
+# from one meaning to another at identical length is the ordinary case, not the
+# adversarial one.
+#
+# The mtime restore is itself armed rather than assumed. `os.utime` is pushed to
+# a DIFFERENT time first and the difference asserted, so the arm proves the
+# filesystem honours a timestamp write before it relies on one; a fast
+# edit-and-rewrite that happened to land on the same coarse tick would otherwise
+# make the control unarmed and the arm pass for the wrong reason. NTFS stores
+# 100ns ticks and round-trips `st_mtime_ns` exactly, so the restore is asserted
+# for EQUALITY rather than for nearness - if that ever stops holding this goes
+# red and says so, which is the honest failure.
+# ---------------------------------------------------------------------------
+
+
+def _restore_mtime_provably(path: Path, mtime_ns: int, atime_ns: int) -> None:
+    """Put `path` back to an exact mtime, having PROVED the write takes effect.
+
+    WITHOUT A POSITIVE CONTROL, A CLEAN RESULT AND AN UNARMED CHECK LOOK
+    IDENTICAL. If `os.utime` were silently ignored - a read-only mount, a
+    filesystem without timestamp writes - the caller's arm would still pass,
+    but it would be passing because the mtime never moved rather than because
+    the watcher read the content. So the timestamp is pushed somewhere else
+    first and the move asserted, and only then restored.
+    """
+    os.utime(path, ns=(atime_ns, mtime_ns + 10**9))
+    assert path.stat().st_mtime_ns != mtime_ns, (
+        "os.utime did not move the modification time, so the restore below "
+        "would be a no-op and this arm could not tell a content key from a "
+        "timestamp key"
+    )
+    os.utime(path, ns=(atime_ns, mtime_ns))
+    assert path.stat().st_mtime_ns == mtime_ns, (
+        "the modification time did not restore EXACTLY. This filesystem cannot "
+        "round-trip st_mtime_ns, so the timestamp leg is not held constant and "
+        "the arm below would prove nothing"
+    )
+
+
+def test_a_note_edited_at_constant_length_with_the_mtime_restored_re_surfaces(
+    watch, tmp_path
+):
+    """THE CONTENT LEG, PINNED ALONE. Kills a watcher keyed on `st_mtime_ns`.
+
+    The arm above it - `test_a_note_corrected_in_place_re_surfaces_as_unread` -
+    edits the file and lets the modification time move with the edit, so it
+    cannot distinguish a content key from a timestamp key. Measured: a watcher
+    keying notes on `sha256(st_mtime_ns)` passed the entire file.
+
+    Here the byte length is identical and the modification time is put back, so
+    the ONLY thing that moved is the content. A watcher that reports this note
+    as still read is reading metadata.
+
+    Real-world miss this closes: a sibling corrects a note and copies it across
+    with `cp -p`, or restores it from an archive. The timestamp comes back with
+    the file and the correction is silently already-read.
+    """
+    inbox = tmp_path / "inbox"
+    edited = _note(inbox, "2026-09-07-1000-from-xx-corrected.md", "verdict: allow\n")
+    neighbour = _note(inbox, "2026-09-07-1100-from-xx-untouched.md", "verdict: allow\n")
+    state = tmp_path / "runtime" / "seen.json"
+    watch.mark_seen(inbox, state)
+    assert watch.unseen_entries(inbox, state) == [], (
+        "precondition failed: both notes must start ACKNOWLEDGED or the arm "
+        "below would pass for the wrong reason"
+    )
+
+    before = edited.stat()
+    before_bytes = edited.read_bytes()
+    neighbour_before = neighbour.stat()
+
+    # SAME NUMBER OF BYTES. `allow` and `block` are both five characters, which
+    # is the ordinary case rather than a contrived one: a policy value flipping
+    # meaning at identical length is exactly what mutant 2 below is about too.
+    edited.write_bytes(b"verdict: block\n")
+    _restore_mtime_provably(edited, before.st_mtime_ns, before.st_atime_ns)
+
+    after = edited.stat()
+    assert after.st_size == before.st_size, (
+        f"the edit changed the byte length {before.st_size} -> {after.st_size}, "
+        "so SIZE moved too and this arm cannot pin the content leg"
+    )
+    assert edited.read_bytes() != before_bytes, (
+        "the bytes did not actually change, so there is nothing for a "
+        "content-keyed watcher to notice"
+    )
+    assert after.st_mtime_ns == before.st_mtime_ns, (
+        "the modification time moved, so this arm would pass under an "
+        "mtime-keyed watcher and prove nothing"
+    )
+    assert neighbour.stat().st_mtime_ns == neighbour_before.st_mtime_ns, (
+        "the untouched neighbour's timestamp moved, so the survivor half of "
+        "this sweep is not a control"
+    )
+
+    checked, unread = watch.survey(inbox, state)
+    assert checked == 2, f"the survey examined {checked} entries and would pass vacuously"
+    assert [entry.key for entry in unread] == [
+        "2026-09-07-1000-from-xx-corrected.md"
+    ], (
+        "a note edited in place at constant byte length, with its modification "
+        "time restored, did not resurface. The watermark is keyed on metadata "
+        "rather than on content, so a correction arriving through cp -p, rsync "
+        "or an archive restore reads as already answered"
+    )
+
+
+def test_a_drop_payload_edited_at_constant_length_and_mtime_re_surfaces_it(
+    watch, tmp_path
+):
+    """THE SAME PIN, INSIDE A DROP. Kills a manifest keyed on size or on mtime.
+
+    `test_an_edited_file_inside_a_drop_re_surfaces_the_drop` varies content and
+    size together - `alpha` becomes `alpha CORRECTED` - so a manifest line
+    carrying `st_size` in place of the file's digest passes it. Measured: it did,
+    with the whole file green.
+
+    Real-world miss this closes: a payload file going from a value meaning allow
+    to one meaning deny at identical length. The file count is equal, the drop's
+    total byte size is equal, every timestamp is equal, and the meaning is
+    inverted.
+    """
+    inbox = tmp_path / "inbox"
+    inbox.mkdir(parents=True)
+    drop = _drop(
+        inbox,
+        "from-XX-verbatim",
+        {"policy.txt": "verdict: allow\n", "notes.txt": "unchanged\n"},
+    )
+    _note(inbox, "2026-09-07-1100-from-xx-untouched.md", "body\n")
+    state = tmp_path / "runtime" / "seen.json"
+    watch.mark_seen(inbox, state)
+    assert watch.unseen_entries(inbox, state) == [], (
+        "precondition: the drop and the note must start read"
+    )
+
+    target = drop / "policy.txt"
+    before = target.stat()
+    before_bytes = target.read_bytes()
+    before_files = sorted(p for p in drop.rglob("*") if p.is_file())
+    before_total = sum(p.stat().st_size for p in before_files)
+
+    target.write_bytes(b"verdict: block\n")
+    _restore_mtime_provably(target, before.st_mtime_ns, before.st_atime_ns)
+
+    after_files = sorted(p for p in drop.rglob("*") if p.is_file())
+    assert after_files == before_files, (
+        "the file listing moved, so this arm would pass under a count-keyed or "
+        "name-keyed watcher and prove nothing"
+    )
+    assert sum(p.stat().st_size for p in after_files) == before_total, (
+        "the drop's total byte size moved, so this arm would pass under a "
+        "size-keyed manifest and prove nothing"
+    )
+    assert target.stat().st_size == before.st_size, (
+        "the edited file's own size moved, which is the same defeat one level "
+        "down"
+    )
+    assert target.stat().st_mtime_ns == before.st_mtime_ns, (
+        "the edited file's modification time moved, so this arm would pass "
+        "under an mtime-keyed manifest"
+    )
+    assert target.read_bytes() != before_bytes, (
+        "the bytes did not actually change, so there is nothing to notice"
+    )
+
+    checked, unread = watch.survey(inbox, state)
+    assert checked == 2, f"the survey examined {checked} entries"
+    assert [entry.key for entry in unread] == ["from-XX-verbatim/"], (
+        "a payload file edited at constant length, with its modification time "
+        "restored, did not resurface the drop. The manifest is built from file "
+        "metadata rather than from file bytes, so allow becoming deny at equal "
+        "length is reported as already read"
+    )
+
+
+def test_the_drop_manifest_moves_when_only_the_bytes_move(watch, tmp_path):
+    """The primitive under the arm above, pinned directly and both ways.
+
+    `_drop_manifest` must move when the bytes move at constant size and constant
+    timestamp, and must NOT move when nothing moves at all. The second half is
+    the survivor guard: a manifest that returned a fresh value on every call
+    would satisfy the first half while being useless, and would silently turn
+    every drop arm in this file into a tautology.
+    """
+    inbox = tmp_path / "inbox"
+    inbox.mkdir(parents=True)
+    drop = _drop(inbox, "d", {"policy.txt": "verdict: allow\n"})
+    target = drop / "policy.txt"
+
+    first = watch._drop_manifest(drop)
+    assert first == watch._drop_manifest(drop), (
+        "the manifest is unstable across two reads of an untouched drop, so "
+        "every drop arm in this file would pass for the wrong reason"
+    )
+
+    before = target.stat()
+    target.write_bytes(b"verdict: block\n")
+    _restore_mtime_provably(target, before.st_mtime_ns, before.st_atime_ns)
+    second = watch._drop_manifest(drop)
+
+    assert target.stat().st_size == before.st_size
+    assert target.stat().st_mtime_ns == before.st_mtime_ns
+    assert second[1] == first[1] == 1, "the file count moved and must not have"
+    assert second[0] != first[0], (
+        "the manifest digest did not move although the bytes did. Size and "
+        "modification time were both held constant, so the manifest is built "
+        "from metadata"
+    )
+
+
+def test_the_note_digest_moves_when_only_the_bytes_move(watch, tmp_path):
+    """The same pin on `_file_digest`, held to behaviour rather than to shape.
+
+    `test_a_readable_file_digest_is_a_plain_sha256` pins the exact value and is
+    the stronger arm where it applies, but it is a WHITE-BOX arm on one
+    primitive: a watcher can leave `_file_digest` untouched and key the entry on
+    metadata at the call site, which is precisely the mutant that survived. This
+    arm asks the question the watermark actually asks.
+    """
+    inbox = tmp_path / "inbox"
+    note = _note(inbox, "a.md", "verdict: allow\n")
+
+    before = note.stat()
+    first = watch._file_digest(note)
+    assert first == watch._file_digest(note), "the digest is unstable across two reads"
+
+    note.write_bytes(b"verdict: block\n")
+    _restore_mtime_provably(note, before.st_mtime_ns, before.st_atime_ns)
+
+    assert note.stat().st_size == before.st_size
+    assert note.stat().st_mtime_ns == before.st_mtime_ns
+    assert watch._file_digest(note) != first, (
+        "the file digest did not move although the bytes did, with size and "
+        "modification time both held constant"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE NO-PAYLOAD PROPERTY, ASSERTED OVER EVERY WINDOW RATHER THAN OVER ONE
+# STRING.
+#
+# `test_the_report_never_carries_a_payload_byte` above asserts that one exact
+# marker is ABSENT from the report. AN ABSENCE ASSERTION ON ONE EXACT STRING IS
+# DEFEATED BY TRUNCATION. Measured here on 2026-09-07: a mutant appending a
+# 16-character preview of a note body and of the first file in a drop passed the
+# whole file, because the planted markers are 18 characters long. The preview
+# leaked real payload bytes into the report and every arm stayed green.
+#
+# A leak is a leak at any length, so the assertion has to be over EVERY
+# CONTIGUOUS WINDOW of the payload rather than over the payload entire. The
+# markers below are drawn from an alphabet chosen so that no window of them can
+# collide with the report's own legitimate vocabulary - names, counts, `recv`,
+# `sent`, `file`, `files`, and `MANIFEST.sha256 present, not used as the key`.
+# The letters of MANIFEST are excluded, the entry names planted here are
+# lowercase, and a run of four characters from this alphabet cannot occur in any
+# of it.
+#
+# Assembled with `chr()` and joined so this module does not carry an
+# instruction-shaped sentence for some other scanner in this repo to find, which
+# is the convention the markers above already follow.
+# ---------------------------------------------------------------------------
+
+#: Uppercase only, and disjoint from the letters of `MANIFEST`.
+_WINDOW_NOTE_MARKER = "ZQBKVWDGHJLOPQRUXYZCDGKW"
+_WINDOW_DROP_MARKER = "QZKBWVGDJHLPOQURXZYWKGDC"
+
+#: Below this the window is short enough that ordinary report text could carry
+#: it by coincidence, which would make the sweep a false-positive generator
+#: rather than a guard. Four is well under the 16 the measured mutant leaked.
+_MIN_LEAK_WINDOW = 4
+
+
+def _payload_window_sweep(report: str, payload: str) -> tuple[int, list[str]]:
+    """(windows checked, windows found in the report).
+
+    RETURNS THE PAIR, like `watch.survey`. A sweep that checked nothing reports
+    an empty offender list and reads exactly like a clean one - zero out of zero
+    as a clean bill of health - so the caller asserts the checked count first.
+    """
+    checked = 0
+    offenders: list[str] = []
+    for size in range(_MIN_LEAK_WINDOW, len(payload) + 1):
+        for start in range(len(payload) - size + 1):
+            window = payload[start:start + size]
+            checked += 1
+            if window in report:
+                offenders.append(window)
+    return checked, offenders
+
+
+def test_the_payload_window_sweep_actually_fires():
+    """NON-VACUITY FOR THE SWEEP ITSELF, and it is the load-bearing arm.
+
+    The two arms below assert that a sweep found nothing. That claim is worth
+    nothing unless the sweep can find something, so it is pointed at a
+    fabricated report carrying a 16-character preview - the exact mutation
+    measured surviving this file - and must report offenders.
+    """
+    clean = "unread: 1\n  [recv] 2026-09-07-0000-from-xx-topic.md\n"
+    checked, offenders = _payload_window_sweep(clean, _WINDOW_NOTE_MARKER)
+    assert checked > 0, "the sweep examined no windows at all"
+    assert offenders == [], (
+        f"the sweep fired on a report with no payload in it: {offenders[:4]}. "
+        "The marker alphabet collides with the report's own vocabulary and the "
+        "arms below would be false positives rather than guards"
+    )
+
+    truncated = clean + "  " + _WINDOW_NOTE_MARKER[:16]
+    checked, offenders = _payload_window_sweep(truncated, _WINDOW_NOTE_MARKER)
+    assert checked > 0, "the sweep examined no windows at all"
+    assert offenders, (
+        "the sweep did not fire on a report carrying a 16-character preview of "
+        "the payload. That is the mutation measured surviving this file, so a "
+        "sweep blind to it is not a guard"
+    )
+    assert _WINDOW_NOTE_MARKER[:16] in offenders
+
+
+@pytest.mark.parametrize("mode", [[], ["--all"], ["--quiet-when-empty"]])
+def test_the_report_leaks_no_window_of_a_payload(watch, tmp_path, capsys, mode):
+    """The privileged-surface property, hardened against truncation.
+
+    Everything this prints at `SessionStart` and `UserPromptSubmit` is injected
+    into a session's context with the harness's own authority, before any
+    judgement is applied to it. A sixteen-character fragment of a sibling's file
+    is still a sibling's bytes arriving in this voice, and an imperative sentence
+    does not need to be complete to be read as one.
+
+    The ARMING assertions come first: a watcher that crashed and printed nothing
+    would satisfy every absence assertion below perfectly.
+    """
+    inbox = tmp_path / "inbox"
+    _note(
+        inbox,
+        "2026-09-07-0000-from-xx-topic.md",
+        f"# heading\n\n{_WINDOW_NOTE_MARKER}\n",
+    )
+    _drop(
+        inbox,
+        "from-XX-verbatim",
+        {
+            "tool.py": f"# {_WINDOW_DROP_MARKER}\n",
+            "MANIFEST.sha256": f"{_WINDOW_DROP_MARKER}  tool.py\n",
+        },
+    )
+    state = tmp_path / "runtime" / "seen.json"
+
+    watch.main(["--dir", str(inbox), "--state", str(state), *mode])
+    out = capsys.readouterr().out
+
+    assert "2026-09-07-0000-from-xx-topic.md" in out, (
+        "the note name is absent, so the watcher reported nothing and every "
+        "absence assertion below would pass for the wrong reason"
+    )
+    assert "from-XX-verbatim" in out, (
+        "the drop name is absent, so this arm is not exercising a drop at all"
+    )
+
+    for label, marker in (
+        ("a note body", _WINDOW_NOTE_MARKER),
+        ("a file inside a drop", _WINDOW_DROP_MARKER),
+    ):
+        checked, offenders = _payload_window_sweep(out, marker)
+        assert checked > 0, f"no windows of {label} were examined; the sweep is vacuous"
+        assert offenders == [], (
+            f"the report echoed {len(offenders)} window(s) of {label} into "
+            f"stdout, the longest being {max(offenders, key=len)!r}. That "
+            "surface is injected into a session with the harness's authority "
+            "before any judgement is applied, so a payload byte reaching it is "
+            "an injection route - and a truncated fragment is still a payload "
+            "byte. Report names, counts and digests instead"
         )

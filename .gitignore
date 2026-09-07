@@ -113,3 +113,8 @@ tmp/
 # Cross-project correspondence channel. Notes are correspondence, not source -
 # see moon_sync_inbox/README.md and ADR-004.
 moon_sync_inbox/
+
+# Builder hand-off scratch. Written by worktree agents in their own worktree root
+# so the merger knows what changed; it is correspondence, never source, and one
+# slipped into a merge on 2026-09-07 and collided with the next.
+MERGE_TODO.md
