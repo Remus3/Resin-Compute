@@ -118,3 +118,8 @@ moon_sync_inbox/
 # so the merger knows what changed; it is correspondence, never source, and one
 # slipped into a merge on 2026-09-07 and collided with the next.
 MERGE_TODO.md
+
+# The ONLY file that resolves a sibling codename to a real project and a real
+# checkout path. The tracked tree carries codenames precisely so that nothing
+# tracked carries this mapping. Per-host by definition.
+ops/moon_sync_repos.json
