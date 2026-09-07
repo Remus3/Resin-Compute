@@ -11,7 +11,7 @@
 // way, which is exactly why none of them live here.
 //
 // WHY THE RULE IS NOT STYLE. Because this file imports Electron, nothing can
-// load it, so nothing in shell/test grades a single line below. Clockspeed
+// load it, so nothing in shell/test grades a single line below. Sibling-A
 // records what that costs: its certificate verdict map lived in its own main.js,
 // no test could reach it, and changing it to a blanket accept left the whole
 // gate green. Anything here that starts making a choice belongs in lib/.

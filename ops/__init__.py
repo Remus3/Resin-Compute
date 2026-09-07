@@ -1,6 +1,6 @@
 """ResinCompute operations lane.
 
-Holds the supervision + health surface, mirroring Riot Commander's `ops/`:
+Holds the supervision + health surface, mirroring Sibling-C's `ops/`:
 
   - `ops.health`     the `ops/runtime/health.json` contract (atomic writes).
   - `ops.supervisor` the watchdog that owns the managed child's lifecycle.

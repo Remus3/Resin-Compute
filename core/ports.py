@@ -6,19 +6,19 @@ grepping its own bind sites, it cannot prove it does not contend with a sibling,
 and the failure mode is not a clean error - it is one process silently winning a
 bind and another degrading in a way nobody attributes to a port for hours.
 
-The pattern is Red Moon's, adopted by Riot Commander, and now by this tree:
+The pattern is Sibling-B's, adopted by Sibling-C, and now by this tree:
 named constants, an `ALL` frozenset of what is actually bound, the block
 reservations, and `tests/test_ports.py` pinning each constant against the
 module that really binds it rather than re-asserting the literal here. That last
-distinction is Riot Commander's improvement and it is the one that catches drift:
+distinction is Sibling-C's improvement and it is the one that catches drift:
 `assert ENGINE == 8790` passes forever while the server quietly moves.
 
 THE MEASUREMENT THAT CREATED THIS FILE. ResinCompute shipped its scaffold with
-PityEngine on 8870, chosen to mirror Daemon Slayer's 8860 by adding ten. 8870 is
-INSIDE Daemon Slayer's reserved block 8860-8879, which is recorded in the
-machine-wide registry and restated in Riot Commander's `core/ports.py` as
-`DS_BLOCK = range(8860, 8880)`. Nothing was bound there at the time, so nothing
-broke and nothing warned. That is precisely how Clockspeed acquired its own
+PityEngine on 8870, chosen to mirror Sibling-F's 8860 by adding ten. 8870 is
+INSIDE Sibling-F's reserved block 8860-8879, which is recorded in the
+machine-wide registry and restated in Sibling-C's `core/ports.py` as that
+sibling's own `range(8860, 8880)` constant. Nothing was bound there at the time,
+so nothing broke and nothing warned. That is precisely how Sibling-A acquired its own
 collision: it picked a band by PROBING for a free listener, and the owning
 project's process happened not to be running. A band is verified against the
 owning project's registry in source, never against a live scan.
@@ -58,9 +58,9 @@ so it is the port that will grow a trust story if it ever leaves loopback.
 RSC_BLOCK = range(8790, 8810)
 """ResinCompute's block: 8790 through 8809 inclusive.
 
-A `range` with an EXCLUSIVE end, matching Riot Commander's spelling. The
+A `range` with an EXCLUSIVE end, matching Sibling-C's spelling. The
 exclusive end is worth stating out loud because it reads as a claim on the last
-number and is not one: `range(8770, 8790)` is Red Moon's block and it stops at
+number and is not one: `range(8770, 8790)` is Sibling-B's block and it stops at
 8789, which is the single fact that made 8790 available to this project at all.
 """
 
@@ -72,31 +72,37 @@ number and is not one: `range(8770, 8790)` is Red Moon's block and it stops at
 # that this repository knows what the sibling has allocated INSIDE its block.
 # The only use of these is the disjointness proof in tests/test_ports.py.
 #
-# Red Moon takes the opposite approach - it carries NO sibling literal in any
+# Sibling-B takes the opposite approach - it carries NO sibling literal in any
 # tracked file and proves disjointness from the negative side with a FORBIDDEN
 # set. Do not paste this repository's literals into that tree; cite the block.
-RM_BLOCK = range(8770, 8790)
-LL_BLOCK = range(8810, 8820)
-DS_BLOCK = range(8860, 8880)
-RC_BLOCK = range(8888, 8896)
-LW_BLOCK = range(8900, 8920)
-CS_BLOCK = range(8920, 8940)
+#
+# The codenames are deliberately opaque and this file does not resolve them. The
+# per-host map lives in the GITIGNORED `ops/moon_sync_repos.json`; a reader on a
+# machine that has one resolves a letter there, and nothing tracked here does.
+SB_BLOCK = range(8770, 8790)
+SD_BLOCK = range(8810, 8820)
+SF_BLOCK = range(8860, 8880)
+SC_BLOCK = range(8888, 8896)
+SE_BLOCK = range(8900, 8920)
+SA_BLOCK = range(8920, 8940)
 
 BLOCKS = {
     "rsc": RSC_BLOCK,
-    "rm": RM_BLOCK,
-    "ll": LL_BLOCK,
-    "ds": DS_BLOCK,
-    "rc": RC_BLOCK,
-    "lw": LW_BLOCK,
-    "cs": CS_BLOCK,
+    "sb": SB_BLOCK,
+    "sd": SD_BLOCK,
+    "sf": SF_BLOCK,
+    "sc": SC_BLOCK,
+    "se": SE_BLOCK,
+    "sa": SA_BLOCK,
 }
 """Every project's reserved range, keyed by short name.
 
-`rc` is Amberstone, formerly Riot Commander. The short code predates the rename
-and the registry kept it, so do not read `rc` as a seventh project.
+`rsc` is THIS repository. The other six are siblings under opaque codenames; see
+the note above the block constants for where a letter is resolved. Sibling-C
+carries two project names in this tree's history, the second a rename of the
+first, and both collapse to the one codename - so do not read them as two.
 
-Riot Commander additionally reserves 2999, far outside the 88xx range, because
+Sibling-C additionally reserves 2999, far outside the 88xx range, because
 that is Riot's Live Client Data API and Riot owns the number. It is deliberately
 NOT listed as a block here: it is not a reservation this project could ever
 collide with by allocating inside 8790-8809.

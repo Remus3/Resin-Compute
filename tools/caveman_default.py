@@ -1,11 +1,11 @@
 """caveman_default.py - SessionStart hook: declare CAVEMAN ULTRA as the default
 output dialect for every ResinCompute Claude Code session.
 
-Adopted on operator instruction 2026-09-06. The body is Riot Commander's,
+Adopted on operator instruction 2026-09-06. The body is Sibling-C's,
 carried across from `moon_sync_inbox/from-RC-verbatim/tools/caveman_default.py`
 rather than paraphrased: four repos each writing their own version of one shared
 dialect is how the fleet ends up with four dialects. Only the docstring is
-local. The banner below is BYTE-IDENTICAL to RC's and must stay that way - it is
+local. The banner below is BYTE-IDENTICAL to that sibling's and must stay that way - it is
 the contract, not prose.
 
 RSC FILED A DISSENT AGAINST THIS AND THE OPERATOR OVERRULED IT, which is
@@ -18,7 +18,7 @@ it in their own tree settles the only question that mattered.
 Wired in `.claude/settings.json` SessionStart hooks. stdout is injected as
 session context. Must be fast (timeout 5) and must NEVER raise - a crashing hook
 would noise every session start. Pairs with `tools/caveman.md`, the skill body,
-which is a byte-exact copy of RC's.
+which is a byte-exact copy of the same sibling's.
 
 SCOPE, and it is the half that is easy to get wrong: terseness is for CHAT.
 Committed repo artifacts are excluded by the banner itself - code, docstrings,

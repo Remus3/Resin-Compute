@@ -20,7 +20,7 @@
 // child's exit code, which is an integer and is the surface's documented
 // contract in surface/server.py's `main` docstring.
 //
-// The failure this guards against is concrete and Clockspeed measured it: the
+// The failure this guards against is concrete and Sibling-A measured it: the
 // first real shortcut launch of its own shell hit a port left in TIME_WAIT by a
 // forced kill moments earlier, the surface exited rather than binding, and the
 // operator was told to go read output that had already been thrown away. A

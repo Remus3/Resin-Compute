@@ -21,7 +21,7 @@ WHAT EVERY TEST HERE HAS TO DO, and why the shape is not decorative:
      clean, so `checked` is asserted first in every case.
 
   2. EVERY HAPPY-PATH TEST ESTABLISHES THE PRECONDITION THAT ARMS THE CHECK IT
-     ASSERTS ABOUT. Riot Commander published this exact failure: their
+     ASSERTS ABOUT. Sibling-C published this exact failure: their
      happy-path test had no runs in the transcript, so the count check never
      armed, and asserting "nothing was flagged" went green while proving
      nothing.
@@ -1110,7 +1110,7 @@ def test_bar_five_a_reader_of_a_longer_name_does_not_harvest_the_seed():
 
 def test_bar_six_a_ci_redirect_seeds_the_ci_list_and_never_the_local_one():
     """BAR 6. Folding the lists makes "this session ran tests" true for a
-    session that only fetched a CI log - the defect Riot Commander published."""
+    session that only fetched a CI log - the defect Sibling-C published."""
     ci = gate.build_evidence(
         [
             *_via("toolu_ci", "gh run view 1 --log > " + SEEDED_PATH, ""),
@@ -1230,7 +1230,7 @@ def test_the_gate_module_is_seven_bit_ascii(module):
 def test_the_open_questions_are_recorded_in_the_module_docstring():
     """The unresolved contract must be visible where the code is read."""
     doc = gate.__doc__ or ""
-    assert "OPEN, ASKED OF RC ON 2026-09-07" in doc
+    assert "OPEN, ASKED OF SIBLING-C ON 2026-09-07" in doc
 
 
 def test_the_measured_numbers_and_the_known_limits_are_recorded(tmp_path):

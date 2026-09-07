@@ -33,7 +33,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_runtime_dir_defaults_to_ops_runtime() -> None:
-    """The default lives under the repo root, mirroring RC's ops/runtime."""
+    """The default lives under the repo root, mirroring Sibling-C's ops/runtime."""
     assert health_mod.runtime_dir(None).parts[-2:] == ("ops", "runtime")
 
 

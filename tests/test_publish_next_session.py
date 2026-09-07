@@ -270,7 +270,7 @@ def test_the_repo_hand_off_block_carries_the_bootstrap_instruction():
 # The hand-off is a PUBLICATION surface - credentials and account paths
 # ---------------------------------------------------------------------------
 #
-# Added 2026-09-07 after Legion Wallpaper asked whether anyone gated the
+# Added 2026-09-07 after Sibling-E asked whether anyone gated the
 # hand-off more widely than ASCII and truncation. This tree's honest answer was
 # no, and it was measured rather than assumed: a block carrying a live-shaped
 # NIMBLE_API_KEY and one carrying an absolute path naming the operator's

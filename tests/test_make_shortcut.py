@@ -53,7 +53,7 @@ def test_a_matching_shortcut_is_left_alone():
 def test_a_differing_shortcut_is_updated_rather_than_refused():
     """Convergence, which is what idempotent means for an installer.
 
-    Clockspeed's equivalent REFUSES here and requires --force. That is a
+    Sibling-A's equivalent REFUSES here and requires --force. That is a
     defensible default and it is not the one that was asked for, so the divergence
     is deliberate and `--no-clobber` restores the stricter behaviour.
     """
@@ -232,7 +232,7 @@ def test_a_renamed_shortcut_with_the_right_target_counts_as_present():
     exact-name lookup found nothing and would have created a SECOND shortcut
     beside the first.
 
-    That is exactly the case Clockspeed's refuse-unless-force default was
+    That is exactly the case Sibling-A's refuse-unless-force default was
     protecting against, and the reason its author gave: "the operator may already
     have pinned or renamed the shortcut that is there." Idempotence is about
     converging on the desired STATE - a working shortcut to this app exists - and

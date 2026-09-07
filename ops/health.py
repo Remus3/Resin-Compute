@@ -1,6 +1,6 @@
 """The health file contract.
 
-Mirrors Riot Commander's `ops/runtime/health.json`, which is the single place
+Mirrors Sibling-C's `ops/runtime/health.json`, which is the single place
 an operator (or another process) looks to answer "is it alive, and did the last
 pass work". CLAUDE.md's "Where to find current state" section names that file
 first for exactly this reason, so the shape is inherited rather than invented.
@@ -56,8 +56,8 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 #: Bump when a field is REMOVED or its meaning changes. Adding an optional
-#: field is backwards compatible and does not need a bump, matching how RC
-#: treats its own health payload.
+#: field is backwards compatible and does not need a bump, matching how
+#: Sibling-C treats its own health payload.
 SCHEMA_VERSION = 1
 
 HEALTH_FILENAME = "health.json"
@@ -69,7 +69,7 @@ SUPERVISOR_HEALTH_FILENAME = "supervisor_health.json"
 ENV_RUNTIME_DIR = "RESINCOMPUTE_RUNTIME_DIR"
 
 #: `ops/health.py` -> `ops/` -> repo root. Same `parent.parent` package-layout
-#: rule CLAUDE.md pins for RC's `app/__init__.py`; getting it wrong silently
+#: rule CLAUDE.md pins for Sibling-C's `app/__init__.py`; getting it wrong silently
 #: relocates every runtime path by one directory.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

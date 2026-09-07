@@ -1,6 +1,6 @@
 """Logging setup - one log file per day, no rotation.
 
-Operator preference inherited verbatim from Riot Commander:
+Operator preference inherited verbatim from Sibling-C:
 
     Logs live at logs/YYYY-MM-DD.log. One file per calendar day. NO rotation,
     no size cap, no RotatingFileHandler. A day is the unit an operator greps.

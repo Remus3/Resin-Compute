@@ -2,7 +2,7 @@
 """Create or converge the desktop shortcut that opens the companion window.
 
 IDEMPOTENT BY DESIGN, and that is a deliberate divergence from the sibling
-project this pattern came from. Clockspeed's equivalent REFUSES when a shortcut
+project this pattern came from. Sibling-A's equivalent REFUSES when a shortcut
 of the same name is already there and requires `--force`, on the reasoning that
 the operator may have pinned or renamed it. That is defensible. It is also not
 idempotent: running it twice is an error the second time, so it cannot be put in
@@ -313,7 +313,7 @@ def find_renamed_twin(powershell: str, destination: Path, desired: ShortcutState
     renamed the shortcut this script created to match their own convention. The
     exact-name lookup then found nothing, and without this scan the next run
     would have created a second shortcut beside the first - which is precisely
-    the failure Clockspeed's refuse-unless-force default was guarding against.
+    the failure Sibling-A's refuse-unless-force default was guarding against.
 
     Idempotence converges on a STATE - a working shortcut to this app exists -
     not on one particular filename.

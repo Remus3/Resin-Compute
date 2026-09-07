@@ -13,7 +13,7 @@
 # UTF-8 em-dash inside a DOUBLE-QUOTED string therefore decodes into a
 # smart-quote character, the tokenizer treats that as a string terminator, and
 # the parse fails somewhere far away from the real cause with an error that
-# names the wrong line. Riot Commander lost a boot script to exactly this on
+# names the wrong line. Sibling-C lost a boot script to exactly this on
 # 2026-05-18. The same applies to en-dashes and to smart quotes.
 #
 # Two defences, both used here:
