@@ -12,6 +12,185 @@ now.
 
 ---
 
+## 2026-09-06 - The publish sweep, a history rewrite, and rebuilding the remote
+
+Six adversaries on distinct lenses, four builder slices, a `filter-repo` rewrite,
+a delete-and-recreate of the GitHub repository, both shared-governor rounds, and
+a durable inbox watcher. **All six adversaries returned REFUTED.** The repository
+was not safe to publish as it stood, and the two findings that mattered most
+could not be fixed by editing a file.
+
+**THE SWEEP FOUND TWO SERVER-SIDE LEAKS, AND A FORCE-PUSH WOULD NOT HAVE CLOSED
+EITHER.** The operator's Windows account path sat in blob `4401b1a8`
+(`.claude/commands/done.md` line 172) inside 8 of the 33 PUSHED commits. The
+forward fix had landed weeks earlier; the published record was never backfilled,
+which is the `CLAUDE.md` rule about a data fix not being done until corrupted
+records are backfilled. Separately, two commits force-pushed away earlier that
+day - `a72a5c6` and `20385fd` - were still served by GitHub with a
+`Claude-Session:` URL in them, and their SHAs were published by the repository's
+own Events API and Actions run list.
+
+That second finding is the load-bearing one and it is general: **a force-push
+does not purge objects from GitHub.** This repository had already proved it once
+and nobody noticed. So the remedy was not another rewrite - it was to rewrite
+locally, DELETE the remote, recreate it, and push only clean history. Verified
+from the server side afterwards rather than assumed: the two orphans and the
+pre-rewrite HEAD all return HTTP 422 `No commit found`, the leaked blob returns
+HTTP 404, and a cold clone of the new remote carries 0 account-path blobs of 291
+and 0 session trailers.
+
+Cost of the recreate, paid deliberately: the Actions run history and the creation
+date. The description and all 17 topics were restored. Nothing else was lost -
+0 stars, 0 forks, 0 watchers, 0 open issues.
+
+**Guards cannot see this class, and both of them say so.**
+`tests/test_machine_identity.py` builds its corpus from `git ls-files`, which is
+the current checkout only, and `tests/test_commit_trailers.py` walks `git log` on
+HEAD. Both passed throughout while the leak was live on the remote. Each is
+correct for the question it asks; neither asks "what is already published".
+
+**THE OBJECT STORE FOUGHT BACK THREE TIMES, and the mechanism is worth the
+entry.** After the rewrite the leaked blob kept reappearing. In order: a
+`FETCH_HEAD` left by fetching the backup bundle for a tree comparison; then
+`refs/remotes/origin/main` surviving inside `.git/packed-refs` after
+`update-ref -d` had removed the loose ref; then creating four agent worktrees,
+which checked out the PRE-REWRITE commit and resurrected the whole history into
+the shared object store, because worktrees share `.git`. `gc --prune=now` is
+powerless against any of them - each was a live reference. The rule learned: an
+unreachable-object purge is only true at the instant it is measured, and it must
+be re-measured after anything that can create a ref. The final purge worked only
+because the remote was deleted FIRST, removing the thing that kept restoring it.
+
+**AN ERROR THIS SESSION MADE, recorded because the scoping mistake is
+transferable.** The cross-repo adversary was instructed "do NOT read any sibling
+tree on this machine - stay inside `C:\Resin Compute`", to stop it rummaging in
+projects that are not ours. That instruction also made the one question that
+mattered structurally unaskable: `ops/loop/winmutex.py` and `slots.py` were
+already world-readable in Legion Wallpaper's PUBLIC repository and had been for
+five weeks, so publishing this tree disclosed nothing new about them. A finding
+was raised to the operator and to two siblings on a premise nobody had tested.
+Retracted in full. The lesson is not "read sibling trees" - it is that a scope
+which protects a neighbour can also blind the check, and "is this already
+public" was answerable from public data alone.
+
+**FOUR BUILDER SLICES, write-list union proven disjoint with `sort | uniq -d`
+before dispatch.** 12 files modified, zero write-list violations, zero untracked
+residue. What landed:
+
+- **The repository declared itself unlicensed in a tracked manifest.** The
+  lockfile carried the pre-ADR-006 licence token against `shell/package.json`'s
+  `GPL-3.0-or-later`. Commit `9cc98c6` flipped the manifest AND added the guard
+  against exactly this in the same commit, but never regenerated the lockfile -
+  and the guard swept 5 files of 153, so it could not see it. The guard now
+  derives its corpus from `git ls-files` and was observed RED against the
+  unfixed lockfile before the fix. `tests/test_licence_posture.py`, 33 arms to
+  41.
+- **Two compliance documents made checkable false claims.**
+  `docs/LICENSE_NOTES.md` called the fixtures "synthetic" while citing a README
+  that says the label was false of two of its three files, and claimed game item
+  names appear "never as code identifiers" while `core/types.py` has `PRIMOGEM`,
+  `INTERTWINED_FATE`, `STARGLITTER` and `HEROS_WIT` as enum members. ADR-002
+  carried the same wording and got a BANNER ADDENDUM instead - 28 insertions, 0
+  deletions, body provably unrewritten. The sibling of the trademark overclaim
+  in `docs/SPEC_SCAFFOLD.md` was found by the same builder and fixed with it,
+  per the fix-every-sibling rule.
+- **Both CI ASCII gates passed any path containing a space.** `xargs` splits on
+  whitespace; the gate warned on the fragments and returned 0. The anti-vacuity
+  arm checked the LIST was non-empty, never that anything was SCANNED. Selection
+  is now a NUL-delimited partition on the `.md` suffix, complementary by
+  construction, with `--expect-count`. Coverage went from 139 of 153 to 153 of
+  153, uncovered set EMPTY and halves disjoint. The 14 files no gate touched
+  included `ops/install_scheduled_task.ps1`, the file class the entire ASCII
+  rule exists for. `docs-guards` also ran both suites in ONE root-level pytest
+  invocation, 359 tests, which `pytest.ini` forbids by name.
+- **A pre-cut hole in the commit-time gate.** `tools/precommit_gate.py` exempted
+  a data/external/ prefix from the 7-bit rule. That directory is gitignored
+  NOWHERE and appeared in no other file in the tree - it is deliberately written
+  without backticks here, because it names nothing that exists and the docs
+  guard correctly rejects a dead pointer. So the one gate that would flag a
+  fetched upstream payload was pre-disabled at a location `git add -A` would
+  happily stage. Every remaining exempt prefix must now pass `git check-ignore`.
+- **The exclusive-bind fix had landed at one call site only.**
+  `surface/server.py` grew `_ExclusiveHTTPServer` after two dashboards bound
+  8791 and the older one answered everything. `agents/pity_engine/__main__.py`
+  kept the stock `ThreadingHTTPServer`, so two engines bound 8790 with
+  byte-identical banners while the first served every request - on the port
+  README section 6 tells a stranger to run. Ported TDD-first with an
+  immediate-restart arm and an ephemeral port.
+- **Two docstrings misled an auditor.** `tools/publish_next_session.py` claimed
+  to be "the one thing in the tree that writes outside it"; `make_shortcut.py`
+  and the task installer also do. README described the Windows Scheduled Task in
+  nine words and never said how to remove it, though it is hidden, elevated,
+  fires at every logon, has no execution time limit, and survives deleting the
+  clone. The removal command is now published, DERIVED from
+  `ops/install_scheduled_task.ps1` line 45 rather than executed.
+
+**THREE AGENTS CORRECTED THEMSELVES, which is the shape the protocol is for.**
+The engine builder's mutation test refuted its own assumption: dropping
+`SO_EXCLUSIVEADDRUSE` alone left every arm green, and a full nine-cell bind
+matrix showed only `reuse`/`reuse` double-binds, so `allow_reuse_address = False`
+is the load-bearing half and no test on this platform can pin the setsockopt.
+That was re-derived independently at the merge rather than taken on trust, and
+`surface/server.py`'s docstring - which credited the wrong half - now records it
+along with the fact that a guard claiming to pin that line would be a guard about
+nothing. The CI builder's own surviving-neighbour arm caught both workflows
+writing their file lists into the checkout. The licence builder found a hole in
+the guard it had just written: a correction note quotes the sentence it corrects,
+so a whole-file sweep passes on the quotation.
+
+**BOTH SHARED-GOVERNOR ROUNDS LANDED, and the leak fix is measured here.**
+Legion Wallpaper rotated the mutex names (`winmutex.py` to `0b112a4f`) and fixed
+the `hold()` release-path leak (`slots.py` to `629c3d51`). Both were copied
+BYTE-WISE off LW's live tree with `cp`, re-hashed from THIS repo's own disk
+against the published values, and the index blob compared to the disk bytes for
+each. Measured on this box, 8 workers over 2 slots at `backoff=0.02`, 40 rounds:
+
+```
+old 1c4f8af4   35 of 40 rounds leaked   51 lockfiles   69 SlotTimeouts
+new 629c3d51    0 of 40 rounds leaked    0 lockfiles    0 SlotTimeouts
+```
+
+That also explained an unrelated-looking red:
+`test_contending_threads_never_exceed_max_slots` failed once with a SlotTimeout
+during a full-suite run and passed six times in isolation immediately after. It
+was the leak surfacing as a flaky test under load, in a repository that does not
+even acquire a slot - the tests are the only callers here. Ten consecutive runs
+since adopting the fix: zero failures. Riot Commander was right to refuse the
+`slots.py` bytes until they were announced; the announcement arrived and both
+rounds are now three-way equal, verified by hashing all three disks directly.
+
+**A DURABLE INBOX WATCHER, because a live one dies with its session.**
+`scripts/watch_inbox.py` plus `tests/test_watch_inbox.py`, 11 arms. Watermark
+under `ops/runtime/`, written through `core/atomic_io.py`. Reading never
+acknowledges; an absent inbox is a plain line rather than a traceback; a corrupt
+watermark degrades toward RE-REPORTING, because a duplicate read costs a glance
+and a dropped note costs a sibling waiting on an answer nobody knows they owe.
+Keyed on NAMES rather than content hashes, with the cost accepted and pinned in
+both directions - a rename re-surfaces a note, which is strictly better than an
+EDITED note reading as already seen. Four mutants killed. The first mutant
+written for the corrupt-watermark arm was EQUIVALENT and passed, which is
+recorded because a surviving mutant is evidence only when it actually changes
+behaviour.
+
+**Decisions taken, so they are not re-litigated.** `docs/adr/ADR-004-port-block.md`
+stated that a port grep across six sibling trees hit "decompiled game assets, a
+strings dump"; that characterised the contents of unpublished trees, was never
+load-bearing for the port argument, and is redacted WITH the redaction recorded
+in the ADR rather than done silently. Charter v3 from Riot Commander is ADOPTED,
+with one dissent filed: "commit onto the worktree branch, push it, then remove
+the worktree" assumes a workflow where agents commit, and this tree's protocol
+forbids builder commits outright, so the invariant - no worktree is removed until
+its work exists somewhere that survives the removal - should be the charter text
+rather than the step sequence.
+
+Counts measured 2026-09-06 on Python 3.14.4 at `dd1ac02`, as a historical
+reading: licence QA 41 passed, docs QA 23 passed, `qa_companion` 16 passed 0
+failed 2 skipped, ruff clean, `tests` 852 passed 1 skipped, `agents/pity_engine`
+80 passed, `shell` node 52 pass 0 fail, headless smoke exit 0, mypy clean over 23
+source files. The tree still DECLARES 3.11 in `CLAUDE.md`, `mypy.ini` and
+`ruff.toml`, so that reading is green on 3.14 only; the divergence predates this
+work and was again not touched.
+
 ## 2026-09-06 - Joining the cross-repo concurrency governor, and being refuted twice
 
 `ops/loop/slots.py`, `ops/loop/winmutex.py`, `tests/test_loop_concurrency.py`,
