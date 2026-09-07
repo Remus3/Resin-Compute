@@ -88,10 +88,21 @@ this block starts one port into a sibling's range.
 
 ## Verification performed
 
-A grep for `879[0-9]` and `880[0-9]` across all six sibling trees returned hits
-only in vendored JavaScript, decompiled game assets, a strings dump and one
-line of Lanternlight's own ledger document - plus Amberstone's
-`range(8770, 8790)`, the exclusive end discussed above. **No bind site and no registry claim** in 8790-8809.
+A grep for `879[0-9]` and `880[0-9]` across all six sibling trees found
+**no bind site and no registry claim** in 8790-8809. Every hit was incidental,
+a number occurring inside unrelated non-source content, with the single
+exception of Amberstone's `range(8770, 8790)` - the exclusive end discussed
+above, which is a real registry claim and does not reach 8790.
+
+> **REDACTED 2026-09-06, before this repository was made public.** The paragraph
+> above previously named the particular kinds of non-source file the incidental
+> hits sat in, inside sibling trees that are NOT published and cannot answer for
+> themselves. That detail was never load-bearing: "no bind site and no registry
+> claim" carries the whole argument, and the count and location of unrelated
+> matches are not this ADR's to publish. **The verification result is unchanged**
+> and was not re-run - only the characterisation of other projects' contents is
+> removed. Recorded rather than done silently, because an ADR that is edited
+> without saying so stops being a record.
 
 ## Consequences
 
