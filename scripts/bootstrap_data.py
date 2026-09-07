@@ -71,7 +71,13 @@ def _fallback_atomic_write(path: Path, text: str) -> None:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
+    # newline="\n" matches core/atomic_io.py, which this is the fallback for.
+    # THE LIVE ONE. DEFAULT_OUTPUT is data/bootstrap/account_snapshot.json, and
+    # .gitignore excludes only data/cache/, data/*.tmp and data/account_state.json
+    # - so this path is TRACKABLE. Under `* text=auto eol=lf` a translated write
+    # here reddens tests/test_line_endings.py with a clean-looking git diff,
+    # because git normalises on the way into the index.
+    tmp.write_text(text, encoding="utf-8", newline="\n")
     tmp.replace(path)
 
 

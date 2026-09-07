@@ -1,69 +1,42 @@
-# MERGE_TODO - slice P0
+# MERGE_TODO - CRLF writer sibling sweep
 
-## Files changed by this slice
+Branch: `worktree-agent-a2a04562af0e10df0`, based on `e1b20e6`.
 
-```
-core/atomic_io.py
-tests/test_core_atomic_io.py
-```
+## Files changed
 
-Nothing else was edited. `MERGE_TODO.md` is this hand-off note, written on the
-dispatching orchestrator's instruction; drop it at merge if unwanted.
+| Path | Change |
+|---|---|
+| `ingest/enka_client.py` | `newline="\n"` on the cache envelope write |
+| `ops/health.py` | `newline="\n"` on the fallback health write |
+| `ops/supervisor.py` | `newline="\n"` on the runtime write probe |
+| `scripts/bootstrap_data.py` | `newline="\n"` on `_fallback_atomic_write` |
+| `tools/wish_authkey.py` | `newline="\n"` on `_atomic_write_text` |
+| `tests/test_no_crlf_writers.py` | NEW - the guard, 7 tests |
 
-## What changed
+## Files on the write-list that needed NO change
 
-- `core/atomic_io.py` - new module constant `_NEWLINE = "\n"`, passed as
-  `newline=_NEWLINE` on the temp write in `atomic_write_text`. No behaviour
-  change other than the newline translation being disabled. `atomic_write_json`
-  inherits it, since it funnels through `atomic_write_text`.
-- `tests/test_core_atomic_io.py` - eight new tests, all asserting on RAW BYTES.
-  Four of them were RED before the fix.
+`tools/capture_supervisor.py` and `tools/first_run_capture.py` already pass
+`newline="\n"`. In both the keyword sits on the CONTINUATION line of a wrapped
+call, so the enumerating `git grep -n "write_text(" | grep -v newline=` reported
+them as offenders. They are false positives. The new guard parses with `ast`
+rather than scanning lines and spares both; `test_checker_reads_calls_not_lines`
+is the regression arm for that.
 
-## For the merger - siblings NOT fixed, and why
+## Needs the merger - NOT actionable from inside a worktree
 
-Root cause is `Path.write_text` defaulting to `newline=None`. Nine other call
-sites in this tree carry the identical property. All are OFF the P0 write-list
-and were left untouched rather than swept in:
+An already-corrupted artefact exists on disk OUTSIDE the repository:
+`captured_url.json` under the first-run capture root. 1945 bytes, 5 CRLF pairs,
+0 lone LF, written by the now-fixed `tools/wish_authkey.py` capture path. It is
+outside the worktree, so it was reported rather than edited. Backfill is a
+CRLF-to-LF rewrite of that one file.
 
-| Site | Target | Tracked? |
-|---|---|---|
-| `ops/health.py:153` | `ops/runtime/health.json` | gitignored (`ops/runtime/*`) |
-| `scripts/bootstrap_data.py:74` | `data/bootstrap/account_snapshot.json` | **NOT gitignored - tracked-eligible** |
-| `tools/wish_authkey.py:504` | authkey log and json target | check at merge |
-| `ingest/enka_client.py:385` | `data/cache/enka/...` | gitignored (`data/cache/`) |
-| `ops/supervisor.py:148` | probe file, no newline in payload | gitignored |
-| `tools/capture_supervisor.py:220` | capture store outside the tree | untracked |
-| `tools/first_run_capture.py:345` | capture store outside the tree | untracked |
+No tracked file needed a backfill: `ops/runtime/health.json` and
+`data/bootstrap/account_snapshot.json` were both ABSENT at the time of measure.
 
-`scripts/bootstrap_data.py` is the one worth a follow-up slice. It resolves
-`atomic_write_text` BY NAME and prefers it, so its normal path now inherits this
-fix - but its `_fallback_atomic_write` at line 74 still translates, and its
-default output `data/bootstrap/account_snapshot.json` sits under `data/`, which
-`.gitignore` does not exclude. `tests/test_line_endings.py` would fail on that
-file if the fallback path were ever taken and the result committed.
+## Note on the base
 
-## For the merger - an existing on-disk artefact is CRLF today
-
-`ops/runtime/inbox_seen.json` in the MAIN checkout, measured this run:
-
-```
-bytes 14896
-crlf_pairs 98
-lone_lf 0
-```
-
-It is gitignored (`ops/runtime/*`), so it cannot turn the suite red. Its next
-write through `scripts/watch_inbox.py:333` -> `atomic_write_json` now emits LF,
-so it self-heals on the next `--mark`. No backfill was performed: the file is
-outside this slice's write-list and outside the worktree.
-
-`ops/runtime/health.json` does not exist on disk at all right now, so there is
-nothing to backfill there.
-
-## Declined: `atomic_write_bytes`
-
-Not added. Reasons in the slice report; summary: zero consumers exist today, the
-`newline` fix already gives byte-exact transport for every current and future
-caller, and `SPEC_provenance.md` section 11 flags the choice as the
-adjudicator's to rule on rather than the producer's. If the adjudicator rules
-for it, it is a small follow-up on the same two files.
+This worktree was created at `353e3c1`, which PREDATES the `core/atomic_io.py`
+fix. It was rebased onto the declared fork point `e1b20e6` before any work, so
+the guard runs against a tree where the origin defect is already fixed. Without
+that rebase the guard would have flagged `core/atomic_io.py:69`, a file this
+slice may not write.
