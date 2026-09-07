@@ -1,5 +1,13 @@
 # Resin Compute & Pity Engine
 
+[![ci](https://github.com/Remus3/Resin-Compute/actions/workflows/ci.yml/badge.svg)](https://github.com/Remus3/Resin-Compute/actions/workflows/ci.yml) [![docs-guards](https://github.com/Remus3/Resin-Compute/actions/workflows/docs-guards.yml/badge.svg)](https://github.com/Remus3/Resin-Compute/actions/workflows/docs-guards.yml)
+
+Both badges are load-bearing and neither is redundant: `ci` carries
+`paths-ignore: ['**/*.md']` and `docs-guards` fires on exactly what `ci`
+declines, so a docs-only push starts no `ci` run at all. Read alone, the `ci`
+badge would show a stale green from the last code push while a docs push went
+unverified. Together they cover every push.
+
 A planning engine for Genshin Impact's resource economy. It answers questions
 that are arithmetic rather than opinion: how many pulls until a character is
 reasonably safe, what a build actually costs in resin and days, and which of
