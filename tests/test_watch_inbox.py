@@ -607,6 +607,61 @@ def test_reporting_never_advances_the_watermark(watch, tmp_path):
     assert state.read_bytes() == before, "a reporting run moved the watermark"
 
 
+def test_reporting_is_idempotent_and_does_not_even_touch_the_state_file(
+    watch, tmp_path
+):
+    """Property 6, and BYTES-EQUAL IS NOT THE SAME CLAIM AS DID-NOT-WRITE.
+
+    Lanternlight measured this from the far side on 2026-09-07 and it is their
+    finding, not ours. Acknowledgement as a SIDE EFFECT of reporting means
+    anything that can report can silently consume - including a probe whose only
+    purpose was to check that the watcher runs. LL ran their four hook commands
+    verbatim to confirm the paths still resolved after an edit, and the
+    `SessionStart` one ate three genuinely unread notes into the seen set. The
+    next check then honestly reported nothing new.
+
+    This tree separates reporting from acknowledging, and did from the first
+    version, but for a weaker stated reason - that an inflated watermark is worse
+    than none. LL's statement of the rule is the better one and this arm exists
+    because of it.
+
+    The arm above asserts the BYTES. That is not enough on its own: an atomic
+    write producing identical content still moves the modification time, so a
+    watcher that rewrote the file every run would pass it. LL named the two as
+    different facts and only one of them is the one you want. Both are asserted
+    here, plus the idempotence of the report itself.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md", "a\n")
+    _drop(inbox, "from-XX-verbatim", {"tool.py": "print(1)\n"})
+    state = tmp_path / "runtime" / "seen.json"
+    watch.mark_seen(inbox, state)
+
+    _note(inbox, "b.md", "b\n")
+    first_checked, first_unread = watch.survey(inbox, state)
+    assert first_checked > 0, "nothing was checked, so this arm is vacuous"
+    assert first_unread, (
+        "nothing is unread, so an acknowledging watcher would have nothing to "
+        "consume and this arm could not detect one"
+    )
+
+    before_bytes = state.read_bytes()
+    before_mtime = state.stat().st_mtime_ns
+
+    second_checked, second_unread = watch.survey(inbox, state)
+
+    assert (second_checked, [e.key for e in second_unread]) == (
+        first_checked,
+        [e.key for e in first_unread],
+    ), "two reporting runs disagreed, so reporting consumed something"
+    assert state.read_bytes() == before_bytes, "a reporting run rewrote the watermark"
+    assert state.stat().st_mtime_ns == before_mtime, (
+        "the watermark's bytes are unchanged but it was written again. Identical "
+        "content is not the same fact as no write, and a watcher that rewrites "
+        "on every report is one refactor away from rewriting something different"
+    )
+
+
 #: Markers planted in payload bodies, assembled with `chr()` so this module does
 #: not itself carry an instruction-shaped sentence for some other scanner to
 #: find, and so the markers cannot collide with ordinary report text.
