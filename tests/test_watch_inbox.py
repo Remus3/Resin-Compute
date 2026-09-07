@@ -41,13 +41,43 @@ SCRIPT = ROOT / "scripts" / "watch_inbox.py"
 
 
 @pytest.fixture()
-def watch():
-    """Load the script by path - `scripts/` is not an importable package."""
+def watch(tmp_path):
+    """Load the script by path - `scripts/` is not an importable package.
+
+    THE DEFAULTS ARE REDIRECTED INTO `tmp_path`, AND THAT IS LOAD-BEARING.
+    Sibling-D measured the version of this fixture that does not: one arm
+    omitted a keyword argument, the parameter fell back to the OPERATOR'S LIVE
+    record, and every suite run for days wrote fixture names into real state. It
+    was invisible while that record was write-only - the moment a new feature
+    started READING it, the live report announced 24 withdrawn notes, 18 of them
+    fixtures called `note-21.md`.
+
+    This repo reproduced it on the first run of the withdrawal work: the live
+    `ops/runtime/inbox_reported.json` came back holding `a.md`, `b.md` and
+    `from-XX-verbatim/`. A test that can reach live state will reach it, so the
+    fixture always injects a throwaway path rather than trusting every arm to
+    pass one. `test_the_fixture_cannot_reach_live_runtime_state` pins it.
+    """
     spec = importlib.util.spec_from_file_location("watch_inbox_under_test", SCRIPT)
     assert spec is not None and spec.loader is not None, f"cannot load {SCRIPT}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module.DEFAULT_STATE = tmp_path / "isolated" / "seen.json"
+    module.DEFAULT_REPORTED = tmp_path / "isolated" / "reported.json"
     return module
+
+
+def test_the_fixture_cannot_reach_live_runtime_state(watch, tmp_path):
+    """An arm that omits a path argument must not land in `ops/runtime/`.
+
+    A write-only state file is verified by nothing, which is why the pollution
+    ran for days elsewhere before anything read it back.
+    """
+    for default in (watch.DEFAULT_STATE, watch.DEFAULT_REPORTED):
+        assert tmp_path in Path(default).parents, (
+            f"{default} escapes the test's own directory, so an arm that omits "
+            "the flag writes into the operator's live record"
+        )
 
 
 def _note(inbox: Path, name: str, body: str = "body\n") -> Path:
@@ -1130,3 +1160,413 @@ def test_the_report_leaks_no_window_of_a_payload(watch, tmp_path, capsys, mode):
             "an injection route - and a truncated fragment is still a payload "
             "byte. Report names, counts and digests instead"
         )
+
+
+# ---------------------------------------------------------------------------
+# THE WALKER REPORTING A DELIVERABLE ZERO TIMES.
+#
+# Sibling-C enumerated four ways a subdirectory-walking watcher stays silent
+# over a real payload, and Sibling-D reproduced two of them independently on a
+# different tree. Three land on the walker in this file and are pinned below.
+#
+# THE JUNCTION IS THE EXPENSIVE ONE. `Path.is_symlink()` is FALSE for an NTFS
+# junction, so `rglob` descends it. Sibling-D measured a ONE-FILE drop reported
+# as 32 files; Sibling-A measured the same shape at 6. The count is the
+# harmless half. A junction pointing at a large tree runs the walk past the
+# hook's timeout, the hook is KILLED, and a killed hook surfaces nothing at all
+# - a whole-channel outage from one link, and a junction is a thing an operator
+# makes on purpose for ordinary reasons.
+#
+# THE RULE ADOPTED FROM SIBLING-C, VERBATIM: WHAT CANNOT BE DIGESTED IS FORCED
+# INTO EVERY REPORT WITH ITS REASON, never keyed silently and never dropped.
+# Silence is the defect; a named anomaly is the fix.
+#
+# THE CONSTRAINT ADOPTED FROM SIBLING-D: the digest FORMAT must not move for a
+# drop of ordinary files, or the fix dumps the whole inbox back on the operator
+# as unread and is worse than the bug. That is pinned first, below, because it
+# is the arm that fails if someone "improves" the manifest later.
+# ---------------------------------------------------------------------------
+
+
+def _junction(link: Path, target: Path) -> bool:
+    """Make an NTFS junction, or report that this box will not."""
+    import subprocess
+
+    try:
+        done = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            capture_output=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return done.returncode == 0 and link.exists()
+
+
+def test_the_drop_digest_format_is_unchanged_for_a_drop_of_ordinary_files(watch, tmp_path):
+    """The fix must not move a single existing key.
+
+    Sibling-D's constraint, and this repo measured the cost it prevents at 88
+    notes: a watcher that re-reports the whole inbox because its digest format
+    moved is a worse artifact than the silence it fixes. The expected value is
+    rebuilt here from the DOCUMENTED format rather than copied from the
+    implementation, so this goes red if the format changes even when the
+    implementation agrees with itself.
+    """
+    import hashlib
+
+    inbox = tmp_path / "inbox"
+    drop = _drop(inbox, "from-XX-verbatim", {"a.py": "print(1)\n", "sub/b.txt": "two\n"})
+
+    lines = []
+    for rel, body in (("a.py", "print(1)\n"), ("sub/b.txt", "two\n")):
+        lines.append(rel + chr(0) + hashlib.sha256(body.encode("ascii")).hexdigest())
+    expected = hashlib.sha256("\n".join(sorted(lines)).encode("utf-8")).hexdigest()
+
+    digest, count, _manifest, anomalies = watch._drop_manifest(drop)
+
+    assert anomalies == (), "an ordinary drop reported an anomaly"
+    assert count == 2
+    assert digest == expected, (
+        "the drop manifest format moved. Every seen key for every drop in every "
+        "sibling's watermark just became stale, and the next report dumps the "
+        "whole inbox back on the operator as unread"
+    )
+
+
+def test_a_junction_inside_a_drop_is_not_descended(watch, tmp_path):
+    """A one-file drop must report ONE file, not the tree behind a junction."""
+    inbox = tmp_path / "inbox"
+    drop = _drop(inbox, "from-XX-verbatim", {"only.py": "print(1)\n"})
+    behind = tmp_path / "behind"
+    (behind / "deep").mkdir(parents=True, exist_ok=True)
+    for i in range(5):
+        (behind / "deep" / f"f{i}.py").write_bytes(b"x\n")
+    if not _junction(drop / "link", behind):
+        pytest.skip("this box will not create an NTFS junction")
+
+    digest, count, _manifest, _anomalies = watch._drop_manifest(drop)
+
+    assert count == 1, (
+        f"the walk descended the junction and reported {count} files for a "
+        "one-file drop. A junction over a large tree runs past the hook "
+        "timeout, the hook is killed, and a killed hook surfaces nothing at all"
+    )
+    assert digest, "the drop still has to hash to something"
+
+
+def test_a_junction_is_named_in_the_report_with_its_reason(watch, tmp_path, capsys):
+    """Not descending it is half the fix. Silence about it is the other defect."""
+    inbox = tmp_path / "inbox"
+    drop = _drop(inbox, "from-XX-verbatim", {"only.py": "print(1)\n"})
+    behind = tmp_path / "behind"
+    behind.mkdir()
+    (behind / "f.py").write_bytes(b"x\n")
+    if not _junction(drop / "link", behind):
+        pytest.skip("this box will not create an NTFS junction")
+    state = tmp_path / "runtime" / "seen.json"
+
+    watch.main(["--dir", str(inbox), "--state", str(state), "--reported", str(tmp_path / "r.json")])
+    out = capsys.readouterr().out
+
+    assert "link" in out, "the junction was pruned silently, which is the defect"
+    assert "reparse" in out.lower(), "the report does not say WHY the entry could not be digested"
+
+
+def test_a_junction_moves_the_drop_digest_rather_than_vanishing(watch, tmp_path):
+    """An entry that cannot be digested must MOVE the key, never drop out of it."""
+    inbox = tmp_path / "inbox"
+    drop = _drop(inbox, "from-XX-verbatim", {"only.py": "print(1)\n"})
+    before, _count, _m, _a = watch._drop_manifest(drop)
+    behind = tmp_path / "behind"
+    behind.mkdir()
+    (behind / "f.py").write_bytes(b"x\n")
+    if not _junction(drop / "link", behind):
+        pytest.skip("this box will not create an NTFS junction")
+
+    after, _count2, _m2, _a2 = watch._drop_manifest(drop)
+
+    assert after != before, (
+        "a junction appeared inside an acknowledged drop and the key did not "
+        "move, so the drop reads as already read"
+    )
+
+
+#: How many files the budget arm below is allowed to create, as a LITERAL.
+#: Never derived from the constant under test - see the arm's docstring.
+_BUDGET_FIXTURE_FILES = 15
+
+
+def test_the_shipped_entry_budget_is_a_bounded_number(watch):
+    """The ceiling has to be small enough to bound a walk under a hook timeout.
+
+    Asserted against a literal rather than against itself, so raising the
+    constant to something that is not a ceiling goes RED here instead of being
+    discovered by a walk that never finishes.
+    """
+    assert 0 < watch.MAX_DROP_ENTRIES <= 100_000, (
+        "the entry budget is not a bound any more, so a junction over a large "
+        "tree runs the walk past the hook timeout and the hook is killed"
+    )
+
+
+def test_a_drop_over_the_entry_budget_stops_and_says_so(watch, tmp_path, capsys, monkeypatch):
+    """An unbounded walk under a hook with a timeout is the outage, not the count.
+
+    THE BUDGET IS LOWERED TO MEET THE FIXTURE, NEVER THE FIXTURE RAISED TO MEET
+    THE BUDGET. The first version of this arm sized its fixture as
+    `MAX_DROP_ENTRIES + 5`, which reads as thorough and is a loaded gun: a
+    mutation run against the constant set it to 10**9 and the arm began writing
+    a billion files, reaching 492674 before it was killed. A fixture whose size
+    is derived from the value under test is not a test of that value, it is an
+    amplifier for whatever that value becomes. Sibling-C reported the same class
+    from the other end - an adversary probing an unbounded read started a 400
+    GiB sparse write on this box - and its rule is the one applied here: cap any
+    fixture an adversary, or a mutation harness, is invited to create.
+    """
+    monkeypatch.setattr(watch, "MAX_DROP_ENTRIES", 5)
+    inbox = tmp_path / "inbox"
+    drop = _drop(inbox, "from-XX-verbatim", {"a.py": "x\n"})
+    for i in range(_BUDGET_FIXTURE_FILES):
+        (drop / f"f{i}.txt").write_bytes(b"x\n")
+    state = tmp_path / "runtime" / "seen.json"
+
+    _digest, count, _m, _a = watch._drop_manifest(drop)
+    watch.main(["--dir", str(inbox), "--state", str(state), "--reported", str(tmp_path / "r.json")])
+    out = capsys.readouterr().out
+
+    assert count <= 5, "the walk ran past its own budget"
+    assert "budget" in out.lower(), "the walk stopped early and the report did not say so"
+
+
+def test_an_entry_that_is_neither_a_file_nor_a_directory_is_reported(watch):
+    """The both-false path, built DIRECTLY rather than through a filename trick.
+
+    Sibling-C reached it with a trailing dot or space in a name; Sibling-D could
+    not create such a name on its box at all. An arm that depends on the trick
+    is a SKIP on one of the two, so the condition is constructed here instead.
+    An `if is_dir() / elif is_file()` ladder with no `else` drops such an entry
+    off the end of the loop under a confident exit 0.
+    """
+
+    class _Neither:
+        name = "odd"
+
+        def is_dir(self):
+            return False
+
+        def is_file(self):
+            return False
+
+    kind, reason = watch._classify(_Neither())
+
+    assert kind == "anomaly", "a both-false entry was classified as something digestible"
+    assert reason, "the anomaly carries no reason, so the report cannot say why"
+
+
+def test_a_loose_top_level_file_is_a_first_class_entry(watch, tmp_path, capsys):
+    """A deliverable that is not a note and not a drop.
+
+    Measured on this channel 2026-09-07: Sibling-A delivered
+    `REFERENCE-moon_sync_poller.py.txt` beside a note. A watcher globbing `*.md`
+    at the top level is silent about it - it is not a note and it is not a
+    directory, so it matches nothing. Sibling-C's rewritten walker caught the
+    same real delivery three hours after its fix landed.
+    """
+    inbox = tmp_path / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    (inbox / "REFERENCE-poller.py.txt").write_bytes(b"print(1)\n")
+    state = tmp_path / "runtime" / "seen.json"
+
+    unread = watch.unseen_entries(inbox, state)
+    watch.main(["--dir", str(inbox), "--state", str(state), "--reported", str(tmp_path / "r.json")])
+    out = capsys.readouterr().out
+
+    assert [e.key for e in unread] == ["REFERENCE-poller.py.txt"], (
+        "a loose top-level deliverable is invisible, which is the `*.md` glob "
+        "reporting a real delivery zero times"
+    )
+    assert "REFERENCE-poller.py.txt" in out
+    assert "print(1)" not in out, "the report leaked the loose file's content"
+
+
+def test_a_loose_top_level_file_edited_in_place_re_surfaces(watch, tmp_path):
+    """It is keyed on content like everything else, not merely listed once."""
+    inbox = tmp_path / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    loose = inbox / "REFERENCE-poller.py.txt"
+    loose.write_bytes(b"print(1)\n")
+    state = tmp_path / "runtime" / "seen.json"
+    watch.mark_seen(inbox, state)
+    assert not watch.unseen_entries(inbox, state), "the mark did not take"
+
+    loose.write_bytes(b"print(2)\n")
+
+    assert [e.key for e in watch.unseen_entries(inbox, state)] == ["REFERENCE-poller.py.txt"]
+
+
+# ---------------------------------------------------------------------------
+# THE WITHDRAWAL PROPERTY, AND THE HALF THAT IS EASY TO SHIP BROKEN.
+#
+# Sibling-A pulled 50 files from four inboxes in one night. Every arrival-keyed
+# watcher on the box - all five of them - reported silence while an entire
+# payload left the channel, and two senders then spent a night reasoning about
+# bytes the receiver did not have. A drop that leaves the channel leaves no
+# trace, so the watcher is the only thing that can say so.
+#
+# THE BASELINE IS `reported | seen`, NOT `seen` ALONE. Sibling-D's correction:
+# the case that MOTIVATED the feature is notes LISTED at session start and
+# pulled before anyone ran the acknowledge, and those live in the report record
+# only. A seen-only baseline scores the motivating case as a non-event.
+#
+# THE HALF THAT SHIPS BROKEN. Sibling-D shipped this and found the defect
+# twenty minutes later by running its own command against live mail: the
+# acknowledge pruned the SEEN record and never touched the REPORT record, so a
+# withdrawn name re-derived itself on every run and could never be cleared by
+# anything. Every arm passed, because every arm asserted that a withdrawal
+# REPORTS and none asserted that it STOPS. A report the reader cannot clear is
+# a defect even when every line in it is TRUE - it trains the reader to skip
+# the one section with no artifact left on disk to notice later.
+#
+# THE THIRD ARM IS THE ONE NOBODY ASKS FOR. The report record must never become
+# a second acknowledgement path. It is written by a plain reporting run, so if
+# it ever fed the unread decision, a session-start report would silently
+# consume the operator's queue - which is the subagent-poisoning defect this
+# tool separates `--mark` out to avoid, re-entering through the back door.
+# ---------------------------------------------------------------------------
+
+
+def test_a_withdrawal_is_reported_after_the_entry_was_shown(watch, tmp_path, capsys):
+    """The motivating case: listed at session start, pulled before any acknowledge."""
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-09-07-from-RC-drop-note.md")
+    state = tmp_path / "runtime" / "seen.json"
+    reported = tmp_path / "runtime" / "reported.json"
+    args = ["--dir", str(inbox), "--state", str(state), "--reported", str(reported)]
+
+    watch.main(args)
+    capsys.readouterr()
+    (inbox / "2026-09-07-from-RC-drop-note.md").unlink()
+    watch.main(args)
+    out = capsys.readouterr().out
+
+    assert "withdrawn" in out.lower(), (
+        "an entry that was SHOWN to the operator left the channel and the "
+        "report went silent, which is the arrival-keyed defect"
+    )
+    assert "2026-09-07-from-RC-drop-note.md" in out
+
+
+def test_a_withdrawn_drop_is_reported_by_name(watch, tmp_path, capsys):
+    """Sibling-A's real incident was three whole payload directories."""
+    import shutil
+
+    inbox = tmp_path / "inbox"
+    _drop(inbox, "from-RC-verbatim", {"tool.py": "print(1)\n"})
+    state = tmp_path / "runtime" / "seen.json"
+    reported = tmp_path / "runtime" / "reported.json"
+    args = ["--dir", str(inbox), "--state", str(state), "--reported", str(reported)]
+
+    watch.main(args + ["--mark"])
+    capsys.readouterr()
+    shutil.rmtree(inbox / "from-RC-verbatim")
+    watch.main(args)
+    out = capsys.readouterr().out
+
+    assert "from-RC-verbatim/" in out and "withdrawn" in out.lower()
+
+
+def test_an_unacknowledged_withdrawal_survives_to_the_next_run(watch, tmp_path, capsys):
+    """Reporting it exactly once puts it straight back into the watermark's class.
+
+    A session cleared before anyone read the output loses it, and unlike every
+    other inbox event there is no artifact left on disk to notice later.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    state = tmp_path / "runtime" / "seen.json"
+    reported = tmp_path / "runtime" / "reported.json"
+    args = ["--dir", str(inbox), "--state", str(state), "--reported", str(reported)]
+
+    watch.main(args)
+    (inbox / "a.md").unlink()
+    watch.main(args)
+    capsys.readouterr()
+    watch.main(args)
+    out = capsys.readouterr().out
+
+    assert "a.md" in out, "the withdrawal was reported exactly once and then lost"
+
+
+def test_an_acknowledged_withdrawal_stops_being_reported(watch, tmp_path, capsys):
+    """The half Sibling-D shipped broken, found by report / acknowledge / report."""
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    state = tmp_path / "runtime" / "seen.json"
+    reported = tmp_path / "runtime" / "reported.json"
+    args = ["--dir", str(inbox), "--state", str(state), "--reported", str(reported)]
+
+    watch.main(args)
+    (inbox / "a.md").unlink()
+    watch.main(args)
+    capsys.readouterr()
+    watch.main(args + ["--mark"])
+    capsys.readouterr()
+    watch.main(args)
+    out = capsys.readouterr().out
+
+    assert "a.md" not in out, (
+        "an acknowledged withdrawal came back. A report the reader cannot clear "
+        "is a defect even when every line in it is true"
+    )
+    assert "withdrawn" not in out.lower()
+
+
+def test_the_report_record_is_never_a_second_acknowledgement_path(watch, tmp_path):
+    """The pruning must not quietly consume unread mail.
+
+    The report record is written by a PLAIN run. If it ever fed the unread
+    decision, a session-start report would consume the operator's queue - the
+    exact defect `--mark` is separated out to prevent, re-entering behind it.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    state = tmp_path / "runtime" / "seen.json"
+    reported = tmp_path / "runtime" / "reported.json"
+    args = ["--dir", str(inbox), "--state", str(state), "--reported", str(reported)]
+
+    watch.main(args)
+    watch.main(args)
+
+    assert reported.is_file(), "the report record was never written, so this arm is vacuous"
+    assert json.loads(reported.read_text())["reported"], "the record is empty, arm vacuous"
+    assert [e.key for e in watch.unseen_entries(inbox, state)] == ["a.md"], (
+        "a note went from unread to read without any --mark. Reporting "
+        "acknowledged something"
+    )
+
+
+def test_an_edited_note_is_not_filed_as_a_withdrawal(watch, tmp_path, capsys):
+    """Once keys carry a digest, an EDIT and a RETRACTION both move the key.
+
+    Comparing raw keys files an edited note in two contradictory sections at
+    once. The comparison is on the STABLE NAME: an edit keeps its name, a
+    retraction loses it.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md", "first\n")
+    state = tmp_path / "runtime" / "seen.json"
+    reported = tmp_path / "runtime" / "reported.json"
+    args = ["--dir", str(inbox), "--state", str(state), "--reported", str(reported)]
+
+    watch.main(args + ["--mark"])
+    capsys.readouterr()
+    _note(inbox, "a.md", "corrected\n")
+    watch.main(args)
+    out = capsys.readouterr().out
+
+    assert "unread" in out and "a.md" in out
+    assert "withdrawn" not in out.lower(), (
+        "an edited note was filed as a withdrawal as well as unread, in two "
+        "contradictory sections of the same report"
+    )

@@ -119,9 +119,15 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
+import stat
 import sys
 from pathlib import Path
 from typing import NamedTuple
+
+#: Present on Windows only. Named here so the walk reads the same on every
+#: platform and the Windows-only bit is a lookup rather than a branch.
+_FILE_ATTRIBUTE_REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -134,6 +140,12 @@ DEFAULT_INBOX = REPO_ROOT / "moon_sync_inbox"
 
 #: Runtime state, gitignored, never source.
 DEFAULT_STATE = REPO_ROOT / "ops" / "runtime" / "inbox_seen.json"
+
+#: What has been SHOWN, which is a different fact from what has been READ. Kept
+#: in its own file so a plain reporting run leaves the WATERMARK byte-unchanged
+#: and mtime-unmoved - the property that stops a subagent's session start from
+#: consuming the operator's queue.
+DEFAULT_REPORTED = REPO_ROOT / "ops" / "runtime" / "inbox_reported.json"
 
 #: This repo's own code in the `from-<CODE>-` naming convention. A note we sent
 #: sits in the same directory as one we received, so direction is read off the
@@ -155,6 +167,20 @@ _CHUNK_BYTES = 1 << 20
 #: digest INPUT, never printed on a user-facing surface.
 _UNREADABLE = "unreadable:"
 
+#: Ceiling on entries visited while walking ONE drop. The count is the harmless
+#: half of the junction defect; the walk running past the hook's timeout is the
+#: outage, because a killed hook surfaces nothing at all. A drop that blows this
+#: stops walking and says so rather than reporting a partial payload as whole.
+MAX_DROP_ENTRIES = 2000
+
+#: Why an entry could not be digested. These are digest INPUTS and they are also
+#: printed - an anomaly is the one thing that must reach the report every run,
+#: so its reason is written to be read. They carry no bytes of any payload.
+REASON_REPARSE = "reparse-point-not-followed"
+REASON_UNCLASSIFIABLE = "neither-file-nor-directory"
+REASON_UNWALKABLE = "directory-could-not-be-listed"
+REASON_BUDGET = "entry-budget-exhausted"
+
 
 class Entry(NamedTuple):
     """One thing in the inbox, note or drop, with what it currently hashes to.
@@ -170,6 +196,7 @@ class Entry(NamedTuple):
     kind: str
     files: int = 0
     manifest: bool = False
+    anomalies: tuple[str, ...] = ()
 
 
 def direction(name: str) -> str:
@@ -202,24 +229,115 @@ def _file_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _drop_files(drop: Path) -> list[Path]:
-    """Every file under `drop`, at any depth, in a stable order."""
+def _classify(child) -> tuple[str, str]:  # noqa: ANN001 - duck-typed on purpose
+    """(`dir` | `file` | `anomaly`, reason). The reason is empty unless anomalous.
+
+    THIS EXISTS BECAUSE OF THE MISSING `else`. An `if is_dir() / elif is_file()`
+    ladder drops any entry BOTH calls answer False for off the end of the loop,
+    under a confident exit 0. Sibling-C reached that state with a trailing dot
+    or space in a filename; Sibling-D could not create such a name on its box at
+    all, so the class is handled here rather than tested through a trick that
+    does not port. An unstattable entry lands here too, by the same argument: it
+    must be reported, never assumed away.
+    """
     try:
-        return sorted((p for p in drop.rglob("*") if p.is_file()), key=lambda p: p.as_posix())
+        if child.is_dir():
+            return "dir", ""
+        if child.is_file():
+            return "file", ""
     except OSError:
-        # An unwalkable drop degrades to "no files", and the caller still
-        # reports the drop itself - a directory is an entry because of its
-        # name. The raw error is not a user-facing surface.
-        return []
+        return "anomaly", REASON_UNCLASSIFIABLE
+    return "anomaly", REASON_UNCLASSIFIABLE
 
 
-def _drop_manifest(drop: Path) -> tuple[str, int, bool]:
-    """(manifest digest, contained file count, whether a sender manifest exists).
+def _is_reparse_point(path: Path) -> bool:
+    """Whether `path` is a link, junction or any other reparse point.
+
+    `Path.is_symlink()` IS NOT ENOUGH ON WINDOWS. It returns False for an NTFS
+    junction, which is why `rglob` descends one: Sibling-D measured a one-file
+    drop reported as 32 files, Sibling-A measured the same shape at 6, and a
+    junction over a large tree runs the walk past the hook's timeout. The
+    attribute bit is the check that actually answers the question; the
+    `is_symlink` half is the portable fallback for everything else.
+    """
+    try:
+        if path.is_symlink():
+            return True
+        attrs = getattr(os.lstat(path), "st_file_attributes", 0)
+    except (OSError, ValueError):
+        # Unstattable is not "ordinary". Treating it as a reparse point prunes
+        # the walk, and the caller records it as an anomaly either way.
+        return True
+    return bool(attrs & _FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def _walk_drop(drop: Path) -> tuple[list[Path], list[tuple[str, str]]]:
+    """(files under `drop` in a stable order, (relative path, reason) anomalies).
+
+    ITERATIVE AND PRUNED, because `rglob` cannot be told not to follow a
+    junction. Every entry the walk refuses to digest - a reparse point, an
+    unlistable directory, something that is neither a file nor a directory, or
+    the point at which the budget ran out - comes back as an anomaly rather
+    than as silence. That is Sibling-C's rule: WHAT CANNOT BE DIGESTED IS
+    FORCED INTO EVERY REPORT WITH ITS REASON, never keyed silently and never
+    dropped.
+    """
+    files: list[Path] = []
+    anomalies: list[tuple[str, str]] = []
+    pending = [drop]
+    visited = 0
+
+    def rel_of(path: Path) -> str:
+        try:
+            return path.relative_to(drop).as_posix()
+        except ValueError:
+            return path.name
+
+    while pending:
+        current = pending.pop()
+        try:
+            children = sorted(current.iterdir(), key=lambda p: p.name)
+        except OSError:
+            anomalies.append((rel_of(current), REASON_UNWALKABLE))
+            continue
+        for child in children:
+            visited += 1
+            if visited > MAX_DROP_ENTRIES:
+                anomalies.append((rel_of(child), REASON_BUDGET))
+                pending.clear()
+                break
+            if _is_reparse_point(child):
+                # NOT descended and NOT ignored. Both halves are the fix.
+                anomalies.append((rel_of(child), REASON_REPARSE))
+                continue
+            kind, reason = _classify(child)
+            if kind == "dir":
+                pending.append(child)
+            elif kind == "file":
+                files.append(child)
+            else:
+                anomalies.append((rel_of(child), reason))
+
+    files.sort(key=lambda p: p.as_posix())
+    anomalies.sort()
+    return files, anomalies
+
+
+def _drop_manifest(drop: Path) -> tuple[str, int, bool, tuple[str, ...]]:
+    """(manifest digest, file count, sender manifest present, anomaly reasons).
 
     Computed over WHAT IS ON DISK. See the module docstring for why a sender's
     own `MANIFEST.sha256` is refuted as the key and shipped as context instead.
+
+    THE FORMAT DOES NOT MOVE FOR A DROP OF ORDINARY FILES. An anomaly
+    contributes a line of exactly the same shape - relative path, NUL, then its
+    reason where a hash would be - so a drop with no anomalies hashes to the
+    byte-identical value it hashed to before this walk existed. Sibling-D named
+    the constraint and this repo measured the cost of breaking it at 88 notes:
+    a watcher that re-reports the whole inbox because its digest format moved
+    is a worse artifact than the silence it fixes.
     """
-    files = _drop_files(drop)
+    files, anomalies = _walk_drop(drop)
     lines = []
     manifest = False
     for path in files:
@@ -230,8 +348,11 @@ def _drop_manifest(drop: Path) -> tuple[str, int, bool]:
         if rel == MANIFEST_NAME:
             manifest = True
         lines.append(f"{rel}\0{_file_digest(path)}")
+    for rel, reason in anomalies:
+        lines.append(f"{rel}\0{reason}")
     body = "\n".join(sorted(lines))
-    return hashlib.sha256(body.encode("utf-8")).hexdigest(), len(files), manifest
+    reasons = tuple(f"{rel}: {reason}" for rel, reason in anomalies)
+    return hashlib.sha256(body.encode("utf-8")).hexdigest(), len(files), manifest, reasons
 
 
 def _entries(inbox: Path) -> list[Entry]:
@@ -250,14 +371,44 @@ def _entries(inbox: Path) -> list[Entry]:
     entries: list[Entry] = []
     for child in children:
         try:
-            if child.is_dir():
-                digest, count, manifest = _drop_manifest(child)
-                entries.append(Entry(child.name + "/", digest, child, "drop", count, manifest))
-            elif child.is_file() and child.name.lower().endswith(".md"):
+            if _is_reparse_point(child):
+                # A link at the TOP level is a deliverable nobody can digest.
+                entries.append(
+                    Entry(child.name, REASON_REPARSE, child, "anomaly", 0, False, (REASON_REPARSE,))
+                )
+                continue
+            kind, reason = _classify(child)
+            if kind == "dir":
+                digest, count, manifest, reasons = _drop_manifest(child)
+                entries.append(
+                    Entry(child.name + "/", digest, child, "drop", count, manifest, reasons)
+                )
+            elif kind == "file" and child.name.lower().endswith(".md"):
                 entries.append(Entry(child.name, _file_digest(child), child, "note"))
+            elif kind == "file":
+                # A LOOSE TOP-LEVEL FILE IS A DELIVERABLE IN ITS OWN RIGHT.
+                # Measured on this channel 2026-09-07: Sibling-A delivered
+                # `REFERENCE-moon_sync_poller.py.txt` beside a note, and every
+                # watcher globbing `*.md` was silent about it - not a note, not
+                # a directory, so it matched nothing. It is keyed on its content
+                # like everything else and NONE of its bytes reach the report.
+                entries.append(Entry(child.name, _file_digest(child), child, "file"))
+            else:
+                entries.append(Entry(child.name, reason, child, "anomaly", 0, False, (reason,)))
         except OSError:
-            # One unreadable child must not take the whole report down.
-            continue
+            # One unreadable child must not take the whole report down, but it
+            # must not vanish either - it is reported with its reason.
+            entries.append(
+                Entry(
+                    child.name,
+                    REASON_UNCLASSIFIABLE,
+                    child,
+                    "anomaly",
+                    0,
+                    False,
+                    (REASON_UNCLASSIFIABLE,),
+                )
+            )
     return entries
 
 
@@ -333,13 +484,89 @@ def mark_seen(inbox: Path, state: Path) -> bool:
     return atomic_write_json(state, payload)
 
 
+def read_reported(reported: Path) -> set[str]:
+    """The keys this repo has ever SHOWN the operator. Corrupt means empty.
+
+    THIS RECORD NEVER FEEDS THE UNREAD DECISION. It is written by a plain
+    reporting run, so if it ever reached `_is_seen` a session start would
+    silently consume the operator's queue - which is exactly the defect `--mark`
+    is separated out to prevent, re-entering behind it. Its only reader is
+    `withdrawn`. `test_the_report_record_is_never_a_second_acknowledgement_path`
+    pins that, and it is the arm nobody asks for.
+    """
+    payload = read_json(reported, default=None)
+    if not isinstance(payload, dict):
+        return set()
+    shown = payload.get("reported")
+    if not isinstance(shown, list):
+        return set()
+    return {k for k in shown if isinstance(k, str)}
+
+
+def record_reported(reported: Path, keys: list[str]) -> bool:
+    """Add `keys` to the record of what has been shown. Union, never a rewrite."""
+    merged = read_reported(reported) | set(keys)
+    reported.parent.mkdir(parents=True, exist_ok=True)
+    return atomic_write_json(reported, {"version": 1, "reported": sorted(merged)})
+
+
+def withdrawn(inbox: Path, state: Path, reported: Path) -> list[str]:
+    """Keys this repo has seen or shown that are no longer in the inbox.
+
+    THE BASELINE IS `reported | seen`, NOT `seen` ALONE. Sibling-D's correction,
+    and the case that motivated the whole feature is the one a seen-only
+    baseline scores as a non-event: notes LISTED at session start and pulled
+    before anyone ran the acknowledge live in the REPORT record only.
+
+    THE COMPARISON IS ON THE STABLE NAME. Once keys carry a content digest an
+    EDIT and a RETRACTION both move the key, so comparing digests would file an
+    edited note in two contradictory sections of the same report. This tool's
+    key already IS the bare name, with the digest held beside it as the value,
+    so the name comparison is the natural one rather than a stripping step.
+
+    WHY IT IS CARRIED RATHER THAN REPORTED ONCE. Reporting a withdrawal exactly
+    once puts it straight back into the watermark's own failure class - a
+    session cleared before anyone reads the output loses it - and unlike every
+    other inbox event there is no artifact left on disk to notice later. It is
+    carried until an explicit `--mark` prunes it.
+    """
+    digests, legacy = _seen(state)
+    baseline = set(digests) | legacy | read_reported(reported)
+    return sorted(baseline - {entry.key for entry in _entries(inbox)})
+
+
+def prune_records(inbox: Path, reported: Path) -> bool:
+    """Drop every reported key that is no longer in the inbox.
+
+    THE ACKNOWLEDGE HAS TO PRUNE BOTH RECORDS. Sibling-D shipped this half
+    broken and found it twenty minutes later by running its own command against
+    live mail: the acknowledge pruned the SEEN record and never touched the
+    REPORT record, so a withdrawn name re-derived itself on every run and could
+    never be cleared by anything. Every arm passed, because every arm asserted
+    that a withdrawal REPORTS and none asserted that it STOPS. A report the
+    reader cannot clear is a defect even when every line in it is true.
+    """
+    present = {entry.key for entry in _entries(inbox)}
+    reported.parent.mkdir(parents=True, exist_ok=True)
+    keep = sorted(read_reported(reported) & present)
+    return atomic_write_json(reported, {"version": 1, "reported": keep})
+
+
 def _describe(entry: Entry) -> str:
     """The human-context suffix on a drop's line. Empty for a note."""
-    if entry.kind != "drop":
+    bits: list[str] = []
+    if entry.kind == "drop":
+        bits.append(f"{entry.files} file" + ("" if entry.files == 1 else "s"))
+        if entry.manifest:
+            bits.append(f"{MANIFEST_NAME} present, not used as the key")
+    elif entry.kind == "file":
+        bits.append("loose file, not a note")
+    # AN ANOMALY IS FORCED INTO EVERY REPORT WITH ITS REASON. It is the one
+    # thing that must never be summarised away: the entry the walk could not
+    # digest is precisely the one the old walker was silent about.
+    bits.extend(entry.anomalies)
+    if not bits:
         return ""
-    bits = [f"{entry.files} file" + ("" if entry.files == 1 else "s")]
-    if entry.manifest:
-        bits.append(f"{MANIFEST_NAME} present, not used as the key")
     return "  (" + ", ".join(bits) + ")"
 
 
@@ -359,6 +586,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dir", default=str(DEFAULT_INBOX), help="inbox directory")
     parser.add_argument("--state", default=str(DEFAULT_STATE), help="watermark file")
     parser.add_argument("--all", action="store_true", help="list every note, read or not")
+    parser.add_argument("--reported", default=str(DEFAULT_REPORTED), help="report record")
     parser.add_argument("--mark", action="store_true", help="record the current set as read")
     parser.add_argument(
         "--quiet-when-empty",
@@ -369,6 +597,7 @@ def main(argv: list[str] | None = None) -> int:
 
     inbox = Path(args.dir)
     state = Path(args.state)
+    reported = Path(args.reported)
 
     if not inbox.is_dir():
         # Normal in a fresh clone. The directory is gitignored, so it does not
@@ -385,11 +614,30 @@ def main(argv: list[str] | None = None) -> int:
     # QUIET IS FOR THE PER-PROMPT HOOK. It runs on every single prompt, and a
     # hook that speaks when it has nothing to say trains the reader to skip it -
     # at which point it is worse than absent, because it looks wired.
-    if entries or not args.quiet_when_empty:
+    gone = withdrawn(inbox, state, reported)
+
+    if entries or gone or not args.quiet_when_empty:
         _render(entries, heading)
 
+    # A WITHDRAWAL IS FILED AS AN ANOMALY, NOT AS AN INFORMATIONAL LINE.
+    # Sibling-A pulled 50 files from four inboxes in one night and every
+    # arrival-keyed watcher on this box reported silence while an entire payload
+    # left the channel; two senders then spent a night reasoning about bytes the
+    # receiver did not have. It is the only inbox event with no artifact left on
+    # disk, so the watcher is the only thing that can say it happened.
+    if gone:
+        print(f"WITHDRAWN after being shown: {len(gone)}")
+        for key in gone:
+            print(f"  [gone] {key}")
+        print("  (run --mark to acknowledge; they are carried until you do)")
+
+    # Recorded AFTER rendering, so the record is of what was actually shown.
+    # This never touches the watermark and never feeds the unread decision.
+    if entries:
+        record_reported(reported, [entry.key for entry in entries])
+
     if args.mark:
-        if mark_seen(inbox, state):
+        if mark_seen(inbox, state) and prune_records(inbox, reported):
             print(f"marked read: {state}")
         else:
             print("could not update the watermark - it stays where it was")
