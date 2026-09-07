@@ -21,7 +21,7 @@ saying "Private. No licence granted." So the answer here is a ruling, not anothe
 
 - **80 tracked `.py` files and 10 tracked `.js` files**, 90 together
   (`git ls-files '*.py' | wc -l`, and the same for `*.js`). Measured at commit
-  `e95a71c`. An earlier draft of this ADR said 78 and 88; that was measured
+  `58c02b4`. An earlier draft of this ADR said 78 and 88; that was measured
   before this session's two new test modules landed, and it is corrected here
   rather than quietly - a stale count in a decision document is the same defect
   class this session spent its time removing.

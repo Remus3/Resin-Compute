@@ -50,7 +50,7 @@ DO NOT ADD -q TO ANY OF THOSE. pytest.ini addopts ALREADY carries -q. A second
 -q makes -qq and SUPPRESSES the summary line, so you get a wall of dots and no
 count, and you cannot report what you did not see. Bitten AGAIN on 2026-09-06.
 
-STATE, verified 2026-09-06 at commit a326851 (report what YOU observe, never
+STATE, verified 2026-09-06 at commit 572fa13 (report what YOU observe, never
 these numbers):
   licence QA                      33 passed
   docs QA                         23 passed
@@ -137,12 +137,12 @@ THE HIGHEST-VALUE WORK NOW, in ROADMAP.md order:
 
 DO NOT REDO THESE. All shipped or settled:
   - The governor vendoring, pin, lane width and the adversarial fixes. Commits
-    2a9d6c3, db3f767, 35140ee, adcfacc.
+    1527e97, 690d8b7, bb7f1ab, 941c1dd.
   - GitHub description and 17 topics, set 2026-09-06. CI and docs-guards badges
     are in README.md. Repository NAME: description and H1 only, no rename.
   - Banned-glyph enforcement in ci.yml and the ci/docs-guards complement guard
-    (tests/test_ci_workflow_complement.py). Commit a326851.
-  - The public-repo audit AND its fixes (e95a71c, 89fb813).
+    (tests/test_ci_workflow_complement.py). Commit 572fa13.
+  - The public-repo audit AND its fixes (58c02b4, 62dbf6b).
   - ADR-004's Lanternlight premise, corrected on LL's advice: their block is
     8810-8819 and has been since 2026-08-27. The ADR table was always right;
     only the prose was stale.
@@ -160,8 +160,8 @@ DO NOT REDO THESE. All shipped or settled:
 TRAPS THAT HAVE ALREADY BITTEN IN THIS TREE. All measured, none hypothetical:
 
   - AGENT WORKTREES CAN FORK FROM THE PREVIOUS HEAD, NOT YOURS. Measured
-    2026-09-06: HEAD was 2a9d6c3 at dispatch and `git worktree list` showed both
-    agents on ef4ff80, the commit BEFORE it. The builder whose whole job was to
+    2026-09-06: HEAD was 1527e97 at dispatch and `git worktree list` showed both
+    agents on ab048c6, the commit BEFORE it. The builder whose whole job was to
     hash ops/loop/*.py had no ops/loop/ at all and burned 32 minutes iterating
     against an impossible precondition. ALWAYS run `git worktree list` after
     dispatching and check the SHA. Worktrees share .git, so any committed SHA is
