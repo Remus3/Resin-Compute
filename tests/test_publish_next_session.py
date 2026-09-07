@@ -264,3 +264,101 @@ def test_the_repo_hand_off_block_carries_the_bootstrap_instruction():
     block = pns.extract_prompt(source)
     assert "CLAUDE.md" in block
     assert "ROADMAP.md" in block
+
+
+# ---------------------------------------------------------------------------
+# The hand-off is a PUBLICATION surface - credentials and account paths
+# ---------------------------------------------------------------------------
+#
+# Added 2026-09-07 after Legion Wallpaper asked whether anyone gated the
+# hand-off more widely than ASCII and truncation. This tree's honest answer was
+# no, and it was measured rather than assumed: a block carrying a live-shaped
+# NIMBLE_API_KEY and one carrying an absolute path naming the operator's
+# account were each published clean to the Desktop.
+#
+# Why this gate and not the tracked-tree sweeps. `tests/test_machine_identity.py`
+# and `tests/test_no_secret_literals.py` both run over the COMMITTED tree.
+# Neither sees a block on its way OUT to the Desktop, and that is the one path
+# that leaves the toolchain - pasted by hand into cold sessions and quoted into
+# notes to four sibling repos, from a repository that is public.
+
+
+def _block(payload: str) -> str:
+    """A syntactically valid hand-off carrying `payload`, over the byte floor.
+
+    The filler is deliberate: an undersized block is refused as `prompt_too_short`
+    BEFORE the leak scan runs, so a probe that forgets it proves nothing about
+    the leak scan. Measured that failure once while writing these arms.
+    """
+    from tools.publish_next_session import FENCE, MIN_BYTES
+
+    filler = "\nfiller line that carries no secret and no account path."
+    body = payload + filler * 90
+    assert len(body.encode("ascii", "replace")) > MIN_BYTES
+    return f"{FENCE}\n{body}\n{FENCE}\n"
+
+
+@pytest.mark.parametrize(
+    ("payload", "reason"),
+    [
+        ("export NIMBLE_API_KEY=abc123def456ghi789jkl012mno345pq", "secret_literal"),
+        ('"ANTHROPIC_API_KEY": "sk-ant-api03-AAAAAAAAAAAAAAAAAAAA"', "secret_literal"),
+        ("token sk-" + "B" * 32, "secret_literal"),
+        ("gh token ghp_" + "C" * 36, "secret_literal"),
+        (r"run C:\Users\someoperator\AppData\Local\Programs\Python", "account_path"),
+        ("run /c/Users/someoperator/AppData/Local", "account_path"),
+        ("run /mnt/c/Users/someoperator/.claude", "account_path"),
+    ],
+)
+def test_a_leaking_block_is_refused(payload, reason):
+    from tools.publish_next_session import Refusal, extract_prompt
+
+    with pytest.raises(Refusal) as caught:
+        extract_prompt(_block(payload))
+    assert caught.value.reason == reason
+
+
+def test_the_refusal_never_echoes_the_secret_it_caught():
+    """A refusal is printed and pasted around. Quoting the key would publish it."""
+    from tools.publish_next_session import Refusal, extract_prompt
+
+    secret = "sk-" + "D" * 40
+    with pytest.raises(Refusal) as caught:
+        extract_prompt(_block(f"token {secret}"))
+    rendered = str(caught.value)
+    assert secret not in rendered, "the refusal message echoed the credential"
+    assert "D" * 40 not in rendered
+
+
+@pytest.mark.parametrize(
+    "innocent",
+    [
+        # The partner guard. A gate that refused these would be turned off.
+        "set NIMBLE_API_KEY in the machine environment before running",
+        "NIMBLE_API_KEY=${NIMBLE_API_KEY}",
+        "ANTHROPIC_API_KEY=%ANTHROPIC_API_KEY%",
+        "path C:/Users/<account>/AppData/Local/Programs",
+        "slots.py 629c3d511d2500f92d25fbe102a7a8c73644c027291f46b8796565a1e839f865",
+        "commit e77ccd466e02b91887604c9875e694109a4c1ac4",
+        # Built rather than written: the Windows shared profile is a real
+        # account-shaped path, and spelling it literally here would make
+        # this file trip tests/test_machine_identity.py. The gate must still
+        # let it through - refusing a path that identifies nobody is the
+        # false positive that gets a gate switched off.
+        "C:" + chr(92) + "Users" + chr(92) + "Public" + chr(92) + "Desktop",
+        "python -m pytest tests",
+    ],
+)
+def test_legitimate_handoff_content_survives(innocent):
+    from tools.publish_next_session import extract_prompt
+
+    assert extract_prompt(_block(innocent))
+
+
+def test_the_leak_scan_is_not_vacuous():
+    """Both detector halves fire, so neither is dead code carrying a comment."""
+    from tools.publish_next_session import scan_for_leaks
+
+    assert [r for r, _ in scan_for_leaks("sk-" + "E" * 30)] == ["secret_literal"]
+    assert [r for r, _ in scan_for_leaks(r"C:\Users\someoperator\x")] == ["account_path"]
+    assert scan_for_leaks("nothing to see here") == []

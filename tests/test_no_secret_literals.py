@@ -104,9 +104,17 @@ ENV_REFERENCE = re.compile(
     r"|secrets\.|vars\.|MOVED-TO-|<[^>]*>|xxx|XXX|placeholder|PLACEHOLDER)",
 )
 
-#: Files whose JOB is to name these patterns. Exempt BY NAME so the exemption is
-#: a visible list of two rather than a rule that quietly widens.
-SELF_EXEMPT = {"tests/test_no_secret_literals.py"}
+#: Files whose JOB is to carry these patterns. Exempt BY NAME so the exemption
+#: stays a short visible list rather than a rule that quietly widens.
+#:
+#: Both entries plant fake credentials DELIBERATELY, as the fixtures that prove
+#: their own detectors have teeth. Exempting them is not a hole: the arm below
+#: asserts each one would actually TRIP the sweep, so an exemption that stopped
+#: being load-bearing is reported rather than left standing.
+SELF_EXEMPT = {
+    "tests/test_no_secret_literals.py",
+    "tests/test_publish_next_session.py",
+}
 
 
 @lru_cache(maxsize=1)
@@ -227,7 +235,10 @@ def test_a_legitimate_neighbour_survives(innocent):
 
 def test_the_self_exemption_is_narrow_and_real():
     """This module names the patterns, so it is exempt - and only it is."""
-    assert SELF_EXEMPT == {"tests/test_no_secret_literals.py"}
+    assert SELF_EXEMPT == {
+        "tests/test_no_secret_literals.py",
+        "tests/test_publish_next_session.py",
+    }
     tracked = set(_tracked_text_files())
     for rel in SELF_EXEMPT:
         assert rel in tracked, (
@@ -243,6 +254,12 @@ def test_the_detector_would_fail_on_this_file_without_its_exemption():
     dead weight and should go. Asserting it here means the next reader is told
     which of the two is true rather than guessing.
     """
+    for rel in sorted(SELF_EXEMPT):
+        body = (REPO_ROOT / rel).read_text(encoding="utf-8")
+        assert scan_text(body), (
+            f"{rel} is exempted but no longer trips the detector, so its "
+            "exemption is unnecessary - remove it rather than leaving a hole"
+        )
     own = (REPO_ROOT / "tests" / "test_no_secret_literals.py").read_text(encoding="utf-8")
     assert scan_text(own), (
         "this module no longer trips its own detector, so SELF_EXEMPT is "

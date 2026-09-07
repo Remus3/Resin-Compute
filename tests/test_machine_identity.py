@@ -190,6 +190,16 @@ PLACEHOLDER_ACCOUNTS: dict[str, str] = {
         "use when describing this very defect. Angle brackets are not legal "
         "in a Windows path segment, so the token cannot name a real account."
     ),
+    "someoperator": (
+        "The deliberately fictional account in the hand-off leak fixtures, "
+        "tests/test_publish_next_session.py. Those arms prove that "
+        "tools/publish_next_session.py REFUSES to publish a block naming a "
+        "real user profile, so they must contain an account-shaped path or "
+        "they assert nothing. Chosen to be obviously invented; it names no "
+        "account on this or any machine, and the real one is never used - "
+        "a fixture that planted the true account name would be the leak it "
+        "is testing for."
+    ),
 }
 
 
