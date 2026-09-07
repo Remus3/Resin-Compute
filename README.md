@@ -58,6 +58,17 @@ live version of this list; what follows is its shape.
   companion with a system tray (ADR-005). Several panels are not live yet.
   A panel that is not wired says what it is waiting on rather than showing a
   placeholder number, which is a deliberate design rule and not a stopgap.
+- **The concurrency governor.** `ops/loop/` holds two files that bound how many
+  headless Claude cycles run at once across three projects sharing this machine.
+  They are byte-identical-by-contract with the other two participants and pinned
+  by digest in `tests/test_loop_concurrency.py`, because a divergence there is
+  not a merge conflict anyone notices - it is a silent concurrency bug.
+  **Nothing in this repository acquires a slot yet.** `headless/runner.py` is a
+  job runner, not a Claude-executor loop, so this is a parity contract joined
+  ahead of need rather than a live throttle. It is listed here rather than under
+  "real and tested" for exactly that reason: the guard is tested, the throttle
+  is not in use. Of interest outside this project mainly as a worked example of
+  keeping a file identical across repositories that cannot import each other.
 
 ---
 

@@ -16,7 +16,7 @@ one contiguous block per project:
 | LL | Lanternlight | 8810-8819 |
 | DS | Daemon Slayer | 8860-8879 |
 | RC | Amberstone | 8888-8895 plus 2999 |
-| LW | LegionWallpaper | 8900-8919 |
+| LW | Legion Wallpaper | 8900-8919 |
 | CS | Clockspeed | 8920-8939 |
 
 ResinCompute was scaffolded after that registry was drawn and was never given a
@@ -31,7 +31,7 @@ nothing ever failed. The collision was latent, not active.
 
 A latent collision is the dangerous kind. Clockspeed acquired its own by
 allocating 8900-8911 after PROBING for a free listener; the range sat wholly
-inside LegionWallpaper's block, and LW's monitor is an operator-launched GUI that
+inside Legion Wallpaper's block, and LW's monitor is an operator-launched GUI that
 is unbound most of the time, so a live scan reported the whole block free. That
 incident is written into `Clockspeed/config/ports.json` as a standing warning:
 **verify a band against the owning project's registry in source, never against
@@ -66,8 +66,18 @@ The unallocated gaps were 8790-8809, 8815-8859, 8880-8887 and 8896-8899.
 - **8880-8887** and **8896-8899** are 8 and 4 ports, too narrow to match the
   20-port convention every other block follows.
 - **8815-8859** is the largest gap but its low end abuts Lanternlight, whose
-  registry entry reads "8810-8814, expanding to 8819". Taking the bottom of that
-  gap would sit on the expansion it has already announced.
+  block is **8810-8819**. Taking the bottom of that gap would sit directly on it.
+
+  CORRECTED 2026-09-06 on Lanternlight's own advice. This clause originally read
+  that LL's registry entry was "8810-8814, expanding to 8819", and reasoned about
+  an ANNOUNCED expansion. That expansion had already landed: the operator widened
+  the block to 8810-8819 on 2026-08-27, before this ADR was written. The decision
+  below is unaffected, because 8815-8859 was rejected either way - but rejecting a
+  range because it overlaps a LIVE claim is a different fact from rejecting it
+  because it abuts a promised one, and the wrong premise would have been copied
+  forward into the reasoning for an eighth block. The table at the top of this
+  ADR always carried the correct 8810-8819; only this clause was stale, which is
+  its own lesson about a document disagreeing with itself.
 - **8790-8809** is exactly 20 ports, bounded by Red Moon below and Lanternlight
   above, and both bounds are firm rather than announced-as-growing.
 
