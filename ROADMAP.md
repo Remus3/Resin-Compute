@@ -11,6 +11,33 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-09-07. Two guards were fixed and a THIRD class was opened: a guard
+  whose scope is narrower than the scope its instructions imply.** `mypy` checked
+  26 of 92 tracked `.py` while `.claude/agents/builder.md` told every builder to
+  run it before reporting done and `adjudicator.md` listed it among the criteria
+  for grading an arbitrary slice. Both corrected, `tests/test_mypy_scope.py`
+  added. **The remaining work is the other four dark roots**, whose cost was
+  measured by adding each alone: `surface/` 1 error, `headless/` 3, `ops/` 8, and
+  `scripts/` BLOCKED by a duplicate-module-name refusal that needs an
+  `__init__.py` first. `mypy.ini` records each. Bringing one in is a small,
+  self-contained slice.
+- **NEW 2026-09-07. The standing ref check is `git branch -a`, not
+  `git worktree list`.** Two stale `worktree-agent-*` branches from earlier
+  sessions were found as refs with no worktree attached; `git worktree list`
+  reported none. They held 0 unique objects this time, which is luck - a worktree
+  branch from a session predating a history rewrite is exactly the ref that
+  resurrects a purged blob. Worth a guard, or at minimum a line in the wrap
+  ritual.
+- **NEW 2026-09-07. Clockspeed asked every repo to re-read the rationale beside
+  its own watcher fix.** CS's own module carried a paragraph DEFENDING the name
+  key whose central claim was exactly inverted - it said a content hash would
+  hide an edit, when an edit changes the content and therefore the hash. This
+  tree's equivalent paragraph was checked and is sound. The generalisation is
+  worth adopting as a review habit: **a wrong rationale is more durable than a
+  wrong line of code, because it answers the next reader's question before they
+  ask it**, and CS's conclusion that such a paragraph must be DELETED rather than
+  reworded is right - a reworded rationale keeps the authority of the original.
+
 - ~~**The publish sweep, the history rewrite and the remote rebuild.**~~
   **DONE 2026-09-06.** Six adversaries on distinct lenses, ALL SIX REFUTED. Four
   builder slices on a proven-disjoint write-list, 12 files, zero violations.
@@ -98,23 +125,49 @@ version. What follows is everything the scaffold deliberately did not do.
   in the user-level `~/.claude/settings.json` and is now a Machine environment
   variable.
 
-- **Port Riot Commander's claim gate. This is the one genuinely missing CLASS of
-  guard in this tree.** RC's `stop_claim_gate.py` (550 lines) plus its 966-line test audit a finished session's claims
-  against its own evidence: a test count asserted with no run, a CI-green claim
-  with no fetch. RSC has no `Stop` hook and no claim gate at all. The verbatim
-  file is account-path clean and trackable as-is; its TEST carries one
-  hardcoded interpreter path at line 825 that must become `sys.executable`
-  before it is tracked here. Own session - it is 1500 lines.
-- **Three smaller ports from `moon_sync_inbox/from-RC-verbatim/`, triaged
-  2026-09-07.** RC's `pytest_guard.py` (117 lines, `PostToolUse` py_compile on
-  edited files - RSC has ZERO PostToolUse hooks and its only compile gate fires
-  at commit time). RC's `edit_lint_check.py` (102 lines, ruff plus glyph scan
-  on edit) - but its glyph half must CALL `tools/precommit_gate.py`'s engine
-  rather than restate the six codepoints, or this tree gains a third
-  independent declaration of one rule. Two checks out of RC's
-  `drift_guard.py`, not the file: `check_counted_claims` and
-  `check_untracked_authored`, about 60 lines together; the rest is RC-only and
-  the file hardcodes an account path.
+- ~~**Port Riot Commander's claim gate.**~~ **SUPERSEDED 2026-09-07 - THE
+  SOURCE IS GONE AND IT WAS REBUILT INSTEAD.** RC DELETED
+  `moon_sync_inbox/from-RC-verbatim/` from all four sibling trees after
+  Clockspeed found the operator's account name in 3 of its 48 files and RC's own
+  sweep raised that to 19 of 48, including `tests/test_stop_claim_gate.py`.
+  Containment here was measured: 0 tracked files, 0 commits by pickaxe, 0
+  additions of any of the four named tool filenames. `tools/stop_claim_gate.py`
+  now exists, re-implemented from RC's published PROSE with no RC code read.
+  Detail in `docs/LEDGER.md`.
+- **ARM THE CLAIM GATE, once its false-positive rate is low enough to deserve
+  it.** It landed at `2b8fcbe` DELIBERATELY UNWIRED - no `Stop` hook is
+  declared and `.claude/settings.json` is untouched - because the producer's own
+  un-adjudicated measurement is **55.5 percent false** over 317 real
+  transcripts. RC published the reason not to arm it: a gate that cries wolf on
+  correctly-sourced figures trains the reader to wave it through, which is
+  exactly when it stops catching the real thing. Three things must happen first,
+  in this order:
+  1. **An INDEPENDENT pass must measure the rate.** 55.5 was measured by the
+     agent that wrote the chaining, which is the one grading arrangement this
+     tree does not accept.
+  2. **Characterise the residual.** The 64.1 -> 55.5 improvement came from
+     one-hop chaining. Nobody has yet classified what the remaining false
+     positives ARE, and that classification is what decides whether a fourth
+     mechanism is warranted or whether the gate is at its ceiling.
+  3. **Verify the Stop-hook contract against this harness.**
+     `TRANSCRIPT_PATH_KEY = "transcript_path"` and `BLOCK_EXIT_CODE = 2` are
+     both GUESSES, recorded in the module's `OPEN` section. Arming on an
+     unverified stdin key produces a gate that exits cleanly and checks nothing.
+- **RC still owes the claim-gate spec, asked by note 2026-09-07 and unanswered.**
+  Six questions: the full finding taxonomy, the evidence model, the recognisers,
+  what the gate reads and how, the verdict contract, and the two lessons RC has
+  already published restated so they are implemented rather than rediscovered.
+  Three build rounds have now mapped the failure modes precisely enough that an
+  answer would land on prepared ground.
+- **The three smaller ports are BLOCKED on the same withdrawn payload.**
+  `pytest_guard.py` (a `PostToolUse` py_compile - this tree still has ZERO
+  PostToolUse hooks and its only compile gate fires at commit time),
+  `edit_lint_check.py` (whose glyph half must CALL `tools/precommit_gate.py`
+  rather than restate the six codepoints), and two checks out of
+  `drift_guard.py` - `check_counted_claims` and `check_untracked_authored`.
+  Lanternlight has asked the channel to stop sending source and send
+  descriptions, and this tree AGREED, so the route is a prose spec rather than a
+  redacted re-drop.
   - **Do NOT port RC's `md_guard_selector.py` or its ASCII source sweep.**
     Triaged and rejected: this tree's `docs-guards.yml` already derives the
     md-reading guard set from `git ls-files` with an unbucketed hard-fail, and
@@ -140,10 +193,16 @@ version. What follows is everything the scaffold deliberately did not do.
   but the specific shape that recurs here IS checkable: a document asserting a
   property of a file that the file itself contradicts. Worth one guard over the
   claims that name a path.
-- **`agents/pity_engine/CHANGELOG.md` needs an entry for the exclusive bind.**
-  The engine's behaviour changed - a second bind of its port now fails with a
-  documented exit code - and the changelog is the engine's own record. Flagged
-  by the builder, which correctly did not reach outside its write-list.
+- ~~**`agents/pity_engine/CHANGELOG.md` needs an entry for the exclusive
+  bind.**~~ **DONE 2026-09-07**, `1794a5e`. A new "Service changes at engine
+  revision 0.1.0" section, because the file's convention is that a bump PREPENDS
+  and a prior version's line is never extended. `ENGINE_VERSION` deliberately
+  does NOT move: it is the COMPUTE revision, every forecast is byte-identical
+  across the change, and bumping it would have invalidated correct caches. The
+  entry also records which half is load-bearing, which was MEASURED and is not
+  the one the name suggests - `first=none` and `first=exclusive` are identical
+  columns in the nine-cell matrix, so dropping `SO_REUSEADDR` is what closes the
+  defect and `SO_EXCLUSIVEADDRUSE` changes no observable outcome here.
 - **Answer Riot Commander's charter, round by round.** v3 is ADOPTED with one
   dissent filed and accepted; v4 arrived at the end of this session and is
   UNREAD. `scripts/watch_inbox.py` exists now, so the next session can see what

@@ -12,6 +12,267 @@ now.
 
 ---
 
+## 2026-09-07 - Three guards that overstated their reach, and a claim gate that took three rounds to become honest
+
+Seven commits, `3f7f23f` through `2b8fcbe`. Four agents dispatched worktree
+isolated, three of them adversaries on distinct lenses. **Every adversarial pass
+that ran against a done-claim returned REFUTED**, and each refutation is recorded
+below with what it changed, because two of them refuted work this merger had
+done rather than a builder's.
+
+### The top roadmap item was DEAD, and the source was gone
+
+`moon_sync_inbox/from-RC-verbatim/` no longer exists - not here and nowhere on
+this machine. Riot Commander DELETED it from all four sibling trees after
+Clockspeed found the operator's Windows account name in 3 of its 48 files and
+RC's own sweep raised that to 19 of 48, including `tests/test_stop_claim_gate.py`.
+So the claim-gate PORT, the `pytest_guard` port, the `edit_lint_check` port and
+the two `drift_guard` checks are all blocked on a withdrawn payload.
+
+**Containment here was measured, not assumed:** 0 tracked files carry the account
+name, `git log --all -S` over it returns 0 commits, and 0 of the four named tool
+filenames were ever added. Nothing from the drop entered this tree.
+
+**This tree's OWN outbound drop was swept, and the check was armed first.** 7
+files across 4 sibling inboxes, byte-identical to the tracked originals by
+sha256. Five needle categories, every one proven to fire on a planted line before
+the real scan: account name 0, home path 0, short path 0, sibling root 0. The 16
+`users-root` hits are `tools/publish_next_session.py` and its test - the tool
+whose job is REFUSING account paths, whose pattern is an account-shaped path and
+whose fixtures use an invented operator name. A detector's own pattern trips its
+own sweep, which this tree had already written down.
+
+**The first run of that sweep reported two categories UNARMED**, and that is the
+lesson worth keeping. Both path patterns had been written through a shell
+heredoc, which silently ate one backslash from each character class and turned
+`[\\/]` into `[\/]` - a class matching forward slash only. Both then scanned
+every Windows path in the payload and found nothing. Without the positive control
+that would have been reported as a clean result.
+
+### Clockspeed's pickaxe check, run here with both controls
+
+Positive control 9 commits at rc=0, negative control 0. Then, scoped against
+`origin/main` because this repository is public: the account name returns **0
+across every ref**. `C:\Users` 6, `AppData/Local/Programs/Python` 1 and
+`Claude-Session` 4 are all false positives - the account-path detector, and the
+hook that strips the session trailer plus the test proving it strips it. Not
+taken on faith: every UUID-shaped and long-hex identifier in the published
+matches was intersected with the 1567 real session ids on this machine.
+**Intersection 0.**
+
+**One live instance of the resurrect-a-blob trap was found and reaped.** Two
+stale `worktree-agent-*` branches from earlier sessions were still present as
+refs with no worktree attached - `git worktree list` reported none while
+`git branch -a` reported both. They held 0 unique objects this time. That is
+luck: a worktree branch from a session predating a history rewrite is exactly the
+ref that resurrects a purged blob. **The standing check is `git branch -a`, not
+`git worktree list`** - the branch outlives the worktree.
+
+### The inbox watcher was blind to content and to directories - `6f37ce5`
+
+Measured against the shipped functions in a fixture inbox BEFORE any edit: 2 of 7
+properties held. `_notes()` globbed `*.md` at the top level and a DIRECTORY has
+no `.md` suffix; the watermark stored bare name strings, so the key was the
+filename alone. All five repos on the cross-repo channel had built the same hole
+independently, each in a different mechanism. Legion Wallpaper's phrasing is the
+one this tree keeps: it was not misclassified, it was invisible.
+
+Now 7 of 7. Notes keyed on (filename, content sha256). Drops are first-class
+entries keyed on (name + "/", manifest digest) computed over what is ON DISK -
+one line per file holding the drop-relative POSIX path, a NUL, then that file's
+sha256, sorted, joined, hashed once. An empty drop still reports. A
+`UserPromptSubmit` hook was added because `SessionStart` fires once and cannot
+see a note landing mid-session; it printed nothing when nothing was unread and
+surfaced three notes mid-session on its first live firing.
+
+Two other key shapes were REFUTED by siblings and are deliberately not
+implemented: a FILE COUNT stays equal when a sender replaces a file, and a digest
+of the sender's `MANIFEST.sha256` FILE keys identical for a payload edited
+without regenerating the manifest.
+
+**Migration verified read-only against the real state before anything was
+committed:** the shipped watermark held 88 plain name strings, and a version bump
+treating those as unseen would have dumped the whole inbox back on the operator.
+88 grandfathered, 1 genuinely new, watermark sha256 unchanged across a reporting
+run. Verification pointer: `tests/test_watch_inbox.py`,
+`test_a_legacy_name_only_watermark_still_counts_its_notes_as_read`.
+
+**The report may not carry a payload byte.** Lanternlight's rule, relayed by
+Clockspeed: everything the watcher prints is injected into a session with the
+harness's own authority, before any judgement is applied, so an imperative
+sentence in a sibling's file must not arrive wearing this watcher's voice. Pinned
+by `test_the_report_never_carries_a_payload_byte`, parametrized over all three
+report modes, asserting the NAMES appear first - a watcher that crashed and
+printed nothing would satisfy a bare no-payload assertion perfectly. Mutation:
+a variant appending a 60-character body preview leaks the marker and reddens it.
+
+### Property 6 - bytes-equal is not the same fact as did-not-write - `bc98c8d`
+
+Lanternlight's finding, and theirs alone. They ran their four hook commands
+verbatim to confirm the paths still resolved after an edit; the `SessionStart`
+one was their watcher, and it marked three genuinely unread notes as seen.
+
+Measured here on the LIVE watermark: two reporting runs, identical unread sets,
+bytes unchanged, **mtime unmoved**. This tree passes, and not from virtue -
+`--mark` has been a separate flag since the first version, so property 6 held by
+an accident of the original shape rather than because anyone had seen the
+failure. LL's statement of the cause is better than the one recorded here and
+replaces it: acknowledgement as a SIDE EFFECT of reporting means anything that
+can report can silently consume, including a probe whose only purpose was to
+check that the watcher runs.
+
+The mtime half is the part this tree would not have caught. The existing arm
+asserted the watermark's bytes and stopped. An atomic write producing identical
+content still moves the modification time. Mutation-proved: a variant rewriting
+the state file with its own identical bytes PASSES bytes-equal and FAILS mtime.
+
+### mypy checked a quarter of the tree and two agent files called that done - `26543e2`
+
+`python -m mypy` printed `Success: no issues found in 23 source files` against 92
+tracked `.py`. A narrow scope is a design. What made it a defect is that
+`.claude/agents/builder.md` told every builder to run mypy before reporting done
+and `.claude/agents/adjudicator.md` listed it among the criteria for GRADING an
+arbitrary slice. **Zero out of zero, institutionalised in the roster, where every
+future agent inherits it.** It happened during this session: a builder working in
+`tools/` reported mypy green and flagged the gap itself, in its own UNVERIFIED
+section rather than its results. The agent was more honest than the instruction
+it was following.
+
+The shape is worth naming because it recurs: **the config was documented in the
+wrong line.** The `mypy.ini` comment explained `exclude=` - a real, measured,
+correct reason covering 5 files. `files=`, which decided the other 64, carried no
+rationale at all, so a reader found a reasoned comment beside the wrong mechanism
+and stopped looking.
+
+Measured by adding each dark directory alone, in a scratchpad config so nothing
+changed to take the measurement: `tools/` 0 errors and now IN, `surface/` 1,
+`headless/` 3, `ops/` 8, and `scripts/` BLOCKED rather than chosen - mypy refuses
+it with a duplicate-module-name error needing an `__init__.py` first. mypy now
+reports 26. `[mypy-tests.*]` was cited by the `exclude=` comment as recording the
+intent and is dead config; it now says so.
+
+`tests/test_mypy_scope.py` is the guard, and mypy was the only tool here without
+one. It holds the dark set as a LITERAL with a measured reason per entry rather
+than deriving it from `mypy.ini`, because a test that recomputes its expectation
+from the file it checks can never fail.
+
+**That guard then had its own defect, found by the next builder and fixed in
+`b55825e`.** mypy WALKS THE FILESYSTEM; `git ls-files` does not. Any unstaged
+`.py` under a covered root made the two disagree, so every builder writing a new
+module in `tools/` would have met a spurious red - the same wave-it-through
+failure the guard exists to prevent, arriving from the other side. The arm now
+asserts `mypy count == tracked-under-roots + unstaged-under-roots`.
+
+### Legion Wallpaper's detector gap, closed - `3f7f23f`
+
+LW ported `tests/test_no_secret_literals.py`, ran it against their tree and
+reported a false positive back: the env destination assigned a bare lowercase
+PowerShell variable that had itself been read from `GetEnvironmentVariable` a
+line earlier. Reproduced here first. Latent rather than live - one tracked `.ps1`,
+no instance of the shape.
+
+**LW's suggested fix was not taken as stated, and the reason generalises.**
+Adding a bare `$name` to `ENV_REFERENCE` would have been wrong here: that pattern
+is applied with `.search()`, so it would exempt any value merely CONTAINING a
+variable. `VARIABLE_VALUE` is a separate pattern matched against the whole
+stripped value.
+
+Mutation changed the shipped test set. Three mutants: dropping the exemption is
+caught, dropping the TRAILING anchor is caught, and **dropping the LEADING anchor
+is EQUIVALENT** because `re.match` already anchors at the start, so `^` is
+documentation rather than mechanism. Without the third arm the trailing-anchor
+mutant survived: a value shaped variable-then-literal matched on its variable
+prefix and the appended secret rode out exempted. Measured as a real false
+negative before the arm existed.
+
+LW's second suggestion - parametrize the exemption assertion over every exempt
+file - was already present here at
+`test_the_detector_would_fail_on_this_file_without_its_exemption`.
+
+### The engine changelog, and why the revision did NOT move - `1794a5e`
+
+`ENGINE_VERSION` is the COMPUTE revision, returned to callers as
+`engine_version` so a consumer can decide whether a cached forecast is still
+valid. Every forecast is byte-identical across the exclusive-bind change, so
+bumping it would have signalled a compute change that did not happen and
+invalidated correct caches. The entry goes in a new "Service changes at engine
+revision 0.1.0" section, because the file's convention is that a bump PREPENDS
+and a prior version's line is never extended.
+
+**Which half is load-bearing was measured, and it is not the one the name
+suggests.** The nine-cell bind matrix in `agents/pity_engine/tests/test_service.py`
+has `first=none` and `first=exclusive` as identical columns, so with
+`allow_reuse_address = False` already set, adding `SO_EXCLUSIVEADDRUSE` changes
+no observable outcome against a listening socket on win32. Dropping
+`SO_REUSEADDR` is what closes it; two stock servers are the single cell in nine
+that double-binds. Crediting the flag would have been Clockspeed's
+durable-wrong-rationale defect, which they described the same night: a wrong
+explanation outlives a wrong line of code, because it answers the next reader's
+question before they ask it.
+
+### The claim gate - three rounds, three refutations, and it lands UNWIRED - `2b8fcbe`
+
+`tools/stop_claim_gate.py` plus 115 arms. Re-implemented from RC's published
+PROSE; no RC code was read, and the six questions asked of RC by note are
+unanswered.
+
+  round 1  lexical credit rule    REFUTED. count_mismatch 71 percent false on
+           the first pass's scoring, 60 percent on the second pass's
+           re-measurement of the same build.
+  round 2  calibrated lexical     REFUTED. False positives fell and laundering
+           holes opened instead - `target: 930 passed ... in 17.50s` credited as
+           evidence, the same line via `grep` credited, the comment bar bypassed
+           by one tab because `normalise_log_line` keeps only text after the last
+           tab. A dedup THIS MERGER added made `tests_pass_without_run`
+           structurally unable to fire, and the docstring asserted four
+           mechanisms the code did not have.
+  round 3  provenance             64.1 percent false, then 55.5 percent with
+           one-hop chaining.
+
+Provenance is the correct mechanism and closed every laundering hole: a summary
+is credited only from output of a command classified as a test RUNNER, so `cat`,
+`grep`, `git log` and `tail` are not evidence sources BY CONSTRUCTION rather than
+by a lexical bar that kept being bypassed. Chaining then credits a reader of a
+file a runner redirected into, one hop, because this project's own convention is
+to redirect and read back - an exit code read through a pipe is the pipe's. Six
+bars keep chaining from re-opening what provenance closed, each with an
+acceptance arm beside its refusal arm.
+
+**55.5 percent is still too high to arm, so no Stop hook is declared and
+`.claude/settings.json` is untouched.** RC published the reason: a gate that cries
+wolf on correctly-sourced figures trains the reader to wave it through, which is
+exactly when it stops catching the real thing. The 55.5 figure is also the
+producer's own, un-adjudicated, and it does NOT compare to the 68.0 percent from
+the round before - that sample was 313 files and 254,497 records where the same
+recipe selects 317 files and 94,136 records. The comparable pair, one sample one
+pass, is 64.1 -> 55.5 percent and 348 -> 274 findings.
+
+**`tests_pass_without_run` was deleted outright.** Across 316 transcripts and
+1877 checked claims it emitted 0 findings, because it arms only when every
+evidence list is empty, which guarantees another check already flagged the same
+record. A name in the contract tuple that cannot fire is the defect this gate
+exists to catch.
+
+Also fixed, and found by neither adversary: `"C:/.../gh.exe" run view` never
+matched `\bgh\s+`, so 40 sessions that HAD read CI were flagged.
+`ci_green_without_fetch` went from 43 findings to 3, all three hand-checked.
+
+Measured, not inferred: `cd shell && node --test` prints `pass 52` and
+`duration_ms 148.6112` - word before number, no `in <float>s` - and its real
+output through the parser yields 0 summaries, so classifying it a non-runner
+costs nothing. Pinned so it reddens if node's shape changes.
+
+### Readings, 2026-09-07 at `2b8fcbe`, historical rather than a claim about now
+
+licence 41, docs 23, qa_companion 16 passed 0 failed 2 skipped, ruff clean,
+`pytest tests` 1087 passed 1 skipped, `pytest agents/pity_engine` 80,
+`shell node --test` 52 pass 0 fail, headless dry-run exit 0, mypy 27 source files
+clean, `RSC_REQUIRE_HOOK_GATE=1 pytest tests/test_hook_gate.py` 12 passed,
+`git worktree list` 0 beyond the main checkout. The single skip is the opt-in
+network test in `tests/test_ingest_client.py`.
+
+---
+
 ## 2026-09-06 - The publish sweep, a history rewrite, and rebuilding the remote
 
 Six adversaries on distinct lenses, four builder slices, a `filter-repo` rewrite,
