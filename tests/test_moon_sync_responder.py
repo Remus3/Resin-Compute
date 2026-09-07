@@ -338,6 +338,91 @@ def test_every_metric_the_trial_agreed_to_is_recorded(rsp, tmp_path):
     assert rows[0]["responder_authored"] is True, "M5 requires the note be tagged as automated"
 
 
+def test_m1_is_never_recorded_without_the_grammar_that_bounds_it(rsp, tmp_path):
+    """Disposition (i): M1 is a LOWER BOUND and the label has to travel with it.
+
+    A caveat in a note does not travel with an integer in a file. This channel
+    has named that failure three times in a week - a count in a doc going stale
+    unguarded, a `Success:` line silent about the files it did not walk, a
+    present-tense measurement read as a claim about a file's past. Each is a
+    value that outlived its qualifier, so the bound goes in the same row.
+    """
+    metrics = tmp_path / "runtime" / "m.json"
+    rsp.record_cycle(
+        metrics, note="n.md", hops=3, arrival=0.0, replied=1.0,
+        seconds=1.0, actions=[], delivered=True,
+    )
+
+    row = json.loads(metrics.read_text())["cycles"][0]
+
+    assert "hops" in row and "grammar" in row, "M1 was recorded without its bound"
+    assert "lower bound" in row["grammar"].lower(), row["grammar"]
+
+
+@pytest.mark.parametrize(
+    ("scenario", "expected"),
+    [("window", "window"), ("budget", "budget"), ("empty", "empty"), ("disarmed", "disarmed")],
+)
+def test_each_way_a_cycle_stops_is_recorded_distinctly(rsp, tmp_path, scenario, expected):
+    """Under (i) the termination REASON is the informative field, not M1.
+
+    Both parties predict the chain terminates because a measurement-only
+    responder runs out of things to say. If it does, the trial has confirmed its
+    own bound and learned nothing about the channel. Any OTHER reason, or no
+    termination, is the finding - and a bare integer cannot tell them apart
+    afterwards.
+    """
+    inbox = tmp_path / "inbox"
+    inbox.mkdir(parents=True)
+    bounds = rsp.Bounds(armed=True)
+    now = None
+
+    if scenario == "window":
+        _note(inbox, "2026-09-07-1900-from-RC-q.md")
+        bounds = rsp.Bounds(armed=True, window_opens=0.0, window_closes=1.0)
+        now = 5000.0
+    elif scenario == "budget":
+        _note(inbox, "2026-09-07-1900-from-RC-hop.md", _draft(rsp, "auto\n"))
+        _note(inbox, "2026-09-07-1901-from-RC-q.md")
+        bounds = rsp.Bounds(armed=True, max_hops=1)
+    elif scenario == "disarmed":
+        _note(inbox, "2026-09-07-1900-from-RC-q.md")
+        bounds = rsp.Bounds(armed=False)
+
+    result = rsp.run_once(
+        inbox=inbox,
+        roots={"RC": tmp_path / "rc"},
+        bounds=bounds,
+        spawn=lambda *a, **k: _draft(rsp, "body\n"),
+        now=now,
+    )
+
+    assert result["termination"] == expected, result
+
+
+def test_a_responder_with_nothing_left_to_say_is_exhausted_not_refused(rsp, tmp_path):
+    """The one distinction disposition (i) exists to preserve.
+
+    A measurement-only responder that has run out of measurements produces an
+    empty draft, and the gate refuses it. That is the BOUND working rather than a
+    malfunction, and recording it as a plain refusal would erase exactly the
+    signal the trial is being run to read.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-09-07-1900-from-RC-q.md")
+    (tmp_path / "rc" / "moon_sync_inbox").mkdir(parents=True)
+
+    result = rsp.run_once(
+        inbox=inbox,
+        roots={"RC": tmp_path / "rc"},
+        bounds=rsp.Bounds(armed=True),
+        spawn=lambda *a, **k: rsp.RESPONDER_TAG + "\n",
+    )
+
+    assert result["termination"] == "exhausted", result
+    assert result["delivered"] is False
+
+
 def test_metrics_append_rather_than_replace(rsp, tmp_path):
     """A trial that overwrites its own record measures its last cycle only."""
     metrics = tmp_path / "runtime" / "m.json"
