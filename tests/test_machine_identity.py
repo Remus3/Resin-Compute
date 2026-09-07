@@ -302,9 +302,12 @@ def test_no_tracked_file_carries_an_absolute_path_naming_a_real_account():
 #
 # A sweep scores one hundred percent on arm one by deleting every path in the
 # tree. This arm is what stops that being an acceptable answer. It has been
-# earned here already: "Legion" names both this machine and a sibling project
-# in ADR-004's port registry, so a blind replace on that word would have
-# destroyed a real port-registry row while reporting success.
+# earned here already: at least one word in this tree names both a piece of
+# hardware and something a sweep might want to rewrite, so a blind replace on
+# that word would have destroyed a real row while reporting success. The word
+# is not named here. Naming it in a comment that explains why it was KEPT is
+# the same defect as quoting a caught credential in a gate's error message: the
+# explanation republishes the thing the decision was about.
 
 
 def test_the_synthetic_account_in_the_shortcut_fixture_survives():

@@ -405,8 +405,8 @@ def test_contending_threads_never_exceed_max_slots(slots, slot_root: Path):
         f"exercised, so this test proved nothing about it. Worker failures: {failures!r}"
     )
     assert entered >= max_slots, f"only {entered} workers were ever admitted"
-    # RESTORED after an adversarial pass REFUTED this test at 690d8b7. Riot
-    # Commander asserts this (its `assert not errors`); the port to this tree
+    # RESTORED after an adversarial pass REFUTED this test at 690d8b7.
+    # Sibling-C asserts this (its `assert not errors`); the port to this tree
     # collected `failures` and then never asserted on it, mentioning it only
     # inside another assertion's failure message - so it was load-bearing
     # nowhere. The demonstrated hole: mutate `hold()` so the deadline check

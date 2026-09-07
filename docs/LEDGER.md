@@ -295,8 +295,12 @@ stay byte-exact. The shared ProgramData slot-bucket path is a live OS location
 three repositories coordinate through; renaming it from one side points this
 repository at a different bucket and silently un-serialises the governor, so
 closing it is a fleet migration rather than a scrub. This repository's own
-`RC_` environment prefix means Resin Compute and is not a sibling. "Riot" in
-`core/ports.py` names Riot Games, a company, not a sibling. One machine-name
+`RC_` environment prefix means Resin Compute and is not a sibling. A third-party
+vendor name that once appeared in `core/ports.py` was judged a company rather
+than a sibling; that judgement was WRONG and the line is gone - see the
+2026-09-07 entry on residual inference channels. The vendor name is deliberately
+not repeated here, because repeating it in the ledger hands back exactly the
+token the module removed. One machine-name
 token survives in `README.md` and `docs/adr/ADR-004-port-block.md`; the
 operator ruled on project names and that is a separate question, left open
 rather than assumed.
