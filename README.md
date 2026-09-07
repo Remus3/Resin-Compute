@@ -451,6 +451,7 @@ Resin-Compute/
     bootstrap_data.py              runnable data bootstrap
     qa_companion.py                end-to-end probe of the companion surface
     make_shortcut.py               desktop shortcut for the companion
+    watch_inbox.py                 unread cross-repo notes, with a watermark
     hook_python.sh                 interpreter resolution shared by the hooks
     precommit_pycompile.py         syntax gate
     precommit_msg_check.py         commit message gate
