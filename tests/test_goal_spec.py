@@ -21,6 +21,7 @@ from core import domains, resin
 from core.types import BannerKind, CurrencyKind
 from engines.objectives import ASCENSION_LEVEL_CAPS
 from ingest.static_data import known_avatar_ids, known_material_ids
+from tests.test_guard_worktree_exclusion import swept_files
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SPEC = REPO_ROOT / "docs" / "GOAL_SPEC_SEED_TEAM.md"
@@ -112,7 +113,15 @@ UNSOURCED_FIGURES = ("430000", "430,000", "150000", "150,000")
 
 
 def _data_files() -> list[Path]:
-    return [p for p in DATA_DIR.rglob("*") if p.is_file() and p.suffix in {".json", ".md"}]
+    """Every `data/` document THIS working tree owns.
+
+    `swept_files` rather than a bare `rglob`: a nested checkout left inside
+    `data/` - a merged worktree, a stray extraction - is a second full copy of
+    somebody else's tree, and sweeping it makes this guard's colour a fact about
+    that copy instead of about this one. See
+    `tests/test_guard_worktree_exclusion.py` for the measurement and the proof.
+    """
+    return [p for p in swept_files(DATA_DIR) if p.suffix in {".json", ".md"}]
 
 
 def test_the_data_directory_carries_no_unsourced_cost_figure():
