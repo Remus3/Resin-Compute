@@ -56,7 +56,17 @@ recorded.
   window.
 - **Two suites, run SEPARATELY:** `python -m pytest tests` and
   `python -m pytest agents/pity_engine`. NEVER `pytest .` from the root. Also
-  `python -m ruff check .` and `python -m mypy` before you report done.
+  `python -m ruff check .` before you report done.
+- **`python -m mypy` IS NOT A DONE-GATE FOR YOUR SLICE unless your slice is in
+  `core/`, `engines/`, `ingest/`, `agents/pity_engine/` or `tools/`.** Those are
+  the only roots in `mypy.ini`'s `files=` list. Everywhere else - `headless/`,
+  `ops/`, `surface/`, `scripts/`, `tests/`, `conftest.py` - it prints
+  `Success: no issues found in N source files` having opened NONE of your files.
+  Measured 2026-09-07: 26 of 92 tracked `.py` are checked. Run it anyway so a
+  regression elsewhere surfaces, but NEVER report its Success as evidence about
+  code it cannot see. Zero out of zero reads as a pass. `mypy.ini` carries the
+  per-directory cost of bringing each remaining root in, and
+  `tests/test_mypy_scope.py` goes red if a root silently leaves the list.
 - **Never `Stop-Process` on Windows.** Use `taskkill /F /PID <pid>`, and under Git Bash
   write `taskkill //F //PID <pid>` - MSYS path conversion rewrites a lone `/F` into `F:/`
   and the call fails SILENTLY when redirected to `/dev/null`, so a process you believe you

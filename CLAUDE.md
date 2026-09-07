@@ -84,6 +84,17 @@ python -m mypy
 Do not restate a suite count in any doc. Counts are not guarded and a doc is not
 a source of truth. Measure with `python -m pytest tests --collect-only -q`.
 
+**`ruff` and `mypy` are not peers, whatever the block above looks like.**
+`ruff check .` traverses every tracked `.py`. `mypy` traverses the `files=`
+roots in `mypy.ini` - `core/`, `engines/`, `ingest/`, `agents/pity_engine/`,
+`tools/` - and prints `Success: no issues found in N source files` while saying
+nothing about `headless/`, `ops/`, `surface/`, `scripts/`, `tests/` or
+`conftest.py`. Never cite its Success as evidence about code outside those
+roots; that is zero out of zero reading as a pass. `mypy.ini` records the
+measured cost of bringing each remaining root in, and `tests/test_mypy_scope.py`
+goes red if a root leaves the list or if mypy's own file count drifts from the
+arithmetic.
+
 ## TDD
 
 Feature work and bug fixes follow TDD: write the failing characterization or

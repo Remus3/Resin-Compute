@@ -187,6 +187,12 @@ python -m ruff check .
 python -m mypy
 ```
 
+The two have different reach. `ruff` traverses every tracked `.py`; `mypy`
+traverses only the `files=` roots in `mypy.ini` and reports a file count that is
+a fraction of the tree, so its `Success` says nothing about `headless/`, `ops/`,
+`surface/`, `scripts/` or `tests/`. `mypy.ini` explains why each root is out and
+what bringing it in would cost; `tests/test_mypy_scope.py` keeps the two honest.
+
 ### 4. Bootstrap static data
 
 Offline by default. It normalizes the local hand-authored fixtures into the
