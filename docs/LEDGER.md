@@ -94,13 +94,13 @@ is a demonstration of the terminal state, NOT a rate. The production defaults
 are `backoff=2.0, jitter=2.0` and that rate was not measured.
 
 **Errors made and corrected in-session, recorded because the next reader deserves
-them.** The `db3f767` commit message cited
+them.** The `690d8b7` commit message cited
 `test_a_missing_vendored_file_is_a_failure_not_a_skip`, a test that has never
 existed - the name came from a dispatch brief and was not read back off the file.
 The real one is `test_the_vendored_governor_is_present`. The same message called
 the parity "recorded from three separate disks", which overstates it: all three
 roots are on one volume, and Riot Commander's note hashed THIS repo's files rather
-than printing its own. Both are corrected in `35140ee`, which cannot amend them.
+than printing its own. Both are corrected in `bb7f1ab`, which cannot amend them.
 
 Counts measured 2026-09-06 on Python 3.14.4, as a historical reading: `tests` 806
 passed 1 skipped, `agents/pity_engine` 76 passed, ruff clean, mypy clean. Note the
@@ -193,7 +193,7 @@ were not its own.
 `.claude/commands/orchestrated-run.md` phase 5 requires candidates to be FROZEN
 before dispatch, and phase 6 inherits it. Both adversaries handled the violation
 correctly - the first pinned its verdict to a worktree copy and named the mtime,
-the second proved its own subject was byte-identical to `e95a71c` by sha256 and
+the second proved its own subject was byte-identical to `58c02b4` by sha256 and
 cloned from the committed HEAD rather than the worktree. Both verdicts therefore
 stood. That is the agents being careful, not the process being sound.
 
@@ -332,7 +332,7 @@ what shipped.
 
 - **The verifier** returned CONFIRMED WITH CORRECTIONS. Every count re-derived
   exactly, including the "was" baselines, which it measured by exporting
-  `905fe24` with `git archive` into a scratch directory rather than mutating the
+  `a7834c8` with `git archive` into a scratch directory rather than mutating the
   checkout. It found three false claims in shipped prose.
 - **The adjudicator** returned ACCEPT WITH RESERVATIONS and made the sharpest
   observation of the session: this commit was convened because a licence gate
@@ -352,7 +352,7 @@ what shipped.
 Replacing filesystem walks with `git ls-files` was correct and it took the number
 of test files depending on the git oracle from 3 to 8 - measured by reading both
 commits - without anything testing what happens when that oracle is absent.
-`git archive e95a71c | tar -x` into a directory with no `.git`, then
+`git archive 58c02b4 | tar -x` into a directory with no `.git`, then
 `python -m pytest tests`, ABORTS AT COLLECTION with exit 2 and NOT ONE TEST RUNS,
 because `tests/test_shell_contract.py` calls git inside a `parametrize` argument
 at import time. With that file skipped, 48 more fail. That is what a person gets
@@ -425,7 +425,7 @@ than closed this session.
 
 ## 2026-09-06 - The public-repo audit, and the finding that refuted itself
 
-An audit session, not a fix session. Every gate was green at commit `96a8c54`
+An audit session, not a fix session. Every gate was green at commit `57f8894`
 before a line was touched, so nothing below is a broken build - each item is a
 defect a stranger would meet on a repository that is still PRIVATE. The findings
 landed in `ROADMAP.md`; the fixes are next session's work, on operator
@@ -497,7 +497,7 @@ enforced on one of its two forms. A second history rewrite is the operator's
 call; the guard extension cannot be written before it, because it would fail at
 HEAD.
 
-Counts observed 2026-09-06 at `96a8c54`, as a reading and not a claim about now:
+Counts observed 2026-09-06 at `57f8894`, as a reading and not a claim about now:
 licence QA exit 0; docs QA exit 0; `scripts/qa_companion.py` 17 passed, 0
 failed, 1 skipped; ruff clean; `pytest tests` 697 passed, 1 skipped;
 `pytest agents/pity_engine` 76 passed; `shell` node --test 52 passed; headless

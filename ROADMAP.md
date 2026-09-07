@@ -12,7 +12,7 @@ version. What follows is everything the scaffold deliberately did not do.
 ## Now
 
 - ~~**QA the repo for going public.**~~ **DONE 2026-09-06.** The audit ran at
-  commit `96a8c54` and every gate was green before a line was touched, so none of
+  commit `57f8894` and every gate was green before a line was touched, so none of
   it was a broken build - each item was a defect a stranger would meet. Every one
   is now fixed and guarded. What landed, with the guard that holds it:
   - **Two fixtures were labelled false, and the label WAS the compliance claim.**
@@ -80,7 +80,7 @@ version. What follows is everything the scaffold deliberately did not do.
     `resin-compute/`".** The relocation premise is gone from the build contract.
   - **Per-file licence headers: DECIDED, in `docs/adr/ADR-009-per-file-licence-headers.md`.**
     The answer is NO, on the merits, with named re-open triggers. Measured at
-    `e95a71c`: 80 tracked `.py`, 10 tracked `.js`, and zero SPDX identifiers in
+    `58c02b4`: 80 tracked `.py`, 10 tracked `.js`, and zero SPDX identifiers in
     any source file - the only occurrences anywhere are in ADR-009 itself,
     discussing them. GPL-3's
     "How to Apply These Terms" sits at LICENSE line 623, AFTER
@@ -118,7 +118,7 @@ version. What follows is everything the scaffold deliberately did not do.
   have failed for anyone cloning to `C:\dev\ResinCompute`. Both fixed and
   measured: archive now 692 passed, 50 skipped, exit 0.
 - **Two guards claim more than they sweep. Found by the quickstart adversary at
-  `e95a71c`, both measured.**
+  `58c02b4`, both measured.**
   - `tests/test_ports.py` sweeps ONLY `.py` files, because it uses `ast.parse` to
     tell a live integer literal from one inside a comment - which is the right
     mechanism and the reason it cannot simply be widened. The gap it leaves is
@@ -140,7 +140,7 @@ version. What follows is everything the scaffold deliberately did not do.
   `tests/test_docs_consistency.py` now derives its trackedness PREDICATE from
   `git ls-files`, but it still enumerates its docs CORPUS - which `.md` files to
   read - with `rglob`, at lines 172, 200, 231, 295, 306, 326 and 381. Found by
-  the verification pass at `e95a71c`. This is NOT a blind spot in the dangerous
+  the verification pass at `58c02b4`. This is NOT a blind spot in the dangerous
   direction: a tracked file in a clean checkout is always present, so the walk is
   a superset and nothing tracked escapes it. The exposure is the opposite one - a
   contributor with an untracked scratch `.md` under `docs/` gets it graded, and a

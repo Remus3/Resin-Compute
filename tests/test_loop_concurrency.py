@@ -97,7 +97,7 @@ EXPECTED_LANES = 3
 # that iterates it inherits whatever it happens to contain - so DELETING one
 # entry disarms that file's presence check and its digest check together, in a
 # single edit, and the only visible trace is the collected count dropping by
-# one. Measured on an adversarial pass against db3f767: removing the
+# one. Measured on an adversarial pass against 690d8b7: removing the
 # `winmutex.py` entry while also corrupting `winmutex.py` gave 18 passed, exit
 # 0, zero skips and zero warnings. This tuple is the second, independent witness
 # that turns that into a RED.
@@ -148,7 +148,7 @@ def test_the_pin_covers_every_vendored_module_and_nothing_was_added():
     """Guards the guard: the pin must cover the DIRECTORY, not merely itself.
 
     Three ways the contract rots with every other arm still green, all three
-    demonstrated by two independent adversarial passes against db3f767:
+    demonstrated by two independent adversarial passes against 690d8b7:
 
       1. an entry is DELETED from `SHARED_SHA256`. Both the presence arm above
          and the digest arm below iterate that one dict, so a single deleted
@@ -382,7 +382,7 @@ def test_contending_threads_never_exceed_max_slots(slots, slot_root: Path):
         f"exercised, so this test proved nothing about it. Worker failures: {failures!r}"
     )
     assert entered >= max_slots, f"only {entered} workers were ever admitted"
-    # RESTORED after an adversarial pass REFUTED this test at db3f767. Riot
+    # RESTORED after an adversarial pass REFUTED this test at 690d8b7. Riot
     # Commander asserts this (its `assert not errors`); the port to this tree
     # collected `failures` and then never asserted on it, mentioning it only
     # inside another assertion's failure message - so it was load-bearing
