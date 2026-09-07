@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 
 from tests.conftest import require_git_repository
+from tests.test_guard_worktree_exclusion import swept_files
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ADR_DIR = REPO_ROOT / "docs" / "adr"
@@ -76,6 +77,36 @@ RUNTIME_ARTIFACTS = {
 
 def _read(name: str) -> str:
     return (REPO_ROOT / name).read_text(encoding="utf-8")
+
+
+def _docs_markdown() -> list[Path]:
+    """Every markdown file under `docs/` that THIS working tree owns.
+
+    `swept_files` rather than a bare `rglob`: a nested checkout left inside
+    `docs/` - a merged worktree, a stray extraction - is a second full copy of
+    somebody else's documentation, and its pointers are not this tree's to
+    resolve. Sweeping it makes these guards' colour a fact about that copy. See
+    `tests/test_guard_worktree_exclusion.py` for the measurement and the proof.
+
+    The non-emptiness assertion is here, at the single choke point every arm in
+    this file walks through, rather than repeated six times: a corpus builder
+    that silently stopped finding documents would let every pointer guard below
+    pass forever, and zero out of zero is not a pass.
+    """
+    found = swept_files(REPO_ROOT / "docs", "*.md")
+    assert found, "the docs/ sweep found no markdown at all - zero out of zero is not a pass"
+    return found
+
+
+def _governing_and_docs() -> list[Path]:
+    """The governing documents plus the whole of `docs/`.
+
+    `.claude/commands/done.md` is one of the governing documents and lives under
+    a dot-directory, so it is named explicitly here and never reached by a
+    sweep - which is also why the sweep's dot-directory exclusion cannot cost
+    this file any coverage.
+    """
+    return [REPO_ROOT / d for d in GOVERNING_DOCS] + _docs_markdown()
 
 
 def _backticked_paths(text: str) -> set[str]:
@@ -172,7 +203,7 @@ def test_every_path_a_governing_doc_points_at_exists(doc: str):
 
 def test_every_path_the_docs_directory_points_at_exists():
     missing: list[str] = []
-    for path in sorted((REPO_ROOT / "docs").rglob("*.md")):
+    for path in _docs_markdown():
         rel = path.relative_to(REPO_ROOT).as_posix()
         for candidate in _backticked_paths(path.read_text(encoding="utf-8")):
             if not (REPO_ROOT / candidate).exists():
@@ -200,7 +231,7 @@ def test_every_runtime_artifact_exemption_is_still_referenced_somewhere():
     exemptions are how an allowlist quietly stops describing reality."""
     corpus = "".join(
         path.read_text(encoding="utf-8")
-        for path in [REPO_ROOT / d for d in GOVERNING_DOCS] + sorted((REPO_ROOT / "docs").rglob("*.md"))
+        for path in _governing_and_docs()
     )
     for artifact in RUNTIME_ARTIFACTS:
         assert artifact in corpus, f"{artifact} is exempt but no longer referenced - drop the exemption"
@@ -231,7 +262,7 @@ def test_every_path_a_governing_doc_points_at_is_tracked_by_git(doc: str):
 
 def test_every_path_the_docs_directory_points_at_is_tracked_by_git():
     untracked: list[str] = []
-    for path in sorted((REPO_ROOT / "docs").rglob("*.md")):
+    for path in _docs_markdown():
         rel = path.relative_to(REPO_ROOT).as_posix()
         for candidate in _backticked_paths(path.read_text(encoding="utf-8")):
             if not _is_tracked(candidate):
@@ -295,7 +326,7 @@ def test_the_trackedness_sweep_walked_a_real_corpus():
     pin a number.
     """
     citations = 0
-    for path in [REPO_ROOT / d for d in GOVERNING_DOCS] + sorted((REPO_ROOT / "docs").rglob("*.md")):
+    for path in _governing_and_docs():
         citations += len(_backticked_paths(path.read_text(encoding="utf-8")))
     assert citations >= 80, f"the trackedness sweep only walked {citations} citations - the parser is broken"
 
@@ -326,7 +357,7 @@ def test_every_adr_referenced_anywhere_exists():
     """A citation of ADR-00N with no such ADR is a dangling argument."""
     numbers = {p.name.split("-")[1] for p in _adr_files()}
     dangling: list[str] = []
-    for path in [REPO_ROOT / d for d in GOVERNING_DOCS] + sorted((REPO_ROOT / "docs").rglob("*.md")):
+    for path in _governing_and_docs():
         text = path.read_text(encoding="utf-8")
         for number in set(re.findall(r"\bADR-(\d{3})\b", text)):
             if number not in numbers:
@@ -381,7 +412,7 @@ def test_the_docs_are_seven_bit_ascii():
     documented hole in it.
     """
     offenders: list[str] = []
-    for path in [REPO_ROOT / d for d in GOVERNING_DOCS] + sorted((REPO_ROOT / "docs").rglob("*.md")):
+    for path in _governing_and_docs():
         raw = path.read_bytes()
         bad = sorted({b for b in raw if b > 0x7E or (b < 0x20 and b not in _ALLOWED_CONTROL)})
         if bad:
