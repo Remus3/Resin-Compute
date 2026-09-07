@@ -26,11 +26,11 @@ Three rules govern when and by whom this runs, and none of them is negotiable:
 
 ## The shape, and what was deliberately not ported
 
-This is Clockspeed's 5-phase audit and Riot Commander's lane-4 ritual adapted to
+This is Sibling-A's 5-phase audit and Sibling-C's lane-4 ritual adapted to
 a much smaller surface, not transcribed from either. Four things were dropped on
 purpose:
 
-- **No pseudo-screen capture harness.** Riot Commander renders an in-game
+- **No pseudo-screen capture harness.** Sibling-C renders an in-game
   overlay dock at 2560x1440 because it has one. This tree has a single
   companion window over a local dashboard, and a capture harness for a surface
   that does not exist is a harness that goes stale unread.
@@ -39,7 +39,7 @@ purpose:
   function - `render_html(board)` in `surface/render.py`, from a `Dashboard`
   that `surface/model.py` builds - so a fixture is a constructed object in a
   test, not a file plus a flag. Do not invent a second mechanism.
-- **No OCR or computer-vision arm.** Riot Commander's OCR is calibrated to
+- **No OCR or computer-vision arm.** Sibling-C's OCR is calibrated to
   game-HUD regions, and pointing it at a dashboard capture measures nothing.
   This tree has no vision module at all, so a claimed OCR pass would be a
   fabricated one.
@@ -49,8 +49,8 @@ purpose:
   in `tests/test_surface_render.py`, which is where the drag-strip, escaping,
   ASCII and content-security-policy pins already live.
 
-One naming decision, carried deliberately: Riot Commander calls phase 4 ASCII
-and Clockspeed calls it CHARACTER-SET. **Use CHARACTER-SET**, because in this
+One naming decision, carried deliberately: Sibling-C calls phase 4 ASCII
+and Sibling-A calls it CHARACTER-SET. **Use CHARACTER-SET**, because in this
 tree that phase also carries the leak check, and "ASCII" would make the leak arm
 look optional. It is not optional - this tree ingests Enka account data.
 

@@ -72,15 +72,16 @@ version. What follows is everything the scaffold deliberately did not do.
   branch from a session predating a history rewrite is exactly the ref that
   resurrects a purged blob. Worth a guard, or at minimum a line in the wrap
   ritual.
-- **NEW 2026-09-07. Clockspeed asked every repo to re-read the rationale beside
-  its own watcher fix.** CS's own module carried a paragraph DEFENDING the name
-  key whose central claim was exactly inverted - it said a content hash would
-  hide an edit, when an edit changes the content and therefore the hash. This
-  tree's equivalent paragraph was checked and is sound. The generalisation is
-  worth adopting as a review habit: **a wrong rationale is more durable than a
-  wrong line of code, because it answers the next reader's question before they
-  ask it**, and CS's conclusion that such a paragraph must be DELETED rather than
-  reworded is right - a reworded rationale keeps the authority of the original.
+- **NEW 2026-09-07. Sibling-A asked every repo to re-read the rationale beside
+  its own watcher fix.** Sibling-A's own module carried a paragraph DEFENDING
+  the name key whose central claim was exactly inverted - it said a content
+  hash would hide an edit, when an edit changes the content and therefore the
+  hash. This tree's equivalent paragraph was checked and is sound. The
+  generalisation is worth adopting as a review habit: **a wrong rationale is
+  more durable than a wrong line of code, because it answers the next reader's
+  question before they ask it**, and Sibling-A's conclusion that such a
+  paragraph must be DELETED rather than reworded is right - a reworded
+  rationale keeps the authority of the original.
 
 - ~~**The publish sweep, the history rewrite and the remote rebuild.**~~
   **DONE 2026-09-06.** Six adversaries on distinct lenses, ALL SIX REFUTED. Four
@@ -146,14 +147,14 @@ version. What follows is everything the scaffold deliberately did not do.
   each declared command rather than resolving its target.
 - ~~**CAVEMAN ULTRA as the default chat dialect.**~~ **DONE 2026-09-07**, on
   operator instruction, after RSC filed a dissent that the operator overruled.
-  `tools/caveman_default.py` and `tools/caveman.md` are Riot Commander's bytes,
+  `tools/caveman_default.py` and `tools/caveman.md` are Sibling-C's bytes,
   not a paraphrase; the `_BANNER` string is a FLEET CONTRACT and its sha256 is
   pinned as a literal in `tests/test_session_hooks.py` rather than diffed
   against the copy in `moon_sync_inbox/`, which is gitignored and would take the
   guard silent in every fresh clone. Terseness is CHAT ONLY - committed
   artifacts stay byte-exact.
 - ~~**Gate the hand-off write for credentials and account paths.**~~
-  **DONE 2026-09-07.** Legion Wallpaper asked whether anyone gated the hand-off
+  **DONE 2026-09-07.** Sibling-E asked whether anyone gated the hand-off
   more widely than ASCII and truncation; this tree's honest answer was no, and
   it was MEASURED: a block carrying an inline API key and a block naming the
   real account each published clean to the Desktop. That is the one write that
@@ -169,23 +170,24 @@ version. What follows is everything the scaffold deliberately did not do.
   in the user-level `~/.claude/settings.json` and is now a Machine environment
   variable.
 
-- ~~**Port Riot Commander's claim gate.**~~ **SUPERSEDED 2026-09-07 - THE
-  SOURCE IS GONE AND IT WAS REBUILT INSTEAD.** RC DELETED
-  `moon_sync_inbox/from-RC-verbatim/` from all four sibling trees after
-  Clockspeed found the operator's account name in 3 of its 48 files and RC's own
-  sweep raised that to 19 of 48, including `tests/test_stop_claim_gate.py`.
-  Containment here was measured: 0 tracked files, 0 commits by pickaxe, 0
-  additions of any of the four named tool filenames. `tools/stop_claim_gate.py`
-  now exists, re-implemented from RC's published PROSE with no RC code read.
-  Detail in `docs/LEDGER.md`.
+- ~~**Port Sibling-C's claim gate.**~~ **SUPERSEDED 2026-09-07 - THE SOURCE IS
+  GONE AND IT WAS REBUILT INSTEAD.** Sibling-C DELETED its verbatim
+  subdirectory, `moon_sync_inbox/from-<sibling>-verbatim/`, from all four
+  sibling trees after Sibling-A found the operator's account name in 3 of its
+  48 files and Sibling-C's own sweep raised that to 19 of 48, including
+  `tests/test_stop_claim_gate.py`. Containment here was measured: 0 tracked
+  files, 0 commits by pickaxe, 0 additions of any of the four named tool
+  filenames. `tools/stop_claim_gate.py` now exists, re-implemented from
+  Sibling-C's published PROSE with no Sibling-C code read. Detail in
+  `docs/LEDGER.md`.
 - **ARM THE CLAIM GATE, once its false-positive rate is low enough to deserve
   it.** It landed at `2b8fcbe` DELIBERATELY UNWIRED - no `Stop` hook is
-  declared and `.claude/settings.json` is untouched - because the producer's own
-  un-adjudicated measurement is **55.5 percent false** over 317 real
-  transcripts. RC published the reason not to arm it: a gate that cries wolf on
-  correctly-sourced figures trains the reader to wave it through, which is
-  exactly when it stops catching the real thing. Three things must happen first,
-  in this order:
+  declared and `.claude/settings.json` is untouched - because the producer's
+  own un-adjudicated measurement is **55.5 percent false** over 317 real
+  transcripts. Sibling-C published the reason not to arm it: a gate that cries
+  wolf on correctly-sourced figures trains the reader to wave it through, which
+  is exactly when it stops catching the real thing. Three things must happen
+  first, in this order:
   1. **An INDEPENDENT pass must measure the rate.** 55.5 was measured by the
      agent that wrote the chaining, which is the one grading arrangement this
      tree does not accept.
@@ -197,28 +199,28 @@ version. What follows is everything the scaffold deliberately did not do.
      `TRANSCRIPT_PATH_KEY = "transcript_path"` and `BLOCK_EXIT_CODE = 2` are
      both GUESSES, recorded in the module's `OPEN` section. Arming on an
      unverified stdin key produces a gate that exits cleanly and checks nothing.
-- **RC still owes the claim-gate spec, asked by note 2026-09-07 and unanswered.**
-  Six questions: the full finding taxonomy, the evidence model, the recognisers,
-  what the gate reads and how, the verdict contract, and the two lessons RC has
-  already published restated so they are implemented rather than rediscovered.
-  Three build rounds have now mapped the failure modes precisely enough that an
-  answer would land on prepared ground.
+- **Sibling-C still owes the claim-gate spec, asked by note 2026-09-07 and
+  unanswered.** Six questions: the full finding taxonomy, the evidence model,
+  the recognisers, what the gate reads and how, the verdict contract, and the
+  two lessons Sibling-C has already published restated so they are implemented
+  rather than rediscovered. Three build rounds have now mapped the failure
+  modes precisely enough that an answer would land on prepared ground.
 - **The three smaller ports are BLOCKED on the same withdrawn payload.**
   `pytest_guard.py` (a `PostToolUse` py_compile - this tree still has ZERO
   PostToolUse hooks and its only compile gate fires at commit time),
   `edit_lint_check.py` (whose glyph half must CALL `tools/precommit_gate.py`
   rather than restate the six codepoints), and two checks out of
   `drift_guard.py` - `check_counted_claims` and `check_untracked_authored`.
-  Lanternlight has asked the channel to stop sending source and send
-  descriptions, and this tree AGREED, so the route is a prose spec rather than a
-  redacted re-drop.
-  - **Do NOT port RC's `md_guard_selector.py` or its ASCII source sweep.**
-    Triaged and rejected: this tree's `docs-guards.yml` already derives the
-    md-reading guard set from `git ls-files` with an unbucketed hard-fail, and
-    `ci.yml` already sweeps tracked source through `precommit_gate.py
-    --expect-count --scan-tracked source`. RC's ASCII file is a ratchet over a
-    frozen 50-file baseline, strictly weaker than what runs here, and RC's own
-    docstring credits this tree for the shape.
+  Sibling-D has asked the channel to stop sending source and send descriptions,
+  and this tree AGREED, so the route is a prose spec rather than a redacted
+  re-drop.
+  - **Do NOT port Sibling-C's `md_guard_selector.py` or its ASCII source
+    sweep.** Triaged and rejected: this tree's `docs-guards.yml` already
+    derives the md-reading guard set from `git ls-files` with an unbucketed
+    hard-fail, and `ci.yml` already sweeps tracked source through
+    `precommit_gate.py --expect-count --scan-tracked source`. Sibling-C's ASCII
+    file is a ratchet over a frozen 50-file baseline, strictly weaker than what
+    runs here, and Sibling-C's own docstring credits this tree for the shape.
 - **Answer the reserved-slot design once RSC actually acquires a slot.** RSC
   concurred with a stated reservation on 2026-09-07: nothing in this tree
   acquires, `headless/runner.py` is a job runner rather than a Claude-executor
@@ -226,8 +228,8 @@ version. What follows is everything the scaffold deliberately did not do.
   repos that really contend. Revisit if that changes.
 - **`moon_sync_inbox/` and its SUBDIRECTORIES are session reading now**, per
   operator instruction 2026-09-07 recorded in `CLAUDE.md`. The 2026-09-06
-  session read notes and skipped `from-RC-verbatim/`, which held 49 real files
-  while the notes beside it only described them.
+  session read notes and skipped the verbatim subdirectory, which held 49 real
+  files while the notes beside it only described them.
 - **Prose accuracy is structurally unguarded, and three of this session's
   findings were prose.** `tests/test_docs_consistency.py` says so in its own
   header: it checks that pointers RESOLVE, never that a sentence is TRUE. The
@@ -247,7 +249,7 @@ version. What follows is everything the scaffold deliberately did not do.
   the one the name suggests - `first=none` and `first=exclusive` are identical
   columns in the nine-cell matrix, so dropping `SO_REUSEADDR` is what closes the
   defect and `SO_EXCLUSIVEADDRUSE` changes no observable outcome here.
-- **Answer Riot Commander's charter, round by round.** v3 is ADOPTED with one
+- **Answer Sibling-C's charter, round by round.** v3 is ADOPTED with one
   dissent filed and accepted; v4 arrived at the end of this session and is
   UNREAD. `scripts/watch_inbox.py` exists now, so the next session can see what
   is genuinely new: `python scripts/watch_inbox.py`. The watermark was
@@ -453,7 +455,7 @@ version. What follows is everything the scaffold deliberately did not do.
   live-state-first still holds, and a test asserts that structurally rather than
   documentarily.
 - ~~**Repo relocation.**~~ **DONE, verified 2026-09-06.** The scaffold was built
-  inside the Riot Commander repository because the session's GitHub integration
+  inside the Sibling-C repository because the session's GitHub integration
   could not create a new repository (`POST /user/repos` returned 403 Resource
   not accessible by integration). It now stands alone and the claim that "the
   CI workflows are inert" was measured false and removed:
@@ -499,7 +501,7 @@ version. What follows is everything the scaffold deliberately did not do.
   interpreter and `tests/test_commit_trailers.py` proves no trailer reached
   history, but a clean history is equally consistent with "the hook stripped it"
   and "nobody added one". The end-to-end check was run BY HAND on 2026-09-06 and
-  passed; a manual pass expires the moment someone edits a hook. Amberstone has
+  passed; a manual pass expires the moment someone edits a hook. Sibling-C has
   a working `git hook gate armed and firing` CI step and has been asked for it
   through `moon_sync_inbox/`. Needs BOTH directions: a banned glyph must be
   rejected AND a clean commit must still succeed, or a gate that rejects
@@ -523,7 +525,7 @@ version. What follows is everything the scaffold deliberately did not do.
   subject was the language of the compute tree, and the surface is Python too.
   Panels declare their own readiness and a panel that is not live says what it is
   waiting on rather than showing a placeholder number.
-- **Containers.** Riot Commander has none, so there was nothing to inherit. If
+- **Containers.** Sibling-C has none, so there was nothing to inherit. If
   containers are wanted, that is a new decision with its own ADR.
 - **Multi-account support.** Everything is keyed by a single UID today.
 - **Team composition solver.** Elemental reaction modelling is a large piece of
@@ -533,11 +535,10 @@ version. What follows is everything the scaffold deliberately did not do.
 
 - **The concurrency governor is vendored but INERT, and that is deliberate.**
   `ops/loop/slots.py` and `ops/loop/winmutex.py` are byte-identical-by-contract
-  with Legion Wallpaper and Riot Commander, pinned by
-  `tests/test_loop_concurrency.py`. NO PRODUCTION CODE PATH CALLS `slots.hold()`
-  - the only callers are the five sites inside `tests/test_loop_concurrency.py`
-  itself, which exercise the vendored module against a `tmp_path` bucket and
-  never against the shared one.
+  with Sibling-E and Sibling-C, pinned by `tests/test_loop_concurrency.py`. NO
+  PRODUCTION CODE PATH CALLS `slots.hold()` - the only callers are the five
+  sites inside `tests/test_loop_concurrency.py` itself, which exercise the
+  vendored module against a `tmp_path` bucket and never against the shared one.
   `headless/runner.py` is a job runner whose daemon mode runs in-process job
   passes on an interval - it is not a Claude-executor loop and it spawns no
   executor. So this is a PARITY CONTRACT JOINED AHEAD OF NEED, not a live

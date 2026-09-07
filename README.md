@@ -371,7 +371,7 @@ Resin-Compute/
   NEXT_SESSION_PROMPT.md           operator hand-off, republished each session
   LICENSE                          GPL-3.0-or-later, verbatim and hash-pinned
   NOTICE                           copyright line and the game-data disclaimer
-  ruff.toml                        lint config, ported from Riot Commander
+  ruff.toml                        lint config, ported from Sibling-C
   pytest.ini                       dual-suite config, never run pytest . at root
   mypy.ini                         type config
   conftest.py                      root sys.path hook, reaches BOTH suites
@@ -553,13 +553,13 @@ matter - this README quotes 8790 and 8791 in several places, and the guard does
 not sweep Markdown, so treat `core/ports.py` as the authority whenever a
 document and the module disagree.
 
-The scaffold originally put the engine on 8870, which sits inside Daemon
-Slayer's reserved 8860-8879. Nothing was listening there, so nothing broke and
+The scaffold originally put the engine on 8870, which sits inside Sibling-F's
+reserved 8860-8879. Nothing was listening there, so nothing broke and
 nothing warned. ADR-004 records the migration, and a guard test now fails on any
 sibling port literal appearing anywhere in tracked Python source.
 
 Verify a band against the owning project's registry in source, never against a
-live scan. That rule is Clockspeed's, learned the hard way, and it is the one
+live scan. That rule is Sibling-A's, learned the hard way, and it is the one
 this block was checked with.
 
 ---

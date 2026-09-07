@@ -59,6 +59,6 @@ Otherwise: caveman ULTRA.
 # Why this exists
 
 Bridge watcher sub-Claude calls cost API tokens per token of input AND
-output. Verbose responses inflate both ends. RC's `bridge_watcher_actions.py`
+output. Verbose responses inflate both ends. Sibling-C's `bridge_watcher_actions.py`
 spawns sub-Claudes with this skill loaded; in interactive sessions, the
 operator can invoke `/caveman` when they want the same compression.
