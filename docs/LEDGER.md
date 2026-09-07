@@ -12,6 +12,87 @@ now.
 
 ---
 
+## 2026-09-06 - Joining the cross-repo concurrency governor, and being refuted twice
+
+`ops/loop/slots.py`, `ops/loop/winmutex.py`, `tests/test_loop_concurrency.py`,
+`tests/test_core_config.py`, `core/config.py`.
+
+This repo took the third slot in a machine-wide concurrency bucket shared with
+Legion Wallpaper and Riot Commander, vacated when Red Moon was archived. The two
+governor files are BYTE-IDENTICAL-BY-CONTRACT across all three trees. Vendored
+LAST, per the ordered round the siblings specified, because this repo was the
+only participant with no pin to break.
+
+**Method, and it is the point of the entry.** The files were copied with
+`shutil.copyfile` off Riot Commander's live tree, never with `Path.write_text` -
+that emits CRLF on Windows and the contract is on bytes. Both sibling trees were
+hashed BEFORE the copy and this repo's own disk was re-hashed AFTER it; the
+hand-off note's digests were used only as a value to check against. `.gitattributes`
+forces `*.py eol=lf`, so the index blob was compared against the disk bytes as
+well - they match, which is what proves the pin survives a fresh clone on an
+`autocrlf=true` box.
+
+**THE GOVERNOR IS INERT AND THE TREE SAYS SO IN FOUR PLACES.** No production path
+calls `slots.hold()`; the only callers are inside `tests/test_loop_concurrency.py`
+against a `tmp_path` bucket. `headless/runner.py` is a job runner whose daemon
+mode runs in-process job passes - verified by reading `run_daemon`, not assumed.
+This is a parity contract joined ahead of need. Two of the three participants
+acquire for real; this one's lane is reserved and unclaimed.
+
+**Two of three adversaries returned REFUTED, and they were right.**
+
+- A mutant removing `hold()`'s queueing passed the entire suite and fails Riot
+  Commander's. The port had collected worker exceptions into `failures` and never
+  asserted on them. Restored as `assert not failures` in
+  `test_contending_threads_never_exceed_max_slots`; the mutant now fails even
+  with a legitimate re-pin applied, and 30 consecutive runs stayed green.
+- `SHARED_SHA256` drove both the presence guard and the digest guard, so deleting
+  one entry disarmed both in a single edit - 18 passed, exit 0, silent. Adding an
+  `__init__.py` beside the vendored pair, or a third module, was equally green.
+  One root cause: the
+  pin named FILES, not the DIRECTORY. Closed by `VENDORED_MODULES` plus
+  `test_the_pin_covers_every_vendored_module_and_nothing_was_added`.
+- `tests/test_core_config.py` PROMISED that any future wiring of the ceiling to
+  `os.environ` "has to turn this file red", on the strength of a substring scan of
+  one function body. Defeated in one line by the module's own
+  `field(default_factory=...)` idiom, which moved the ceiling to 9 while every
+  guard reported green. A guard that overstates its reach is worse than a missing
+  one: it tells the next session not to look. Closed structurally by
+  `test_the_ceiling_field_has_no_default_factory` and behaviourally by
+  `test_a_poisoned_environment_cannot_move_the_ceiling`.
+- The missing fourth arm of `is_stale` - the mtime fallback that stops an
+  UNPARSEABLE lock wedging a lane - is now covered by
+  `test_a_corrupt_lock_cannot_wedge_the_bucket_forever` with its survivor arm.
+
+Every fix was mutation-tested AFTER the fact. Five mutants that were green before
+are red now. That order matters: the session's own lesson is that a guard nobody
+has watched fail is a guard nobody has tested.
+
+**A REAL DEFECT IN THE SHARED FILE, REPORTED RATHER THAN FIXED.** Under contention
+on Windows the vendored `hold()` leaks lockfiles: measured here at 33 of 40 rounds
+with 8 workers and 2 slots. The mechanism was proven deterministically, not
+inferred - `reap` to `is_stale` to `_read` to `Path.read_text` holds a handle
+opened without `FILE_SHARE_DELETE`, so the releasing holder's `slot.unlink()`
+raises `PermissionError` winerror 32, `except OSError: pass` swallows it, and the
+release is LOGGED anyway. A log-reading overlap analysis therefore records a
+release for a lock still on disk, and the lane is not reclaimed for 4.5 hours.
+Re-pinning is a JOINT act, so the file was not touched; the reproduction went to
+both siblings through `moon_sync_inbox/`.
+
+**Errors made and corrected in-session, recorded because the next reader deserves
+them.** The `db3f767` commit message cited
+`test_a_missing_vendored_file_is_a_failure_not_a_skip`, a test that has never
+existed - the name came from a dispatch brief and was not read back off the file.
+The real one is `test_the_vendored_governor_is_present`. The same message called
+the parity "recorded from three separate disks", which overstates it: all three
+roots are on one volume, and Riot Commander's note hashed THIS repo's files rather
+than printing its own. Both are corrected in `35140ee`, which cannot amend them.
+
+Counts measured 2026-09-06 on Python 3.14.4, as a historical reading: `tests` 806
+passed 1 skipped, `agents/pity_engine` 76 passed, ruff clean, mypy clean. Note the
+tree DECLARES 3.11 in `CLAUDE.md`, `mypy.ini` and `ruff.toml`, so that reading is
+green on 3.14 only; the divergence predates this work and was not touched.
+
 ## 2026-09-06 - Landing the public-repo fixes, and a refutation that reversed one
 
 The fix session for the previous entry's audit. Nine slices, worktree-isolated,
