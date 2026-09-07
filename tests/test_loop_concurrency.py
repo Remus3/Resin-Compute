@@ -86,8 +86,16 @@ SHARED_BUCKET = Path(r"C:\ProgramData\lw-loop\slots")
 # keys: two repos spelling them differently do not collide and do not error -
 # they serialize against nothing at all, each holding a private lock while
 # believing it holds the shared one.
-SHARED_GEMINI_MUTEX = "Global\\LWRC_GEMINI"
-SHARED_GPU_MUTEX = "Global\\LW_GPU"
+# ROTATED 2026-09-07 in the joint round LW announced at 04:15. The retired
+# values were "Global\\LWRC_GEMINI" and "Global\\LW_GPU". They are DEAD NAMES,
+# not secrets - they sat in LW's public repository for five weeks - so nothing
+# here tries to hide them. They are recorded because a judge or log parser keyed
+# on a fragment of the OLD name now matches nothing and reports GREEN ON NO
+# EVIDENCE, which is how LW's own P5 probe failed. RSC was swept for that and
+# holds no such consumer; these two literals and the shared file are the only
+# sites, and this one is the independent second witness for the assertion below.
+SHARED_GEMINI_MUTEX = "Global\\MX-7C41A9E2"
+SHARED_GPU_MUTEX = "Global\\MX-2E58D3B6"
 
 # The agreed lane width. Same value in Riot Commander and Legion Wallpaper.
 EXPECTED_LANES = 3
@@ -119,8 +127,8 @@ SHARED_SHA256 = {
     # digests were re-hashed from this repo's own disk, not copied from the
     # hand-off note. The bucket stays at 3 participants because it models
     # ANTHROPIC ACCOUNT concurrency and the participant count did not change.
-    "slots.py": "1c4f8af43ff349709c11bf3fe622e922b24cb720771c49a522b13a4d5e58c492",
-    "winmutex.py": "f1b4b011112685efb88616c52752657cf896fbb0993b2d2d264e7b3edde8b4f4",
+    "slots.py": "629c3d511d2500f92d25fbe102a7a8c73644c027291f46b8796565a1e839f865",
+    "winmutex.py": "0b112a4f6bfa88cf5f537f8869225c1821ebfe97428b1e899979797ddd71a61e",
 }
 
 
