@@ -24,6 +24,8 @@ import argparse
 import json
 import logging
 import os
+import socket
+import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -176,12 +178,90 @@ class PityEngineHandler(BaseHTTPRequestHandler):
         LOGGER.debug("%s %s", self.address_string(), format % args)
 
 
+class _ExclusiveHTTPServer(ThreadingHTTPServer):
+    """A server that REFUSES a port something else already holds.
+
+    MEASURED DEFECT, and this class is the fix. `socketserver.TCPServer` sets
+    `allow_reuse_address = True`, which sets SO_REUSEADDR. On POSIX that only
+    sidesteps TIME_WAIT and is exactly what you want. **On Windows it lets a
+    completely separate process bind a port another process is already listening
+    on**, leaving both sockets in LISTENING with no defined rule about which one
+    receives a connection.
+
+    THE SIBLING OF A DEFECT THIS TREE ALREADY PAID FOR ONCE. `surface/server.py`
+    carries the same class for the dashboard on 8791, written after two surfaces
+    bound that port simultaneously on 2026-09-06 and the OLDER one answered every
+    request while a freshly started surface serving new code was silently
+    ignored. That fix landed at ONE call site. The engine on 8790 kept the stock
+    server and kept the defect.
+
+    Reproduced against this engine on 2026-09-06: two engine processes both bound
+    127.0.0.1:8790, both logged the byte-identical banner "PityEngine 0.1.0
+    listening on http://127.0.0.1:8790", and six consecutive /health calls all
+    returned the FIRST process's pid. That is the worst shape a bug can take -
+    the second engine reports healthy, serves nothing, and a stranger following
+    README section 6 is fed stale forecasts by code they already replaced.
+
+    So SO_REUSEADDR is dropped, and on Windows SO_EXCLUSIVEADDRUSE is set in its
+    place - the flag that actually means what SO_REUSEADDR means on POSIX.
+
+    WHICH HALF IS LOAD-BEARING, measured rather than assumed. The full bind
+    matrix was probed on this box on 2026-09-06 against a LISTENING first socket,
+    and exactly one of its nine cells double-binds: SO_REUSEADDR on BOTH sockets,
+    which is precisely what two stock `ThreadingHTTPServer` engines are. Every
+    other pairing is already refused. `allow_reuse_address = False` is therefore
+    the half that closes the defect, and the `first=none` and `first=exclusive`
+    columns are IDENTICAL - so no test here pins the setsockopt, and none can on
+    this platform. It is kept because it mirrors `surface/server.py`, the sibling
+    fix this one is derived from, and because it is Microsoft's documented
+    guidance for a server socket. The matrix is reproduced in the test file.
+
+    The listening socket is closed on shutdown, so TIME_WAIT does not apply to it
+    and an immediate restart still works; `agents/pity_engine/tests/test_service.py`
+    pins that, because turning off address reuse is exactly the change that could
+    break it, and the engine runs in the FOREGROUND so ctrl-C then restart is its
+    ordinary edit loop.
+    """
+
+    allow_reuse_address = False
+
+    def server_bind(self) -> None:
+        if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def build_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
-    """Bind a server without serving it - the seam the service tests use."""
-    return ThreadingHTTPServer((host, port), PityEngineHandler)
+    """Bind a server without serving it - the seam the service tests use.
+
+    Returns a `ThreadingHTTPServer`, which `_ExclusiveHTTPServer` is, so every
+    existing caller and annotation keeps working. It now RAISES `OSError` rather
+    than quietly binding a port another process holds - see the class above.
+    """
+    return _ExclusiveHTTPServer((host, port), PityEngineHandler)
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the engine until interrupted.
+
+    Exit codes:
+
+        0  clean shutdown
+        2  the port it needs is already held by something else
+
+    THE ENGINE DOCUMENTED NO EXIT CODE FOR A TAKEN PORT BEFORE THIS. It bound
+    unconditionally and returned 0, which on Windows meant a second engine
+    started successfully, logged the same banner as the first and then served
+    nobody. 2 is not a new contract invented here - it is the number
+    `surface/server.py`'s `main` already documents for exactly this condition,
+    and the one `shell/lib/supervisor.js` renders refusal text from. Nothing
+    spawns the engine, so naming it broke no existing caller; it makes the
+    repository say one thing about a held port instead of two.
+
+    The raw `OSError` goes to the log and never to the caller, per the fail-soft
+    rule in SPEC section 2 - a bind message can name a host and a port, and the
+    fixed exit code is what a supervisor can actually act on.
+    """
     parser = argparse.ArgumentParser(
         prog="pity_engine",
         description=f"PityEngine {ENGINE_VERSION} - local deterministic gacha forecaster",
@@ -191,7 +271,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    server = build_server(args.host, args.port)
+    try:
+        # build_server is what BINDS, so it is what can fail. Wrapping the whole
+        # serve_forever call instead would swallow a later, unrelated failure as
+        # though it had been a bind refusal.
+        server = build_server(args.host, args.port)
+    except OSError as exc:
+        LOGGER.error("PityEngine could not bind %s:%s: %s", args.host, args.port, exc)
+        return 2
     LOGGER.info("PityEngine %s listening on http://%s:%d", ENGINE_VERSION, args.host, args.port)
     try:
         server.serve_forever()

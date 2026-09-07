@@ -77,6 +77,12 @@ live version of this list; what follows is its shape.
   "real and tested" for exactly that reason: the guard is tested, the throttle
   is not in use. Of interest outside this project mainly as a worked example of
   keeping a file identical across repositories that cannot import each other.
+  **If you copy it, read the leak note in `docs/LEDGER.md` first.** Under
+  Windows contention `hold()` leaks lockfiles, and a leaked lock whose holder is
+  still alive is unreapable until the 4.5-hour age arm clears it. Measured here
+  and reported to both siblings; not fixed in this tree, because re-pinning a
+  byte-identical file is a joint act across three repositories rather than a
+  local edit.
 
 ---
 
@@ -251,6 +257,47 @@ console B again:
 python -c "import json;print(json.dumps(json.load(open('ops/runtime/health.json')),indent=2))"
 ```
 
+#### The Windows Scheduled Task, and how to remove it
+
+Nothing above installs it and the Quickstart does not need it. But
+`ops/install_scheduled_task.ps1` is there, it registers
+`ops/ResinCompute-Supervisor.xml` so the supervisor comes up unattended, and it
+is the one thing in this repository that OUTLIVES THE CLONE. Know what it is
+before you run it.
+
+Read off the XML, not from memory:
+
+- **It fires at EVERY LOGON.** A logon trigger is the only trigger it has.
+- **It runs at the HIGHEST AVAILABLE privilege** the account can obtain.
+- **It is HIDDEN.** Task Scheduler does not list it until "Show hidden tasks" is
+  on, so it is easy to look straight past when auditing what starts with your
+  session.
+- **It has NO execution time limit.** The field is `PT0S`, which for this
+  setting means unlimited rather than zero.
+- **It restarts itself on failure**, three times, a minute apart.
+- **Its working directory is baked in at install time.** Move or delete the
+  checkout and the task keeps firing at a path that is no longer there.
+
+**Deleting the repository does not remove it.** The definition lives in the
+Windows Task Scheduler store, not in the clone, so `rm -rf` on the checkout
+leaves a hidden elevated task starting at every logon against a directory that
+has gone. Remove it explicitly:
+
+```powershell
+Get-ScheduledTask -TaskName 'ResinCompute-Supervisor' -ErrorAction SilentlyContinue
+Stop-ScheduledTask -TaskName 'ResinCompute-Supervisor' -ErrorAction SilentlyContinue
+Unregister-ScheduledTask -TaskName 'ResinCompute-Supervisor' -Confirm:$false
+```
+
+Elevate the console if any of those is denied - the task is registered at the
+highest available privilege. `ResinCompute-Supervisor` is the installer's
+default `-TaskName`; if you passed your own, the task is under that name and
+these commands need it instead.
+
+If a supervised process is still running afterwards, take its pid from
+`ops/runtime/health.json` and use `taskkill /F /PID <pid>`. Never `Stop-Process`
+- see Conventions.
+
 ### 6. Run the PityEngine service
 
 The engine runs in the FOREGROUND and does not return, so these are two
@@ -392,8 +439,8 @@ Resin-Compute/
   ops/                             supervision and operational state
     supervisor.py                  watchdog, restart trigger, bounded backoff
     health.py                      the health.json contract
-    ResinCompute-Supervisor.xml    Windows Scheduled Task, ONLOGON
-    install_scheduled_task.ps1     registers that task
+    ResinCompute-Supervisor.xml    hidden ONLOGON task, elevated, no time limit
+    install_scheduled_task.ps1     registers it - removal is in Quickstart 5
     runtime/                       health.json is written here, gitignored
     loop/                          shared cross-repo concurrency governor
       slots.py                     BYTE-IDENTICAL across three repos, never edit alone

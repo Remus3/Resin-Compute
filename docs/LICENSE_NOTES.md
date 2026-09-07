@@ -75,8 +75,23 @@ Genshin Impact data.
 
 ## Chosen posture, as implemented
 
-1. **Vendor no game data.** `data/fixtures/` holds only hand-authored synthetic
-   fixtures for tests, labelled as such in `data/fixtures/README.md`.
+1. **Vendor no game data.** `data/fixtures/` is HAND-AUTHORED, and no upstream
+   dataset is vendored into it. TWO KINDS of file live there and the difference
+   is the point. `seed_roster.json` and `seed_materials.json` are records of
+   publicly known game FACT - real avatarIds and material ids, independently
+   verified and typed in one row at a time rather than lifted from a dataset;
+   both carry `_hand_authored: true` and `_vendored: false`. Only
+   `enka_sample_profile.json` is genuinely synthetic: its ids and name hashes
+   are deliberately unrealistic placeholders that could not be mistaken for
+   game data, and it carries `_synthetic: true`. Each file is labelled with its
+   own kind in `data/fixtures/README.md`.
+
+   An earlier draft of this bullet called the whole directory synthetic, which
+   the sibling file it cited as its own authority declares false. SYNTHETIC
+   MEANS INVENTED, and a verified avatarId is not invented. Hand-authored is
+   what ADR-002 requires, and it is also the STRONGER claim: nothing was lifted
+   from anywhere at all. Corrected 2026-09-06 and guarded in
+   `tests/test_licence_posture.py`.
 2. **Re-implement the client** from the published protocol in
    `ingest/enka_client.py`. No upstream client source is copied.
 3. **Fetch at runtime**, with a custom User-Agent, honouring the response `ttl`,
@@ -111,9 +126,24 @@ brief is malformed and does not exist.
 
 ## Trademark posture
 
-No HoYoverse-coined proper noun appears as a module, package, class or CLI
-identifier in this repo. Game data values such as character and item names appear
-only as data, never as code identifiers.
+No HoYoverse-coined proper noun appears as a module name, package name, class
+name or CLI verb in this repo. That is the claim, and it is the whole of it.
+
+**It does not extend to every identifier, and an earlier draft of this section
+said it did.** That draft read "game data values such as character and item names
+appear only as data, never as code identifiers", which is false of this tree:
+`CurrencyKind` in `core/types.py` has `PRIMOGEM`, `INTERTWINED_FATE`,
+`STARGLITTER` and `HEROS_WIT` among its MEMBER NAMES, and those are code
+identifiers naming HoYoverse-coined items. Overclaiming here costs more than it
+buys - a compliance sentence a reader can falsify in one grep discredits the
+sentences around it that are true.
+
+The narrow claim is the defensible one, and it is the one this project actually
+holds to. Referring to an item by its name in order to talk about it is
+nominative use, which is ordinary and expected of a fan tool; what matters is
+that the PROJECT and its public surface are not named after someone else's
+marks. `docs/SPEC_SCAFFOLD.md` section 0 states the same narrow claim, and the
+naming decisions below are how it was met.
 
 Names considered and rejected for the project itself, with reasons, so the
 question is not reopened: `GenshinOps` and `impact-commander` use the registered

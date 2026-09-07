@@ -117,31 +117,66 @@ jobs:
           python -m compileall -q -x '(\.venv|__pycache__|build|dist)' .
           echo "py_compile sweep OK over ${count} .py file(s)"
 
-      - name: ASCII hygiene over tracked non-markdown source
-        # THE HOOK CANNOT BE THE ONLY ENFORCEMENT OF THIS RULE.
+      - name: ASCII hygiene over every tracked non-markdown file
+        # THE HOOK CANNOT BE THE ONLY ENFORCEMENT OF THIS RULE, and once this
+        # repository is public the hook is STRUCTURALLY ABSENT for the whole
+        # population the rule exists to catch.
         #
         # CLAUDE.md states the banned-glyph rule as a hard rule and
         # .githooks/pre-commit enforces it at commit time. It also states, in
         # the same breath, that `core.hooksPath` is LOCAL CONFIG AND IS NOT
         # CLONED - so a fresh clone runs zero hooks until someone runs
-        # scripts/install_hooks.py. Anyone who has not (a new contributor, a CI
-        # sandbox, an agent working in a fresh worktree) can land an em-dash in
-        # a .py and nothing at all notices. That is precisely the "gate that is
-        # absent without saying so" this scaffold exists to prevent, and it
-        # matters more the moment this repository is visible to people who
-        # never read CLAUDE.md.
+        # scripts/install_hooks.py. A fork opening a pull request has never run
+        # it. For that contributor CI is not a backstop, it is the ONLY gate.
         #
-        # docs-guards.yml already covers tracked .md and is skipped here
-        # because ci.yml never runs on a docs-only push. This step covers
-        # everything else, using the SAME engine
-        # (tools/precommit_gate.py --scan-files) so CI and the commit-time gate
-        # cannot drift into two different readings of one rule.
+        # docs-guards.yml covers tracked .md and is skipped here because ci.yml
+        # never runs on a docs-only push. This step covers EVERYTHING ELSE.
+        #
+        # SELECTION IS HALF THE RULE, and it used to be the unshared half.
+        # Both steps shared the engine (tools/precommit_gate.py) and each wrote
+        # its own SELECTION: an extension allowlist here, '*.md' there. On
+        # 2026-09-06 that allowlist missed 14 tracked files - every .githooks/
+        # script, LICENSE, NOTICE, both requirements files, .gitattributes,
+        # .gitignore, the supervisor XML and ops/install_scheduled_task.ps1,
+        # which carries its OWN 17-line ASCII-ONLY header citing the PowerShell
+        # 5.1 parse failure that is the reason the rule exists at all. The
+        # comment above this step claimed it "covers everything else"; it did
+        # not, and nothing said so.
+        #
+        # `--scan-tracked source` now defines source as THE COMPLEMENT OF .md
+        # inside the gate itself, so the two halves partition the tracked set
+        # by construction and cannot develop a hole between them. The staged
+        # hook already scans every staged file regardless of extension, so this
+        # also stops CI from being the looser of the two readings.
+        #
+        # AND THE HANDOFF IS NUL-SAFE. This step used to end in
+        # `xargs -r -a src_files.txt ... --scan-files`. xargs splits on
+        # WHITESPACE: a tracked path containing a space became two arguments
+        # that both failed to open, the gate warned on stderr, continued, and
+        # printed "7-bit ASCII clean" with EXIT 0 over a file carrying an
+        # em-dash. README.md advertises a space-containing install path as a
+        # deliberately exercised case and .githooks/* were hardened to quote
+        # every expansion - these two CI steps were the pair that had not been.
+        # A single quote in a name failed the other way: `xargs: unmatched
+        # single quote`, red on a legal filename. There is no shell in the
+        # handoff any more, so neither is reachable.
         run: |
           set -euo pipefail
-          git ls-files '*.py' '*.toml' '*.ini' '*.yml' '*.yaml' '*.json' '*.js' '*.sh' > src_files.txt
-          echo "tracked non-markdown source files: $(wc -l < src_files.txt)"
-          test -s src_files.txt || { echo "the sweep selected NOTHING - it would pass vacuously"; exit 1; }
-          xargs -r -a src_files.txt python tools/precommit_gate.py --scan-files
+          # The expected count is derived HERE, by counting NUL terminators in
+          # a DIFFERENT git invocation than the one the gate makes. It is a
+          # cross-check, not the same number quoted twice, and it is counted in
+          # NULs rather than lines so a newline inside a filename cannot inflate
+          # it. If the two disagree the step goes red rather than sweeping a
+          # short list quietly.
+          total="$(git ls-files -z | tr -cd '\0' | wc -c)"
+          docs="$(git ls-files -z -- '*.md' | tr -cd '\0' | wc -c)"
+          expected="$(( total - docs ))"
+          echo "tracked: ${total} | .md (docs-guards.yml's half): ${docs} | this step's half: ${expected}"
+          if [ "${expected}" -le 0 ]; then
+            echo "::error::the sweep would select NOTHING - it would pass vacuously"
+            exit 1
+          fi
+          python tools/precommit_gate.py --expect-count "${expected}" --scan-tracked source
 
       - name: mypy
         # ADVISORY, deliberately, and this is the one line to change when that

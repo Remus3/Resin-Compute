@@ -31,8 +31,40 @@ split between them is forced by git's own hook ordering rather than by taste:
      SUBJECT carried a U+2014 em-dash landed completely clean.
 
   3. --scan-files <path>... mode. Scans whole files, not just added lines.
-     Used by .github/workflows/docs-guards.yml over tracked .md, and by hand
-     for a drift sweep. This is the only mode that does not consult git.
+     Used by hand for a drift sweep. This is the only mode that does not
+     consult git.
+
+  4. --scan-files-from0 <listfile> mode. Same scan, but the paths are read
+     NUL-DELIMITED from a file instead of from argv.
+
+     WHY THIS EXISTS, measured 2026-09-06
+     ------------------------------------
+     Both CI workflows used to hand the path list over as
+     `xargs -r -a list.txt python tools/precommit_gate.py --scan-files`.
+     `xargs` splits on WHITESPACE, so a tracked path carrying a space became
+     TWO bogus arguments, both of which failed to open. The old code warned on
+     stderr and `continue`d, so the gate printed "0 file(s) scanned, 7-bit
+     ASCII clean" AND EXITED 0 over a file carrying an em-dash. Passing the
+     same path directly exited 1. A single quote in a name went the other way:
+     `xargs: unmatched single quote`, exit 1 on a legal filename.
+
+     Reading a NUL-delimited list removes the shell from the handoff
+     completely, so a space, a single quote, a double quote and a newline in a
+     filename are all carried intact.
+
+  5. --list-tracked {source|docs|all} and --scan-tracked {source|docs}. The
+     SELECTION half of the rule, defined here rather than in YAML.
+
+     ci.yml used to select by an extension ALLOWLIST while docs-guards.yml
+     selected '*.md', and 14 tracked files matched NEITHER - among them
+     ops/install_scheduled_task.ps1, which is the file class the whole
+     7-bit-ASCII rule exists for, and every .githooks/ script. An allowlist
+     has to be maintained; a PARTITION on the .md suffix cannot develop a hole,
+     because `source` is defined as the complement of `docs`.
+
+Any scan mode accepts a leading `--expect-count N`, which fails the run when
+the number of paths SELECTED is not N. That is the anti-vacuity arm: a gate
+that scanned nothing must never report clean.
 
 EXIT CODES. Any finding exits 1 (SPEC_SCAFFOLD / build contract). Riot
 Commander's copy exits 2 because it doubles as a Claude Code PreToolUse hook,
@@ -77,11 +109,20 @@ _HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
 # Surfaces the 7-bit-ASCII rule does not reach.
 #
-# data/cache/ and data/external/ hold FETCHED third-party payloads. Character
-# and item names arrive from upstream carrying whatever codepoints upstream
-# authored; this repo did not write them and cannot fix them, so flagging them
-# would block a correct cache refresh - and a gate that blocks correct work is
-# one people learn to bypass with --no-verify.
+# data/cache/ holds FETCHED third-party payloads. Character and item names
+# arrive from upstream carrying whatever codepoints upstream authored; this
+# repo did not write them and cannot fix them, so flagging them would block a
+# correct cache refresh - and a gate that blocks correct work is one people
+# learn to bypass with --no-verify.
+#
+# EVERY PREFIX HERE MUST BE GITIGNORED, and data/cache/ is (.gitignore line
+# 45). An exemption for a path that CAN be committed is a pre-cut hole, not an
+# exemption: `data/external/` sat in this tuple until 2026-09-06 while being
+# gitignored NOWHERE and referenced by NO other file in the tree, so the one
+# gate that would flag a fetched upstream payload was pre-disabled at a path
+# `git add -A` would have staged without a word. The vendoring refusal in
+# docs/LICENSE_NOTES.md is the single leg the publication decision rests on;
+# it cannot rest on a gate that was switched off in advance. Removed.
 #
 # data/fixtures/ is deliberately NOT exempt. Those are hand-authored minimal
 # test fixtures (SPEC_SCAFFOLD section 4), which makes them authored content.
@@ -89,7 +130,7 @@ _ASCII_EXEMPT_PARTS = ("logs/", "__pycache__/", ".git/")
 _ASCII_EXEMPT_SUFFIXES = (
     ".log", ".jsonl", ".pyc", ".png", ".jpg", ".jpeg", ".ico", ".zip", ".gz",
 )
-_ASCII_EXEMPT_PREFIXES = ("data/cache/", "data/external/")
+_ASCII_EXEMPT_PREFIXES = ("data/cache/",)
 
 
 def _is_commit(command: str) -> bool:
@@ -310,31 +351,182 @@ def _check_message_file(path: str) -> int:
     return 0
 
 
-def _check_scan_files(paths: list[str]) -> int:
+def _git_z(args: list[str], root: str | None = None) -> list[str] | None:
+    """Run git and split NUL-delimited stdout into paths. None if git failed.
+
+    NUL-delimited on purpose, and the two reasons are different. `git ls-files`
+    without -z separates on NEWLINE, which a filename may legally contain on
+    Linux; and it QUOTES any path it considers unusual (core.quotePath), so a
+    path carrying a space or a quote cannot be recovered from that stream
+    unambiguously. -z emits the raw bytes with a NUL terminator and no quoting
+    at all.
+    """
+    try:
+        out = subprocess.run(
+            ["git", *args],
+            cwd=root or None,
+            capture_output=True,
+            timeout=30,
+            creationflags=_NO_WINDOW,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    raw = out.stdout.decode("utf-8", "surrogateescape")
+    return [p for p in raw.split("\0") if p]
+
+
+def _tracked_split(root: str | None = None) -> tuple[list[str], list[str]] | None:
+    """(source, docs): every tracked path, PARTITIONED on the .md suffix.
+
+    Complements by construction. That is the whole point: an extension
+    allowlist has to be maintained and silently stops covering whatever is
+    added after it was written, while a partition cannot develop a hole
+    because one half is defined as the complement of the other.
+
+    CASE-SENSITIVE on purpose, and it has to be. The partition exists to mirror
+    the ci.yml / docs-guards.yml trigger complement, and GitHub's `paths` /
+    `paths-ignore` globs and git's own `*.md` pathspec are both case-sensitive
+    on Linux. Lower-casing here would put a `README.MD` in the docs half while
+    both workflows put it in the source half, and the disagreement would be a
+    file neither gate scanned.
+
+    Returns None when git could not be consulted - callers must fail CLOSED on
+    that, never report a clean sweep they did not perform.
+    """
+    paths = _git_z(["ls-files", "-z"], root)
+    if paths is None:
+        return None
+    docs = [p for p in paths if p.endswith(".md")]
+    source = [p for p in paths if not p.endswith(".md")]
+    return source, docs
+
+
+def _paths_from_nul_file(path: str) -> list[str] | None:
+    """Read a NUL-delimited path list written by `git ls-files -z`."""
+    try:
+        raw = pathlib.Path(path).read_bytes()
+    except OSError:
+        return None
+    return [p for p in raw.decode("utf-8", "surrogateescape").split("\0") if p]
+
+
+def _check_scan_files(paths: list[str], expect_count: int | None = None) -> int:
     """--scan-files entry point: whole-file glyph scan, reported as file:line.
 
     Whole-file rather than added-lines-only, because CI has no staged diff to
-    consult. Used by docs-guards.yml over tracked .md.
+    consult.
+
+    FAIL-CLOSED, unlike the ruff and message halves, and the difference is not
+    inconsistency. Those two fail open because the gate could not run a half of
+    ITSELF. Here the caller NAMED a file: being unable to read it means the
+    sweep did not cover what it was asked to cover, which is indistinguishable
+    from the file being clean unless it is reported as a finding. It used to
+    warn and `continue`, and that is exactly how the xargs word-splitting
+    defect printed "7-bit ASCII clean" and exited 0 over an em-dash.
     """
+    selected = len(paths)
+    if selected == 0:
+        sys.stderr.write(
+            "precommit_gate BLOCKED - the sweep selected NOTHING, so a clean "
+            "result would mean nothing.\n  A gate that scanned zero files must "
+            "not report zero findings as a pass.\n"
+        )
+        return 1
+    if expect_count is not None and selected != expect_count:
+        sys.stderr.write(
+            f"precommit_gate BLOCKED - selected {selected} path(s) but the "
+            f"caller expected {expect_count}.\n  The two counts are computed "
+            "independently; a mismatch means the path list was mangled in "
+            "transit, which is how a sweep silently stops covering the tree.\n"
+        )
+        return 1
+
     violations: list[str] = []
     scanned = 0
+    exempt = 0
     for p in paths:
-        fp = pathlib.Path(p)
         if _ascii_exempt(p):
+            exempt += 1
             continue
         try:
-            text = fp.read_text(encoding="utf-8", errors="replace")
+            data = pathlib.Path(p).read_bytes()
         except OSError as exc:
-            sys.stderr.write(f"precommit_gate WARNING: skipped {p} ({exc})\n")
+            violations.append(f"  {p}  UNREADABLE: {exc}")
+            continue
+        if b"\x00" in data:
+            # Degrade LOUDLY rather than skipping. "It is binary" must never
+            # become a silent pass, or the exemption grows back the hole this
+            # partition was built to close. A genuinely binary tracked file
+            # gets an explicit suffix in _ASCII_EXEMPT_SUFFIXES, with a reason.
+            violations.append(
+                f"  {p}  BINARY (NUL byte): the 7-bit ASCII rule cannot be "
+                "applied - add its suffix to _ASCII_EXEMPT_SUFFIXES with a "
+                "recorded reason, or do not track it"
+            )
             continue
         scanned += 1
-        for i, ln in enumerate(text.splitlines(), start=1):
+        for i, ln in enumerate(data.decode("utf-8", "replace").splitlines(), start=1):
             hits = _glyph_hits(ln, p)
             if hits:
                 violations.append(f"  {p}:{i}  banned glyph: {', '.join(hits)}")
     if violations:
-        return _report(violations, f"banned glyph in {len(violations)} scanned line(s):")
+        return _report(violations, f"banned glyph or unscannable file in {len(violations)} place(s):")
+    # First line kept BYTE-COMPATIBLE with the pre-2026-09-06 format; anything
+    # parsing it keeps working. The arithmetic below it is the new part.
     print(f"precommit_gate: {scanned} file(s) scanned, 7-bit ASCII clean")
+    print(f"precommit_gate: selected={selected} scanned={scanned} exempt={exempt}")
+    return 0
+
+
+def _check_scan_tracked(mode: str, expect_count: int | None = None) -> int:
+    """--scan-tracked entry point: select from git, then scan, in ONE process.
+
+    No shell between the selection and the scan, so there is no handoff left to
+    mangle.
+    """
+    if mode not in ("source", "docs"):
+        sys.stderr.write(
+            f"precommit_gate: --scan-tracked takes 'source' or 'docs', not {mode!r}\n"
+        )
+        return 1
+    split = _tracked_split()
+    if split is None:
+        sys.stderr.write(
+            "precommit_gate BLOCKED - `git ls-files -z` did not answer, so the "
+            "tracked file set is unknown.\n  Fail CLOSED: a sweep that could "
+            "not choose its inputs has not run.\n"
+        )
+        return 1
+    source, docs = split
+    paths = source if mode == "source" else docs
+    print(f"precommit_gate: --scan-tracked {mode} selected {len(paths)} tracked path(s)")
+    return _check_scan_files(paths, expect_count=expect_count)
+
+
+def _list_tracked(mode: str) -> int:
+    """--list-tracked entry point: NUL-delimited paths on stdout.
+
+    Exists so the workflows and tests/test_ci_workflow_complement.py consume
+    ONE definition of the partition rather than three restatements of it.
+    """
+    if mode not in ("source", "docs", "all"):
+        sys.stderr.write(
+            f"precommit_gate: --list-tracked takes 'source', 'docs' or 'all', "
+            f"not {mode!r}\n"
+        )
+        return 1
+    split = _tracked_split()
+    if split is None:
+        sys.stderr.write("precommit_gate: `git ls-files -z` did not answer\n")
+        return 1
+    source, docs = split
+    paths = {"source": source, "docs": docs, "all": source + docs}[mode]
+    sys.stdout.buffer.write(
+        b"".join(p.encode("utf-8", "surrogateescape") + b"\0" for p in paths)
+    )
+    sys.stdout.flush()
     return 0
 
 
@@ -421,6 +613,22 @@ def _check_staged(command: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
 
+    # A leading --expect-count N modifies whichever scan mode follows. Parsed
+    # first so the mode flags below keep consuming argv exactly as before.
+    expect: int | None = None
+    if args and args[0] == "--expect-count":
+        if len(args) < 2:
+            sys.stderr.write("precommit_gate: --expect-count needs an integer\n")
+            return 1
+        try:
+            expect = int(args[1])
+        except ValueError:
+            sys.stderr.write(
+                f"precommit_gate: --expect-count needs an integer, got {args[1]!r}\n"
+            )
+            return 1
+        args = args[2:]
+
     # Explicit flags rather than sniffing argv shape, so each hook body reads
     # as a statement of what it is asking for.
     if args and args[0] == "--message-file":
@@ -428,15 +636,41 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write("precommit_gate: --message-file needs a path\n")
             return 1
         return _check_message_file(args[1])
+    if args and args[0] == "--scan-tracked":
+        if len(args) < 2:
+            sys.stderr.write("precommit_gate: --scan-tracked needs source|docs\n")
+            return 1
+        return _check_scan_tracked(args[1], expect_count=expect)
+    if args and args[0] == "--list-tracked":
+        if len(args) < 2:
+            sys.stderr.write("precommit_gate: --list-tracked needs source|docs|all\n")
+            return 1
+        return _list_tracked(args[1])
+    if args and args[0] == "--scan-files-from0":
+        if len(args) < 2:
+            sys.stderr.write("precommit_gate: --scan-files-from0 needs a list path\n")
+            return 1
+        paths = _paths_from_nul_file(args[1])
+        if paths is None:
+            sys.stderr.write(
+                f"precommit_gate BLOCKED - could not read the path list "
+                f"{args[1]!r}.\n  Fail CLOSED: a sweep whose input list is "
+                "missing has not run.\n"
+            )
+            return 1
+        return _check_scan_files(paths, expect_count=expect)
     if args and args[0] == "--scan-files":
-        return _check_scan_files(args[1:])
+        return _check_scan_files(args[1:], expect_count=expect)
     if args:
         sys.stderr.write(
             f"precommit_gate: unknown argument {args[0]!r}\n"
             "  usage: precommit_gate.py                      (staged mode, "
             "command string on stdin)\n"
             "         precommit_gate.py --message-file PATH\n"
-            "         precommit_gate.py --scan-files PATH...\n"
+            "         precommit_gate.py [--expect-count N] --scan-files PATH...\n"
+            "         precommit_gate.py [--expect-count N] --scan-files-from0 LISTFILE\n"
+            "         precommit_gate.py [--expect-count N] --scan-tracked source|docs\n"
+            "         precommit_gate.py --list-tracked source|docs|all\n"
         )
         return 1
 

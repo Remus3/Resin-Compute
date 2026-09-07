@@ -16,10 +16,22 @@
 #      `scripts/install_hooks.py`. A commit made from a fresh clone, or by an
 #      automated routine that never installs hooks, is seen by CI or by nobody.
 #
-# So this workflow fires on exactly what ci.yml declines, and runs ONLY the two
-# things that are cheap and .md-shaped. The minute saver survives intact: a
-# prose edit that no guard reads still skips the full suite, the compile sweep,
-# ruff, mypy and the headless smoke.
+# So this workflow fires on exactly what ci.yml declines, and runs two things:
+# the banned-glyph sweep over tracked .md, and the SUBSET of test modules that
+# read tracked .md off disk. The minute saver survives in the shape that
+# matters - a prose edit skips the compile sweep, ruff, mypy, the headless
+# smoke and every test module that does not read a .md - but the guard subset
+# is not small, and saying it was would be the kind of comment that reads as
+# reassurance while describing something else. It is derived from the index on
+# every run, so its size is whatever the tree currently justifies; the log
+# prints the count.
+#
+# THE TWO SUITES ARE INVOKED SEPARATELY HERE, exactly as pytest.ini and
+# CLAUDE.md require. Until 2026-09-06 the guard selection reached into
+# agents/pity_engine/tests/ and handed both suites to ONE root-level pytest -
+# the precise invocation pytest.ini names as how a sibling project earned its
+# import-file-mismatch incident. It had been green on every docs push since it
+# was written, which is why nothing surfaced it.
 #
 # Do not remove one file without the other, and keep the two filters
 # complementary: an entry added to ci.yml's `paths-ignore` needs the matching
@@ -95,41 +107,120 @@ jobs:
       - name: ASCII hygiene over tracked .md
         # Runs FIRST because it is seconds long and it is the check most likely
         # to fire on a prose edit. Reuses the very same banned-glyph engine the
-        # git hooks use (tools/precommit_gate.py --scan-files), so CI and the
-        # commit-time gate can never disagree about what the rule means - two
-        # rules enforcing one hard rule is how the looser one ends up deciding.
+        # git hooks use (tools/precommit_gate.py), so CI and the commit-time
+        # gate can never disagree about what the rule means - two rules
+        # enforcing one hard rule is how the looser one ends up deciding.
+        #
+        # Since 2026-09-06 they also share the SELECTION, not just the engine:
+        # `--scan-tracked docs` and ci.yml's `--scan-tracked source` are the
+        # two halves of one partition of the tracked set, defined once inside
+        # the gate. They used to be two hand-written filters, and 14 tracked
+        # files fell between them.
+        #
+        # The handoff carries no shell. It used to be
+        # `xargs -r -a md_files.txt ... --scan-files`, and xargs splits on
+        # WHITESPACE - a tracked path containing a space became two arguments
+        # that both failed to open, and the gate reported "7-bit ASCII clean"
+        # with EXIT 0 over a file carrying an em-dash.
         run: |
           set -euo pipefail
-          git ls-files '*.md' > md_files.txt
-          echo "tracked .md files: $(wc -l < md_files.txt)"
-          xargs -r -a md_files.txt python tools/precommit_gate.py --scan-files
+          # Counted in NUL terminators rather than lines, so a newline inside a
+          # filename cannot inflate it, and derived from a different git call
+          # than the gate's own - a cross-check, not the same number twice.
+          expected="$(git ls-files -z -- '*.md' | tr -cd '\0' | wc -c)"
+          echo "tracked .md files: ${expected}"
+          python tools/precommit_gate.py --expect-count "${expected}" --scan-tracked docs
 
       - name: Select the guards that read tracked .md
         run: |
           set -euo pipefail
           # Derived, never hardcoded. Any test module that mentions a .md path
           # is a candidate; the set is recomputed on every run from the index.
-          git ls-files '*/tests/*.py' 'tests/*.py' > candidate_tests.txt || true
-          : > md_guards.txt
-          while IFS= read -r f; do
-            [ -n "$f" ] || continue
-            if grep -qE '\.md([^a-zA-Z0-9]|$)' "$f"; then
-              printf '%s\n' "$f" >> md_guards.txt
-            fi
-          done < candidate_tests.txt
-          echo "selected $(wc -l < md_guards.txt) md-reading guard module(s):"
-          cat md_guards.txt
+          #
+          # NUL-delimited throughout, matching the ASCII step above: `git
+          # ls-files` without -z separates on newline and quotes unusual paths,
+          # neither of which survives a filename carrying a space or a quote.
+          #
+          # SPLIT BY SUITE, and that is the point of this step rather than an
+          # aside. pytest.ini and CLAUDE.md both say the two suites are run
+          # SEPARATELY and never as one root-level collection; this job used to
+          # select '*/tests/*.py' and 'tests/*.py' into ONE list and hand the
+          # lot to a single pytest, which reached into agents/pity_engine/tests
+          # and collected both suites together. It was green on every docs push,
+          # which is exactly why it went unnoticed for as long as it did.
+          #
+          # THE INTERMEDIATES LIVE OUTSIDE THE WORKSPACE. This step used to
+          # drop candidate_tests.txt and md_guards.txt into the repo root,
+          # where anyone who ran these steps by hand would leave them for the
+          # next `git add -A` to stage as junk. RUNNER_TEMP is provided by the
+          # runner and is not the checkout; the fallback keeps a local hand-run
+          # equally clean. Nothing in .gitignore has to know about this.
+          WORK="${RUNNER_TEMP:-/tmp}/rc-docs-guards"
+          rm -rf "$WORK"
+          mkdir -p "$WORK"
+          git ls-files -z '*/tests/*.py' 'tests/*.py' > "$WORK/candidate_tests.z"
+          : > "$WORK/app_guards.z"
+          : > "$WORK/engine_guards.z"
+          : > "$WORK/unbucketed.txt"
+          while IFS= read -r -d '' f; do
+            grep -qE '\.md([^a-zA-Z0-9]|$)' "$f" || continue
+            case "$f" in
+              agents/pity_engine/tests/*) printf '%s\0' "$f" >> "$WORK/engine_guards.z" ;;
+              tests/*)                    printf '%s\0' "$f" >> "$WORK/app_guards.z" ;;
+              # A candidate belonging to NEITHER suite is not dropped quietly.
+              # A silent skip here would rebuild the same coverage hole one
+              # directory over.
+              *)                          printf '%s\n' "$f" >> "$WORK/unbucketed.txt" ;;
+            esac
+          done < "$WORK/candidate_tests.z"
+          app_n="$(tr -cd '\0' < "$WORK/app_guards.z" | wc -c)"
+          engine_n="$(tr -cd '\0' < "$WORK/engine_guards.z" | wc -c)"
+          echo "md-reading guards: ${app_n} in tests/, ${engine_n} in agents/pity_engine/tests/"
+          tr '\0' '\n' < "$WORK/app_guards.z"
+          tr '\0' '\n' < "$WORK/engine_guards.z"
+          if [ -s "$WORK/unbucketed.txt" ]; then
+            echo "::error::these md-reading guards belong to neither suite, so neither invocation below would run them:"
+            cat "$WORK/unbucketed.txt"
+            exit 1
+          fi
 
-      - name: Run the guards that read tracked .md
+      - name: Run the md-reading guards - the two suites SEPARATELY
         run: |
           set -euo pipefail
-          if [ ! -s md_guards.txt ]; then
+          # Two invocations, never one. See pytest.ini: the engine package is
+          # self-validating and is mirrored as a standalone unit, so collecting
+          # it alongside tests/ is how a sibling project earned its
+          # import-file-mismatch incident. Two steps' worth of output in one
+          # step, so the log names which half failed.
+          #
+          # No -q. pytest.ini already carries `addopts = -q`; adding a second
+          # one doubles it to -qq, which SUPPRESSES the summary line - the one
+          # step in this job that runs assertions would log a wall of dots and
+          # no count.
+          # Same path the selection step computed. RUNNER_TEMP is stable for
+          # the whole job, so the two steps agree without leaving anything in
+          # the checkout for a later `git add -A` to pick up.
+          WORK="${RUNNER_TEMP:-/tmp}/rc-docs-guards"
+          app=()
+          engine=()
+          mapfile -d '' -t app    < "$WORK/app_guards.z"
+          mapfile -d '' -t engine < "$WORK/engine_guards.z"
+          if [ "${#app[@]}" -eq 0 ] && [ "${#engine[@]}" -eq 0 ]; then
             # Legitimately possible while the tree is young. Say so loudly
             # rather than reporting a silent green over zero assertions.
             echo "::notice::no test module reads tracked .md yet - nothing to run"
             exit 0
           fi
-          # -r so an empty list can never hand pytest zero arguments, which
-          # would make it collect the WHOLE tree and report a green that this
-          # job did not earn.
-          xargs -r -a md_guards.txt python -m pytest -q --tb=short
+          # The arrays are expanded directly. Never `xargs`, which splits on
+          # whitespace and would turn one guard module whose path contains a
+          # space into two nonexistent ones - and pytest handed a nonexistent
+          # path is an error, while pytest handed NO path collects the whole
+          # tree and reports a green this job did not earn.
+          if [ "${#app[@]}" -gt 0 ]; then
+            echo "--- application suite: ${#app[@]} md-reading module(s) ---"
+            python -m pytest --tb=short "${app[@]}"
+          fi
+          if [ "${#engine[@]}" -gt 0 ]; then
+            echo "--- engine suite: ${#engine[@]} md-reading module(s) ---"
+            python -m pytest --tb=short "${engine[@]}"
+          fi

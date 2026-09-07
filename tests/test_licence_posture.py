@@ -22,9 +22,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import require_git_repository
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -86,16 +89,196 @@ def test_the_readme_declares_the_same_licence():
     assert SPDX in readme
 
 
-def test_no_file_still_claims_the_project_is_unlicensed():
-    """The pre-ADR-006 wording, swept for so it cannot survive in a corner."""
-    stale = ["Private. No licence granted", "UNLICENSED"]
+#: The pre-ADR-006 wording. A tracked file still ASSERTING either of these
+#: contradicts `LICENSE`, and a project whose own files disagree about its
+#: licence has, in practice, no licence anyone can rely on.
+STALE_LICENCE_CLAIMS = ("Private. No licence granted", "UNLICENSED")
+
+#: Tracked paths where a stale phrase is a QUOTATION and not a DECLARATION,
+#: each with the reason it is exempt.
+#:
+#: Named ONE AT A TIME rather than by directory glob. An exemption expressed as
+#: `docs/adr/*` widens on its own every time an ADR is added, and an exemption
+#: that widens on its own has stopped being an exemption and become a hole.
+#: Every entry is re-earned on each run by
+#: `test_every_quotation_exemption_is_still_earned` below.
+QUOTATION_EXEMPT = {
+    "tests/test_licence_posture.py": (
+        "this guard's own denylist literals - a sweep cannot look for a phrase "
+        "it is forbidden to spell"
+    ),
+    "docs/adr/ADR-006-outbound-licence.md": (
+        "quotes the superseded README wording as the very thing it replaced"
+    ),
+    "docs/adr/ADR-009-per-file-licence-headers.md": (
+        "cites ADR-006's finding of that same superseded wording"
+    ),
+}
+
+
+def _git(*args: str) -> str:
+    """Run git at the repo root, SKIPPING the calling test when git cannot answer.
+
+    Guarded here, at the single point where the dependency is real, rather than
+    at module level - every arm in this file that reads a known path off disk
+    needs no repository and keeps its coverage in a Download-ZIP or sdist copy.
+    See the header of `tests/conftest.py` for why that distinction is not
+    theoretical.
+    """
+    require_git_repository()
+    return subprocess.run(
+        ["git", *args],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def _is_utf8_text(path: Path) -> bool:
+    """Can this file's bytes be read as text at all?
+
+    A phrase check has no meaning over binary bytes, and one committed PNG must
+    not abort the whole sweep with a `UnicodeDecodeError`.
+    """
+    try:
+        path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def _tracked_text_files() -> list[str]:
+    """Every tracked path whose bytes decode as UTF-8, sorted.
+
+    ASKED OF GIT, not walked off disk. The question this guard exists to answer
+    is what A FRESH CLONE RECEIVES. A `Path.glob` answers the different question
+    of what is on this machine - it would drag in `node_modules/` and every
+    untracked scratch file, and it would still have missed the defect that
+    prompted the widening, because the old corpus was five hand-listed paths.
+    """
+    tracked = [line for line in _git("ls-files").splitlines() if line]
+    return sorted(
+        name
+        for name in tracked
+        # A staged deletion is tracked but absent from disk. Not this guard's
+        # problem, and reading it would raise.
+        if (REPO_ROOT / name).is_file() and _is_utf8_text(REPO_ROOT / name)
+    )
+
+
+def _swept_for_stale_licence_claims() -> list[str]:
+    return [name for name in _tracked_text_files() if name not in QUOTATION_EXEMPT]
+
+
+def test_no_tracked_file_still_claims_the_project_is_unlicensed():
+    """The pre-ADR-006 wording, swept out of the WHOLE tracked tree.
+
+    THE DEFECT THIS WIDENING ENCODES, which this repository shipped. The corpus
+    was `REPO_ROOT.glob("*.md")` plus `shell/package.json` - five files out of
+    153 tracked. `shell/package-lock.json` sat outside it declaring
+    `"license": "UNLICENSED"` while `shell/package.json` three lines of code
+    away declared GPL-3.0-or-later, and this guard passed green throughout.
+
+    It did not self-heal and could not. The commit that flipped `package.json`
+    ADDED THIS VERY GUARD in the same breath, and npm only rewrites the
+    lockfile's root entry when it re-reads the manifest, which nothing since
+    made it do. The lockfile root entry is what dependency scanners and GitHub's
+    dependency graph read, so the contradiction was the machine-readable half.
+
+    Trap 1 in `docs/LICENSE_NOTES.md` is this exact failure, written in this
+    repository's own words before it committed it: "A repo can contradict
+    itself. The LICENSE file and the package.json or pyproject.toml licence
+    field can disagree. Read both."
+    """
     offenders: list[str] = []
-    for path in list(REPO_ROOT.glob("*.md")) + [REPO_ROOT / "shell" / "package.json"]:
-        text = path.read_text(encoding="utf-8")
-        for phrase in stale:
+    for name in _swept_for_stale_licence_claims():
+        text = (REPO_ROOT / name).read_bytes().decode("utf-8")
+        for phrase in STALE_LICENCE_CLAIMS:
             if phrase in text:
-                offenders.append(f"{path.name} still says {phrase!r}")
-    assert not offenders, "; ".join(offenders)
+                offenders.append(f"{name} still says {phrase!r}")
+    assert not offenders, (
+        "these tracked files contradict LICENSE about this project's own "
+        "licence: " + "; ".join(offenders)
+    )
+
+
+def test_the_stale_licence_sweep_reaches_the_whole_tracked_tree():
+    """Non-vacuity. This is the arm that would have caught the five-file corpus.
+
+    A sweep is only as good as what it looks at, and a corpus that quietly
+    narrows leaves a guard that passes forever while guarding nothing. The named
+    paths are the four places the licence is declared plus the lockfile that was
+    the actual offender - none of them may fall out of the sweep again.
+    """
+    swept = set(_swept_for_stale_licence_claims())
+    assert len(swept) >= 100, (
+        f"the sweep collapsed to {len(swept)} files; it is meant to cover the "
+        "whole tracked tree"
+    )
+    for required in (
+        "shell/package-lock.json",
+        "shell/package.json",
+        "README.md",
+        "NOTICE",
+        "LICENSE",
+        "docs/LICENSE_NOTES.md",
+    ):
+        assert required in swept, f"the stale-licence sweep no longer reaches {required}"
+
+
+def test_every_quotation_exemption_is_still_earned():
+    """THE DISARM PATH, CLOSED. Read this before adding an entry above.
+
+    The cheapest way to make the sweep green is not to fix the offender but to
+    exempt it, and the second cheapest is to leave a dead entry lying around
+    until something drifts into its path. Three arms, all mandatory:
+
+      - the exempted path must still EXIST, so a rename cannot leave a stale
+        entry silently covering nothing;
+      - it must still CONTAIN a stale phrase, so a dead exemption is deleted
+        rather than left as a pre-authorised hole;
+      - it may not be a MANIFEST. `shell/package-lock.json` and
+        `shell/package.json` are exactly what this guard exists to check, and a
+        machine-readable licence field is a DECLARATION - it can never be a
+        quotation of history, so no `.json` may ever be exempted for one.
+
+    Needs no git repository, so it keeps its teeth in a Download-ZIP copy where
+    the sweep above can only skip.
+    """
+    for name, reason in QUOTATION_EXEMPT.items():
+        path = REPO_ROOT / name
+        assert path.is_file(), (
+            f"the quotation exemption for {name} names a file that is gone; "
+            "delete the entry rather than leaving it to cover a future path"
+        )
+        assert not name.endswith(".json"), (
+            f"{name} is a manifest and manifests may never be exempted. A licence "
+            "field is a declaration, not a quotation, and exempting one would "
+            "disarm the exact check this file exists to perform"
+        )
+        text = path.read_bytes().decode("utf-8")
+        assert any(phrase in text for phrase in STALE_LICENCE_CLAIMS), (
+            f"the exemption for {name} is dead - it carries none of "
+            f"{list(STALE_LICENCE_CLAIMS)} any more. Remove it. Reason on "
+            f"file: {reason}"
+        )
+
+
+def test_the_sweep_skips_undecodable_files_instead_of_erroring(tmp_path):
+    """Aimed at the predicate, because the live tree gives it no subject.
+
+    Every one of the 153 tracked files decodes as UTF-8 today, so the binary
+    branch is unexercised by the sweep itself - and an unexercised branch is the
+    one that breaks the first time a favicon or a screenshot is committed. It is
+    therefore asserted here directly rather than assumed.
+    """
+    decodable = tmp_path / "notes.md"
+    decodable.write_bytes(b"a tracked text file\n")
+    binary = tmp_path / "icon.png"
+    binary.write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe\xff\x00")
+    assert _is_utf8_text(decodable)
+    assert not _is_utf8_text(binary), "the binary guard would let a decode error escape"
 
 
 def test_the_notice_disclaims_any_right_over_the_game_data():
@@ -562,3 +745,204 @@ def test_the_fixtures_readme_keeps_the_surviving_reason_to_refuse():
         assert "game data" in lowered or "hoyoverse" in lowered, (
             f"the {name} row gives no surviving reason to refuse: {row!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Inbound - the DIRECTORY-WIDE synthetic claim, swept out of the LIVE docs
+#
+# "`data/fixtures/` holds synthetic fixtures" is FALSE of two of the three
+# files in that directory, and it was written into three places at once. This
+# is the sweep that stops it coming back. Being a sweep, it carries the
+# surviving-neighbour arm this tree requires of every sweep: the one fixture
+# that genuinely IS invented must go on being called synthetic.
+# ---------------------------------------------------------------------------
+
+
+#: An affirmative DIRECTORY-WIDE synthetic claim - `data/fixtures/` and the
+#: word `synthetic` inside one sentence.
+#:
+#: THE `[^.]` IS LOAD-BEARING AND MUST NOT BE RELAXED TO `.`. Refusing to cross
+#: a period is what confines the match to a single sentence, and it is also
+#: exactly what makes the pattern walk past the TRUE per-file claim: in "only
+#: `data/fixtures/enka_sample_profile.json` is synthetic" the period inside the
+#: filename breaks the match before it ever reaches the word. Widen it to `.`
+#: and this sweep begins condemning the one sentence it exists to protect.
+_DIRECTORY_WIDE_SYNTHETIC = re.compile(
+    r"data/fixtures/?[^.]{0,140}?\bsynthetic\b", re.IGNORECASE
+)
+
+#: Frozen decision records, swept out of the guard below.
+#:
+#: An ADR states a decision AS IT WAS MADE. `docs/adr/ADR-002-data-posture.md`
+#: says so in terms - "The body below is left exactly as it was written" -
+#: because editing the reasoning to match a later decision destroys the record
+#: `docs/adr/README.md` exists to keep. ADR-002's Decision section therefore
+#: still carries the false wording and always will.
+#:
+#: THAT EXCLUSION IS PAID FOR, not granted. The banner arm at the end of this
+#: file requires the correction to appear in ADR-002's AMENDMENT BANNER
+#: instead, so a reader cannot take the frozen Decision section at face value.
+#: Exempt from the sweep is not exempt from being corrected.
+_FROZEN_RECORD_PREFIX = "docs/adr/"
+
+
+def _live_compliance_docs() -> list[str]:
+    """Tracked `.md` under `docs/` that speaks in the present tense.
+
+    `docs/LEDGER.md` is deliberately IN. It narrates rather than decides, so it
+    could in principle restate the false claim while reporting it - but a live
+    document that repeats "the fixtures are synthetic" WITHOUT marking it
+    corrected is a hazard whoever wrote it, and one worth a human reading. It
+    does not trip the sweep today.
+    """
+    return [
+        name
+        for name in _tracked_text_files()
+        if name.startswith("docs/")
+        and name.endswith(".md")
+        and not name.startswith(_FROZEN_RECORD_PREFIX)
+    ]
+
+
+def test_no_live_doc_calls_the_whole_fixtures_directory_synthetic():
+    """The claim is false, and it is false in the direction that costs.
+
+    `data/fixtures/seed_roster.json` and `seed_materials.json` carry
+    `_hand_authored: true` and `_vendored: false`, and their own notes call them
+    hand-authored tables of independently verified ids. SYNTHETIC MEANS
+    INVENTED, and a verified avatarId is not invented. Only
+    `enka_sample_profile.json` is genuinely synthetic and flags itself so.
+
+    `data/fixtures/README.md` states the stakes plainly, and this repository is
+    public: a compliance document that is demonstrably false about its own
+    contents is a far worse position than the true one - which here is also the
+    STRONGER one, because hand-authored-and-nothing-vendored is a bigger claim
+    than synthetic.
+
+    `CLAUDE.md` routes every contributor to `docs/LICENSE_NOTES.md` as the
+    authority on this question, which is what made the wording there load
+    bearing rather than cosmetic.
+    """
+    offenders: list[str] = []
+    for name in _live_compliance_docs():
+        flat = _flatten((REPO_ROOT / name).read_bytes().decode("utf-8"))
+        for match in _DIRECTORY_WIDE_SYNTHETIC.finditer(flat):
+            offenders.append(f"{name}: {match.group(0)!r}")
+    assert not offenders, (
+        "these live documents call the whole fixtures directory synthetic, which "
+        "is false of the two hand-authored seed tables in it: " + "; ".join(offenders)
+    )
+
+
+def test_the_directory_wide_synthetic_sweep_spares_the_true_per_file_claim():
+    """BOTH ARMS, and neither is optional.
+
+    A sweep that scores on the first arm by deleting the second's subject has
+    failed. The false claim must be caught; the true per-file claim about
+    `enka_sample_profile.json` must survive untouched, because that fixture is
+    genuinely invented - 9xxxxxxx placeholder ids, SYNTHETIC_* name hashes - and
+    a sweep that relabelled it would replace one false document with another.
+    """
+    false_claim = (
+        "1. **Vendor no game data.** `data/fixtures/` holds only hand-authored "
+        "synthetic fixtures for tests, labelled as such"
+    )
+    assert _DIRECTORY_WIDE_SYNTHETIC.search(false_claim) is not None, (
+        "the detector misses the exact wording this repository shipped"
+    )
+
+    true_claim = (
+        "Only `data/fixtures/enka_sample_profile.json` is synthetic; the two seed "
+        "tables are hand-authored records of publicly verified game fact"
+    )
+    assert _DIRECTORY_WIDE_SYNTHETIC.search(true_claim) is None, (
+        "the detector condemns the TRUE per-file claim - the surviving neighbour "
+        "this sweep exists to leave standing"
+    )
+
+
+def test_the_live_docs_sweep_reaches_the_document_that_carried_the_claim():
+    """Non-vacuity. A corpus that stopped including the offender passes free."""
+    swept = _live_compliance_docs()
+    assert "docs/LICENSE_NOTES.md" in swept, (
+        "the sweep no longer reaches LICENSE_NOTES, which is the file CLAUDE.md "
+        "names as the authority on this question"
+    )
+    assert len(swept) >= 3, f"only {len(swept)} live docs resolved into the sweep"
+
+
+def test_the_licence_notes_keep_the_one_genuinely_synthetic_fixture_named():
+    """The surviving neighbour, asserted against the LIVE file and not a sample.
+
+    The lazy way to make the sweep above green is to delete every mention of
+    synthetic from LICENSE_NOTES. That would swap a false statement for a vaguer
+    one and lose the distinction that is the entire point: the directory holds
+    two KINDS of file. The correction has to name which file is which.
+    """
+    flat = _flatten((REPO_ROOT / "docs" / "LICENSE_NOTES.md").read_bytes().decode("utf-8"))
+    assert "enka_sample_profile.json" in flat, (
+        "LICENSE_NOTES no longer names the one genuinely synthetic fixture"
+    )
+    assert "hand-authored" in flat.lower(), (
+        "LICENSE_NOTES no longer says what the fixtures directory actually is"
+    )
+
+
+def test_adr_002_records_that_its_synthetic_claim_was_later_corrected():
+    """THE PRICE OF THE FROZEN-RECORD EXCLUSION ABOVE.
+
+    ADR-002's Decision section still reads "`data/fixtures/` contains only
+    hand-authored synthetic fixtures for tests, labelled as synthetic", and it
+    must: an ADR records a decision as it was made, and its own banner says the
+    body is left exactly as written.
+
+    So the correction goes in the AMENDMENT BANNER, in the same shape the banner
+    already uses for ADR-006's dissolution of the copyleft objection. Without
+    it, the exclusion in `_FROZEN_RECORD_PREFIX` would be a licence for a false
+    compliance claim to sit unmarked in a document readers are sent to.
+
+    The banner must precede the body - a correction a reader meets AFTER the
+    claim has already been read is not a correction.
+
+    BANNER AND BODY ARE SPLIT BEFORE ANYTHING IS ASSERTED, and that is not
+    tidiness. A correction note QUOTES the sentence it corrects, so a check for
+    the false sentence over the whole file would be satisfied by the banner's
+    own quotation of it - and the body-preservation arm would then pass over a
+    body that had been rewritten away entirely. That is the failure this tree
+    has already paid for once: an expectation living inside the same structure
+    it checks, one edit from vacuous.
+    """
+    raw = (REPO_ROOT / "docs" / "adr" / "ADR-002-data-posture.md").read_bytes().decode("utf-8")
+    marker = "## Context"
+    assert marker in raw, "ADR-002 has no Context heading to split banner from body"
+    banner = _flatten(raw[: raw.index(marker)])
+    body = _flatten(raw[raw.index(marker) :])
+
+    assert "contains only hand-authored synthetic" in body, (
+        "ADR-002's BODY was rewritten. It must not be: an ADR records a decision "
+        "as it was made, and this one says so in terms. The correction belongs in "
+        "the amendment banner"
+    )
+
+    lowered = banner.lower()
+    assert "synthetic" in lowered, (
+        "the synthetic correction is not in ADR-002's amendment banner. A reader "
+        "meets the Decision section's false claim before any note that follows it"
+    )
+    assert "hand-authored" in lowered, (
+        "ADR-002's banner does not say what the fixtures actually are"
+    )
+    assert "enka_sample_profile.json" in banner, (
+        "ADR-002's banner does not name the one fixture that IS synthetic, so it "
+        "reads as a blanket retraction of a claim that is true of one file"
+    )
+    assert "_hand_authored" in banner, (
+        "ADR-002's banner does not record the corrected machine-readable labelling"
+    )
+    assert "data/fixtures/README.md" in banner, (
+        "ADR-002's banner does not point at the file carrying the corrected labels"
+    )
+    assert "ADR-006" in banner, (
+        "ADR-002's banner lost the ADR-006 amendment note. This correction is a "
+        "SECOND, separate note and must not have replaced the first"
+    )

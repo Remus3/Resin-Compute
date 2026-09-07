@@ -22,6 +22,34 @@
 > exists to keep. `docs/LICENSE_NOTES.md` carries the same amendment in the same
 > shape.
 
+> **CORRECTED ON THE FACTS, 2026-09-06. A second and separate note, owing
+> nothing to ADR-006. The body below is still left exactly as it was written.**
+>
+> **FALSE AS WRITTEN:** Decision point 1 below says `data/fixtures/` "contains
+> only hand-authored synthetic fixtures for tests, labelled as synthetic". That
+> was false of two of the three files the directory actually holds.
+> `seed_roster.json` and `seed_materials.json` are records of publicly known
+> game FACT - real avatarIds and material ids, independently verified and typed
+> in one row at a time rather than lifted from a dataset. They carry
+> `_hand_authored: true` and `_vendored: false`. Only `enka_sample_profile.json`
+> is genuinely synthetic - its ids and name hashes are deliberately unrealistic
+> placeholders - and it alone carries `_synthetic: true` and keeps that label.
+> `data/fixtures/README.md` is titled for the corrected posture and names which
+> of its three files is which kind.
+>
+> **The DECISION is unaffected. Only its description of the fixtures was wrong.**
+> "Vendor no game data" is precisely what that directory does, and hand-authored
+> is the STRONGER claim: synthetic means invented, and a verified avatarId is not
+> invented. Nothing there was lifted from anywhere.
+>
+> The body is not rewritten here either, for the reason given above. This is the
+> difference between the two files that carried this wording:
+> `docs/LICENSE_NOTES.md` is a LIVE compliance document that readers are sent to
+> for the current answer, so it was corrected in place; an ADR is a RECORD of a
+> decision as it was made, so it is annotated instead. Both are guarded by
+> `tests/test_licence_posture.py`, which sweeps the live documents and separately
+> requires this banner to exist.
+
 ## Context
 
 The originating brief named four data sources to "bootstrap from and periodically
