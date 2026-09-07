@@ -117,6 +117,32 @@ jobs:
           python -m compileall -q -x '(\.venv|__pycache__|build|dist)' .
           echo "py_compile sweep OK over ${count} .py file(s)"
 
+      - name: ASCII hygiene over tracked non-markdown source
+        # THE HOOK CANNOT BE THE ONLY ENFORCEMENT OF THIS RULE.
+        #
+        # CLAUDE.md states the banned-glyph rule as a hard rule and
+        # .githooks/pre-commit enforces it at commit time. It also states, in
+        # the same breath, that `core.hooksPath` is LOCAL CONFIG AND IS NOT
+        # CLONED - so a fresh clone runs zero hooks until someone runs
+        # scripts/install_hooks.py. Anyone who has not (a new contributor, a CI
+        # sandbox, an agent working in a fresh worktree) can land an em-dash in
+        # a .py and nothing at all notices. That is precisely the "gate that is
+        # absent without saying so" this scaffold exists to prevent, and it
+        # matters more the moment this repository is visible to people who
+        # never read CLAUDE.md.
+        #
+        # docs-guards.yml already covers tracked .md and is skipped here
+        # because ci.yml never runs on a docs-only push. This step covers
+        # everything else, using the SAME engine
+        # (tools/precommit_gate.py --scan-files) so CI and the commit-time gate
+        # cannot drift into two different readings of one rule.
+        run: |
+          set -euo pipefail
+          git ls-files '*.py' '*.toml' '*.ini' '*.yml' '*.yaml' '*.json' '*.js' '*.sh' > src_files.txt
+          echo "tracked non-markdown source files: $(wc -l < src_files.txt)"
+          test -s src_files.txt || { echo "the sweep selected NOTHING - it would pass vacuously"; exit 1; }
+          xargs -r -a src_files.txt python tools/precommit_gate.py --scan-files
+
       - name: mypy
         # ADVISORY, deliberately, and this is the one line to change when that
         # should stop being true.
