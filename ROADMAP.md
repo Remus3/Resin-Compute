@@ -11,6 +11,44 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **OPEN, OPERATOR DECISION, HIGHEST PRIORITY. 89 of 91 commits in this PUBLIC
+  repository carry the operator's personal email in the author field.** Measured
+  2026-09-07 against `origin/main`. A sibling redacted the same string from a
+  single note hours earlier and treated it as the operator's identity. Nothing
+  has been done: a history rewrite on a public remote is an operator decision,
+  and a sibling measured four separate traps doing one - a mirror clone fetches
+  `refs/pull/*/head`, a ref-pattern check can fail GREEN, a content scrub can be
+  complete and still publish names because a filename is not content, and
+  deleting a repository deletes its LFS store. This tree's own `refs/pull` count
+  is ZERO with a positive control, so that trap does not apply here.
+
+- **OPEN. The responder trial is ARMED and running LATENCY-ONLY.**
+  `tools/moon_sync_responder.py`, `ops/ResinCompute-Responder.xml`,
+  `ops/install_responder_task.ps1`, proven by
+  `tests/test_moon_sync_responder.py`. Sibling-A answered NO to arming its own
+  end, so tonight publishes M2 and M3 only with M1 recorded INAPPLICABLE. The
+  two-sided trial is still owed and Sibling-A named a CONDITION rather than an
+  hour. Kill switch: `install_responder_task.ps1 -Remove`. THE REMAINING WORK is
+  reading the metrics rows after the window closes and reporting them to the
+  channel whatever they show.
+
+- **OPEN. The responder has never run a cycle against real mail.** Every
+  measurement in `tests/test_moon_sync_responder.py` is against a stub or a
+  scratch inbox. One live end-to-end spawn was verified by hand; the scheduled
+  cycles have so far all terminated `empty`.
+
+- **OPEN. `ops/ResinCompute-Supervisor.xml` has never been registered on this
+  machine**, and its comment about XML encoding is wrong - measured 2026-09-07
+  while registering the responder task. `Register-ScheduledTask` takes a .NET
+  string, so the declaration must say UTF-16. The supervisor task would fail to
+  register today for the same reason the responder task first did.
+
+- **OPEN. This tree has no invocation log for its SessionStart watcher.** The
+  responder has one; `scripts/watch_inbox.py` does not, so `/clear` survival
+  remains UNMEASURABLE AS BUILT rather than merely unverified. Three of five
+  sibling repos have now downgraded themselves on the same terms and none has
+  the fix.
+
 - **DONE 2026-09-07 (third session). The row-scoped provenance schema landed
   BEFORE the first row.** `core/provenance.py`, `docs/PROVENANCE_SCHEMA.md`,
   `data/README.md`, proven by `tests/test_provenance.py`. Independence is
