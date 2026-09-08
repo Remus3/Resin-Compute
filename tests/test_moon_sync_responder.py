@@ -713,15 +713,26 @@ def test_a_cycle_that_does_nothing_still_records_that_it_fired(rsp, tmp_path):
     assert "run_once" in rsp.DEFAULT_INVOCATIONS.read_text()
 
 
-def test_the_invocation_log_records_one_line_per_fire(rsp, tmp_path):
+def test_the_invocation_log_records_a_start_and_a_terminal_line_per_fire(rsp, tmp_path):
+    """Two lines, and BOTH are load-bearing.
+
+    This arm asserted one line per fire, which was only ever true because the
+    four quiet terminations forgot to write their second one. The `start` line
+    is the only evidence that a fire which dies mid-cycle happened at all; the
+    terminal line is the only evidence of what a fire that lived decided. A log
+    with just the first cannot tell a declining cycle from a cycle that never
+    ran, which is the defect measured against the live task on 2026-09-07.
+    """
     inbox = tmp_path / "inbox"
     inbox.mkdir(parents=True)
     for _ in range(3):
         rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=False))
 
     lines = [ln for ln in rsp.DEFAULT_INVOCATIONS.read_text().splitlines() if ln.strip()]
+    outcomes = [ln.split("	")[-1] for ln in lines]
 
-    assert len(lines) == 3, f"expected one line per fire, got {lines}"
+    assert len(lines) == 6, f"expected a start and a terminal per fire, got {lines}"
+    assert outcomes == ["start", "empty"] * 3, outcomes
 
 
 def test_an_unwritable_invocation_log_does_not_take_the_responder_down(rsp, tmp_path):
@@ -998,4 +1009,88 @@ def test_the_prompt_labels_the_note_as_data_and_never_as_instructions(rsp, tmp_p
         "markers - a crafted note that sorts above its own warning is a "
         "measured shape on this channel, not a hypothetical. "
         f"caveat={caveat_last} begin={begin} body={body} end={end}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("scenario", "expected"),
+    [("window", "window"), ("budget", "budget"), ("empty", "empty"), ("disarmed", "disarmed")],
+)
+def test_every_way_a_cycle_stops_reaches_the_invocation_log(rsp, tmp_path, scenario, expected):
+    """A termination tested only as a RETURN VALUE is not a recorded one.
+
+    Measured here 2026-09-07 at 19:16, mid-trial and against the live task:
+    four scheduled fires inside the agreed window each terminated `empty`, and
+    `ops/runtime/responder_invocations.log` carried four bare `start` lines and
+    nothing else. `window`, `budget`, `empty` and `disarmed` each return before
+    reaching `log_invocation`, so a cycle that ran and declined to act is
+    byte-identical on disk to a cycle that never fired at all. That is the P4
+    defect `log_invocation` exists to close, and it is the same class already
+    fixed on the `no-destination` path, which carries a comment saying so.
+
+    The sibling test above asserts the same four terminations as a return value
+    and stays green through this, which is the whole point: a predicate with a
+    passing arm is not an enforced gate until something asserts the CALL.
+
+    No metrics row is asserted, and none should be written. A row carries
+    `reply_seconds` as `replied - arrival`, so a row for a cycle that sent
+    nothing would put an invented latency into M2 - the number the trial is
+    being run to measure.
+    """
+    _agree(rsp)
+    inbox = tmp_path / "inbox"
+    inbox.mkdir(parents=True)
+    bounds = rsp.Bounds(armed=True)
+    now = None
+
+    if scenario == "window":
+        _note(inbox, "2026-09-07-1900-from-RC-q.md")
+        bounds = rsp.Bounds(armed=True, window_opens=0.0, window_closes=1.0)
+        now = 5000.0
+    elif scenario == "budget":
+        _note(inbox, "2026-09-07-1900-from-RC-hop.md", _draft(rsp, "auto\n"))
+        _note(inbox, "2026-09-07-1901-from-RC-q.md")
+        bounds = rsp.Bounds(armed=True, max_hops=1)
+    elif scenario == "disarmed":
+        _note(inbox, "2026-09-07-1900-from-RC-q.md")
+        bounds = rsp.Bounds(armed=False)
+
+    result = rsp.run_once(
+        inbox=inbox,
+        roots={"RC": tmp_path / "rc"},
+        bounds=bounds,
+        spawn=lambda *a, **k: _draft(rsp, "body\n"),
+        now=now,
+    )
+
+    lines = [ln for ln in rsp.DEFAULT_INVOCATIONS.read_text().splitlines() if ln.strip()]
+    outcomes = [ln.split("\t")[-1] for ln in lines]
+
+    assert result["termination"] == expected, result
+    assert outcomes[0] == "start", outcomes
+    assert outcomes[-1] == expected, (
+        f"{scenario} left the log saying only {outcomes}, so this fire is "
+        "indistinguishable on disk from one that never happened"
+    )
+
+
+def test_no_terminal_path_leaves_the_log_saying_only_start(rsp, tmp_path):
+    """Discovered rather than listed, so a NEW early return fails here.
+
+    The parametrised arm above names four terminations by hand, and a hand
+    maintained list is the failure mode this suite has already been bitten by
+    once, when the isolation fixture named three `DEFAULT_` paths and a fourth
+    arrived an hour later. This arm asserts the PROPERTY instead: whatever
+    `run_once` returns as its termination must be the last word in the log.
+    """
+    inbox = tmp_path / "inbox"
+    inbox.mkdir(parents=True)
+
+    result = rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=False))
+    lines = [ln for ln in rsp.DEFAULT_INVOCATIONS.read_text().splitlines() if ln.strip()]
+
+    assert lines, "a fire left no record at all"
+    assert lines[-1].split("\t")[-1] == result["termination"], (
+        f"log ends on {lines[-1]!r} but the cycle terminated "
+        f"{result['termination']!r}"
     )
