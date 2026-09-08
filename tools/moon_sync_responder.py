@@ -740,7 +740,45 @@ def run_once(
     now: float | None = None,
     grammar: str = GRAMMAR,
 ) -> dict:
-    """One cycle: find a note, draft a reply, gate it, deliver or hold.
+    """One cycle, with its outcome guaranteed to reach the invocation log.
+
+    EVERY EXIT IS LOGGED HERE, not on the path that takes it. The first version
+    logged per-path, and four paths - `window`, `budget`, `empty` and
+    `disarmed` - simply did not, each having a passing arm asserting its
+    termination as a RETURN VALUE. Measured 2026-09-07 at 19:16 against the
+    live scheduled task: four fires inside the agreed window, four bare `start`
+    lines, and no record of what any of them decided. A hand-maintained list of
+    paths that remember to log is the same failure mode as a hand-maintained
+    list of paths to isolate, and this suite has been bitten by that once.
+
+    So the cycle body cannot forget. It returns, and the wrapper writes the
+    terminal line whatever the body did, including when the body raises.
+
+    Two lines per fire, a `start` and a terminal. The `start` is not redundant:
+    it is the only evidence that a fire which dies mid-cycle ever happened.
+    """
+    started = time.time() if now is None else now
+    log_invocation("run_once", None, "start", now=started)
+    try:
+        result = _run_once(inbox, roots, bounds, spawn, started, grammar)
+    except BaseException:
+        # A responder that tracebacks out of a scheduled task surfaces nothing
+        # at all. The log says so before the exception continues on its way.
+        log_invocation("run_once", None, "crashed")
+        raise
+    log_invocation("run_once", result.get("note"), result["termination"])
+    return result
+
+
+def _run_once(
+    inbox: Path | None,
+    roots: dict[str, Path] | None,
+    bounds: Bounds | None,
+    spawn: Callable[..., str] | None,
+    started: float,
+    grammar: str,
+) -> dict:
+    """The cycle itself: find a note, draft a reply, gate it, deliver or hold.
 
     `spawn` is injected so the session is a seam rather than a dependency. The
     draft comes back as TEXT and every decision about it is made out here.
@@ -748,7 +786,6 @@ def run_once(
     inbox = inbox or DEFAULT_INBOX
     bounds = bounds or Bounds()
     roots = load_roots() if roots is None else roots
-    started = time.time() if now is None else now
     result: dict = {
         "delivered": False,
         "reasons": [],
@@ -757,14 +794,12 @@ def run_once(
         "termination": "unknown",
         "grammar": grammar,
     }
-    log_invocation("run_once", None, "start", now=started)
 
     agreed, why = counterparty_agreed(DEFAULT_CONFIRMATION, now=started)
     if bounds.armed and not agreed:
         print(f"responder: HOLDING - {why}")
         result["reasons"] = [why]
         result["termination"] = "unconfirmed"
-        log_invocation("run_once", None, "unconfirmed", now=started)
         return result
 
     if not window_open(bounds, now=started):
@@ -793,7 +828,6 @@ def run_once(
         # indistinguishable from one that never ran, which is the same class as
         # the invocation log this responder already carries.
         result["termination"] = "no-destination"
-        log_invocation("run_once", note.name, "no-destination", now=started)
         return result
 
     if not bounds.armed:
@@ -812,7 +846,6 @@ def run_once(
         print(f"responder: REFUSING to spawn - {why}")
         result["reasons"] = [why]
         result["termination"] = "untrusted-workspace"
-        log_invocation("run_once", note.name, "untrusted-workspace", now=started)
         record_cycle(
             DEFAULT_METRICS, note.name, hops_used(inbox), started, time.time(),
             time.time() - started, [], False, [why], "untrusted-workspace", grammar,
@@ -836,7 +869,6 @@ def run_once(
             DEFAULT_METRICS, note.name, hops_used(inbox), started, time.time(),
             time.time() - started, [], False, reasons, "spawn-failed", grammar,
         )
-        log_invocation("run_once", note.name, "spawn-failed", now=time.time())
         return result
 
     reasons = validate_draft(draft, bounds)
@@ -866,7 +898,6 @@ def run_once(
         finished - started, result["actions"], result["delivered"], result["reasons"],
         result["termination"], grammar,
     )
-    log_invocation("run_once", note.name, result["termination"], now=finished)
     return result
 
 
