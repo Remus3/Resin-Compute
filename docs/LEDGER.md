@@ -12,6 +12,75 @@ now.
 
 ---
 
+## 2026-09-08 - The invocation log could not name which hook fired, and the proof took a real fire
+
+Commit `3964544`. `scripts/watch_inbox.py`, `.claude/settings.json`,
+`tests/test_watch_inbox.py`, `tests/test_session_hooks.py`. Measured 2026-09-08:
+1421 passed and 1 skipped in the application suite, 80 in PityEngine, licence 41,
+docs 23, qa_companion 17 passed 0 failed 1 skipped, ruff clean, headless exit 0.
+Baseline 1408 was re-derived by an adversary from a fresh clone at `0e9491a`
+rather than taken on the builder's word; 13 arms added, 0 removed, and the
+arithmetic closes against a collected count of 1422.
+
+**The defect.** The runtime invocation log under `ops/runtime/`, named here in
+prose because it is gitignored, existed to answer whether the `SessionStart`
+hook fires on a cold session and survives `/clear`. It could not answer either.
+`.claude/settings.json` wired BOTH `SessionStart` AND `UserPromptSubmit` to the
+same command, `resolve_source` falls back to `cli` for both, and a manual
+terminal run writes `cli` as well. Every fire in the complete log was `cli`.
+An instrument that cannot separate its callers is not evidence about any of them.
+
+**The trap the shape of the module set.** `main` writes its `start` line BEFORE
+`_main` parses argv, so a label resolved by argparse would tag the terminal line
+only and the two lines of one fire would disagree. The label is resolved by a
+hand scan at the `__main__` guard instead. A flag rather than an env prefix,
+because `VAR=x python ...` is POSIX syntax and the shell that runs a hook command
+on this machine was never established.
+
+**What actually settled it was a real fire, and an adversary was right to
+demand one.** The builder's probe spawned the declared command as a subprocess,
+which proves tokenisation by the test, not by the harness. A second adversary
+refused that as evidence and was correct to: it further showed that
+`--quiet-when-empty`, the flag already live in a hook command at `0e9491a`, is
+NOT a positive control, because that flag changes stdout only and `_main` returns
+its disposition unconditionally, so no log line could ever record it arriving.
+The candidate was merged into the live checkout uncommitted against a pinned
+baseline of 18 lines all `cli`, and the next real `UserPromptSubmit` fire
+appended `userpromptsubmit` on BOTH of its lines, three columns, exit 0. That is
+the first end-to-end measurement in this tree that a Claude Code hook delivers
+argv to the process it names.
+
+**Still unmeasured, deliberately.** `SessionStart` carried no flag at `0e9491a`,
+so this change makes it argv-dependent for the first time, on the exact event the
+log exists to prove. Its label cannot be read until a cold boot. A next session
+reading `sessionstart` there closes it; reading nothing new means the hook died
+and the recovery is a hand edit of plain JSON that needs no working hook.
+
+**Two adversaries, distinct lenses, and they disagreed.** Does-it-reproduce
+returned NOT REFUTED on six claims, having re-run the mutant itself, mutated the
+settings file two ways - collapsing both hooks onto one label fails 6 arms,
+collapsing both onto `cli` fails 8 - and fuzzed the argv scan with 12 real spawns
+without producing a forged column or a forged line. Scope-and-siblings returned
+REFUTED on the argv hole above, on an unfixed sibling, and on stale prose. Both
+were right about different things, which is the case the two-lens rule exists for.
+
+**A count baked into a comment was false within the hour.** The committed prose
+cited ten lines and five fires from the live log. The log stood at 20 by the time
+the slice merged. The comments name the property now and not the number, which is
+the same rule the suite counts already live under.
+
+**Corrected before merge:** an overclaim in `source_from_argv` that two readers of
+one argv reaching two answers is its own defect. False for `--sour x`, for
+`--source=`, and for a trailing `--source` with no value. Every divergence is
+conservative and `_main` never reads `args.source`, so none can reach the log.
+
+**A sibling repository's defect does not apply here, and was checked rather than
+assumed.** Sibling-L reported the same day that its tracked hook command carries
+an ABSOLUTE path, so in any clone or worktree it runs the ORIGINAL tree's script
+and reports the ORIGINAL tree's inbox. This tree's commands are relative, verified
+byte-wise, and the builder's own worktree run left no runtime log in the worktree
+at all.
+
 ## 2026-09-08 - A task State string is not liveness, and every slice was refuted before it merged
 
 One commit, `e7ab266`, four slices, ten files. THE PROCESS RESULT IS THE
