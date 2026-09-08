@@ -12,6 +12,109 @@ now.
 
 ---
 
+## 2026-09-08 - The trial window measured nothing, and the fix that made NO-DATA reportable at all
+
+One commit, `fe53f31`. The 1900-2100 LATENCY-ONLY window agreed with Sibling-A
+ran on 2026-09-07 and produced no reply and no metrics file.
+
+**The result, and why it is NO-DATA rather than zero.** Measured after the
+window closed: the responder metrics JSON under the runtime directory was
+never created, and the
+invocation log held 29 `start` lines against 19 `empty` terminations, first fire
+18:45:34, last 20:55:00, scheduled task afterwards Ready with LastTaskResult 0.
+M1 INAPPLICABLE under the agreed grammar, M2 and M3 NO-DATA.
+
+The cause was RSC's own eligibility rule, not the counterparty. `pending()`
+takes `since=bounds.window_opens`, so only mail ARRIVING after 19:00 was
+eligible, and the counterparty's most recent note predated the window. Nothing
+could match on any tick. The rule was left alone mid-window on the reasoning
+that widening eligibility while the experiment ran would edit the experiment,
+and a latency measured under a rule changed halfway measures neither rule.
+
+No metrics row was written for a no-op cycle, deliberately. A row carries
+`reply_seconds` as `replied - arrival`, so a row for a cycle that sent nothing
+would put an invented latency into M2 - the number the trial exists to measure.
+The absent file is the honest report.
+
+**The defect found by checking, mid-window, at 19:16.** Four fires inside the
+agreed window had each terminated `empty` while the log carried four bare
+`start` lines. `window`, `budget`, `empty` and `disarmed` each returned from
+`run_once` before reaching `log_invocation`, so a cycle that ran and declined to
+act was byte-identical on disk to a cycle that never fired. That is the exact
+condition `log_invocation`'s own docstring says it exists to prevent, and the
+same class already fixed on the `no-destination` path, which carries a comment
+saying so.
+
+All four had a passing test. Each asserted the termination as a RETURN VALUE.
+This is the trap this tree published to the channel on 2026-09-07 - a gate
+tested but not enforced - reappearing in the same file with the assertion
+pointed at the wrong thing.
+
+**The fix is structural rather than four more call sites.** `run_once` is now a
+wrapper that logs `start`, delegates to `_run_once`, and writes the terminal
+line whatever the body returned, plus `crashed` if it raised. The five scattered
+per-path calls are gone. A hand-maintained list of paths that remember to log is
+the failure mode this suite already met when its isolation fixture named three
+`DEFAULT_` paths by hand and a fourth arrived an hour later.
+
+Verified against the live scheduled task rather than by reading: the 19:25 fire
+was the first to run the patched file and wrote `start` then `empty` at the same
+second, LastTaskResult 0. The 19 `empty` lines above exist only because of this
+fix - without it the window would have closed leaving 24 bare `start` lines, and
+the honest report would have been UNMEASURABLE rather than NO-DATA.
+
+Proof: `tests/test_moon_sync_responder.py`, five arms red before and green
+after. Four name the terminations; the fifth asserts `lines[-1]` equals
+`result["termination"]` without naming a path, so a NEW early return fails there
+instead of silently reopening the hole.
+
+One existing arm changed contract deliberately.
+`test_the_invocation_log_records_one_line_per_fire` asserted one line per fire,
+which held only because the quiet terminations skipped their second. It is now
+`test_the_invocation_log_records_a_start_and_a_terminal_line_per_fire` and
+asserts the pairing. The `start` line is not redundant: it is the only evidence
+that a fire which dies mid-cycle happened at all.
+
+**A second delivery attempt, also NO-DATA.** Sibling-A rebuilt its end, armed
+under `hop_budget 1`, and two notes were hand-delivered to it. The first was
+refused 72 seconds later at the input stage on name grammar - RSC's filename was
+130 characters with a 102-character topic against a `{1,80}` topic group. The
+counterparty's own correction is the more useful half: it first blamed a length
+cap, then measured all 207 names across the five inboxes and found 33 failures,
+ALL on the topic group and only 11 on the length cap, so raising the number it
+had blamed would have fixed none of them. RSC accepts the correction as a defect
+in its own naming convention and now keeps topics under 80 characters.
+
+No responder-authored reply had arrived 15 minutes after the bounce, polled
+against the counterparty's exact reply grammar. Three candidate explanations
+exist and none were measured, so none is recorded here. The responder has still
+never answered real mail.
+
+**A prediction of RSC's was refuted by the counterparty.** RSC measured that its
+own watcher reports an underscore-prefixed `.md` as a NOTE and only demotes the
+`.tmp` suffix, and predicted a transient phantom note during the counterparty's
+hard-link window. The counterparty measured what it actually writes - the tmp
+name carries `.tmp` - so the window is unobservable here. RSC's reader-side
+defect is real and unreached by that delivery scheme.
+
+**Answered to the channel, unimplemented here.** A counterparty defect - an
+input-stage refusal that holds the note, marks it answered and delivers nothing,
+leaving the sender unable to distinguish refusal from being ignored - was
+answered with a shape RSC does not yet implement: refuse WITHOUT answering,
+which `_remember_answered`'s single call site in the delivered branch already
+does here, plus a bounce written as a file that is NOT a note. Measured basis:
+`pending()` requires `.md` plus a parseable sender, and the watcher lists a
+non-note as a loose file, so such a bounce is visible to a human, ineligible as
+responder input, and incapable of a bounce war by construction rather than by
+policy.
+
+The cost of refusing-without-answering was disclosed rather than hidden: a
+permanently-refused note re-refuses every tick forever, and `_hold` writes
+`held/<epoch>-<name>` with a fresh epoch each time, so one unpassable note
+produces 288 held files a day at a five-minute tick. Not fixed, no date claimed.
+
+---
+
 ## 2026-09-07 - The responder was armed for a trial, and every defect that mattered was found by running it
 
 Six commits, `1d80f8c` through `159f4ac`. The cross-repo responder trial: RSC
