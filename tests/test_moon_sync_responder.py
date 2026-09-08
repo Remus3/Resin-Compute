@@ -840,7 +840,18 @@ def test_an_armed_run_holds_an_invalid_draft_for_the_operator(rsp, tmp_path):
 
     assert result["delivered"] is False
     assert result["reasons"], "the draft was refused with no reason recorded"
-    assert list(rc_inbox.iterdir()) == [], "a refused draft was delivered anyway"
+    # AMENDED, AND THE MEANING IS UNCHANGED. This once asserted the destination
+    # was empty, which stopped being the right assertion when a refusal started
+    # delivering a bounce. What it was actually guarding is that no NOTE and no
+    # byte of the refused DRAFT crosses into a sibling's tree, so it now says
+    # that instead of saying nothing at all.
+    for landed in rc_inbox.iterdir():
+        assert not landed.name.lower().endswith(".md"), (
+            f"a refused draft was delivered as a note anyway: {landed.name}"
+        )
+        assert "no tag at all" not in landed.read_text(), (
+            f"the refused draft's own bytes reached {landed.name}"
+        )
     held = list(rsp.DEFAULT_STAGING.glob("held/*"))
     assert held, "the refused draft was dropped rather than held for the operator"
 
@@ -1093,4 +1104,728 @@ def test_no_terminal_path_leaves_the_log_saying_only_start(rsp, tmp_path):
     assert lines[-1].split("\t")[-1] == result["termination"], (
         f"log ends on {lines[-1]!r} but the cycle terminated "
         f"{result['termination']!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE REPEAT REFUSAL, AND THE SILENCE IT LEAVES AT THE OTHER END.
+#
+# Two coupled defects, both disclosed to the channel on 2026-09-08 rather than
+# hidden, and both measured here rather than argued.
+#
+# ONE. `_hold` wrote `held/<epoch>-<name>` with a fresh epoch every cycle, and a
+# refusal deliberately does not touch the answered record - because the answered
+# record means REPLIED TO, and a refusal is exactly the case where it has not
+# been. So a note that can never pass produced one held file per tick: 288 a day
+# at a five-minute tick, for one note, forever.
+#
+# TWO. A refusal delivered NOTHING, so from the sender's side a refusal and
+# being ignored are the same observation. The answer published to the channel
+# was a bounce written as a file that is NOT a note, and the measured basis for
+# that shape is in this repo: `pending()` requires `.md` plus a parseable
+# sender, so a `.txt` bounce is ineligible as responder input on either side and
+# a bounce war is impossible by construction rather than by policy.
+#
+# EVERY ARM BELOW DRIVES `run_once`. That is not a style choice. Four
+# terminations in this exact module were once proven by arms asserting a RETURN
+# VALUE, and every one of them returned before reaching the invocation log - a
+# gate tested as a pure predicate is not an enforced gate. So the suppression
+# and the bounce are measured as FILES ON DISK after a real cycle.
+# ---------------------------------------------------------------------------
+
+
+def _refused_cycle(rsp, tmp_path, inbox, draft, now):
+    """One armed cycle whose draft the output gate will refuse."""
+    return rsp.run_once(
+        inbox=inbox,
+        roots={"RC": tmp_path / "rc"},
+        bounds=rsp.Bounds(armed=True),
+        spawn=lambda *a, **k: draft,
+        now=now,
+    )
+
+
+def _refusal_bed(rsp, tmp_path, name="2026-09-08-1900-from-RC-question.md"):
+    """An agreed, armed setup with one note and a real destination inbox."""
+    _agree(rsp)
+    inbox = tmp_path / "inbox"
+    _note(inbox, name)
+    rc_inbox = tmp_path / "rc" / "moon_sync_inbox"
+    rc_inbox.mkdir(parents=True)
+    return inbox, rc_inbox
+
+
+def _held(rsp):
+    return sorted(p.name for p in rsp.DEFAULT_STAGING.glob("held/*"))
+
+
+def _bounces(rc_inbox):
+    return sorted(p.name for p in rc_inbox.iterdir())
+
+
+def test_the_same_refusal_twice_holds_one_file_and_not_two(rsp, tmp_path):
+    """THE 288-A-DAY DEFECT, measured as files rather than argued.
+
+    THE TWO DRAFTS DIFFER, AND THAT IS THE CORRECTION. This arm returned a
+    BYTE-IDENTICAL draft on both cycles when it was written, and an independent
+    pass measured what it structurally could not see: `refusal_key` hashed the
+    RENDERED REASON TEXT, and `validate_draft` builds its oversize reason as
+    `f"the draft is {len(encoded)} bytes, ..."`. A draft over the ceiling by a
+    different amount each cycle - which is what an unattended model produces -
+    minted a fresh fingerprint every cycle, so `refusal_seen` was always False
+    and the hold fired every tick. Ten cycles, ten held files, ten fingerprints,
+    with one note and no cap involved. An arm that cannot fail is what let it
+    through.
+
+    So the drafts here vary while staying in ONE reason category. The
+    suppression must key on the category and see one refusal.
+
+    The stamps are a minute apart THROUGH `now`, so the held names cannot
+    collide by landing in the same second and pass for a suppression that is not
+    there.
+    """
+    inbox, _rc = _refusal_bed(rsp, tmp_path)
+
+    _refused_cycle(rsp, tmp_path, inbox, "no tag at all\n", now=1_000.0)
+    first = _held(rsp)
+    _refused_cycle(rsp, tmp_path, inbox, "still no tag, and different bytes\n", now=1_060.0)
+    second = _held(rsp)
+
+    assert len(first) == 1, f"the first refusal did not hold the draft: {first}"
+    assert second == first, (
+        f"the same note refused for the same reasons held twice: {second}. At a "
+        "five-minute tick that is 288 files a day for one note that can never pass"
+    )
+
+
+def test_a_refusal_whose_byte_count_moves_is_still_one_refusal(rsp, tmp_path):
+    """R1 AS MEASURED, driven through `run_once` and counted as files on disk.
+
+    Ten cycles, each producing a draft over the reply ceiling by a DIFFERENT
+    number of bytes. That is one defect - the model will not stop being
+    over-long - and the operator needs to be told once. Before the fix this
+    produced ten held files and ten fingerprints.
+
+    `ceiling` IS A LITERAL, and it is checked against the constant rather than
+    read from it. Sizing the fixture from `Bounds().max_reply_bytes` would make
+    this arm agree with a mutant that set the ceiling to 10**9 and then write
+    a file per cycle trying, which is the amplifier this tree has paid for once.
+    """
+    inbox, rc_inbox = _refusal_bed(rsp, tmp_path)
+    ceiling = 32_000
+    assert rsp.Bounds().max_reply_bytes == ceiling, (
+        "the reply ceiling moved, so this arm no longer feeds an oversize draft"
+    )
+
+    for i in range(10):
+        oversize = rsp.RESPONDER_TAG + "\n" + "a" * (ceiling + 500 + i)
+        _refused_cycle(rsp, tmp_path, inbox, oversize, now=20_000.0 + 300 * i)
+
+    held = _held(rsp)
+    record = json.loads(rsp.DEFAULT_REFUSALS.read_text())["refusals"]
+    fingerprints = record["2026-09-08-1900-from-RC-question.md"]["fingerprints"]
+
+    assert len(held) == 1, (
+        f"ten cycles over the same ceiling held {len(held)} files: {held}. The "
+        "refusal is fingerprinted on its rendered text, so a byte count that "
+        "moves mints a new identity every cycle"
+    )
+    assert len(fingerprints) == 1, (
+        f"one defect produced {len(fingerprints)} fingerprints: {fingerprints}"
+    )
+    assert len(_bounces(rc_inbox)) == 1, _bounces(rc_inbox)
+
+
+def test_a_refusal_in_a_new_category_is_a_new_refusal(rsp, tmp_path):
+    """THE NON-VACUITY ARM FOR THE ONE ABOVE, taken at the fingerprint itself.
+
+    Keying on the category rather than the text is only correct if two genuinely
+    different categories still separate. A fingerprint that collapsed everything
+    to a single value would pass the arm above and silence every new defect,
+    which is the one thing an operator reads the held directory to find.
+    """
+    over = ["the draft is 40000 bytes, over the agreed 32000-byte reply ceiling"]
+    over_again = ["the draft is 91234 bytes, over the agreed 32000-byte reply ceiling"]
+    tagless = ["no responder tag, so M5 cannot separate this from human traffic"]
+
+    assert rsp.refusal_key("n.md", over) == rsp.refusal_key("n.md", over_again), (
+        "two oversize refusals have different identities, so the hold repeats"
+    )
+    assert rsp.refusal_key("n.md", over) != rsp.refusal_key("n.md", tagless), (
+        "an oversize and a missing-tag refusal share one identity"
+    )
+    assert rsp.refusal_key("a.md", over) != rsp.refusal_key("b.md", over), (
+        "the fingerprint ignores the note, so one note silences another"
+    )
+
+
+def test_a_note_refused_for_a_DIFFERENT_reason_is_held_again(rsp, tmp_path):
+    """The suppression must be keyed on (note, reasons), never on the note.
+
+    A note keyed on its name alone would silence a NEW defect in the draft the
+    first time it appeared, which is the one thing an operator reads the held
+    directory to find.
+    """
+    inbox, _rc = _refusal_bed(rsp, tmp_path)
+    account = "path " + "C:" + chr(92) + "Users" + chr(92) + "bob" + chr(92) + "x\n"
+
+    _refused_cycle(rsp, tmp_path, inbox, "no tag at all\n", now=2_000.0)
+    _refused_cycle(rsp, tmp_path, inbox, _draft(rsp, account), now=2_060.0)
+
+    held = _held(rsp)
+    assert len(held) == 2, (
+        f"a second, different reason was suppressed as though already seen: {held}"
+    )
+
+
+def test_a_suppressed_refusal_never_touches_the_answered_record(rsp, tmp_path):
+    """ANSWERED MEANS REPLIED TO, and a refusal is where it has not been.
+
+    Marking a refused note answered would suppress the repeat hold as a side
+    effect and would ALSO retire the note, so a draft that starts passing
+    tomorrow is never sent. The two records are separate on purpose.
+    """
+    inbox, _rc = _refusal_bed(rsp, tmp_path)
+
+    for stamp in (3_000.0, 3_060.0, 3_120.0):
+        _refused_cycle(rsp, tmp_path, inbox, "no tag at all\n", now=stamp)
+
+    assert rsp._answered(rsp.DEFAULT_ANSWERED) == set(), (
+        "a refusal reached the answered record, which means REPLIED TO"
+    )
+
+
+def test_a_refused_note_stays_eligible_after_the_hold_is_suppressed(rsp, tmp_path):
+    """Suppressing the hold must not retire the note."""
+    inbox, _rc = _refusal_bed(rsp, tmp_path)
+
+    for stamp in (4_000.0, 4_060.0):
+        _refused_cycle(rsp, tmp_path, inbox, "no tag at all\n", now=stamp)
+
+    still = rsp.pending(inbox, rsp.OPTED_IN, rsp._answered(rsp.DEFAULT_ANSWERED))
+    assert [p.name for p in still] == ["2026-09-08-1900-from-RC-question.md"], (
+        f"the note stopped being eligible after being refused: {still}"
+    )
+
+
+def test_a_refusal_delivers_a_bounce_that_is_not_a_note(rsp, tmp_path):
+    """THE SHAPE IS THE MECHANISM, and it is measured on both properties.
+
+    `pending()` requires `.md` plus a parseable sender, so the bounce is
+    ineligible as responder input by CONSTRUCTION. The second assertion runs
+    `pending` over the destination directory with RSC treated as an opted-in
+    sender - which is the counterparty's own configuration - and requires that
+    it finds nothing. A bounce war is then impossible rather than discouraged.
+    """
+    inbox, rc_inbox = _refusal_bed(rsp, tmp_path)
+
+    result = _refused_cycle(rsp, tmp_path, inbox, "no tag at all\n", now=5_000.0)
+
+    landed = _bounces(rc_inbox)
+    assert len(landed) == 1, f"a refusal delivered no bounce at all: {landed}"
+    assert result["bounced"] is True, result
+    assert not landed[0].lower().endswith(".md"), (
+        f"{landed[0]} is a note, so the other end's responder could answer it"
+    )
+    assert rsp.pending(rc_inbox, ("RSC", "RC"), set()) == [], (
+        "the bounce is eligible responder input at the far end, which is a "
+        "bounce war one grammar change away"
+    )
+
+
+def test_no_model_authored_byte_reaches_the_bounce(rsp, tmp_path):
+    """100 PERCENT RUNNER-AUTHORED. The draft is the untrusted half.
+
+    The draft here carries a marker, an account path and a traceback - two of
+    which this repo forbids on any reported surface. A bounce that quoted the
+    draft would ship all three into a sibling's inbox, which is the failure the
+    template exists to make impossible.
+
+    The structural arm is the load-bearing one: every line of the delivered file
+    must be a template line, a code line drawn from the module's own code table,
+    or one of the two labelled fields. Nothing else can appear.
+    """
+    inbox, rc_inbox = _refusal_bed(rsp, tmp_path)
+    marker = "ZQXMODELAUTHOREDZQX"
+    account = "C:" + chr(92) + "Users" + chr(92) + "bob" + chr(92) + "secret"
+    draft = f"{marker}\n{account}\nTraceback (most recent call last)\n"
+
+    _refused_cycle(rsp, tmp_path, inbox, draft, now=6_000.0)
+
+    landed = list(rc_inbox.iterdir())
+    assert len(landed) == 1, f"expected exactly one bounce, got {landed}"
+    raw = landed[0].read_bytes()
+    text = raw.decode("ascii")
+
+    assert marker not in text, "a model-authored byte reached the bounce"
+    assert account not in text, "an account-shaped path reached a sibling's inbox"
+    assert "Traceback" not in text, "a raw traceback reached a reported surface"
+    assert chr(13) not in text, "the bounce carries CRLF"
+    assert rsp.RESPONDER_TAG not in text, "the bounce carries the reply tag"
+
+    template = set(rsp.BOUNCE_TEMPLATE)
+    codes = {f"  CODE: {code}" for _needle, code in rsp.BOUNCE_CODES}
+    codes.add("  CODE: OTHER")
+    for line in text.split("\n"):
+        assert (
+            line in template
+            or line in codes
+            or line.startswith("  NOTE: ")
+            or line.startswith("  TERMINATION: ")
+        ), f"{line!r} is in the bounce and is not a runner-authored line"
+
+
+def test_one_bounce_per_note_per_agreement(rsp, tmp_path):
+    """A bounce that repeated would be the held-file defect pointed outwards.
+
+    The second half is the non-vacuity arm: a NEW recorded agreement is a new
+    trial, and the sender has to be told again, so the detector must fire the
+    second time rather than merely never firing.
+    """
+    inbox, rc_inbox = _refusal_bed(rsp, tmp_path)
+
+    for stamp in (7_000.0, 7_060.0, 7_120.0):
+        _refused_cycle(rsp, tmp_path, inbox, "no tag at all\n", now=stamp)
+    under_one = _bounces(rc_inbox)
+
+    rsp.DEFAULT_CONFIRMATION.write_text(
+        json.dumps({"confirmed_by": "RC", "note": "second-window.md", "expires": 9_999_999_999})
+    )
+    result = _refused_cycle(rsp, tmp_path, inbox, "no tag at all\n", now=7_180.0)
+    under_two = _bounces(rc_inbox)
+
+    assert len(under_one) == 1, f"one agreement produced {len(under_one)} bounces: {under_one}"
+    assert result["bounced"] is True, result
+    assert len(under_two) == 2, (
+        f"a new agreement sent no fresh bounce: {under_two}. The arm above would "
+        "then pass on a responder that never bounces at all"
+    )
+
+
+def test_a_bounce_is_not_a_reply_and_spends_no_budget(rsp, tmp_path):
+    """It must not count as a hop, a delivery, or a row of its own.
+
+    M1 counts RESPONDER-authored notes, so a bounce carrying the tag would spend
+    the trial's hop budget on a message that answers nothing. And M2 is
+    arrival-to-REPLY: a row for a bounce would publish a reply latency for a
+    reply that was never sent.
+
+    THE TWO CYCLES ARE REFUSED IN DIFFERENT CATEGORIES ON PURPOSE. This arm
+    counts rows, and a repeat of an identical refusal deliberately writes no row
+    at all now - see `test_a_permanently_refused_note_writes_nothing_at_all`.
+    Two identical cycles would therefore have made this arm agree with a
+    responder that had stopped recording entirely, which is a different bug
+    wearing this arm's pass. Two DISTINCT refusals both record, exactly one
+    bounce goes out under the one agreement, and the question this arm actually
+    asks - did the bounce get a row of its own - is put as 2 rather than 3.
+    """
+    inbox, rc_inbox = _refusal_bed(rsp, tmp_path)
+    account = "path " + "C:" + chr(92) + "Users" + chr(92) + "bob" + chr(92) + "x\n"
+
+    _refused_cycle(rsp, tmp_path, inbox, "no tag at all\n", now=8_000.0)
+    result = _refused_cycle(rsp, tmp_path, inbox, _draft(rsp, account), now=8_060.0)
+
+    rows = json.loads(rsp.DEFAULT_METRICS.read_text())["cycles"]
+    bounce = _bounces(rc_inbox)[0]
+
+    assert rsp.hops_used(rc_inbox) == 0, "the bounce is counted as an automated hop"
+    assert result["delivered"] is False, result
+    assert result["actions"] == [], f"a bounce claimed an allowlisted action: {result}"
+    assert len(rows) == 2, f"two cycles wrote {len(rows)} rows, so the bounce made one: {rows}"
+    assert all(row["note"] != bounce for row in rows), (
+        "a bounce has a metrics row, so it is being measured as a reply"
+    )
+    assert all(row["delivered"] is False for row in rows), rows
+
+
+def test_the_bounce_and_the_suppression_are_reached_by_a_real_cycle(rsp, tmp_path):
+    """THE ARM THAT THE FOUR UNLOGGED TERMINATIONS PROVE IS NECESSARY.
+
+    Every helper below exists and is correct in isolation, and that is exactly
+    what was true of the four terminations that never reached the invocation
+    log. This arm asserts the WIRING: after two identical refused cycles the
+    refusal record on disk names the note, which nothing but `_run_once` writes.
+    """
+    inbox, _rc = _refusal_bed(rsp, tmp_path)
+
+    for stamp in (9_000.0, 9_060.0):
+        _refused_cycle(rsp, tmp_path, inbox, "no tag at all\n", now=stamp)
+
+    assert rsp.DEFAULT_REFUSALS.is_file(), (
+        "no refusal record was written by a real cycle, so the suppression is a "
+        "helper nothing calls"
+    )
+    record = json.loads(rsp.DEFAULT_REFUSALS.read_text())["refusals"]
+    assert "2026-09-08-1900-from-RC-question.md" in record, record
+
+
+def test_an_exhausted_cycle_bounces_too_rather_than_going_silent(rsp, tmp_path):
+    """`exhausted` is the PREDICTED outcome and it is equally silent.
+
+    An empty draft is refused by the gate and recorded as `exhausted`, which
+    under disposition (i) means the bound worked. The sender cannot see that
+    distinction, and from its side an exhausted cycle is indistinguishable from
+    being ignored - the same defect, so it gets the same bounce, carrying the
+    termination that names which of the two it was.
+    """
+    inbox, rc_inbox = _refusal_bed(rsp, tmp_path)
+
+    result = _refused_cycle(rsp, tmp_path, inbox, rsp.RESPONDER_TAG + "\n", now=10_000.0)
+
+    landed = list(rc_inbox.iterdir())
+    assert result["termination"] == "exhausted", result
+    assert len(landed) == 1, f"an exhausted cycle told the sender nothing: {landed}"
+    assert "  TERMINATION: exhausted" in landed[0].read_text(), (
+        "the bounce does not say which of the two silences this was"
+    )
+
+
+def test_the_refusal_record_is_bounded_by_a_literal_cap(rsp, tmp_path):
+    """A record that grows without bound is the held directory again.
+
+    THE FIXTURE IS SIZED BY A LITERAL, deliberately. An arm sized
+    `MAX_REFUSAL_NOTES + 5` met a mutation setting that constant to 10**9 in
+    this tree once and wrote 492674 files before anyone noticed, so the cap is
+    asserted to be small rather than trusted to be whatever it says.
+    """
+    assert rsp.MAX_REFUSAL_NOTES <= 1000, rsp.MAX_REFUSAL_NOTES
+    assert rsp.MAX_REFUSAL_FINGERPRINTS <= 100, rsp.MAX_REFUSAL_FINGERPRINTS
+
+    path = rsp.DEFAULT_REFUSALS
+    for i in range(12):
+        rsp._remember_refusal(path, f"n{i}.md", ["r"], "agreement", False, float(i))
+
+    record = json.loads(path.read_text())["refusals"]
+    assert len(record) == min(12, rsp.MAX_REFUSAL_NOTES), len(record)
+    for i in range(30):
+        rsp._remember_refusal(path, "n0.md", [f"reason {i}"], "agreement", False, float(i))
+    fingerprints = json.loads(path.read_text())["refusals"]["n0.md"]["fingerprints"]
+    assert len(fingerprints) <= rsp.MAX_REFUSAL_FINGERPRINTS, len(fingerprints)
+
+
+# ---------------------------------------------------------------------------
+# THE OUTBOUND FAILURE MODES. Everything above this line asks whether the
+# responder does the right thing when its own state is intact. An independent
+# pass asked what it does when the state is NOT, and found the answers pointed
+# in the worst available direction: fail-open, into a sibling's repository.
+#
+# Every arm below drives `run_once` and counts FILES. A gate proved as a pure
+# predicate is not an enforced gate, and this tree has been bitten by that
+# three times now.
+# ---------------------------------------------------------------------------
+
+
+def _drive(rsp, tmp_path, inbox, n, draft="no tag at all\n", start=30_000.0):
+    """`n` armed refused cycles a clock-minute apart. `n` is always a literal."""
+    out = []
+    for i in range(n):
+        out.append(_refused_cycle(rsp, tmp_path, inbox, draft, now=start + 60.0 * i))
+    return out
+
+
+def test_a_refusal_record_that_cannot_be_written_sends_no_bounce(rsp, tmp_path):
+    """R2. FAIL CLOSED, BECAUSE THE FAILURE WRITES INTO SOMEBODY ELSE'S REPO.
+
+    The record is present as a NON-EMPTY DIRECTORY - a plausible botched-restore
+    state, and non-empty so that `Path.replace` cannot quietly win. Both of the
+    record's primitives are fail-SOFT by design: `read_json` returns its default
+    and `atomic_write_json` returns False, neither raising. Together they made
+    an unwritable record read as "never refused, never bounced" on every single
+    cycle, which is precisely the state that holds a file and delivers a bounce.
+
+    Measured before the fix: five cycles, five held files, and FIVE BOUNCES
+    delivered into the sibling's inbox with nothing surfaced anywhere.
+    `bounce_name` is minute-resolution, so a five-minute tick is 288 distinct
+    files a day written into a repository this one does not own.
+
+    The bounce count is the load-bearing assertion. The held count is this
+    repo's own mess; the bounce count is the other repo's.
+    """
+    inbox, rc_inbox = _refusal_bed(rsp, tmp_path)
+    rsp.DEFAULT_REFUSALS.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_REFUSALS.mkdir()
+    (rsp.DEFAULT_REFUSALS / "keep.txt").write_text("not empty, so replace cannot win")
+
+    results = _drive(rsp, tmp_path, inbox, 5)
+
+    assert _bounces(rc_inbox) == [], (
+        f"an unrecordable refusal delivered {len(_bounces(rc_inbox))} bounces into "
+        "a sibling's inbox. A bounce that cannot be recorded is a bounce that "
+        "will be sent again on every cycle forever"
+    )
+    assert _held(rsp) == [], f"an unrecordable refusal still held files: {_held(rsp)}"
+    assert all(r["termination"] == "unrecordable" for r in results), results
+    assert all(r["bounced"] is False and r["held"] is False for r in results), results
+
+
+@pytest.mark.parametrize(
+    "poison",
+    ["{not json", "", "[]", '{"refusals": "not a mapping"}'],
+    ids=["corrupt", "empty", "wrong-top-type", "wrong-rows-type"],
+)
+def test_a_replaceable_refusal_record_still_bounces_and_self_heals(rsp, tmp_path, poison):
+    """THE NON-VACUITY ARM FOR THE ONE ABOVE, and it is the whole distinction.
+
+    Failing closed on every unreadable record would be trivially safe and would
+    silence the channel: a responder that stops bouncing whenever its JSON is
+    scrambled is the counterparty's original complaint back again. These four
+    poisonings are all UNREADABLE and all REPLACEABLE - the next write fixes
+    them, at a cost of one duplicate hold - so the bounce must still go out and
+    the record must heal itself.
+
+    Without this arm the one above passes on a responder that never bounces.
+    """
+    inbox, rc_inbox = _refusal_bed(rsp, tmp_path)
+    rsp.DEFAULT_REFUSALS.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_REFUSALS.write_text(poison)
+
+    results = _drive(rsp, tmp_path, inbox, 3)
+
+    assert len(_bounces(rc_inbox)) == 1, (
+        f"a replaceable record sent {len(_bounces(rc_inbox))} bounces, expected 1"
+    )
+    assert len(_held(rsp)) == 1, _held(rsp)
+    assert results[0]["termination"] == "refused", results[0]
+    assert json.loads(rsp.DEFAULT_REFUSALS.read_text())["refusals"], (
+        "the record did not heal itself, so the suppression is dead from here on"
+    )
+
+
+@pytest.mark.parametrize(
+    "target",
+    ["DEFAULT_REFUSALS", "DEFAULT_ANSWERED", "DEFAULT_METRICS", "DEFAULT_STAGING"],
+)
+def test_a_state_parent_present_as_a_file_does_not_crash_the_cycle(rsp, tmp_path, target):
+    """R3. `mkdir(parents=True, exist_ok=True)` IS NOT TOTAL.
+
+    `exist_ok` forgives a component that exists as a DIRECTORY. A component that
+    exists as a FILE still raises - `FileExistsError`, WinError 183 on Windows -
+    and four call sites did it unguarded.
+
+    The ordering is what made it serious rather than untidy. Measured before the
+    fix on `DEFAULT_REFUSALS`: five of five cycles raised out of
+    `_remember_refusal`, each AFTER the cycle had already written a held file
+    and delivered a bounce. So the crash did not prevent the outbound write, it
+    only destroyed the record of it - the worse of the two orderings, and the
+    one that re-bounces forever.
+
+    Parametrised over every state path rather than the one that was measured:
+    the root cause is a call shape, not a file, and a sweep that fixes only the
+    reported instance leaves the siblings.
+    """
+    inbox, rc_inbox = _refusal_bed(rsp, tmp_path)
+    path = getattr(rsp, target)
+    # THE PARENT, NOT THE PATH. A file AT the state path is the corrupt-record
+    # case, which self-heals and is covered above. The crash needs a path
+    # COMPONENT present as a file, which is what `exist_ok` does not forgive.
+    path.parent.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.write_text("i am a file where a directory is expected")
+
+    results = _drive(rsp, tmp_path, inbox, 3)
+
+    assert len(results) == 3, "a cycle raised instead of returning"
+    assert len(_bounces(rc_inbox)) <= 1, (
+        f"{target} being a file re-opened the bounce: {_bounces(rc_inbox)}"
+    )
+    assert all(r["termination"] in rsp.TERMINATIONS for r in results), results
+
+
+def test_a_permanently_refused_note_writes_nothing_at_all(rsp, tmp_path):
+    """R4. THE 288-A-DAY WAS RELOCATED, NOT ELIMINATED. Zero growth is the bar.
+
+    `held/` and the sibling's inbox were correctly bounded and that part stood.
+    `record_cycle` was not: it appended a row unconditionally on the refused
+    path, and because the whole document is re-read, re-serialized and
+    re-written every tick the BYTES WRITTEN grew with the square of the cycle
+    count. Measured before the fix, 100 cycles on one note: 100 rows and 54165
+    bytes, from a note that had already been fully reported on once.
+
+    So a cycle that produced no new fact - no new refusal category, no held
+    file, no bounce - writes no row. The invocation log still records the fire,
+    which is where "this cycle happened and did nothing" belongs and is why the
+    evidence is not lost.
+
+    THE CYCLE COUNTS ARE LITERALS. Sizing them from any constant under test is
+    the amplifier that wrote 492674 files in this tree once.
+    """
+    inbox, rc_inbox = _refusal_bed(rsp, tmp_path)
+
+    _drive(rsp, tmp_path, inbox, 1)
+    after_one = rsp.DEFAULT_METRICS.stat().st_size
+    _drive(rsp, tmp_path, inbox, 24, start=40_000.0)
+    after_all = rsp.DEFAULT_METRICS.stat().st_size
+
+    rows = json.loads(rsp.DEFAULT_METRICS.read_text())["cycles"]
+    assert len(rows) == 1, (
+        f"25 cycles on one permanently-refused note wrote {len(rows)} metrics "
+        "rows, so the 288-a-day defect is alive in the metrics file"
+    )
+    assert after_all == after_one, f"the metrics file grew: {after_one} -> {after_all}"
+    assert len(_held(rsp)) == 1, _held(rsp)
+    assert len(_bounces(rc_inbox)) == 1, _bounces(rc_inbox)
+
+
+def test_a_refusal_that_is_genuinely_new_still_writes_its_row(rsp, tmp_path):
+    """THE NON-VACUITY ARM FOR THE ONE ABOVE. Suppression must not be silence.
+
+    A responder that had simply stopped writing metrics would pass the arm above
+    with a better number. A NEW refusal category is new information and has to
+    reach the record, or the trial has measured its first cycle only.
+    """
+    inbox, _rc = _refusal_bed(rsp, tmp_path)
+    account = "path " + "C:" + chr(92) + "Users" + chr(92) + "bob" + chr(92) + "x\n"
+
+    _refused_cycle(rsp, tmp_path, inbox, "no tag at all\n", now=50_000.0)
+    _refused_cycle(rsp, tmp_path, inbox, _draft(rsp, account), now=50_060.0)
+
+    rows = json.loads(rsp.DEFAULT_METRICS.read_text())["cycles"]
+    assert len(rows) == 2, (
+        f"a genuinely new refusal category wrote no row: {rows}. The arm above "
+        "would then pass on a responder that had stopped recording entirely"
+    )
+
+
+def test_the_metrics_file_is_bounded_by_a_literal_cap(rsp, tmp_path):
+    """The backstop for a note whose reasons really do differ every cycle.
+
+    Asserted SMALL rather than trusted to be whatever the constant says, for the
+    reason `test_the_refusal_record_is_bounded_by_a_literal_cap` records.
+    """
+    assert rsp.MAX_METRICS_ROWS <= 5_000, rsp.MAX_METRICS_ROWS
+
+    for i in range(12):
+        rsp.record_cycle(
+            rsp.DEFAULT_METRICS, f"n{i}.md", 0, 0.0, 1.0, 1.0, [], False, ["r"], "refused"
+        )
+    rows = json.loads(rsp.DEFAULT_METRICS.read_text())["cycles"]
+
+    assert len(rows) == min(12, rsp.MAX_METRICS_ROWS), len(rows)
+    assert rows[-1]["note"] == "n11.md", "the cap kept the OLDEST rows, not the newest"
+
+
+def test_the_invocation_log_is_bounded_and_keeps_the_newest_lines(rsp, tmp_path):
+    """The log adds two lines per fire and could not suppress either of them.
+
+    Its whole purpose is that a cycle which decided to do nothing still leaves
+    proof it fired, so de-duplicating it would delete the evidence it exists to
+    produce. Bounding it therefore means TRIMMING, and the trim has to keep the
+    newest lines: a rotation that kept the oldest would freeze the log at the
+    first day of the trial.
+
+    The fixture is written directly rather than driven, because reaching the
+    byte cap through `run_once` would take thousands of cycles.
+    """
+    assert rsp.MAX_INVOCATION_LINES <= 20_000, rsp.MAX_INVOCATION_LINES
+    assert rsp.MAX_INVOCATION_BYTES <= 4_000_000, rsp.MAX_INVOCATION_BYTES
+
+    rsp.DEFAULT_INVOCATIONS.parent.mkdir(parents=True, exist_ok=True)
+    filler = "2026-01-01T00:00:00\tstale\t-\tstart\n"
+    rsp.DEFAULT_INVOCATIONS.write_text(filler * 40_000, encoding="ascii")
+    assert rsp.DEFAULT_INVOCATIONS.stat().st_size > rsp.MAX_INVOCATION_BYTES, (
+        "the fixture is already under the cap, so this arm would pass without a trim"
+    )
+
+    rsp.log_invocation("run_once", "newest.md", "refused", now=60_000.0)
+
+    lines = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines()
+    assert len(lines) <= rsp.MAX_INVOCATION_LINES, len(lines)
+    assert rsp.DEFAULT_INVOCATIONS.stat().st_size <= rsp.MAX_INVOCATION_BYTES, (
+        "the trim left the log over its own cap"
+    )
+    assert lines[-1].endswith("newest.md\trefused"), (
+        f"the trim discarded the newest line: {lines[-1]!r}"
+    )
+
+
+def test_evicting_a_refusal_row_does_not_re_open_the_bounce(rsp, tmp_path):
+    """R5. AN EVICTION POLICY MUST NOT RE-OPEN AN OUTBOUND WRITE.
+
+    The bounce was a FIELD ON THE REFUSAL ROW, and the rows are capped. So after
+    enough distinct notes the oldest row was dropped, `bounced_under` went
+    False, and the note re-bounced into the sibling's inbox - the cap that
+    existed to stop unbounded growth became the thing that re-opened the write.
+
+    The ledger is now its own top-level block, one short string per note, scoped
+    to the agreement, and not evicted from. At its own cap the responder STOPS
+    BOUNCING rather than forgetting, which is the same fail-closed rule as the
+    unwritable record.
+
+    THE PUSH COUNT IS A LITERAL well over `MAX_REFUSAL_NOTES`, and the row
+    eviction is asserted to have actually happened - otherwise this arm proves
+    nothing at all, which is how the original defect survived.
+    """
+    path = rsp.DEFAULT_REFUSALS
+    agreement = "RC|agreed.md|9999999999"
+    rsp._remember_refusal(path, "victim.md", ["r"], agreement, True, 0.0)
+    assert rsp.bounced_under(path, "victim.md", agreement)
+
+    for i in range(250):
+        rsp._remember_refusal(path, f"n{i:03d}.md", ["r"], agreement, False, float(i + 1))
+
+    rows = json.loads(path.read_text())["refusals"]
+    assert "victim.md" not in rows, (
+        "the row was never evicted, so this arm did not exercise the eviction"
+    )
+    assert rsp.bounced_under(path, "victim.md", agreement) is True, (
+        "evicting the row forgot a delivered bounce, so the note bounces again "
+        "into a repository this one does not own"
+    )
+    assert rsp.bounced_under(path, "victim.md", "A DIFFERENT AGREEMENT") is False, (
+        "the ledger is not scoped to the agreement, so a new trial window sends "
+        "no fresh bounce and the arm above passes on a permanent silence"
+    )
+
+
+def test_one_unpassable_note_does_not_starve_the_ones_behind_it(rsp, tmp_path):
+    """R6. A CHANNEL-LEVEL DENIAL OF SERVICE A SIBLING CAN ARRANGE BY FILENAME.
+
+    `pending()` sorts by name, `_run_once` takes `queue[0]`, and a refusal
+    deliberately never touches `DEFAULT_ANSWERED`. So one note that can never
+    pass was selected on every cycle forever and every note behind it was never
+    selected at all. Measured before the fix: five cycles, the same note picked
+    five times, the second note never once.
+
+    Every stated property held while that was true - the answered record was
+    untouched, the refused note stayed eligible - which is why the property had
+    to be measured at the channel rather than at the claim.
+
+    The bad note sorts FIRST by name on purpose. That is the arrangement a
+    sibling would make deliberately, and an arm using the natural ordering would
+    pass on the broken responder.
+    """
+    _agree(rsp)
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-09-08-1000-from-RC-aaa-unpassable.md")
+    _note(inbox, "2026-09-08-2000-from-RC-zzz-behind-it.md")
+    (tmp_path / "rc" / "moon_sync_inbox").mkdir(parents=True)
+
+    picked = [r["note"] for r in _drive(rsp, tmp_path, inbox, 5, start=70_000.0)]
+
+    assert "2026-09-08-2000-from-RC-zzz-behind-it.md" in picked, (
+        f"one un-passable note starved the whole channel: {picked}. A sibling "
+        "can arrange that with a note whose name sorts first"
+    )
+
+
+def test_a_deprioritised_note_is_still_answered_when_it_is_alone(rsp, tmp_path):
+    """THE NON-VACUITY ARM FOR THE ONE ABOVE, and it pins claim (iv).
+
+    Making a refused note INELIGIBLE would fix the starvation and break what the
+    eligibility is for: a draft that starts passing tomorrow must still be sent,
+    and the answered record must stay untouched because answered means REPLIED
+    TO. Deprioritising sorts last; it does not exclude.
+    """
+    inbox, _rc = _refusal_bed(rsp, tmp_path)
+    name = "2026-09-08-1900-from-RC-question.md"
+
+    _drive(rsp, tmp_path, inbox, 2, start=80_000.0)
+    still = rsp.pending(inbox, rsp.OPTED_IN, set(), deprioritise={name})
+    result = _refused_cycle(rsp, tmp_path, inbox, "no tag at all\n", now=80_500.0)
+
+    assert [p.name for p in still] == [name], (
+        f"a deprioritised note was excluded rather than sorted last: {still}"
+    )
+    assert result["note"] == name, f"the only note in the inbox was never selected: {result}"
+    assert rsp._answered(rsp.DEFAULT_ANSWERED) == set(), (
+        "a refusal reached the answered record, which means REPLIED TO"
     )

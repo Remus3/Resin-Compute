@@ -54,15 +54,25 @@ STATE AS OBSERVED 2026-09-08 at commit fe53f31, a reading and not a promise:
 Counts are not guarded and a doc is not a source of truth. Re-measure with
 python -m pytest tests --collect-only -q before citing any of them.
 
-THE RESPONDER TASK IS REGISTERED AND ITS AGREEMENT IS SPENT. The
-ResinCompute-Responder scheduled task is Ready on a 5-minute tick.
+THE RESPONDER TASK IS REGISTERED AND IT WILL NOT FIRE AGAIN. Registered is not
+live. Every trigger on ResinCompute-Responder expired at its EndBoundary
+2026-09-07T21:00:00, and a Windows scheduled task goes on reporting State Ready
+with last result 0 FOREVER after that - there is no state value meaning
+"expired". Measured 2026-09-08: Ready, NextRunTime EMPTY, LastRunTime 2026-09-07
+20:55, zero invocation-log lines since. A previous hand-off read that Ready and
+wrote "Ready on a 5-minute tick" here. It was wrong by twenty-four hours.
+A STATE STRING NAMES A STATE, NOT A CAPABILITY.
 ops/runtime/trial_confirmed.json names the 2026-09-07 counterparty agreement and
 that window has CLOSED, so armed cycles now terminate on the window bound.
 Rearming is an OPERATOR act - a gitignored agreement record under ops/runtime/
 must name the counterparty, cite the note it rests on, and not have expired.
-CHECK STATE FIRST:
-  powershell -NoProfile -Command "Get-ScheduledTaskInfo -TaskName 'ResinCompute-Responder'"
+CHECK LIVENESS, NOT STATE. This exits 0 if and only if the task is positively
+established to fire again; any non-zero exit means NOT ESTABLISHED, and the
+non-zero values are not worth enumerating:
+  python ops/check_task_liveness.py ResinCompute-Responder
   cat ops/runtime/responder_invocations.log
+tests/test_task_state_claims.py goes red if any tracked file drifts back into
+presenting a task state string as evidence that the task will fire.
 KILL SWITCH: powershell -ExecutionPolicy Bypass -File .\ops\install_responder_task.ps1 -Remove
 
 THE TRIAL HAS RUN TWICE AND MEASURED NOTHING BOTH TIMES. Window one, 2026-09-07

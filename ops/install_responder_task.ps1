@@ -58,6 +58,26 @@ function Write-Step {
     Write-Host ('[responder] ' + $Message)
 }
 
+function Resolve-ConsolePython {
+    # The TASK runs under pythonw.exe so it does not flash a console on every
+    # fire. The liveness CHECKER is the opposite case - it is run here, once,
+    # interactively, and its report has to reach the operator's screen, so it
+    # needs console python.exe. Returns $null rather than throwing: an absent
+    # interpreter must degrade into an honest UNVERIFIED, never into a silent
+    # fallback that prints a state string as if it had answered.
+    if (-not [string]::IsNullOrWhiteSpace($PythonwExe)) {
+        $sibling = Join-Path (Split-Path -Parent $PythonwExe) 'python.exe'
+        if (Test-Path -LiteralPath $sibling) {
+            return $sibling
+        }
+    }
+    $found = Get-Command -Name 'python.exe' -ErrorAction SilentlyContinue
+    if ($null -ne $found) {
+        return $found.Source
+    }
+    return $null
+}
+
 # --- The kill switch runs before anything else needs resolving -------------
 
 if ($Remove) {
@@ -188,4 +208,47 @@ $check = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($null -eq $check) {
     throw 'registration reported success but the task is not present'
 }
-Write-Step ('verified present, state: ' + $check.State)
+Write-Step ('present in the scheduler store: ' + $TaskName)
+
+# --- Liveness, which is NOT the same question as State ---------------------
+#
+# A scheduled task reports State Ready and last result 0 FOREVER once every
+# trigger on it has expired. There is no state value meaning "expired".
+# Measured on this machine 2026-09-08: this very task read Ready with its
+# EndBoundary twenty-four hours in the past, NextRunTime EMPTY, and not one
+# invocation-log line since. It will never fire again. A session read that
+# Ready and wrote "Ready on a 5-minute tick" into the hand-off, wrong by a day.
+#
+# So State is printed below as CONTEXT and never as the verdict. The verdict
+# comes from ops/check_task_liveness.py, whose command-line contract is fixed:
+# it exits 0 IF AND ONLY IF the task is positively established to fire again.
+# Every non-zero exit means NOT ESTABLISHED - the values are deliberately not
+# enumerated here, so that checker can add new ones without lying through this
+# script.
+
+Write-Step ('context only, not a verdict - reported state is ' + $check.State)
+
+$livenessChecker = Join-Path $InstallRoot 'ops\check_task_liveness.py'
+$consolePython = Resolve-ConsolePython
+
+if (-not (Test-Path -LiteralPath $livenessChecker)) {
+    Write-Step 'LIVENESS UNVERIFIED - ops/check_task_liveness.py is absent, and a state string does not answer the question.'
+    Write-Step 'The task is REGISTERED. Whether it will ever fire is UNKNOWN from this script.'
+    exit 3
+}
+if ($null -eq $consolePython) {
+    Write-Step 'LIVENESS UNVERIFIED - no console python.exe was found to run the liveness checker.'
+    Write-Step 'The task is REGISTERED. Whether it will ever fire is UNKNOWN from this script.'
+    exit 3
+}
+
+Write-Step ('running the liveness checker: ' + $consolePython + ' ' + $livenessChecker + ' ' + $TaskName)
+& $consolePython $livenessChecker $TaskName
+$livenessExit = $LASTEXITCODE
+
+if ($livenessExit -eq 0) {
+    Write-Step 'LIVENESS ESTABLISHED - the checker exited 0, so this task is positively established to fire again.'
+} else {
+    Write-Step ('LIVENESS NOT ESTABLISHED - the checker exited ' + $livenessExit + '. The task is registered, but it is NOT established that it will fire again. Read the checker report above.')
+}
+exit $livenessExit

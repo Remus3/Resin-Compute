@@ -86,6 +86,7 @@ ordering rather than the wording.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 import time
@@ -147,6 +148,78 @@ TERMINATIONS = (
     "empty",
     "disarmed",
     "delivered",
+    # THE FAIL-CLOSED TERMINATION. A refusal that cannot be RECORDED must not
+    # be acted on, because every suppression below - the repeat hold and the
+    # once-per-agreement bounce - is keyed on that record. Measured 2026-09-08
+    # with the record present as a non-empty DIRECTORY: `read_json` returned
+    # its default and `atomic_write_json` returned False, both silently, so
+    # five cycles produced five held files and FIVE BOUNCES DELIVERED INTO A
+    # SIBLING'S INBOX. At a five-minute tick that is 288 files a day written
+    # into somebody else's tree, and nothing said a word.
+    "unrecordable",
+)
+
+#: THE BOUNCE. A refusal that delivers nothing is indistinguishable, from the
+#: sender's side, from being ignored - the counterparty's defect, answered on
+#: 2026-09-08 with a shape this module now implements.
+#:
+#: A BOUNCE IS A FILE THAT IS NOT A NOTE, and that is the mechanism rather than
+#: a convention. `pending()` above requires `.md` PLUS a parseable sender before
+#: a file is eligible responder input, and `scripts/watch_inbox.py` classifies a
+#: non-`.md` top-level file as a loose file and still reports it. So a `.txt`
+#: bounce is visible to a human on both sides and cannot be answered by a
+#: responder on either: a bounce war is impossible BY CONSTRUCTION rather than
+#: by policy, which is the only kind of impossible worth writing down.
+BOUNCE_SUFFIX = ".txt"
+
+#: EVERY BYTE OF A BOUNCE IS RUNNER-AUTHORED. The draft that was refused is
+#: model output, and two of the things this module refuses drafts FOR - a raw
+#: traceback and an account-shaped path - would be shipped straight into a
+#: sibling's inbox by any bounce that quoted what it was refusing. So the body
+#: is this fixed template plus a sanitised note name, a termination drawn from
+#: `TERMINATIONS`, and codes drawn from `BOUNCE_CODES`. Nothing else can appear,
+#: and an arm walks the delivered file line by line to say so.
+BOUNCE_TEMPLATE: tuple[str, ...] = (
+    "RSC RESPONDER BOUNCE",
+    "",
+    "This file is NOT a note and NOT a reply. It is a fixed template written by",
+    "the responder itself. No byte of the draft it is reporting on appears",
+    "anywhere in it.",
+    "",
+    "The note named below reached this repo and NO REPLY WAS SENT. A session",
+    "drafted one, the draft did not pass this repo's output gate, and the draft",
+    "is held here for an operator. This file exists so that outcome is",
+    "distinguishable from the note having been ignored.",
+    "",
+    "This file carries no responder tag, so it is not counted as an automated",
+    "hop by either end. Its name is deliberately not a note name, so neither",
+    "end's responder can take it as input. One bounce is sent per note per",
+    "agreed trial window, so a bounce cannot answer a bounce.",
+    "",
+    "Codes below are this repo's own labels for what the gate objected to. They",
+    "are not quotations of the draft.",
+    "",
+)
+
+#: (substring of a `validate_draft` reason, the code that goes on the wire). The
+#: reason prose is this module's own, but it interpolates a byte count, so the
+#: wire carries a CODE instead - a label from this table and nothing derived
+#: from the draft at all.
+BOUNCE_CODES: tuple[tuple[str, str], ...] = (
+    ("no responder tag", "MISSING-TAG"),
+    ("empty apart from its tag", "EMPTY"),
+    ("not 7-bit ascii", "NON-ASCII"),
+    ("CRLF", "CRLF"),
+    ("byte reply ceiling", "OVERSIZE"),
+    ("raw traceback", "TRACEBACK"),
+    ("account-shaped home directory", "ACCOUNT-PATH"),
+)
+
+#: What survives into a bounce from a name the sender chose. Everything else
+#: becomes an underscore: a note name is untrusted text, and a bounce is text
+#: this repo writes into somebody else's tree.
+_NAME_SAFE = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
 )
 
 #: Building is not arming. See the module docstring.
@@ -156,6 +229,71 @@ DEFAULT_INBOX = REPO_ROOT / "moon_sync_inbox"
 DEFAULT_STAGING = REPO_ROOT / "ops" / "runtime" / "responder"
 DEFAULT_METRICS = REPO_ROOT / "ops" / "runtime" / "responder_metrics.json"
 DEFAULT_ANSWERED = REPO_ROOT / "ops" / "runtime" / "responder_answered.json"
+
+#: THE REFUSAL RECORD, AND IT IS NOT THE ANSWERED RECORD.
+#:
+#: Disclosed to the channel on 2026-09-08 as the direct cost of
+#: refusing-without-answering: `_hold` wrote `held/<epoch>-<name>` with a fresh
+#: epoch every cycle, and a refusal deliberately does not touch
+#: `DEFAULT_ANSWERED`, so a note that can never pass produced ONE HELD FILE PER
+#: TICK - 288 a day at a five-minute tick, for one note, forever.
+#:
+#: The obvious fix is the wrong one. Marking a refused note answered would
+#: suppress the repeat hold as a side effect and would also RETIRE the note, so
+#: a draft that starts passing tomorrow is never sent, and the record whose
+#: whole meaning is REPLIED TO would carry notes that were not replied to. So
+#: refusals get their own record, keyed on (note name, sorted reasons) rather
+#: than on the note: a note refused for a NEW reason must hold again, because
+#: a new defect in the draft is the one thing an operator reads that directory
+#: to find.
+DEFAULT_REFUSALS = REPO_ROOT / "ops" / "runtime" / "responder_refusals.json"
+
+#: LITERAL CAPS ON THE RECORD, because the record is otherwise the held
+#: directory again in JSON. A note whose reasons vary every cycle would
+#: accumulate one fingerprint per cycle without them.
+MAX_REFUSAL_NOTES = 200
+MAX_REFUSAL_FINGERPRINTS = 20
+
+#: THE BOUNCE LEDGER IS CAPPED SEPARATELY AND IT IS THE OUTBOUND ONE.
+#:
+#: Measured 2026-09-08: with the bounce recorded as a FIELD ON THE REFUSAL ROW,
+#: evicting the row under `MAX_REFUSAL_NOTES` also forgot that the bounce had
+#: been sent, so an evicted note re-bounced into a sibling's inbox. A local
+#: record's eviction policy must never be able to re-open a write into someone
+#: else's tree.
+#:
+#: So the ledger is its own top-level block, holding one short string per note
+#: rather than a whole row, and it is AGREEMENT-SCOPED: a new recorded
+#: agreement is a new trial window and clears it, which is the same rule
+#: `bounced_under` already enforced and is why the block can be small.
+#:
+#: At the cap the responder STOPS BOUNCING rather than evicting, for the same
+#: reason `_run_once` fails closed on an unwritable record: a bounce that
+#: cannot be recorded is a bounce that will be sent again every cycle forever.
+MAX_BOUNCED_NOTES = 2_000
+
+#: LITERAL CAPS ON THE TWO REMAINING UNBOUNDED FILES.
+#:
+#: Measured 2026-09-08, 100 cycles on ONE permanently-refused note: `held/` and
+#: the sibling's inbox both held at 1 file, correctly - and `record_cycle`
+#: appended 100 rows totalling 54165 bytes while the invocation log took 200
+#: lines. The whole metrics document is re-read, re-serialized and re-written
+#: every tick, so the BYTES WRITTEN grow with the square of the cycle count.
+#: The 288-a-day defect had been relocated, not closed.
+#:
+#: `MAX_METRICS_ROWS` is the backstop. The actual fix is in `_run_once`, which
+#: writes NO row at all for a refusal that is identical to one already
+#: recorded - zero growth per cycle, which is the bar. The cap only catches a
+#: note whose refusal reasons genuinely differ every cycle.
+MAX_METRICS_ROWS = 500
+
+#: The invocation log cannot suppress a line: its entire purpose is that a
+#: cycle which declined to act still leaves proof it fired, so `log_invocation`
+#: is the one writer here that MUST emit every time. It is bounded by trimming
+#: instead. The byte trigger is a `stat` rather than a read, so the common
+#: cycle pays nothing and the rewrite happens once every few thousand fires.
+MAX_INVOCATION_BYTES = 262_144
+MAX_INVOCATION_LINES = 2_000
 
 #: One line per invocation. See `log_invocation` for why this is a
 #: requirement of the trial rather than an improvement filed against it.
@@ -268,20 +406,71 @@ def _read_text(path: Path) -> str:
         return ""
 
 
+def _ensure_dir(directory: Path) -> bool:
+    """Make `directory`, reporting failure rather than raising. Never raises.
+
+    `mkdir(parents=True, exist_ok=True)` IS NOT TOTAL, and this is the measured
+    case rather than a defensive habit. `exist_ok` forgives a component that
+    exists as a DIRECTORY; a component that exists as a FILE still raises
+    `FileExistsError` - WinError 183 on Windows, `NotADirectoryError` or
+    `FileExistsError` on POSIX depending on which component it is.
+
+    Measured 2026-09-08 with `ops/runtime/responder_refusals.json`'s PARENT
+    present as a file - a plausible botched-restore state: five of five cycles
+    raised out of `_remember_refusal`, each AFTER the cycle had already written
+    a held file and delivered a bounce. So the crash did not prevent the
+    outbound write, it only prevented the record of it, which is the worst
+    ordering available and is exactly what re-bounces every cycle forever.
+
+    `ValueError` is in the tuple for the reason `log_invocation` records: a path
+    carrying a NUL byte raises it out of `mkdir` rather than `OSError`, so an
+    `OSError`-only guard does not catch the case it was written for.
+    """
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _ensure_parent(path: Path) -> bool:
+    """`_ensure_dir` for the directory `path` will be written into."""
+    return _ensure_dir(path.parent)
+
+
 def pending(
     inbox: Path,
     opted_in: tuple[str, ...],
     answered: set[str],
     since: float | None = None,
+    deprioritise: set[str] | None = None,
 ) -> list[Path]:
     """Notes from an opted-in sender that have not been answered yet.
 
     DEFAULT DENY. A sender not on the list is not answered, an unparseable name
     is not answered, and this repo's OWN notes are never answered - a responder
     replying to its own broadcast is a loop with one participant.
+
+    `deprioritise` SORTS LAST, IT DOES NOT EXCLUDE, and the distinction is the
+    whole point. Measured 2026-09-08: two notes in the inbox, the first
+    un-passable and named so it sorts first, and `_run_once` took `queue[0]`
+    every cycle while a refusal deliberately never touches `DEFAULT_ANSWERED`.
+    Over five cycles the second note was never selected once. Every stated
+    property held - the answered record was untouched, the refused note stayed
+    eligible - and the channel was still dead, because ONE note that can never
+    pass starves every note behind it forever. A sibling can arrange that with
+    a filename.
+
+    Making the refused note ineligible would fix the starvation and break the
+    thing the eligibility is for: a draft that starts passing tomorrow must
+    still be sent. So a note already bounced under the CURRENT agreement - the
+    sender has been told, and nothing new can be learned by picking it again -
+    goes to the BACK of the queue. It is still answered when it is the only
+    thing there, and it can no longer monopolise the channel.
     """
+    skip = deprioritise or set()
     try:
-        children = sorted(inbox.iterdir(), key=lambda p: p.name)
+        children = sorted(inbox.iterdir(), key=lambda p: (p.name in skip, p.name))
     except OSError:
         return []
 
@@ -657,7 +846,16 @@ def record_cycle(
             "reasons": reasons or [],
         }
     )
-    metrics.parent.mkdir(parents=True, exist_ok=True)
+    # THE BACKSTOP, NOT THE FIX. `_run_once` writes no row at all for a refusal
+    # identical to one already recorded, which is where the zero-growth
+    # property comes from. This cap catches the residue: a note whose refusal
+    # reasons genuinely differ every cycle would otherwise append forever, and
+    # because the whole document is re-serialized on every append the BYTES
+    # WRITTEN grow quadratically. Measured 2026-09-08: 100 cycles, 100 rows,
+    # 54165 bytes, from ONE note.
+    rows = rows[-MAX_METRICS_ROWS:]
+    if not _ensure_parent(metrics):
+        return False
     return atomic_write_json(metrics, {"version": 1, "cycles": rows})
 
 
@@ -686,7 +884,8 @@ def log_invocation(source: str, note: str | None, outcome: str, now: float | Non
     stamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now or time.time()))
     line = f"{stamp}\t{source}\t{note or '-'}\t{outcome}\n"
     try:
-        DEFAULT_INVOCATIONS.parent.mkdir(parents=True, exist_ok=True)
+        if not _ensure_parent(DEFAULT_INVOCATIONS):
+            return False
         with DEFAULT_INVOCATIONS.open("a", encoding="ascii") as handle:
             handle.write(line)
     except (OSError, ValueError):
@@ -703,7 +902,31 @@ def log_invocation(source: str, note: str | None, outcome: str, now: float | Non
         # read, for the same reason. The lesson is that the exception a guard
         # names is a claim about the failure, and the claim needs testing.
         return False
+    _trim_invocations()
     return True
+
+
+def _trim_invocations() -> None:
+    """Hold the invocation log at a literal cap. Never raises.
+
+    THE LOG IS THE ONE WRITER HERE THAT CANNOT SUPPRESS A LINE. Its purpose is
+    that a cycle which decided to do nothing still leaves proof it fired, so
+    de-duplicating it would delete the evidence it exists to produce. Bounding
+    it therefore means trimming, not skipping: measured 2026-09-08, 100 cycles
+    on one permanently-refused note wrote 200 lines and would have written
+    83000 in a year of five-minute ticks.
+
+    The trigger is a `stat` and not a read, so the common cycle pays one system
+    call and the rewrite happens once every few thousand fires.
+    """
+    try:
+        if DEFAULT_INVOCATIONS.stat().st_size <= MAX_INVOCATION_BYTES:
+            return
+        lines = DEFAULT_INVOCATIONS.read_text(encoding="ascii", errors="replace").splitlines()
+    except (OSError, ValueError):
+        return
+    kept = lines[-MAX_INVOCATION_LINES:]
+    atomic_write_text(DEFAULT_INVOCATIONS, "".join(f"{line}\n" for line in kept))
 
 
 def _answered(path: Path) -> set[str]:
@@ -713,22 +936,356 @@ def _answered(path: Path) -> set[str]:
 
 
 def _remember_answered(path: Path, name: str) -> bool:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if not _ensure_parent(path):
+        return False
     return atomic_write_json(
         path, {"version": 1, "answered": sorted(_answered(path) | {name})}
     )
 
 
-def _hold(staging: Path, name: str, text: str, reasons: list[str]) -> Path:
+def refusal_key(name: str, reasons: list[str]) -> str:
+    """A stable fingerprint for (note name, refusal CATEGORIES).
+
+    KEYED ON THE CATEGORY, NEVER ON THE RENDERED REASON TEXT, and that is the
+    correction rather than a refinement. This function hashed the prose first,
+    and `validate_draft` builds its oversize reason as
+
+        f"the draft is {len(encoded)} bytes, over the agreed ..."
+
+    so a draft that is over the ceiling by a DIFFERENT amount each cycle - which
+    is exactly what an unattended model produces - minted a NEW fingerprint
+    every cycle. `refusal_seen` was then always False and `_hold` fired every
+    tick. Measured 2026-09-08: 10 cycles, 10 held files, 10 fingerprints, from
+    one note with no cap involved. That is the 288-a-day defect this record was
+    built to close, alive underneath it.
+
+    The arm that was supposed to catch it returned a BYTE-IDENTICAL draft on
+    both cycles and structurally could not.
+
+    So the identity of a refusal is its reason CATEGORY, and the tree already
+    had that vocabulary: `BOUNCE_CODES` exists because the same interpolated
+    byte count must not reach the wire either. `bounce_codes` sorts and
+    deduplicates, which also subsumes the ordering rule this docstring used to
+    state - `validate_draft` builds its list in rule order and a reordering
+    must not read as a new refusal.
+
+    THE SWEEP, because one interpolating reason is never the only one. Every
+    reason string this module can produce was checked: `counterparty_agreed`
+    interpolates the counterparty name, `_run_once` interpolates the hop budget,
+    and `workspace_trust` interpolates a config spelling. None of those reach a
+    fingerprint today - each returns before the refusal branch - but they are
+    the same defect one refactor away, and keying on the category rather than
+    the text is immune to all of them at once rather than to the one that was
+    measured.
+    """
+    joined = "\n".join([name, *bounce_codes(reasons)])
+    return hashlib.sha256(joined.encode("utf-8", "replace")).hexdigest()[:16]
+
+
+def refusals_usable(path: Path) -> tuple[bool, str]:
+    """(whether the refusal record can be read AND written, why not if not).
+
+    FAIL CLOSED IS THE POINT. `_refusals` is built on `read_json`, which returns
+    its default rather than raising, and `atomic_write_json` returns False
+    rather than raising. Both are correct - a poisoned state file must degrade a
+    run rather than end it - and together they are fail-OPEN for this caller,
+    because an empty record means "never refused, never bounced" and that is the
+    state in which the responder holds a file and writes into a sibling's tree.
+
+    Measured 2026-09-08 with the record present as a non-empty DIRECTORY: five
+    cycles, five held files, and FIVE BOUNCES delivered into the sibling's
+    inbox, with no error surfaced anywhere. `bounce_name` is minute-resolution,
+    so a five-minute tick is 288 distinct files a day in somebody else's repo.
+
+    The self-healing classes are deliberately NOT caught here. Corrupt text, an
+    empty file and a wrong-type document all mean the record is unreadable but
+    REPLACEABLE - the next write fixes them and the cost is one duplicate hold.
+    Only the structural classes, where the write cannot land either, fail
+    closed.
+    """
+    try:
+        if path.exists() and not path.is_file():
+            return False, "the refusal record exists and is not a file, so no refusal can be recorded"
+        if path.parent.exists() and not path.parent.is_dir():
+            return False, "the refusal record's parent is not a directory, so no refusal can be recorded"
+    except (OSError, ValueError) as exc:
+        return False, f"the refusal record cannot be inspected ({exc.__class__.__name__})"
+    if not _ensure_parent(path):
+        return False, "the refusal record's directory cannot be created, so no refusal can be recorded"
+    try:
+        if path.is_file():
+            path.read_bytes()
+    except (OSError, ValueError):
+        return False, "the refusal record cannot be read, so no refusal can be recorded"
+    return True, "the refusal record is readable and writable"
+
+
+def _refusals_doc(path: Path) -> tuple[dict, str, list[str]]:
+    """(rows, the agreement the bounce ledger is scoped to, bounced note names).
+
+    Reads the whole document rather than only `refusals`, because the bounce
+    ledger now lives beside the rows instead of inside them. A version 1
+    document is MIGRATED on read - the per-row `bounced` field is folded into
+    the ledger - so upgrading in place cannot re-open a bounce that was already
+    delivered under the agreement still in force.
+    """
+    payload = read_json(path, default=None)
+    if not isinstance(payload, dict):
+        return {}, "", []
+    raw_rows = payload.get("refusals")
+    rows = (
+        {k: v for k, v in raw_rows.items() if isinstance(k, str) and isinstance(v, dict)}
+        if isinstance(raw_rows, dict)
+        else {}
+    )
+
+    ledger = payload.get("bounced")
+    if isinstance(ledger, dict):
+        agreement = ledger.get("agreement")
+        notes = ledger.get("notes")
+        return (
+            rows,
+            agreement if isinstance(agreement, str) else "",
+            [n for n in notes if isinstance(n, str)] if isinstance(notes, list) else [],
+        )
+
+    # Version 1 on disk. One agreement per document was already the invariant,
+    # so the first row carrying a string `bounced` names it.
+    agreements = [r["bounced"] for r in rows.values() if isinstance(r.get("bounced"), str)]
+    if not agreements:
+        return rows, "", []
+    agreement = agreements[0]
+    return rows, agreement, [n for n, r in rows.items() if r.get("bounced") == agreement]
+
+
+def _refusals(path: Path) -> dict:
+    """The refusal rows, or an empty mapping. Never raises."""
+    return _refusals_doc(path)[0]
+
+
+def _write_refusals(path: Path, rows: dict, agreement: str, notes: list[str]) -> bool:
+    """The only writer of the refusal document. Guarded, and never raises."""
+    if not _ensure_parent(path):
+        return False
+    return atomic_write_json(
+        path,
+        {
+            "version": 2,
+            "refusals": rows,
+            "bounced": {"agreement": agreement, "notes": sorted(set(notes))},
+        },
+    )
+
+
+def refusal_seen(path: Path, name: str, reasons: list[str]) -> bool:
+    """Whether this note has ALREADY been refused for exactly these reasons.
+
+    False for a note never refused, and false for a note refused for a DIFFERENT
+    set of reasons - which is the case the operator most needs to see, so it
+    holds again.
+    """
+    row = _refusals(path).get(name)
+    if row is None:
+        return False
+    fingerprints = row.get("fingerprints")
+    return isinstance(fingerprints, list) and refusal_key(name, reasons) in fingerprints
+
+
+def agreement_id(path: Path) -> str:
+    """An identity for the agreement in force, so a bounce is once PER AGREEMENT.
+
+    A new recorded agreement is a new trial window, and the sender has to be
+    told again - a bounce recorded against last week's agreement must not
+    silence this week's. Absent or malformed reads as the single identity
+    `none`, which still bounces once rather than every cycle.
+    """
+    payload = read_json(path, default=None)
+    if not isinstance(payload, dict):
+        return "none"
+    who = payload.get("confirmed_by")
+    note = payload.get("note")
+    expires = payload.get("expires")
+    if not isinstance(who, str) or not isinstance(note, str):
+        return "none"
+    if not isinstance(expires, (int, float)) or isinstance(expires, bool):
+        return "none"
+    return f"{who}|{note}|{expires}"
+
+
+def bounced_notes(path: Path, agreement: str) -> set[str]:
+    """Every note already bounced under `agreement`. Empty for any other one.
+
+    A new recorded agreement is a new trial window, so the ledger is scoped to
+    one and reads as empty the moment the agreement changes. That is what keeps
+    it small enough to keep whole rather than evict from.
+    """
+    _rows, scoped, notes = _refusals_doc(path)
+    return set(notes) if scoped == agreement else set()
+
+
+def bounced_under(path: Path, name: str, agreement: str) -> bool:
+    """Whether this note has already been bounced under this agreement.
+
+    READS THE LEDGER, NOT THE ROW. The row is capped by `MAX_REFUSAL_NOTES` and
+    was measured on 2026-09-08 to lose this fact on eviction: after 205 distinct
+    notes the oldest row was dropped, `bounced_under` went False, and the note
+    re-bounced into the sibling's inbox. An eviction policy on a local record
+    must not be able to re-open a write into someone else's tree.
+    """
+    return name in bounced_notes(path, agreement)
+
+
+def bounce_capacity(path: Path, name: str, agreement: str) -> bool:
+    """Whether one more bounce can be RECORDED under this agreement.
+
+    At the cap the answer is no and `_run_once` does not bounce. Evicting
+    instead would forget a delivered bounce and send it again, which is the
+    defect this ledger exists to close, so the cap is a stop rather than a
+    rotation - the same fail-closed rule as `refusals_usable`.
+    """
+    notes = bounced_notes(path, agreement)
+    return name in notes or len(notes) < MAX_BOUNCED_NOTES
+
+
+def mark_bounced(path: Path, name: str, agreement: str) -> bool:
+    """Record that `name` was bounced under `agreement`. Touches nothing else.
+
+    Deliberately not folded into `_remember_refusal`: that function increments a
+    count and appends a fingerprint, and calling it twice in one cycle would
+    double-count the refusal. This runs only on the cycle that actually
+    delivered, which is once per note per agreement.
+    """
+    rows, scoped, notes = _refusals_doc(path)
+    if scoped != agreement:
+        scoped, notes = agreement, []
+    if name not in notes:
+        if len(notes) >= MAX_BOUNCED_NOTES:
+            return False
+        notes = [*notes, name]
+    row = rows.get(name)
+    if isinstance(row, dict):
+        # Kept for the human reading the file. The ledger above is what
+        # `bounced_under` reads, so this field going missing with an evicted
+        # row costs nothing.
+        row["bounced"] = agreement
+    return _write_refusals(path, rows, scoped, notes)
+
+
+def _remember_refusal(
+    path: Path,
+    name: str,
+    reasons: list[str],
+    agreement: str,
+    bounced: bool,
+    stamp: float,
+) -> bool:
+    """Record one refusal. Bounded by literal caps, oldest note evicted first.
+
+    EVICTION HERE CAN ONLY COST A DUPLICATE HOLD, never a duplicate bounce. The
+    bounce ledger is a separate top-level block scoped to the agreement and is
+    not evicted from at all - see `bounced_under` for the measurement that
+    separated them.
+    """
+    rows, scoped, notes = _refusals_doc(path)
+    if scoped != agreement:
+        scoped, notes = agreement, []
+    row = dict(rows.get(name) or {})
+    fingerprints = [f for f in row.get("fingerprints", []) if isinstance(f, str)]
+    key = refusal_key(name, reasons)
+    if key not in fingerprints:
+        fingerprints.append(key)
+    row["fingerprints"] = fingerprints[-MAX_REFUSAL_FINGERPRINTS:]
+    row["last"] = stamp
+    count = row.get("count")
+    row["count"] = (count if isinstance(count, int) else 0) + 1
+    if bounced and name not in notes and len(notes) < MAX_BOUNCED_NOTES:
+        notes = [*notes, name]
+    if bounced:
+        row["bounced"] = agreement
+    elif not isinstance(row.get("bounced"), str):
+        row["bounced"] = None
+    rows[name] = row
+    if len(rows) > MAX_REFUSAL_NOTES:
+        ordered = sorted(
+            rows.items(),
+            key=lambda kv: kv[1].get("last") if isinstance(kv[1].get("last"), (int, float)) else 0.0,
+        )
+        rows = dict(ordered[-MAX_REFUSAL_NOTES:])
+    return _write_refusals(path, rows, scoped, notes)
+
+
+def safe_name(name: str) -> str:
+    """A sender-chosen name reduced to characters that can carry no meaning."""
+    kept = "".join(ch if ch in _NAME_SAFE else "_" for ch in name)[:80]
+    return kept or "unnamed"
+
+
+def bounce_codes(reasons: list[str]) -> list[str]:
+    """Reason prose to wire codes. An unrecognised reason is `OTHER`, never text."""
+    codes: set[str] = set()
+    for reason in reasons:
+        matched = [code for needle, code in BOUNCE_CODES if needle in reason]
+        codes.update(matched or ["OTHER"])
+    return sorted(codes)
+
+
+def build_bounce(note_name: str, reasons: list[str], termination: str) -> str:
+    """The bounce body. Template, one sanitised name, and codes. Nothing else."""
+    lines = list(BOUNCE_TEMPLATE)
+    lines.append(f"  NOTE: {safe_name(note_name)}")
+    lines.append(
+        f"  TERMINATION: {termination if termination in TERMINATIONS else 'unknown'}"
+    )
+    lines.extend(f"  CODE: {code}" for code in bounce_codes(reasons))
+    lines.append("")
+    return "\n".join(lines)
+
+
+def bounce_name(note: Path, stamp: float) -> str:
+    """A bounce filename that FAILS the note grammar on purpose.
+
+    Not `.md`, so `pending()` on either end skips it before it ever looks at the
+    sender. The `-from-RSC-` is for the human reading the directory listing; it
+    is not what makes the file safe, and nothing here relies on it.
+    """
+    when = time.strftime("%Y-%m-%d-%H%M", time.localtime(stamp))
+    stem = safe_name(note.stem)[:40].strip("-") or "note"
+    return f"{when}-from-{SELF_CODE}-bounce-{stem}{BOUNCE_SUFFIX}"
+
+
+def _hold(
+    staging: Path, name: str, text: str, reasons: list[str], stamp: float | None = None
+) -> Path | None:
     """Keep a refused draft where an operator can read it.
 
     A responder that DISCARDS what it will not send is a withdrawal with no
     trace, which is the defect this channel spent a night on.
+
+    `stamp` IS THE CYCLE'S OWN CLOCK AND IT IS APPENDED LAST WITH A DEFAULT, per
+    the dataclass convention this repo keeps for the same reason: a required
+    field in the middle breaks every existing positional call.
+
+    It exists because the first version read `time.time()` here, so two cycles
+    landing in the SAME SECOND produced the same held filename and the second
+    silently overwrote the first. That is not a cosmetic problem - it made the
+    arm proving repeat holds are suppressed pass on a responder with no
+    suppression at all, because one file was on disk either way. Measured: with
+    the epoch read here, `test_a_note_refused_for_a_DIFFERENT_reason_is_held_again`
+    saw one file where two distinct refusals had been written.
     """
     held = staging / "held"
-    held.mkdir(parents=True, exist_ok=True)
-    target = held / f"{int(time.time())}-{name}"
-    atomic_write_text(target, "REFUSED:\n" + "\n".join(f"  - {r}" for r in reasons) + "\n\n" + text)
+    # NOT A BARE `mkdir`. A staging component present as a FILE raised
+    # `FileExistsError` out of here on every cycle, and `run_once` logged
+    # `crashed` and re-raised - which is the honest behaviour for a crash and
+    # the wrong one for a foreseeable disk state. Returning None says the same
+    # thing to the one caller that can do something about it. See `_ensure_dir`.
+    if not _ensure_dir(held):
+        return None
+    target = held / f"{int(time.time() if stamp is None else stamp)}-{name}"
+    if not atomic_write_text(
+        target, "REFUSED:\n" + "\n".join(f"  - {r}" for r in reasons) + "\n\n" + text
+    ):
+        return None
     return target
 
 
@@ -793,6 +1350,11 @@ def _run_once(
         "actions": [],
         "termination": "unknown",
         "grammar": grammar,
+        # BOTH DEFAULT FALSE ON EVERY PATH. A field only set on the branch
+        # that does the thing is a field a caller reads as absent-means-no on
+        # some paths and KeyError on others.
+        "held": False,
+        "bounced": False,
     }
 
     agreed, why = counterparty_agreed(DEFAULT_CONFIRMATION, now=started)
@@ -814,7 +1376,17 @@ def _run_once(
         result["termination"] = "budget"
         return result
 
-    queue = pending(inbox, OPTED_IN, _answered(DEFAULT_ANSWERED), since=bounds.window_opens)
+    # HEAD-OF-LINE, and a sibling can cause it deliberately. A note already
+    # bounced under the agreement in force has had everything said to it that
+    # this responder can say, so it sorts to the BACK rather than blocking the
+    # notes behind it. It stays eligible - see `pending`.
+    queue = pending(
+        inbox,
+        OPTED_IN,
+        _answered(DEFAULT_ANSWERED),
+        since=bounds.window_opens,
+        deprioritise=bounced_notes(DEFAULT_REFUSALS, agreement_id(DEFAULT_CONFIRMATION)),
+    )
     if not queue:
         result["termination"] = "empty"
         return result
@@ -859,7 +1431,7 @@ def _run_once(
         # The raw string never reaches a reported surface. A responder that
         # tracebacks out of a scheduled task surfaces nothing at all.
         reasons = ["the session could not be run"]
-        _hold(DEFAULT_STAGING, note.name, "", reasons)
+        _hold(DEFAULT_STAGING, note.name, "", reasons, started)
         result["reasons"] = reasons
         # NEVER `exhausted`. A session that could not RUN is not a session with
         # nothing to say, and under disposition (i) `exhausted` is the label
@@ -874,7 +1446,6 @@ def _run_once(
     reasons = validate_draft(draft, bounds)
     reply_name = _reply_name(note)
     if reasons:
-        _hold(DEFAULT_STAGING, note.name, draft, reasons)
         result["reasons"] = reasons
         # EXHAUSTED IS THE PREDICTED OUTCOME AND IS RECORDED SEPARATELY. A
         # measurement-only responder with nothing further to report produces an
@@ -883,6 +1454,83 @@ def _run_once(
         # one distinction disposition (i) exists to preserve.
         empty_only = all("empty" in r for r in reasons)
         result["termination"] = "exhausted" if empty_only else "refused"
+
+        # FAIL CLOSED BEFORE ANYTHING IS WRITTEN. Every suppression below is
+        # keyed on the refusal record, and both of the record's primitives are
+        # fail-SOFT by design - `read_json` returns its default, and
+        # `atomic_write_json` returns False. An unwritable record therefore
+        # reads as "never refused, never bounced" on every cycle, which is the
+        # exact state that holds a file and writes into a sibling's tree.
+        # Measured 2026-09-08: 5 cycles, 5 held files, 5 bounces delivered,
+        # silently. So a refusal that cannot be RECORDED is not acted on.
+        usable, why_unusable = refusals_usable(DEFAULT_REFUSALS)
+        if not usable:
+            print(f"responder: NOT HOLDING AND NOT BOUNCING - {why_unusable}")
+            result["reasons"] = [*reasons, why_unusable]
+            result["termination"] = "unrecordable"
+            record_cycle(
+                DEFAULT_METRICS, note.name, hops_used(inbox), started, time.time(),
+                time.time() - started, [], False, result["reasons"], "unrecordable", grammar,
+            )
+            return result
+
+        # THE REPEAT HOLD IS SUPPRESSED, THE NOTE STAYS ELIGIBLE. Keyed on
+        # (note, reason CATEGORIES), so the SAME refusal is silent from the
+        # second cycle on however its byte counts move, and a NEW category
+        # still lands a file. Nothing here touches `DEFAULT_ANSWERED`: answered
+        # means replied to, and this is the case where it has not been.
+        repeat = refusal_seen(DEFAULT_REFUSALS, note.name, reasons)
+        if not repeat:
+            result["held"] = _hold(DEFAULT_STAGING, note.name, draft, reasons, started) is not None
+
+        # THE BOUNCE, ONCE PER NOTE PER AGREEMENT. It is not a reply: it carries
+        # no responder tag so it spends no hop, it sets neither `delivered` nor
+        # an M4 action, and it writes no metrics row of its own - M2 is
+        # arrival-to-REPLY and a row here would publish a reply latency for a
+        # reply that was never sent.
+        agreement = agreement_id(DEFAULT_CONFIRMATION)
+        already_bounced = bounced_under(DEFAULT_REFUSALS, note.name, agreement)
+
+        # RECORDED FIRST, THEN DELIVERED. Writing the refusal before the bounce
+        # proves the record is actually writable at this instant rather than
+        # merely inspectable, and it is the ordering the `mkdir` crash made
+        # necessary: that crash fired AFTER the bounce had gone out, so the
+        # delivery happened and the record of it never did.
+        recorded = _remember_refusal(
+            DEFAULT_REFUSALS, note.name, reasons, agreement, False, started
+        )
+        if not recorded:
+            print("responder: NOT BOUNCING - the refusal record could not be written")
+            result["reasons"] = [*reasons, "the refusal record could not be written"]
+            result["termination"] = "unrecordable"
+            record_cycle(
+                DEFAULT_METRICS, note.name, hops_used(inbox), started, time.time(),
+                time.time() - started, [], False, result["reasons"], "unrecordable", grammar,
+            )
+            return result
+
+        if not already_bounced and bounce_capacity(DEFAULT_REFUSALS, note.name, agreement):
+            sent = deliver(
+                build_bounce(note.name, reasons, result["termination"]),
+                bounce_name(note, started),
+                [d / "moon_sync_inbox" for d in dests],
+            )
+            # A FAILED WRITE IS NOT RECORDED AS BOUNCED, so the next cycle tries
+            # again rather than counting a bounce nobody received.
+            result["bounced"] = bool(sent) and all(ok for ok, _ in sent)
+            if result["bounced"]:
+                mark_bounced(DEFAULT_REFUSALS, note.name, agreement)
+
+        # ZERO GROWTH FOR A PERMANENTLY-REFUSED NOTE. A repeat of a refusal
+        # already on the record, with the bounce already sent, has produced no
+        # new fact: no held file, no bounce, and therefore nothing for a row to
+        # say that the previous row does not. Measured 2026-09-08 before this
+        # existed: 100 cycles on one note wrote 100 rows and 54165 bytes, and
+        # because the whole document is re-serialized per append the bytes
+        # written grew quadratically. The invocation log still records the fire,
+        # which is where "this cycle happened and did nothing" belongs.
+        if repeat and already_bounced and not result["held"] and not result["bounced"]:
+            return result
     else:
         written = deliver(draft, reply_name, [d / "moon_sync_inbox" for d in dests])
         # Our own copy, so a cold session sees both halves of the conversation.
@@ -1043,7 +1691,10 @@ def main(argv: list[str] | None = None) -> int:
     elif outcome["delivered"]:
         print(f"responder: answered {outcome['note']}")
     elif outcome["reasons"] and outcome["reasons"] != ["disarmed"]:
-        print(f"responder: HELD {outcome['note']} - {len(outcome['reasons'])} reason(s)")
+        # NOT ALWAYS "HELD". A repeat refusal holds nothing, and printing HELD
+        # would send an operator to a directory with no new file in it.
+        state = "HELD" if outcome.get("held") else "REFUSED AGAIN, hold suppressed"
+        print(f"responder: {state} {outcome['note']} - {len(outcome['reasons'])} reason(s)")
         for reason in outcome["reasons"]:
             print(f"  - {reason}")
     return 0

@@ -32,6 +32,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -57,13 +58,27 @@ def watch(tmp_path):
     `from-XX-verbatim/`. A test that can reach live state will reach it, so the
     fixture always injects a throwaway path rather than trusting every arm to
     pass one. `test_the_fixture_cannot_reach_live_runtime_state` pins it.
+
+    EVERY `DEFAULT_*` PATH IS REDIRECTED, DISCOVERED RATHER THAN LISTED. This
+    fixture named two of them by hand until the invocation log arrived as a
+    third, at which point every arm below would have appended real lines to the
+    operator's live record. That is not a hypothetical: the sibling fixture in
+    `tests/test_moon_sync_responder.py` named three `DEFAULT_` paths, a fourth
+    was added an hour later, and the suite immediately wrote five real lines
+    into the live `ops/runtime/responder_invocations.log`. A hand-maintained
+    list of things to isolate goes stale the moment somebody adds the next one,
+    and it fails SILENTLY, because the arm that would have caught it was the
+    same list.
     """
     spec = importlib.util.spec_from_file_location("watch_inbox_under_test", SCRIPT)
     assert spec is not None and spec.loader is not None, f"cannot load {SCRIPT}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    module.DEFAULT_STATE = tmp_path / "isolated" / "seen.json"
-    module.DEFAULT_REPORTED = tmp_path / "isolated" / "reported.json"
+
+    for name in [n for n in dir(module) if n.startswith("DEFAULT_")]:
+        value = getattr(module, name)
+        if isinstance(value, Path):
+            setattr(module, name, tmp_path / "isolated" / name.lower() / value.name)
     return module
 
 
@@ -72,10 +87,18 @@ def test_the_fixture_cannot_reach_live_runtime_state(watch, tmp_path):
 
     A write-only state file is verified by nothing, which is why the pollution
     ran for days elsewhere before anything read it back.
+
+    ENUMERATED, so a `DEFAULT_` constant added tomorrow is covered today rather
+    than being discovered in the operator's live directory.
     """
-    for default in (watch.DEFAULT_STATE, watch.DEFAULT_REPORTED):
-        assert tmp_path in Path(default).parents, (
-            f"{default} escapes the test's own directory, so an arm that omits "
+    defaults = [
+        n for n in dir(watch) if n.startswith("DEFAULT_") and isinstance(getattr(watch, n), Path)
+    ]
+
+    assert len(defaults) >= 4, f"the discovery found almost nothing, so this arm is vacuous: {defaults}"
+    for name in defaults:
+        assert tmp_path in getattr(watch, name).parents, (
+            f"{name} escapes the test's own directory, so an arm that omits "
             "the flag writes into the operator's live record"
         )
 
@@ -1569,4 +1592,714 @@ def test_an_edited_note_is_not_filed_as_a_withdrawal(watch, tmp_path, capsys):
     assert "withdrawn" not in out.lower(), (
         "an edited note was filed as a withdrawal as well as unread, in two "
         "contradictory sections of the same report"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE INVOCATION LOG.
+#
+# WHY IT IS A REQUIREMENT AND NOT AN IMPROVEMENT. This watcher's only output is
+# a report to a human, and a report to a human leaves nothing behind that says
+# it ran. The SessionStart hook declared in `.claude/settings.json` - `python
+# scripts/watch_inbox.py`, timeout 5 - could therefore fire on every cold
+# session, or on none at all, and this tree would read exactly the same
+# afterwards either way. So the honest status of "does the hook fire, and does
+# it survive /clear" was never UNVERIFIED. It was UNMEASURABLE AS BUILT, which
+# is a different and worse thing: no amount of care could have measured it.
+#
+# `tools/moon_sync_responder.py` reached that conclusion first, on Sibling-A's
+# 1806 note, and its `log_invocation` is the shape copied here.
+#
+# THE WRAPPER IS THE DESIGN, and it is a measurement rather than a preference.
+# The responder logged per exit path first, and four terminations - `window`,
+# `budget`, `empty` and `disarmed` - each returned before ever reaching the
+# logger, each with a passing arm asserting its termination as a RETURN VALUE.
+# A gate tested as a pure predicate is not an enforced gate. Measured against
+# the live scheduled task 2026-09-07 at 19:16: four fires, four bare `start`
+# lines, no record of what any of them decided.
+#
+# So `main` here is a WRAPPER that writes the terminal line whatever the body
+# returned, including when the body raised, and every arm below asserts the LOG
+# rather than the return value. An arm on the logger's own return proves
+# nothing about the paths that never call it.
+#
+# TWO LINES PER FIRE, a `start` and exactly one terminal. The `start` is not
+# redundant here either: this hook is declared with a five second timeout and
+# `MAX_DROP_ENTRIES` exists precisely because a walk can run past it. A fire
+# killed mid-walk writes no terminal line at all, and the `start` is the only
+# thing that can say it happened.
+# ---------------------------------------------------------------------------
+
+
+def _log_lines(watch) -> list[str]:
+    """Every non-blank line currently in the invocation log."""
+    path = Path(watch.DEFAULT_INVOCATIONS)
+    if not path.is_file():
+        return []
+    return [ln for ln in path.read_text(encoding="ascii").splitlines() if ln.strip()]
+
+
+def _terminals(watch) -> list[str]:
+    """The TERMINAL dispositions only, in order. `start` phase lines are dropped.
+
+    Split on the last field rather than on a position, so a line that grows a
+    column later still grades on its disposition.
+    """
+    return [
+        line.split("\t")[-1]
+        for line in _log_lines(watch)
+        if line.split("\t")[-1] != watch.PHASE_START
+    ]
+
+
+def _one_note_inbox(tmp_path: Path) -> Path:
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-09-07-1800-from-RC-hello.md")
+    return inbox
+
+
+def test_a_watcher_run_leaves_a_record_that_it_fired(watch, tmp_path):
+    """Without this line a fire is indistinguishable on disk from no fire."""
+    inbox = _one_note_inbox(tmp_path)
+
+    watch.main(["--dir", str(inbox), "--state", str(tmp_path / "seen.json")])
+
+    assert _log_lines(watch), (
+        "the watcher ran and left no record, which is the state that makes "
+        "hook survival UNMEASURABLE rather than merely unverified"
+    )
+    assert _terminals(watch) == [watch.TERMINAL_REPORTED], _log_lines(watch)
+
+
+def test_the_absent_inbox_is_logged_as_a_disposition_of_its_own(watch, tmp_path):
+    """A FRESH CLONE HAS NO CHANNEL AT ALL, and that is not the same fact as a
+    quiet one.
+
+    `moon_sync_inbox/` is gitignored (`.gitignore:115`), so a fresh clone
+    receives zero files of it and the tool prints its no-inbox line and exits 0.
+    That is a real terminal disposition of a real fire. Logging it as
+    "nothing unread" would say the channel was checked and was quiet, when in
+    fact there was no channel to check - and the two send a reader to completely
+    different next steps.
+    """
+    state = tmp_path / "seen.json"
+
+    watch.main(["--dir", str(tmp_path / "nope"), "--state", str(state)])
+    absent = _terminals(watch)
+
+    empty = tmp_path / "inbox"
+    empty.mkdir()
+    watch.main(["--dir", str(empty), "--state", str(state)])
+
+    assert watch.TERMINAL_NO_INBOX != watch.TERMINAL_NOTHING_UNREAD, (
+        "the two dispositions are the same string, so the log cannot tell a "
+        "fresh clone with no channel from a channel with nothing in it"
+    )
+    assert absent == [watch.TERMINAL_NO_INBOX], _log_lines(watch)
+    assert _terminals(watch) == [
+        watch.TERMINAL_NO_INBOX,
+        watch.TERMINAL_NOTHING_UNREAD,
+    ], _log_lines(watch)
+
+
+def _zero_argument_flags(watch) -> list[str]:
+    """Every flag `main` declares that takes no value, read off the PARSER.
+
+    DISCOVERED, NOT LISTED. A hand-maintained list of paths that remember to do
+    something goes stale silently, and this suite's sibling has already been
+    bitten by exactly that: the responder's isolation fixture named three
+    `DEFAULT_` paths and the fourth arrived an hour later. So the matrix comes
+    from the parser itself, which means a flag added tomorrow is graded today.
+
+    `-h` is included deliberately. It exits through `SystemExit` rather than
+    through the body, which is one of the exit paths a wrapper has to cover.
+    """
+    parser = watch._build_parser()
+    return [a.option_strings[0] for a in parser._actions if a.option_strings and a.nargs == 0]
+
+
+def test_every_exit_path_through_main_writes_exactly_one_terminal_line(watch, tmp_path):
+    """The property, asserted without naming a single path.
+
+    This is the arm the responder could not have had while its terminations
+    were listed by hand. It does not care which flags exist or what they are
+    called: whatever `main` declares, each invocation of it must leave the log
+    exactly one line longer in terminal lines, and that line must be a declared
+    disposition.
+    """
+    flags = _zero_argument_flags(watch)
+    assert len(flags) >= 4, f"the discovery found almost nothing, so this arm is vacuous: {flags}"
+
+    inbox = _one_note_inbox(tmp_path)
+    base = [
+        "--dir",
+        str(inbox),
+        "--state",
+        str(tmp_path / "seen.json"),
+        "--reported",
+        str(tmp_path / "reported.json"),
+    ]
+
+    observed: list[str] = []
+    for flag in [None, *flags]:
+        argv = base if flag is None else [*base, flag]
+        before = len(_terminals(watch))
+        try:
+            watch.main(argv)
+        except SystemExit:
+            # `-h` leaves through argparse. It is still a fire.
+            pass
+        after = _terminals(watch)
+
+        assert len(after) == before + 1, (
+            f"{argv} left {len(after) - before} terminal lines, not one. A fire "
+            "with none is indistinguishable from one that never happened, and a "
+            "fire with two is a log that cannot be counted"
+        )
+        assert after[-1] in watch.TERMINAL_DISPOSITIONS, (
+            f"{argv} logged {after[-1]!r}, which is not a declared disposition"
+        )
+        observed.append(after[-1])
+
+    assert len(set(observed)) >= 2, (
+        f"every flag terminated identically ({observed}), so this arm would "
+        "pass against a wrapper that logs one constant and reads nothing"
+    )
+
+
+def test_a_crash_inside_the_body_still_leaves_exactly_one_terminal_line(watch, tmp_path, monkeypatch):
+    """A traceback out of a session-start hook surfaces NOTHING at all.
+
+    The log says the fire happened and says it died, before the exception
+    continues on its way. The exception is deliberately NOT swallowed: a
+    watcher that hides its own failure is the defect one layer down.
+    """
+    inbox = _one_note_inbox(tmp_path)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("planted")
+
+    monkeypatch.setattr(watch, "_entries", boom)
+
+    with pytest.raises(RuntimeError):
+        watch.main(["--dir", str(inbox), "--state", str(tmp_path / "seen.json")])
+
+    assert _terminals(watch) == [watch.TERMINAL_CRASHED], _log_lines(watch)
+
+
+def test_an_argv_the_parser_rejects_is_logged_rather_than_vanishing(watch, tmp_path):
+    """argparse leaves through `SystemExit`, which is not an `Exception`.
+
+    A wrapper guarding only `Exception` lets this exit path out untouched, and
+    a hook mis-wired with a stale flag then fires, fails, and leaves nothing
+    behind saying so - which reads afterwards exactly like a hook that is not
+    wired at all.
+    """
+    with pytest.raises(SystemExit):
+        watch.main(["--no-such-flag-exists"])
+
+    assert _terminals(watch) == [watch.TERMINAL_ARGV_REJECTED], _log_lines(watch)
+
+
+def test_the_declared_dispositions_are_discovered_rather_than_listed(watch):
+    """A new `TERMINAL_` constant nobody added to the tuple fails HERE.
+
+    The arm above grades every observed disposition against
+    `TERMINAL_DISPOSITIONS`. That tuple is itself a hand-maintained list, so it
+    is cross-checked against the module's own constants rather than trusted.
+    """
+    declared = {
+        getattr(watch, name)
+        for name in dir(watch)
+        if name.startswith("TERMINAL_") and isinstance(getattr(watch, name), str)
+    }
+
+    assert len(declared) >= 5, f"the discovery found almost nothing, so this arm is vacuous: {declared}"
+    assert declared == set(watch.TERMINAL_DISPOSITIONS), (
+        "a terminal disposition constant exists that the declared tuple does "
+        f"not carry, or the reverse: {declared ^ set(watch.TERMINAL_DISPOSITIONS)}"
+    )
+    assert watch.PHASE_START not in declared, (
+        "`start` is an OPENING line, not a termination. Counting it as one "
+        "makes a fire that died mid-walk read as a fire that finished"
+    )
+
+
+def test_the_line_records_which_entry_point_fired(watch, tmp_path):
+    """`cli` is what the SessionStart hook produces; an in-process call is not.
+
+    Without the entry point the log answers "something ran" and not "the hook
+    ran", and the hook is the whole question.
+    """
+    inbox = _one_note_inbox(tmp_path)
+    argv = ["--dir", str(inbox), "--state", str(tmp_path / "seen.json")]
+
+    watch.main(argv)
+    watch.main(argv, source=watch.SOURCE_CLI)
+
+    sources = [line.split("\t")[1] for line in _log_lines(watch)]
+
+    assert watch.SOURCE_CLI in sources, sources
+    assert len(set(sources)) == 2, (
+        f"both fires recorded the same entry point ({sources}), so the column "
+        "cannot separate a hook fire from an in-process call"
+    )
+
+
+def test_the_command_line_entry_point_declares_itself_as_such(watch):
+    """Structural, and no longer the only thing standing here.
+
+    ITS STATED REASON FOR BEING STRUCTURAL IS GONE, AND THE ARM IS KEPT ANYWAY.
+    This docstring used to say that the end-to-end version "would run the
+    script as a subprocess, which writes into the OPERATOR'S LIVE log - the
+    exact pollution the fixture above exists to prevent". That was true and it
+    is now fixed: `RESINCOMPUTE_RUNTIME_DIR` points a child somewhere
+    disposable, so the arms under ISOLATION ACROSS A PROCESS BOUNDARY below DO
+    launch the real script and DO read the label back off disk. Those arms are
+    the guarantee.
+
+    What this one still buys is a different fact, and it is cheap: that the
+    guard names `SOURCE_CLI` as its FALLBACK. An end-to-end arm run with the
+    variable unset proves the observed label is `cli`; only the source says
+    that `cli` is what an unset variable resolves TO, rather than a value some
+    ambient environment happened to supply.
+    """
+    source = SCRIPT.read_text(encoding="utf-8")
+
+    assert "resolve_source(SOURCE_CLI)" in source, (
+        "the `__main__` guard does not label its own entry point with the "
+        "honest fallback, so a hook fire is recorded under some other source"
+    )
+
+
+#: Never derived from the constant under test - see the arm's docstring.
+_INVOCATION_CAP_FIXTURE = 5
+_INVOCATION_FIXTURE_FIRES = 12
+
+
+def test_the_shipped_invocation_cap_is_a_bounded_number(watch):
+    """Asserted against a literal, so a cap that stops being one goes red here."""
+    assert 0 < watch.MAX_INVOCATION_LINES <= 100_000, (
+        "the invocation log has no bound any more, so a hook that fires on "
+        "every prompt grows a file nobody prunes"
+    )
+
+
+def test_the_invocation_log_is_capped_at_the_shipped_ceiling(watch, monkeypatch):
+    """THE CAP IS LOWERED TO MEET THE FIXTURE, NEVER THE FIXTURE RAISED TO IT.
+
+    A fixture sized `MAX_INVOCATION_LINES + 5` reads as thorough and is a
+    loaded gun: this suite measured the same shape against `MAX_DROP_ENTRIES`,
+    where a mutation set the constant to 10**9 and the arm wrote 492674 files
+    before it was killed. A fixture whose size derives from the value under
+    test is an amplifier for whatever that value becomes.
+    """
+    monkeypatch.setattr(watch, "MAX_INVOCATION_LINES", _INVOCATION_CAP_FIXTURE)
+
+    for i in range(_INVOCATION_FIXTURE_FIRES):
+        watch.log_invocation("test", f"d{i}")
+
+    lines = _log_lines(watch)
+
+    assert len(lines) == _INVOCATION_CAP_FIXTURE, (
+        f"the log kept {len(lines)} lines under a cap of {_INVOCATION_CAP_FIXTURE}"
+    )
+    assert lines[-1].split("\t")[-1] == f"d{_INVOCATION_FIXTURE_FIRES - 1}", (
+        f"the cap dropped the NEWEST line rather than the oldest: {lines}"
+    )
+
+
+def test_the_invocation_log_is_written_through_atomic_io(watch, tmp_path):
+    """AN APPEND LOG STILL MUST NOT BE OBSERVABLE HALF-WRITTEN.
+
+    `core/atomic_io.py` is the only sanctioned state-write path in this tree
+    because readers poll mid-write, and a bare `open(path, "a")` is a real
+    window: a reader can see a line without its newline, and the cap needs a
+    rewrite rather than an append in any case.
+    """
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "atomic_write_text" in source, (
+        "the invocation log is not written through core.atomic_io"
+    )
+
+    watch.log_invocation("test", watch.PHASE_START)
+    log = Path(watch.DEFAULT_INVOCATIONS)
+
+    assert log.is_file(), "no log was written"
+    strays = [p.name for p in log.parent.iterdir() if p.name != log.name]
+    assert strays == [], f"a temp file was left behind by the write: {strays}"
+
+
+def test_each_logged_line_is_tab_separated_ascii_with_a_timestamp(watch, tmp_path):
+    """The format is what a later reader parses, so it is pinned here.
+
+    ASCII and LF are not house style in this file - `.gitattributes` pins
+    `eol=lf` and `write_text` silently emits CRLF on Windows, so a log written
+    through the wrong path carries bytes that no diff would show.
+    """
+    inbox = _one_note_inbox(tmp_path)
+    watch.main(["--dir", str(inbox), "--state", str(tmp_path / "seen.json")])
+
+    raw = Path(watch.DEFAULT_INVOCATIONS).read_bytes()
+    raw.decode("ascii")
+
+    assert b"\r\n" not in raw, "the log carries CRLF, which no diff in this tree would show"
+    for line in _log_lines(watch):
+        fields = line.split("\t")
+        assert len(fields) == 3, f"expected timestamp, entry point and disposition: {line!r}"
+        time.strptime(fields[0], "%Y-%m-%dT%H:%M:%S")
+        assert fields[1], f"the entry point column is empty: {line!r}"
+        assert fields[2], f"the disposition column is empty: {line!r}"
+
+
+def test_an_unwritable_invocation_log_does_not_take_the_watcher_down(watch, tmp_path):
+    """A crashed hook surfaces NOTHING at all, which is worse than a lost line.
+
+    `ValueError` is in the guard because of a measurement, not out of caution:
+    a path carrying a NUL byte raises `ValueError` out of `mkdir`, not
+    `OSError`, so an `OSError`-only guard does not catch the case it was
+    written for. `core/atomic_io.py` catches `OSError` alone, so the escape is
+    real rather than hypothetical.
+    """
+    watch.DEFAULT_INVOCATIONS = tmp_path / "nope" / (chr(0) + "bad") / "x.log"
+
+    assert watch.log_invocation("test", watch.PHASE_START) is False
+
+    rc = watch.main(["--dir", str(tmp_path / "absent"), "--state", str(tmp_path / "seen.json")])
+
+    assert rc == 0, "an unwritable log took the watcher down with it"
+
+
+def test_the_invocation_log_never_carries_a_payload_byte(watch, tmp_path):
+    """The log is a record of FIRES, not of contents. No note body reaches it."""
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-09-07-1800-from-RC-hello.md", _NOTE_MARKER + "\n")
+    _drop(inbox, "from-XX-verbatim", {"tool.py": _DROP_MARKER + "\n"})
+
+    watch.main(["--dir", str(inbox), "--state", str(tmp_path / "seen.json"), "--mark"])
+
+    raw = Path(watch.DEFAULT_INVOCATIONS).read_text(encoding="ascii")
+
+    for marker in (_NOTE_MARKER, _DROP_MARKER):
+        assert marker not in raw, f"the invocation log carried {marker!r} out of a payload"
+
+
+# ---------------------------------------------------------------------------
+# ISOLATION ACROSS A PROCESS BOUNDARY
+#
+# THE FIXTURE AT THE TOP OF THIS FILE CANNOT ISOLATE A SUBPROCESS, AND IT IS
+# COMPLETE. It redirects every `DEFAULT_` Path by enumeration rather than by a
+# hand-written list, which is the fix for the failure it documents - and a
+# monkeypatched module attribute lives in ONE interpreter. A test that launches
+# `python scripts/watch_inbox.py` gets a fresh import with the real defaults,
+# and every byte it writes lands in the operator's live `ops/runtime/`.
+#
+# MEASURED HERE, 2026-09-08, before this section existed. With the live log
+# deleted first, `python -m pytest tests/test_session_hooks.py` passed 33 arms
+# and left SIX REAL LINES in `ops/runtime/inbox_invocations.log`, all of them
+# labelled `cli` - the same label a genuine SessionStart hook fire writes,
+# because `__main__` passed `SOURCE_CLI` in both cases. The same run left two
+# PLANTED fixture keys in the live `ops/runtime/inbox_reported.json`:
+# `2026-09-07-1200-from-RC-planted.md` and `from-RC-verbatim/`. That is the
+# fixture-pollution failure this file's own fixture docstring records - 24
+# withdrawn notes, 18 of them called `note-21.md` - arriving through the one
+# door the fixture cannot close.
+#
+# WHY IT IS NOT COSMETIC. The whole purpose of the invocation log is to make
+# "does the SessionStart hook fire, and does it survive /clear" MEASURABLE for
+# the first time. An operator reading the log after a suite run counts
+# suite-manufactured lines as hook fires. An instrument its own test suite
+# writes to, indistinguishably, is not evidence about the world.
+#
+# THE FIX IS THE ENVIRONMENT, because it is the only channel that crosses a
+# process boundary:
+#
+#   RESINCOMPUTE_RUNTIME_DIR       where the runtime records go. NOT a new knob
+#                                  - `ops/health.py` already defines it and
+#                                  `headless/runner.py` already honours it, so
+#                                  this tool joining them is one contract
+#                                  rather than a second one beside it.
+#   RESINCOMPUTE_INVOCATION_SOURCE who invoked this process. Absent, the label
+#                                  stays the honest `cli`, so a missing
+#                                  variable can never make a real fire look
+#                                  like a test.
+#
+# EVERY ARM BELOW THAT MATTERS DRIVES THE REAL `python scripts/watch_inbox.py`
+# PATH. A gate tested as a pure predicate is not an enforced gate: an arm on
+# `resolve_source`'s return value would pass over a `__main__` guard that never
+# calls it. The predicate arms are here as the non-vacuity half, never as the
+# guarantee.
+# ---------------------------------------------------------------------------
+
+
+def _reimport(monkeypatch, env: dict[str, str | None]):
+    """Import the script FRESH under `env`, bypassing the isolating fixture.
+
+    The module resolves its runtime location from the ENVIRONMENT at import,
+    because that is what a subprocess inherits, so an arm about that behaviour
+    has to re-import rather than re-assign an attribute.
+    """
+    for name, value in env.items():
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    spec = importlib.util.spec_from_file_location("watch_inbox_env_probe", SCRIPT)
+    assert spec is not None and spec.loader is not None, f"cannot load {SCRIPT}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+#: A literal ceiling on a spawned run, never derived from anything under test.
+#: A fixture sized from the value it measures is an amplifier - this file has
+#: already measured one that wrote 492674 files.
+_SPAWN_TIMEOUT_SECONDS = 60
+
+
+def _spawn(argv: list[str], env_extra: dict[str, str | None]):
+    """Run the REAL script in a REAL child process under `env_extra`.
+
+    `sys.executable` rather than a bare `python`: this suite has measured a
+    subprocess call that never ran at all and returned the reassuring shape of
+    one that did.
+    """
+    import subprocess
+    import sys
+
+    env = dict(os.environ)
+    for name, value in env_extra.items():
+        if value is None:
+            env.pop(name, None)
+        else:
+            env[name] = value
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *argv],
+        cwd=str(ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=_SPAWN_TIMEOUT_SECONDS,
+    )
+
+
+def _live_paths(monkeypatch, watch) -> dict[str, Path]:
+    """Every `DEFAULT_` Path as an UNREDIRECTED import sees it - the real ones.
+
+    Derived from the module rather than spelled out here. A hand-written copy
+    of `ops/runtime/inbox_invocations.log` in this file would go stale silently
+    the day the record is renamed, and the arm guarding the operator's live
+    state would then be guarding a path nothing writes.
+    """
+    plain = _reimport(monkeypatch, {watch.ENV_RUNTIME_DIR: None})
+    return {
+        name: getattr(plain, name)
+        for name in dir(plain)
+        if name.startswith("DEFAULT_") and isinstance(getattr(plain, name), Path)
+    }
+
+
+def _snapshot(paths: dict[str, Path]) -> dict[str, bytes | None]:
+    """The bytes of each path, or None where there is no file. Creates nothing."""
+    return {name: (p.read_bytes() if p.is_file() else None) for name, p in paths.items()}
+
+
+def _spawned_lines(redirected: Path, monkeypatch, watch) -> list[str]:
+    """The invocation lines a spawned child left under `redirected`."""
+    log = redirected / _live_paths(monkeypatch, watch)["DEFAULT_INVOCATIONS"].name
+    assert log.is_file(), (
+        f"the child wrote no log under {redirected}; either it ignored "
+        f"{watch.ENV_RUNTIME_DIR} or it wrote into live state"
+    )
+    return [ln for ln in log.read_text(encoding="ascii").splitlines() if ln.strip()]
+
+
+def test_the_runtime_override_is_the_variable_the_rest_of_the_tree_honours(watch):
+    """ONE contract, not a second one beside it.
+
+    `ops/health.py` defines `RESINCOMPUTE_RUNTIME_DIR` and `headless/runner.py`
+    already honours it. A watcher that invented its own name would leave an
+    operator with two variables to set and a suite with two to remember, and
+    the one nobody set is the one that writes into live state.
+    """
+    from ops import health as health_mod
+
+    assert watch.ENV_RUNTIME_DIR == health_mod.ENV_RUNTIME_DIR, (
+        f"the watcher reads {watch.ENV_RUNTIME_DIR!r} while the rest of the tree "
+        f"reads {health_mod.ENV_RUNTIME_DIR!r}; that is two contracts wearing one name"
+    )
+
+
+def test_every_runtime_record_follows_the_override_and_the_inbox_does_not(watch, monkeypatch, tmp_path):
+    """DISCOVERED, NEVER LISTED, and stated in both directions.
+
+    The set that MOVES is computed by diffing two imports rather than by naming
+    the three records, so a runtime record added tomorrow that forgets the
+    override lands in `stayed` and turns this red today. The set that STAYS is
+    asserted exactly, because a redirect that swallowed the INBOX would isolate
+    the suite by making the watcher read an empty channel - green, and blind.
+    """
+    redirected = tmp_path / "elsewhere"
+    plain = _reimport(monkeypatch, {watch.ENV_RUNTIME_DIR: None})
+    fresh = _reimport(monkeypatch, {watch.ENV_RUNTIME_DIR: str(redirected)})
+
+    names = [
+        n for n in dir(plain) if n.startswith("DEFAULT_") and isinstance(getattr(plain, n), Path)
+    ]
+    assert len(names) >= 4, f"the discovery found almost nothing, so this arm is vacuous: {names}"
+
+    moved = [n for n in names if getattr(fresh, n) != getattr(plain, n)]
+    stayed = [n for n in names if getattr(fresh, n) == getattr(plain, n)]
+
+    assert stayed == ["DEFAULT_INBOX"], (
+        "exactly one default is not runtime state - the INBOX, which is an "
+        f"input and must never move with the override. Stayed: {stayed}"
+    )
+    assert len(moved) >= 3, moved
+    for name in moved:
+        assert getattr(fresh, name).parent == redirected, (
+            f"{name} ignored {watch.ENV_RUNTIME_DIR} and stayed at "
+            f"{getattr(fresh, name)}; a subprocess cannot be isolated any other way"
+        )
+
+
+def test_an_absent_source_variable_leaves_the_honest_label(watch, monkeypatch):
+    """A MISSING VARIABLE MUST NEVER MAKE A REAL FIRE LOOK LIKE A TEST.
+
+    The fallback is what a genuine hook writes, so the default has to be the
+    truthful one and the override the deliberate act - the same shape as
+    `--mark` being separate from reading.
+    """
+    monkeypatch.delenv(watch.ENV_INVOCATION_SOURCE, raising=False)
+    assert watch.resolve_source(watch.SOURCE_CLI) == watch.SOURCE_CLI
+    assert watch.resolve_source(watch.SOURCE_MAIN) == watch.SOURCE_MAIN
+
+
+def test_a_named_source_variable_replaces_the_label(watch, monkeypatch):
+    monkeypatch.setenv(watch.ENV_INVOCATION_SOURCE, watch.SOURCE_SUITE)
+    assert watch.resolve_source(watch.SOURCE_CLI) == watch.SOURCE_SUITE
+
+
+#: Labels the log must refuse, with the reason each one is here. Built with
+#: `chr()` where a literal would put a control byte into this file's source.
+_FORGED_LABELS = (
+    ("suite" + chr(9) + "cli", "a tab forges the disposition column"),
+    ("a" + chr(10) + "2026-01-01T00:00:00" + chr(9) + "cli", "a newline forges a whole line"),
+    ("", "an empty label leaves the column blank"),
+    ("   ", "whitespace leaves the column blank"),
+    ("CLI", "an uppercase spelling is a second name for one entry point"),
+    ("x" * 200, "an unbounded label is an unbounded line"),
+    ("-leading", "a label must start with something nameable"),
+)
+
+
+@pytest.mark.parametrize("forged,why", _FORGED_LABELS)
+def test_a_forged_source_label_falls_back_to_the_honest_one(watch, monkeypatch, forged, why):
+    """The label is untrusted input written into a TAB-separated record."""
+    monkeypatch.setenv(watch.ENV_INVOCATION_SOURCE, forged)
+    assert watch.resolve_source(watch.SOURCE_CLI) == watch.SOURCE_CLI, why
+
+
+@pytest.mark.parametrize("legitimate", ("suite", "cli", "cron", "ops-probe", "run_once", "v2.1"))
+def test_a_legitimate_source_label_survives(watch, monkeypatch, legitimate):
+    """THE SURVIVING-NEIGHBOUR HALF. A validator that rejected everything would
+    satisfy every arm above while making the variable useless, and the log would
+    then be back to one undifferentiated label.
+    """
+    monkeypatch.setenv(watch.ENV_INVOCATION_SOURCE, legitimate)
+    assert watch.resolve_source(watch.SOURCE_CLI) == legitimate
+
+
+def test_a_spawned_process_writes_where_the_environment_points_and_nowhere_else(
+    watch, monkeypatch, tmp_path
+):
+    """THE ENFORCED-GATE ARM. The real script, a real child process.
+
+    An arm on `resolve_source` or on a redirected module attribute proves
+    nothing about `python scripts/watch_inbox.py`, which is what
+    `.claude/settings.json` declares and what a test spawns.
+    """
+    live = _live_paths(monkeypatch, watch)
+    before = _snapshot(live)
+    redirected = tmp_path / "runtime"
+
+    done = _spawn(
+        ["--dir", str(tmp_path / "absent")],
+        {watch.ENV_RUNTIME_DIR: str(redirected), watch.ENV_INVOCATION_SOURCE: watch.SOURCE_SUITE},
+    )
+
+    assert done.returncode == 0, f"stderr: {done.stderr[:400]!r}"
+    assert _spawned_lines(redirected, monkeypatch, watch), (
+        f"the child left no lines. stdout: {done.stdout[:200]!r}"
+    )
+    assert _snapshot(live) == before, (
+        "a spawned run changed the operator's live runtime records although the "
+        "environment pointed somewhere disposable"
+    )
+
+
+def test_a_spawned_process_labels_itself_from_the_environment(watch, monkeypatch, tmp_path):
+    """A suite-manufactured line must be TELLABLE from a hook fire.
+
+    Same argument as the entry-point column itself: without it the log answers
+    "something ran" when the question is whether the HOOK ran.
+    """
+    redirected = tmp_path / "runtime"
+    done = _spawn(
+        ["--dir", str(tmp_path / "absent")],
+        {watch.ENV_RUNTIME_DIR: str(redirected), watch.ENV_INVOCATION_SOURCE: watch.SOURCE_SUITE},
+    )
+    assert done.returncode == 0, f"stderr: {done.stderr[:400]!r}"
+
+    lines = _spawned_lines(redirected, monkeypatch, watch)
+    sources = {ln.split("\t")[1] for ln in lines}
+
+    assert sources == {watch.SOURCE_SUITE}, (
+        f"a spawned run labelled itself {sources}; a suite line reading "
+        f"{watch.SOURCE_CLI!r} is indistinguishable from a real hook fire"
+    )
+    assert watch.SOURCE_SUITE != watch.SOURCE_CLI, (
+        "the two labels are the same string, so the column separates nothing"
+    )
+
+
+def test_a_spawned_process_with_nothing_naming_it_still_says_cli(watch, monkeypatch, tmp_path):
+    """THE HONEST-DEFAULT ARM, on the real path.
+
+    A hook fires with no variable set, so this is the line the instrument is
+    for. If the fallback ever became the test label the log would report every
+    genuine session start as suite noise, and the measurement would invert.
+    """
+    redirected = tmp_path / "runtime"
+    done = _spawn(
+        ["--dir", str(tmp_path / "absent")],
+        {watch.ENV_RUNTIME_DIR: str(redirected), watch.ENV_INVOCATION_SOURCE: None},
+    )
+    assert done.returncode == 0, f"stderr: {done.stderr[:400]!r}"
+
+    lines = _spawned_lines(redirected, monkeypatch, watch)
+    assert {ln.split("\t")[1] for ln in lines} == {watch.SOURCE_CLI}, lines
+
+
+def test_a_forged_label_cannot_reach_a_spawned_log(watch, monkeypatch, tmp_path):
+    """The validator on the real path, not on its own return value.
+
+    A tab in the label would forge the disposition column, so a line claiming
+    any outcome at all could be planted by setting one variable.
+    """
+    redirected = tmp_path / "runtime"
+    done = _spawn(
+        ["--dir", str(tmp_path / "absent")],
+        {
+            watch.ENV_RUNTIME_DIR: str(redirected),
+            watch.ENV_INVOCATION_SOURCE: "suite" + chr(9) + watch.TERMINAL_MARKED,
+        },
+    )
+    assert done.returncode == 0, f"stderr: {done.stderr[:400]!r}"
+
+    lines = _spawned_lines(redirected, monkeypatch, watch)
+    for line in lines:
+        assert len(line.split("\t")) == 3, f"a forged label grew a column: {line!r}"
+    assert {ln.split("\t")[1] for ln in lines} == {watch.SOURCE_CLI}, (
+        f"a rejected label did not fall back to the honest one: {lines}"
     )
