@@ -114,14 +114,42 @@ answer nobody knows they owe. No raw exception string ever reaches the report.
 The watermark lives under `ops/runtime/`, which is gitignored, and is written
 through `core/atomic_io.py` - the only sanctioned state-write path in this tree,
 because readers poll mid-write.
+
+EVERY INVOCATION IS LOGGED, and that is a requirement rather than an
+improvement. See `log_invocation`.
+
+TWO ENVIRONMENT VARIABLES, AND BOTH EXIST FOR THE SAME REASON
+=============================================================
+
+A SUBPROCESS CANNOT BE ISOLATED BY MONKEYPATCHING A MODULE ATTRIBUTE. The
+fixture in `tests/test_watch_inbox.py` redirects every `DEFAULT_` Path by
+enumeration - complete, and confined to one interpreter. Anything that
+LAUNCHES `python scripts/watch_inbox.py` gets a fresh import with the real
+defaults. Measured 2026-09-08: `python -m pytest tests/test_session_hooks.py`
+passed 33 arms and left six real lines in `ops/runtime/inbox_invocations.log`
+plus two planted fixture keys in `ops/runtime/inbox_reported.json`. So:
+
+  RESINCOMPUTE_RUNTIME_DIR       moves every runtime record. NOT this tool's
+                                 own knob - `ops/health.py` defines it and
+                                 `headless/runner.py` already honours it.
+                                 `DEFAULT_INBOX` deliberately does NOT follow
+                                 it; the inbox is an input, and moving it would
+                                 isolate a caller by blinding it.
+  RESINCOMPUTE_INVOCATION_SOURCE names the entry point. See `resolve_source`.
+
+Neither is required and neither is a test-only door: a scheduled task or an
+operator probe can name itself the same way. What matters is the direction of
+the default - absent, the label stays the honest one a real hook writes.
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
 import os
+import re
 import stat
 import sys
+import time
 from pathlib import Path
 from typing import NamedTuple
 
@@ -133,19 +161,148 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.atomic_io import atomic_write_json, read_json  # noqa: E402
+from core.atomic_io import atomic_write_json, atomic_write_text, read_json  # noqa: E402
+# `ENV_RUNTIME_DIR` IS RE-EXPORTED ON PURPOSE and is not dead. It is this
+# module's statement of which variable isolates a CHILD of this script, and a
+# caller that spelled the literal itself would go stale silently the day the
+# name moved. F401 is switched ON in this tree by choice - see `ruff.toml` - so
+# the suppression is stated here with its reason rather than inherited.
+from ops.health import ENV_RUNTIME_DIR, runtime_dir  # noqa: E402, F401
 
 #: Correspondence lives here. Gitignored: see `moon_sync_inbox/README.md`.
+#:
+#: NOT re-rooted by `RUNTIME_DIR`. The inbox is an INPUT, and a redirect that
+#: moved it would isolate a caller by handing this tool an empty channel -
+#: green, and blind. `test_every_runtime_record_follows_the_override_and_the_
+#: inbox_does_not` asserts that in both directions.
 DEFAULT_INBOX = REPO_ROOT / "moon_sync_inbox"
 
+#: Where every runtime record below lives, resolved from the environment at
+#: IMPORT so a child process inherits it. See `resolve_source` for why the
+#: environment is the only channel that can carry this.
+#:
+#: `RESINCOMPUTE_RUNTIME_DIR` IS NOT A NEW KNOB. `ops/health.py` defines it and
+#: `headless/runner.py` already honours it, so this tool joins one contract
+#: rather than standing a second one beside it - and the variable an operator
+#: forgets to set is always the one that writes into live state.
+RUNTIME_DIR = runtime_dir()
+
 #: Runtime state, gitignored, never source.
-DEFAULT_STATE = REPO_ROOT / "ops" / "runtime" / "inbox_seen.json"
+DEFAULT_STATE = RUNTIME_DIR / "inbox_seen.json"
 
 #: What has been SHOWN, which is a different fact from what has been READ. Kept
 #: in its own file so a plain reporting run leaves the WATERMARK byte-unchanged
 #: and mtime-unmoved - the property that stops a subagent's session start from
 #: consuming the operator's queue.
-DEFAULT_REPORTED = REPO_ROOT / "ops" / "runtime" / "inbox_reported.json"
+DEFAULT_REPORTED = RUNTIME_DIR / "inbox_reported.json"
+
+#: One line per fire. See `log_invocation` for why this is a requirement of the
+#: hook rather than an improvement filed against it.
+DEFAULT_INVOCATIONS = RUNTIME_DIR / "inbox_invocations.log"
+
+#: Ceiling on the lines kept. The `UserPromptSubmit` hook fires on EVERY prompt,
+#: so an uncapped log is a file that grows for as long as the tree is used and
+#: that nobody prunes. The oldest lines are dropped, never the newest: the
+#: question the log answers - did this fire, just now - is about the recent end.
+MAX_INVOCATION_LINES = 2000
+
+#: The ENTRY POINT column. `cli` is what a hook produces, because a hook runs
+#: `python scripts/watch_inbox.py` and reaches `main` through the `__main__`
+#: guard. `main` is an in-process call - a test, or another tool importing this
+#: one. Without the column the log answers "something ran" and the question is
+#: whether the HOOK ran.
+SOURCE_MAIN = "main"
+SOURCE_CLI = "cli"
+
+#: What a TEST-SPAWNED child calls itself. Named here rather than in the suite
+#: so the tree carries one spelling: a label the tests invent privately is a
+#: label an operator reading the log has nothing to look it up against.
+SOURCE_SUITE = "suite"
+
+#: Names WHO invoked this process, for the case a module attribute cannot
+#: reach. See `resolve_source`.
+ENV_INVOCATION_SOURCE = "RESINCOMPUTE_INVOCATION_SOURCE"
+
+#: Ceiling on a label, as a literal. The log line is written on a hook path and
+#: the label is the one field this module does not choose.
+MAX_SOURCE_LABEL_CHARS = 32
+
+#: `\A` and `\Z`, NEVER `^` and `$`. In Python `$` also matches immediately
+#: before a trailing newline, so `^[a-z]+$` accepts `cli` followed by a newline
+#: - which is precisely the forgery this shape exists to refuse, since a
+#: newline in the label writes a second line into a line-oriented log.
+_SOURCE_LABEL_SHAPE = re.compile(
+    r"\A[a-z0-9][a-z0-9._-]{0," + str(MAX_SOURCE_LABEL_CHARS - 1) + r"}\Z"
+)
+
+
+def resolve_source(fallback: str) -> str:
+    """The entry-point label this PROCESS writes, from the environment.
+
+    A SUBPROCESS CANNOT BE ISOLATED BY MONKEYPATCHING A MODULE ATTRIBUTE, and
+    that is the whole reason this reads the environment. `tests/test_watch_
+    inbox.py` redirects every `DEFAULT_` Path by enumeration - complete, and
+    confined to one interpreter. A test that launches `python
+    scripts/watch_inbox.py` gets a fresh import with the real defaults.
+    Measured 2026-09-08: `python -m pytest tests/test_session_hooks.py` passed
+    33 arms and left six real lines in the live invocation log, every one of
+    them labelled `cli`, which is exactly what a genuine SessionStart hook
+    writes. An instrument its own suite writes to indistinguishably is not
+    evidence about the world, and the log's entire purpose is to answer
+    "does the hook fire, and does it survive /clear".
+
+    THE FALLBACK IS THE HONEST ONE. A hook fires with nothing set, so an absent
+    variable must produce the label a hook produces. Inverting that - defaulting
+    to a test label - would report every real session start as suite noise.
+
+    THE LABEL IS VALIDATED BECAUSE IT IS THE ONE FIELD THIS MODULE DOES NOT
+    CHOOSE. The record is TAB separated and line oriented, so a tab forges the
+    disposition column and a newline forges a whole line, timestamp and all.
+    Anything that is not a plain lowercase label falls back rather than being
+    trimmed into one: a silently repaired label is a label nobody can trace.
+    """
+    raw = os.environ.get(ENV_INVOCATION_SOURCE, "")
+    if _SOURCE_LABEL_SHAPE.match(raw):
+        return raw
+    return fallback
+
+#: The OPENING line of a fire, and NOT a termination. It is written before the
+#: body runs, so a fire killed part way through - this hook is declared with a
+#: five second timeout and `MAX_DROP_ENTRIES` exists because a walk can run past
+#: it - still leaves evidence that it happened.
+PHASE_START = "start"
+
+#: The terminal dispositions. Exactly one is written per fire.
+#:
+#: `no-inbox` IS DELIBERATELY NOT `nothing-unread`. `moon_sync_inbox/` is
+#: gitignored (`.gitignore:115`), so a fresh clone receives no channel at all
+#: and this tool prints its no-inbox line and exits 0. Recording that as a quiet
+#: channel would claim the inbox was checked and was empty, which is a different
+#: fact and sends a reader somewhere else entirely.
+TERMINAL_NO_INBOX = "no-inbox"
+TERMINAL_NOTHING_UNREAD = "nothing-unread"
+TERMINAL_REPORTED = "reported"
+TERMINAL_WITHDRAWN_ONLY = "withdrawn-only"
+TERMINAL_MARKED = "marked"
+TERMINAL_MARK_FAILED = "mark-failed"
+TERMINAL_USAGE = "usage-printed"
+TERMINAL_ARGV_REJECTED = "argv-rejected"
+TERMINAL_CRASHED = "crashed"
+
+#: Cross-checked against the module's own `TERMINAL_` constants by
+#: `test_the_declared_dispositions_are_discovered_rather_than_listed`, because
+#: this tuple is itself a hand-maintained list and those go stale silently.
+TERMINAL_DISPOSITIONS = (
+    TERMINAL_NO_INBOX,
+    TERMINAL_NOTHING_UNREAD,
+    TERMINAL_REPORTED,
+    TERMINAL_WITHDRAWN_ONLY,
+    TERMINAL_MARKED,
+    TERMINAL_MARK_FAILED,
+    TERMINAL_USAGE,
+    TERMINAL_ARGV_REJECTED,
+    TERMINAL_CRASHED,
+)
 
 #: This repo's own code in the `from-<CODE>-` naming convention. A note we sent
 #: sits in the same directory as one we received, so direction is read off the
@@ -552,6 +709,65 @@ def prune_records(inbox: Path, reported: Path) -> bool:
     return atomic_write_json(reported, {"version": 1, "reported": keep})
 
 
+def _log_tail() -> list[str]:
+    """The lines already in the invocation log, oldest first. Unreadable is empty.
+
+    Degrading to empty rather than raising is the same choice the watermark
+    makes: a log this tool cannot read is a log it rewrites, which loses history
+    it could not see anyway - and the alternative is a hook that dies on a
+    corrupt runtime file and surfaces nothing at all.
+    """
+    try:
+        raw = DEFAULT_INVOCATIONS.read_text(encoding="ascii")
+    except (OSError, UnicodeDecodeError, ValueError):
+        return []
+    return [line for line in raw.splitlines() if line.strip()]
+
+
+def log_invocation(source: str, disposition: str, now: float | None = None) -> bool:
+    """One line per fire: when, from which entry point, and what came of it.
+
+    THIS IS A REQUIREMENT, NOT AN IMPROVEMENT. This tool's only output is a
+    report to a human, and a report to a human leaves nothing behind that says
+    it ran. The `SessionStart` hook declared in `.claude/settings.json` - `python
+    scripts/watch_inbox.py`, timeout 5 - could therefore fire on every cold
+    session or on none at all, and this tree would read exactly the same
+    afterwards either way. The honest status of "does the hook fire, and does it
+    survive /clear" was never UNVERIFIED. It was UNMEASURABLE AS BUILT, which is
+    worse, because no amount of care could have measured it.
+
+    Four repositories on this channel reported the same thing as unverified and
+    argued it by construction. `tools/moon_sync_responder.py` has the fix;
+    this did not, so the same argument that condemned the responder condemned
+    this tool and nobody had said so.
+
+    NEVER A PAYLOAD BYTE. The columns are a timestamp, an entry point and a
+    disposition, all of them values this module chose. A note is untrusted data
+    and none of it reaches the log, for the same reason none of it reaches the
+    report.
+
+    ATOMIC, DESPITE BEING AN APPEND. `core/atomic_io.py` is the only sanctioned
+    state-write path in this tree because readers poll mid-write, and a bare
+    `open(path, "a")` leaves a real window in which a reader sees a line without
+    its newline. The cap needs a rewrite rather than an append in any case.
+    """
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() if now is None else now))
+    kept = [*_log_tail(), f"{stamp}\t{source}\t{disposition}"][-MAX_INVOCATION_LINES:]
+    try:
+        return atomic_write_text(DEFAULT_INVOCATIONS, "\n".join(kept) + "\n")
+    except (OSError, ValueError):
+        # A log that cannot be written must not take the watcher down with it:
+        # an exception escaping a session-start hook crashes it, and a crashed
+        # hook surfaces NOTHING at all.
+        #
+        # `ValueError` IS IN THIS TUPLE BECAUSE OF A MEASUREMENT. A path
+        # carrying a NUL byte raises `ValueError` out of `mkdir`, not `OSError`,
+        # and `core/atomic_io.py` catches `OSError` alone - so the escape is
+        # real rather than hypothetical. The exception a guard names is a claim
+        # about the failure, and the claim needs testing.
+        return False
+
+
 def _describe(entry: Entry) -> str:
     """The human-context suffix on a drop's line. Empty for a note."""
     bits: list[str] = []
@@ -579,7 +795,14 @@ def _render(entries: list[Entry], heading: str) -> None:
         print(f"  [{direction(entry.key)}] {entry.key}{_describe(entry)}")
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
+    """The declaration of what `main` accepts, built where a test can read it.
+
+    Extracted so the flag matrix in `tests/test_watch_inbox.py` is DISCOVERED
+    from the parser rather than listed by hand. A hand-maintained list of exit
+    paths to check is the failure this whole section exists to remove, and it
+    would be a poor joke to guard it with one.
+    """
     parser = argparse.ArgumentParser(
         description="Report unread moon_sync_inbox notes and advance the watermark.",
     )
@@ -593,7 +816,56 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="print nothing at all when there is nothing to report",
     )
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None, source: str = SOURCE_MAIN) -> int:
+    """Run one report, with its outcome guaranteed to reach the invocation log.
+
+    EVERY EXIT IS LOGGED HERE, not on the path that takes it. The responder
+    logged per exit path first and four terminations - `window`, `budget`,
+    `empty` and `disarmed` - simply did not, each having a passing arm asserting
+    its termination as a RETURN VALUE. A gate tested as a pure predicate is not
+    an enforced gate. Measured against the live scheduled task 2026-09-07 at
+    19:16: four fires, four bare `start` lines, no record of what any of them
+    decided.
+
+    So the body cannot forget. It returns its disposition, and this wrapper
+    writes the terminal line whatever the body did - including when the body
+    raised, and including when it left through `SystemExit`, which is what
+    argparse throws and which is not an `Exception`.
+
+    Two lines per fire, a `start` and exactly one terminal. The `start` is not
+    redundant: a fire killed at the hook's five second ceiling writes no
+    terminal line, and the `start` is then the only evidence it happened.
+    """
+    log_invocation(source, PHASE_START)
+    try:
+        code, disposition = _main(argv)
+    except SystemExit as exc:
+        # argparse, and only argparse. A usage print and a rejected flag are
+        # different events: the second means something invoked this tool with a
+        # flag it does not have, which for a hook is a wiring defect that would
+        # otherwise leave no trace at all.
+        log_invocation(source, TERMINAL_USAGE if not exc.code else TERMINAL_ARGV_REJECTED)
+        raise
+    except BaseException:
+        # NOT swallowed. A watcher that hides its own failure is the defect one
+        # layer down; the log says the fire died before the exception goes on.
+        log_invocation(source, TERMINAL_CRASHED)
+        raise
+    log_invocation(source, disposition)
+    return code
+
+
+def _main(argv: list[str] | None) -> tuple[int, str]:
+    """The report itself. Returns (exit code, terminal disposition).
+
+    It does not log. That is the whole point of the wrapper above: a path that
+    returns early here cannot forget to say what it decided, because saying so
+    is the return value rather than a call it has to remember to make.
+    """
+    args = _build_parser().parse_args(argv)
 
     inbox = Path(args.dir)
     state = Path(args.state)
@@ -601,10 +873,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if not inbox.is_dir():
         # Normal in a fresh clone. The directory is gitignored, so it does not
-        # arrive with the repository.
+        # arrive with the repository - which is a different fact from an inbox
+        # that is present and quiet, and the log records it as one.
         if not args.quiet_when_empty:
             print(f"no inbox at {inbox} - nothing to report")
-        return 0
+        return 0, TERMINAL_NO_INBOX
 
     if args.all:
         entries, heading = _entries(inbox), "all notes"
@@ -637,12 +910,30 @@ def main(argv: list[str] | None = None) -> int:
         record_reported(reported, [entry.key for entry in entries])
 
     if args.mark:
+        # The acknowledge is the deliberate act, so it is what the line says
+        # happened. Whether it LANDED is the fact worth keeping: a mark that
+        # failed leaves the watermark where it was, and the next session then
+        # re-reads a queue somebody believes they cleared.
         if mark_seen(inbox, state) and prune_records(inbox, reported):
             print(f"marked read: {state}")
-        else:
-            print("could not update the watermark - it stays where it was")
-    return 0
+            return 0, TERMINAL_MARKED
+        print("could not update the watermark - it stays where it was")
+        return 0, TERMINAL_MARK_FAILED
+
+    if entries:
+        return 0, TERMINAL_REPORTED
+    if gone:
+        return 0, TERMINAL_WITHDRAWN_ONLY
+    return 0, TERMINAL_NOTHING_UNREAD
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # `SOURCE_CLI` is what makes a HOOK fire distinguishable in the log from an
+    # in-process call, and the hook is the whole question. It is the FALLBACK
+    # rather than the value, so a caller that can say who it is - a test
+    # harness spawning this script - says so, and a caller that says nothing
+    # still records the honest `cli`. Resolved HERE, at the process entry
+    # point, rather than inside `log_invocation`: the variable describes how
+    # this PROCESS was invoked, and an in-process call already carries an
+    # explicit label from its caller that ambient environment must not override.
+    raise SystemExit(main(source=resolve_source(SOURCE_CLI)))

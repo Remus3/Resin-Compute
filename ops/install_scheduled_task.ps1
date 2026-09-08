@@ -56,6 +56,26 @@ function Write-Step {
     Write-Host ('[install] ' + $Message)
 }
 
+function Resolve-ConsolePython {
+    # The TASK runs under pythonw.exe so a logon-triggered start does not flash
+    # a console. The liveness CHECKER is the opposite case - run here, once,
+    # with its report going to the operator's screen - so it needs console
+    # python.exe. Returns $null rather than throwing: an absent interpreter
+    # must degrade into an honest UNVERIFIED, never into a silent fallback that
+    # prints a state string as if it had answered the question.
+    if (-not [string]::IsNullOrWhiteSpace($PythonwExe)) {
+        $sibling = Join-Path (Split-Path -Parent $PythonwExe) 'python.exe'
+        if (Test-Path -LiteralPath $sibling) {
+            return $sibling
+        }
+    }
+    $found = Get-Command -Name 'python.exe' -ErrorAction SilentlyContinue
+    if ($null -ne $found) {
+        return $found.Source
+    }
+    return $null
+}
+
 # --- Resolve the install root ---------------------------------------------
 
 if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
@@ -139,11 +159,59 @@ $check = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($null -eq $check) {
     throw ('Registration reported success but the task is not present: ' + $TaskName)
 }
-Write-Step ('Verified. State: ' + $check.State)
+Write-Step ('Present in the scheduler store: ' + $TaskName)
+
+# The comment above is right and the read that used to sit here was wrong. The
+# absence of an error is not proof of registration - true, and handled by the
+# null check. But PRESENCE is not proof it will ever fire either, and this line
+# used to end on the State string as though it were the verdict.
+#
+# A scheduled task reports State Ready and last result 0 FOREVER once every
+# trigger on it has expired; there is no state value meaning "expired".
+# Measured on this machine 2026-09-08 on the sibling responder task: Ready, with
+# its EndBoundary a full day in the past and NextRunTime empty. A state string
+# names a state, not a capability.
+#
+# State is therefore printed as CONTEXT below. The verdict comes from
+# ops/check_task_liveness.py, whose command-line contract is fixed: exit 0 IF
+# AND ONLY IF the task is positively established to fire again. Every non-zero
+# exit means NOT ESTABLISHED, and the values are deliberately not enumerated
+# here so that checker can add new ones without lying through this script.
+
+Write-Step ('Context only, not a verdict - reported state is ' + $check.State)
+
+$livenessChecker = Join-Path $InstallRoot 'ops\check_task_liveness.py'
+$consolePython = Resolve-ConsolePython
+
+if ((-not (Test-Path -LiteralPath $livenessChecker)) -or ($null -eq $consolePython)) {
+    if (-not (Test-Path -LiteralPath $livenessChecker)) {
+        Write-Step 'LIVENESS UNVERIFIED - ops/check_task_liveness.py is absent, and a state string does not answer the question.'
+    } else {
+        Write-Step 'LIVENESS UNVERIFIED - no console python.exe was found to run the liveness checker.'
+    }
+    Write-Step 'The task is REGISTERED. Whether it will ever fire is UNKNOWN from this script.'
+    Write-Step 'Start it now with: Start-ScheduledTask -TaskName ResinCompute-Supervisor'
+    exit 3
+}
+
+Write-Step ('Running the liveness checker: ' + $consolePython + ' ' + $livenessChecker + ' ' + $TaskName)
+& $consolePython $livenessChecker $TaskName
+$livenessExit = $LASTEXITCODE
+
+if ($livenessExit -eq 0) {
+    Write-Step 'LIVENESS ESTABLISHED - the checker exited 0, so this task is positively established to fire again.'
+} else {
+    Write-Step ('LIVENESS NOT ESTABLISHED - the checker exited ' + $livenessExit + '. The task is registered, but it is NOT established that it will fire again. Read the checker report above.')
+}
 Write-Step 'Start it now with: Start-ScheduledTask -TaskName ResinCompute-Supervisor'
 
 # NOTE ON STOPPING THE CHILD, inherited hard rule: never use Stop-Process to
 # kill the supervised process. Use: taskkill /F /PID <pid>
 # ops/supervisor.py implements that path itself; this note is here so an
 # operator reading the installer does not reach for Stop-Process by habit.
-exit 0
+
+# The exit code carries the LIVENESS verdict, not merely "the script ran". A
+# provisioning step that treats 0 as success therefore fails loudly when the
+# task was registered but cannot be established to fire, which is precisely the
+# condition that went unnoticed for twenty-four hours.
+exit $livenessExit

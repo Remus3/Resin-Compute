@@ -71,10 +71,13 @@ something it never touched.
 from __future__ import annotations
 
 import functools
+import importlib.util
 import json
+import os
 import re
 import shlex
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import NamedTuple
@@ -400,6 +403,93 @@ def _watermark_bytes() -> bytes | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# ISOLATING THE CHILD. A FIXTURE THAT MONKEYPATCHES MODULE ATTRIBUTES CANNOT
+# ISOLATE A SUBPROCESS.
+#
+# Every arm in this file that proves a hook FIRES has to launch the declared
+# command, and a launched command is a fresh interpreter with the real
+# defaults. `tests/test_watch_inbox.py` redirects every `DEFAULT_` Path by
+# enumeration; that is complete, and it stops at the process boundary.
+#
+# MEASURED 2026-09-08, with the live log deleted first: this file passed 33
+# arms and left SIX REAL LINES in `ops/runtime/inbox_invocations.log`, every
+# one labelled `cli` - the same label a genuine SessionStart hook fire writes.
+# The same run left two PLANTED fixture keys in the live
+# `ops/runtime/inbox_reported.json`: `2026-09-07-1200-from-RC-planted.md` and
+# `from-RC-verbatim/`.
+#
+# The invocation log exists to make "does the hook fire, and does it survive
+# /clear" measurable for the first time. An instrument its own suite writes to
+# INDISTINGUISHABLY is not evidence about the world, and a report record
+# holding fixture names is the pollution `tests/test_watch_inbox.py` documents
+# at length - 24 withdrawn notes, 18 of them called `note-21.md`.
+#
+# So every launch below carries an environment: the runtime records go
+# somewhere disposable, and the child names itself as the suite.
+# ---------------------------------------------------------------------------
+
+
+@functools.lru_cache(maxsize=1)
+def _watcher_module():
+    """The watcher, loaded BY PATH - `scripts/` is not an importable package.
+
+    Loaded for its CONSTANTS: the two environment variables that are the only
+    channel able to reach a child process. Reading them from the module rather
+    than spelling them here means a rename in the script turns this file red
+    instead of silently un-isolating the suite.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "watch_inbox_for_hook_tests", REPO_ROOT / WATCHER
+    )
+    assert spec is not None and spec.loader is not None, f"cannot load {WATCHER}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _live_runtime_records() -> dict[str, Path]:
+    """Every record the watcher writes when nothing redirects it.
+
+    DISCOVERED FROM THE MODULE, never listed here. A hand-written
+    `ops/runtime/inbox_invocations.log` in this file goes stale the day the
+    record is renamed, and the arm guarding live state would then be guarding
+    a path nothing writes - passing, and looking at nothing.
+    """
+    watcher = _watcher_module()
+    return {
+        name: getattr(watcher, name)
+        for name in dir(watcher)
+        if name.startswith("DEFAULT_")
+        and isinstance(getattr(watcher, name), Path)
+        and getattr(watcher, name).parent == watcher.RUNTIME_DIR
+    }
+
+
+def _isolated_env(runtime: Path) -> dict[str, str]:
+    """The environment every launch in this file uses.
+
+    BOTH HALVES ARE LOAD-BEARING AND NEITHER IS REDUNDANT. The runtime redirect
+    keeps suite bytes out of the operator's records; the source label keeps a
+    suite line that does get written - a child launched some other way, a
+    variable someone forgot - TELLABLE from a real hook fire. One protects the
+    file, the other protects the reading.
+    """
+    watcher = _watcher_module()
+    env = dict(os.environ)
+    env[watcher.ENV_RUNTIME_DIR] = str(runtime)
+    env[watcher.ENV_INVOCATION_SOURCE] = watcher.SOURCE_SUITE
+    return env
+
+
+def _isolated_lines(runtime: Path) -> list[str]:
+    """The invocation lines a child left under `runtime`, if any."""
+    log = runtime / _live_runtime_records()["DEFAULT_INVOCATIONS"].name
+    if not log.is_file():
+        return []
+    return [line for line in log.read_text(encoding="ascii").splitlines() if line.strip()]
+
+
 def _planted(tmp_path: Path, command: str, timeout: int = 5) -> dict:
     """A settings blob written to `tmp_path` and read back.
 
@@ -628,12 +718,17 @@ def test_the_session_start_hook_actually_fires(tmp_path):
     session = [hook for hook in _hook_commands(_load_settings()) if hook.event == "SessionStart"]
     assert len(session) >= 1, "SessionStart declares no command hook to fire"
 
-    for hook in session:
+    for index, hook in enumerate(session):
         argv = _argv(hook.command)
         assert len(argv) >= 1, f"empty command for {hook.event}"
 
-        out_path = tmp_path / f"{hook.event}.out"
-        err_path = tmp_path / f"{hook.event}.err"
+        # Indexed, because SessionStart declares more than one command and a
+        # label built from the EVENT alone has the second run overwrite the
+        # first one's streams and runtime directory.
+        label = f"{hook.event}-{index}"
+        out_path = tmp_path / f"{label}.out"
+        err_path = tmp_path / f"{label}.err"
+        runtime = tmp_path / f"{label}-runtime"
         before = _watermark_bytes()
 
         started = time.monotonic()
@@ -642,6 +737,7 @@ def test_the_session_start_hook_actually_fires(tmp_path):
                 status = subprocess.call(
                     argv,
                     cwd=str(REPO_ROOT),
+                    env=_isolated_env(runtime),
                     stdout=out,
                     stderr=err,
                     stdin=subprocess.DEVNULL,
@@ -672,6 +768,15 @@ def test_the_session_start_hook_actually_fires(tmp_path):
             f"{WATERMARK} changed during a hook that only reports; reading is not "
             "acknowledging"
         )
+        # THE ISOLATED HALF, AND IT IS THE ONE WITH TEETH. The assertion above
+        # is now also satisfied by the redirect, and it was always weak on its
+        # own: on a machine where no watermark exists yet, None == None passes
+        # over a hook that marked. The child's OWN runtime directory starts
+        # empty, so a watermark appearing there is a hook that acknowledged.
+        assert not (runtime / WATERMARK.name).exists(), (
+            f"{hook.event} hook `{hook.command}` wrote {WATERMARK.name} into its "
+            "isolated runtime directory; reading is not acknowledging"
+        )
         assert elapsed < MAX_HOOK_TIMEOUT, (
             f"{hook.event} hook took {elapsed:.2f}s against a declared ceiling of "
             f"{MAX_HOOK_TIMEOUT}s, so Claude Code would kill it"
@@ -683,6 +788,10 @@ class Fired(NamedTuple):
     body: str
     noise: str
     elapsed: float
+    #: Where the child's runtime records went. Appended at the END with a
+    #: default, per the convention in `CLAUDE.md`: a mid-tuple required field
+    #: breaks every existing positional construction and its tests.
+    runtime: Path | None = None
 
 
 def _fire(argv: list[str], tmp_path: Path, label: str) -> Fired:
@@ -691,14 +800,25 @@ def _fire(argv: list[str], tmp_path: Path, label: str) -> Fired:
     FILES rather than pipes, for both reasons the existing arm gives: an exit
     code collected from a pipeline is the pipeline's, and output read out of a
     pipe can be truncated by a full buffer without anything saying so.
+
+    THE ENVIRONMENT IS NOT OPTIONAL HERE. See the ISOLATING THE CHILD block
+    above: this launch used to write into the operator's live `ops/runtime/`,
+    and the log it wrote to is the one instrument that answers whether the hook
+    fires at all.
     """
     out_path = tmp_path / f"{label}.out"
     err_path = tmp_path / f"{label}.err"
+    runtime = tmp_path / f"{label}-runtime"
     started = time.monotonic()
     try:
         with out_path.open("wb") as out, err_path.open("wb") as err:
             status = subprocess.call(
-                argv, cwd=str(REPO_ROOT), stdout=out, stderr=err, stdin=subprocess.DEVNULL
+                argv,
+                cwd=str(REPO_ROOT),
+                env=_isolated_env(runtime),
+                stdout=out,
+                stderr=err,
+                stdin=subprocess.DEVNULL,
             )
     except OSError as exc:
         pytest.fail(f"could not launch {argv}: {type(exc).__name__}: {exc}")
@@ -707,6 +827,7 @@ def _fire(argv: list[str], tmp_path: Path, label: str) -> Fired:
         out_path.read_text(encoding="utf-8", errors="replace"),
         err_path.read_text(encoding="utf-8", errors="replace"),
         time.monotonic() - started,
+        runtime,
     )
 
 
@@ -747,6 +868,10 @@ def test_the_user_prompt_submit_hook_actually_fires(tmp_path):
             f"{WATERMARK} changed during a hook that only reports; reading is not "
             "acknowledging, and this hook fires on every prompt"
         )
+        assert fired.runtime is not None and not (fired.runtime / WATERMARK.name).exists(), (
+            f"{hook.event} hook `{hook.command}` wrote {WATERMARK.name} into its "
+            "isolated runtime directory; this one fires before EVERY prompt"
+        )
         assert fired.elapsed < MAX_HOOK_TIMEOUT, (
             f"{hook.event} hook took {fired.elapsed:.2f}s against a ceiling of "
             f"{MAX_HOOK_TIMEOUT}s, and it runs before every prompt"
@@ -785,6 +910,114 @@ def test_the_user_prompt_submit_hook_speaks_when_a_note_is_unread(tmp_path):
         "the drop did not surface; a subdirectory payload is a first-class entry"
     )
     assert not state.exists(), "a reporting run created the watermark it was handed"
+
+
+def test_a_fired_hook_labels_itself_as_the_suite_in_its_own_log(tmp_path):
+    """THE ENFORCED-GATE ARM FOR THE LABELLING, on the DECLARED command.
+
+    An arm on `resolve_source`'s return value proves nothing about the path
+    `.claude/settings.json` actually names. This one fires the declared hook
+    command and reads the entry-point column back off disk, which is the only
+    thing that says the `__main__` guard consults the variable at all.
+
+    THE LABEL IS THE POINT OF THE WHOLE SECTION. A suite line that reads `cli`
+    is indistinguishable from a genuine session start, and an operator counting
+    hook fires in that log would be counting this test.
+    """
+    hooks = [
+        hook
+        for hook in _hook_commands(_load_settings())
+        if WATCHER in _repo_relative_command(hook.command)
+    ]
+    assert len(hooks) >= 1, "no declared hook runs the watcher, so this arm is vacuous"
+
+    watcher = _watcher_module()
+    for index, hook in enumerate(hooks):
+        fired = _fire(_argv(hook.command), tmp_path, f"labelled-{index}")
+        assert fired.status == 0, f"stderr: {fired.noise.strip()[:400]!r}"
+        assert fired.runtime is not None
+
+        lines = _isolated_lines(fired.runtime)
+        assert lines, (
+            f"`{hook.command}` left no invocation line at all, so the log cannot "
+            "answer whether the hook fired"
+        )
+        sources = {line.split("\t")[1] for line in lines}
+        assert sources == {watcher.SOURCE_SUITE}, (
+            f"a suite-launched hook labelled itself {sources}; "
+            f"{watcher.SOURCE_CLI!r} would be indistinguishable from a real fire"
+        )
+
+
+#: Set for a NESTED run so the arm below does not re-enter itself. A recursion
+#: guard rather than a skip-when-inconvenient: without it the nested run
+#: launches its own nested run and the suite never terminates.
+NESTED_MARKER = "RESINCOMPUTE_HOOK_SUITE_NESTED"
+
+#: A literal ceiling on the nested run, never derived from anything it
+#: measures. A fixture sized from the value under test is an amplifier - this
+#: tree measured one that wrote 492674 files.
+NESTED_TIMEOUT_SECONDS = 600
+
+
+def test_this_file_leaves_the_live_runtime_records_byte_unchanged():
+    """A SUITE RUN MUST NOT WRITE INTO THE INSTRUMENT IT IS MEASURING.
+
+    NARROWED, AND SAID PLAINLY. This runs `tests/test_session_hooks.py`, not
+    the whole of `python -m pytest tests`. A nested full-suite run costs
+    minutes on every invocation of this one arm, and this file is the only one
+    in the suite that launches the watcher as a child process - which is the
+    entire exposure. The full-run claim belongs to a measurement in the
+    session record, not to this arm, and this arm does not make it.
+
+    THE BASELINE IS BYTES, NOT MTIME OR EXISTENCE. Six identical `cli` lines
+    appended to a log that already had lines is exactly the shape that reads as
+    unchanged to anything coarser.
+
+    THE RECORDS ARE DISCOVERED FROM THE MODULE. A new runtime record added
+    tomorrow is covered today; a hand-written list would have been correct on
+    the day it was written and silent ever after.
+    """
+    if os.environ.get(NESTED_MARKER):
+        pytest.skip("nested run - see NESTED_MARKER, this arm must not re-enter itself")
+
+    watcher = _watcher_module()
+    assert watcher.ENV_RUNTIME_DIR not in os.environ, (
+        f"{watcher.ENV_RUNTIME_DIR} is set in this run's environment, so what this "
+        "arm calls the live records are not the live records and it would measure "
+        "nothing. Unset it and run again"
+    )
+
+    records = _live_runtime_records()
+    assert len(records) >= 3, (
+        f"the discovery found almost nothing, so this arm is vacuous: {sorted(records)}"
+    )
+    before = {name: (p.read_bytes() if p.is_file() else None) for name, p in records.items()}
+
+    env = dict(os.environ)
+    env[NESTED_MARKER] = "1"
+    done = subprocess.run(
+        [sys.executable, "-m", "pytest", f"tests/{Path(__file__).name}", "-q"],
+        cwd=str(REPO_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=NESTED_TIMEOUT_SECONDS,
+    )
+
+    after = {name: (p.read_bytes() if p.is_file() else None) for name, p in records.items()}
+    touched = sorted(name for name in records if before[name] != after[name])
+
+    assert touched == [], (
+        f"a run of this file changed the operator's live runtime records {touched}. "
+        "Every launch here must carry _isolated_env; a launch site added without "
+        "it writes suite lines into the one instrument that answers whether the "
+        "SessionStart hook fires"
+    )
+    assert done.returncode == 0, (
+        "the nested run of this file failed, so the comparison above is a "
+        f"statement about a broken run: {done.stdout.strip()[-800:]!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
