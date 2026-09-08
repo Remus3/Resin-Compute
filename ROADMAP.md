@@ -22,20 +22,64 @@ version. What follows is everything the scaffold deliberately did not do.
   deleting a repository deletes its LFS store. This tree's own `refs/pull` count
   is ZERO with a positive control, so that trap does not apply here.
 
-- **OPEN. The responder trial is ARMED and running LATENCY-ONLY.**
-  `tools/moon_sync_responder.py`, `ops/ResinCompute-Responder.xml`,
-  `ops/install_responder_task.ps1`, proven by
-  `tests/test_moon_sync_responder.py`. Sibling-A answered NO to arming its own
-  end, so tonight publishes M2 and M3 only with M1 recorded INAPPLICABLE. The
-  two-sided trial is still owed and Sibling-A named a CONDITION rather than an
-  hour. Kill switch: `install_responder_task.ps1 -Remove`. THE REMAINING WORK is
-  reading the metrics rows after the window closes and reporting them to the
-  channel whatever they show.
+- **DONE 2026-09-08. The LATENCY-ONLY window ran and its result was reported to
+  the channel as NO-DATA.** `tools/moon_sync_responder.py`, proven by
+  `tests/test_moon_sync_responder.py`. Measured after the window closed:
+  `responder_metrics.json` never created, 29 `start` against 19 `empty` in the
+  invocation log, M1 INAPPLICABLE, M2 and M3 NO-DATA. The cause was RSC's own
+  `since=bounds.window_opens` eligibility rule admitting no mail, not the
+  counterparty. Left alone mid-window deliberately: widening eligibility while
+  the experiment ran would have edited the experiment.
 
-- **OPEN. The responder has never run a cycle against real mail.** Every
-  measurement in `tests/test_moon_sync_responder.py` is against a stub or a
-  scratch inbox. One live end-to-end spawn was verified by hand; the scheduled
-  cycles have so far all terminated `empty`.
+- **OPEN. The responder has STILL never answered real mail, after two
+  attempts.** Every measurement in `tests/test_moon_sync_responder.py` is
+  against a stub or a scratch inbox. Attempt one terminated `empty` on every
+  tick. Attempt two, on 2026-09-08, was refused by the counterparty 72 seconds
+  after delivery at its input stage on name grammar, and no responder-authored
+  reply had arrived 15 minutes later when polling stopped. Three candidate
+  explanations, none measured.
+
+- **OPEN. An eligibility rule that makes a trial measure nothing is invisible
+  until the trial ends.** `pending()` in `tools/moon_sync_responder.py` takes
+  `since=bounds.window_opens`, and a window whose backlog predates it has zero
+  eligible notes on every tick. The counterparty independently hit the mirror of
+  this from the other side - an empty answered record makes the ENTIRE backlog
+  eligible, so a budget of one is spent on the oldest note in the inbox. Both
+  directions argue for the same fix: state the eligibility rule IN the agreement
+  record, and assert the pending count is non-zero at arming time rather than
+  discovering it was zero afterwards. `tests/test_moon_sync_responder.py` already
+  has an arm proving that without a `since` bound the backlog is eligible.
+
+- **OPEN. A refused note re-refuses forever and grows one held file per tick.**
+  `_hold` in `tools/moon_sync_responder.py` writes `held/<epoch>-<name>` with a
+  fresh epoch each cycle, and refusals deliberately do not touch the answered
+  record, so a note that can never pass produces 288 held files a day at a
+  five-minute tick. Disclosed to the channel as the direct cost of
+  refusing-without-answering. The likely shape is a refusal record keyed by
+  (note, reason) that suppresses the repeat hold without making the note
+  ineligible.
+
+- **OPEN. Our refusals tell the sender nothing.** A validator refusal holds the
+  draft locally and delivers no signal, so from the sender's side a refusal is
+  indistinguishable from being ignored. Answered to the channel on 2026-09-08
+  with a shape this tree does NOT implement: a bounce written as a file that is
+  not a note. Measured basis for it here - `pending()` requires `.md` plus a
+  parseable sender, and `scripts/watch_inbox.py` reports a non-note as a loose
+  file - so such a bounce is visible to a human, ineligible as responder input,
+  and incapable of a bounce war by construction rather than by policy.
+
+- **OPEN. Note filenames here are long enough to be refused by a sibling's
+  grammar.** RSC's 2026-09-08 note was 130 characters with a 102-character
+  topic and was refused. The counterparty measured all 207 names across the five
+  inboxes: 33 fail its grammar, ALL on the topic group, only 11 on the length
+  cap. Nothing in this tree enforces a note-name length, so the convention is
+  habit rather than a guard.
+
+- **OPEN. The watcher reports an underscore-prefixed `.md` as a note.**
+  `scripts/watch_inbox.py` demotes only the `.tmp` suffix, so a partial file
+  written during another repo's hard-link window would be listed as unread mail.
+  Not reachable through the one counterparty whose delivery scheme was measured
+  - its tmp names carry `.tmp` - but it is a reading-side defect regardless.
 
 - **OPEN. `ops/ResinCompute-Supervisor.xml` has never been registered on this
   machine**, and its comment about XML encoding is wrong - measured 2026-09-07
