@@ -42,8 +42,8 @@ line says NOTHING about headless/, ops/, surface/, scripts/, tests/ or
 conftest.py - citing it as evidence about those is zero out of zero read as a
 pass.
 
-STATE AS OBSERVED 2026-09-08 at commit fe53f31, a reading and not a promise:
-  pytest tests            1271 passed, 1 skipped
+STATE AS OBSERVED 2026-09-08 at commit e7ab266, a reading and not a promise:
+  pytest tests            1408 passed, 1 skipped
   pytest agents/pity_engine  80 passed
   shell node --test       52 pass, 0 fail
   licence / docs gates    41 passed / 23 passed
@@ -54,142 +54,158 @@ STATE AS OBSERVED 2026-09-08 at commit fe53f31, a reading and not a promise:
 Counts are not guarded and a doc is not a source of truth. Re-measure with
 python -m pytest tests --collect-only -q before citing any of them.
 
-THE RESPONDER TASK IS REGISTERED AND IT WILL NOT FIRE AGAIN. Registered is not
-live. Every trigger on ResinCompute-Responder expired at its EndBoundary
-2026-09-07T21:00:00, and a Windows scheduled task goes on reporting State Ready
-with last result 0 FOREVER after that - there is no state value meaning
-"expired". Measured 2026-09-08: Ready, NextRunTime EMPTY, LastRunTime 2026-09-07
-20:55, zero invocation-log lines since. A previous hand-off read that Ready and
-wrote "Ready on a 5-minute tick" here. It was wrong by twenty-four hours.
-A STATE STRING NAMES A STATE, NOT A CAPABILITY.
-ops/runtime/trial_confirmed.json names the 2026-09-07 counterparty agreement and
-that window has CLOSED, so armed cycles now terminate on the window bound.
-Rearming is an OPERATOR act - a gitignored agreement record under ops/runtime/
-must name the counterparty, cite the note it rests on, and not have expired.
-CHECK LIVENESS, NOT STATE. This exits 0 if and only if the task is positively
-established to fire again; any non-zero exit means NOT ESTABLISHED, and the
-non-zero values are not worth enumerating:
+CHECK TASK LIVENESS WITH THE CHECKER, NEVER WITH A STATE STRING:
   python ops/check_task_liveness.py ResinCompute-Responder
+Exit 0 LIVE, 1 DORMANT, 2 ABSENT, 3 UNKNOWN, 4 AMBIGUOUS. Exit 0 means and only
+means the task is positively established to fire again. Do NOT read State or
+LastTaskResult to answer that question - that is the defect this tool exists for.
   cat ops/runtime/responder_invocations.log
-tests/test_task_state_claims.py goes red if any tracked file drifts back into
-presenting a task state string as evidence that the task will fire.
 KILL SWITCH: powershell -ExecutionPolicy Bypass -File .\ops\install_responder_task.ps1 -Remove
 
-THE TRIAL HAS RUN TWICE AND MEASURED NOTHING BOTH TIMES. Window one, 2026-09-07
-1900-2100 LATENCY-ONLY: no metrics file, 29 start against 19 empty, M1
-INAPPLICABLE, M2 and M3 NO-DATA, because pending() takes
-since=bounds.window_opens and the counterparty's mail predated the window.
-Attempt two, 2026-09-08: two notes hand-delivered to the counterparty, the first
-refused 72 seconds later on name grammar, no responder-authored reply 15 minutes
-after the bounce. Three candidate explanations, NONE measured - do not repeat
-them as if they were findings.
+THE RESPONDER IS DORMANT AND ITS AGREEMENT IS EXPIRED, both at
+2026-09-07T21:00:00. Measured 2026-09-08: State reads Ready and LastTaskResult
+reads 0, while the only trigger's EndBoundary is in the past, NextRunTime is
+empty, and the invocation log holds ZERO lines dated 2026-09-08. Rearming is an
+OPERATOR act and re-running the installer produces another BOUNDED window, not
+a standing responder. A gitignored agreement record under ops/runtime/ must
+name the counterparty, cite the note it rests on, and not have expired.
+
+THE TRIAL FINALLY PRODUCED DATA, ON THE RECEIVING SIDE ONLY. Sibling-A's
+responder delivered a machine-authored note at 17:00 on 2026-09-08, cycle
+20260908T165744-28336-aba821, the first this repository has ever received. M2
+and M3 are no longer NO-DATA inbound. The REPLY path is dormant, so this tree
+still cannot answer automatically. Do not read our silence as their defect.
 
 TRAPS THAT HAVE ACTUALLY BITTEN IN THIS TREE. Every one measured here.
 
-- A GATE TESTED AS A PURE PREDICATE IS NOT AN ENFORCED GATE, AND IT RECURS.
-  First measured on three responder bounds. It then happened AGAIN in the same
-  file: four terminations - window, budget, empty, disarmed - each returned
-  before reaching log_invocation, and each had a passing arm asserting the
-  termination as a RETURN VALUE. Fixed in fe53f31 by making run_once a wrapper
-  that logs the terminal line whatever the body returned. If you have a budget,
-  a window, a kill switch or a log line with a unit test, assert that something
-  CALLS it.
-- A HAND-MAINTAINED LIST OF PATHS THAT REMEMBER TO DO X GOES STALE SILENTLY.
-  The isolation fixture named three DEFAULT_ paths and a fourth arrived an hour
-  later. The invocation log had the same shape. Prefer a funnel or an
-  enumeration over a list, and assert the PROPERTY without naming paths.
-- A WAITER BASELINED FROM THE WRONG NUMBER REPORTS A FALSE NEGATIVE. A poll
-  loop was baselined at 6 lines taken from a `tail -6` while the file held 10,
-  so it exited on its first pass and reported "no new fire". A statement about
-  the instrument, not the world. Baseline with the same command you poll with.
+- A TASK State STRING NAMES A STATE, NOT A CAPABILITY. Ready is reported forever
+  once every trigger has expired. A hand-off written from that string claimed a
+  5-minute tick and was wrong by 24 hours. The mirror error is just as real: an
+  ABSENT EndBoundary is absence of evidence, not evidence, and a fired one-shot
+  carries none. Use ops/check_task_liveness.py.
+- A GATE TESTED AS A PURE PREDICATE IS NOT AN ENFORCED GATE, AND IT HAS NOW
+  RECURRED FOUR TIMES. Three responder bounds; then four terminations each
+  returning before reaching log_invocation; then a name validator whose only
+  caller was stubbed by every main() arm. If you have a budget, a window, a kill
+  switch or a log line with a unit test, assert that something CALLS it.
+- A SHAPE ARM PINS FORMAT, NOT VALUE. An arm asserting the probe emits every KEY
+  the parser reads stayed green while the probe emitted null for all of them.
+  Assert the VALUE for a case known to carry one.
+- AN ISOLATION FIXTURE THAT MONKEYPATCHES MODULE ATTRIBUTES CANNOT ISOLATE A
+  SUBPROCESS. The subprocess re-imports with the real defaults. The watcher's
+  own test suite wrote six real lines into the operator's live invocation log,
+  under the same source label a genuine hook firing uses.
+- AN INTERPOLATED REASON STRING DEFEATS ITS OWN FINGERPRINT. A dedupe key hashed
+  reason TEXT and one reason carried a byte count, so a draft oversize by a
+  different amount each cycle minted a fresh key every tick. The guarding arm
+  fed a byte-identical draft and could not fail. Key on CATEGORY.
+- A FAIL-OPEN STATE RECORD WRITES INTO SOMEONE ELSE'S REPOSITORY. An unwritable
+  refusals record produced five bounces delivered into a sibling's inbox with no
+  error surfaced - 288 files a day at a five-minute tick. Record before
+  delivering, so an unrecordable refusal stops the outbound.
+- A WAITER BASELINED FROM THE WRONG NUMBER REPORTS A FALSE NEGATIVE, AND IT HITS
+  THE MERGER TOO. Reading exit=$? after a pipeline measures the last filter.
+  Calling list() on a dict-shaped JSON record counts its top-level keys. Both
+  produced confident wrong readings in one session. Baseline with the same
+  command you poll with, and re-measure before claiming.
+- THE DOCS GATE CATCHES A BACKTICKED PATH GIT DOES NOT STORE. A ledger entry
+  citing a gitignored runtime record failed test_docs_consistency.py, correctly.
+  Name such a file in PROSE, never as a backtick path.
+- A FIXTURE SIZED FROM THE VALUE UNDER TEST IS AN AMPLIFIER. An arm sized
+  MAX_DROP_ENTRIES + 5 met a mutation setting that constant to 10**9 and wrote
+  492674 files before it was killed. Cap fixtures with a LITERAL.
 - A FAILED SPAWN LOOKED LIKE A SUCCESSFUL BOUND. subprocess could not launch
   `claude` by bare name on Windows (the entry point is a .CMD shim), the spawn
   returned empty, the gate refused the empty draft, and it was recorded as
   `exhausted` - the label meaning "the bound worked as predicted".
 - AN EMPTY MODEL RESPONSE IS NOT EXHAUSTION. A counterparty measured that the
   CLI returns subtype success with {"actions": []} for an unsatisfiable schema
-  rather than an error. Reading that as exhaustion is the trap this tree hit.
-- A FIXTURE SIZED FROM THE VALUE UNDER TEST IS AN AMPLIFIER. An arm sized
-  MAX_DROP_ENTRIES + 5 met a mutation setting that constant to 10**9 and wrote
-  492674 files before it was killed. Cap fixtures with a literal.
-- THE DOCS GATE CATCHES A CITED PATH THAT DOES NOT EXIST. Writing a ledger
-  entry ABOUT an absent file failed test_docs_consistency.py, correctly. Name
-  such a file in prose, not as a backtick path.
+  rather than an error.
+- A RESPONDER THAT MEASURES HEAD REPORTS THE CODE, AND A REPOSITORY'S INTENT CAN
+  BE NEWER THAN ITS CODE. Sibling-A's responder correctly described its own tree
+  while being stale about a ruling its operator had already accepted.
 - SCHEDULED TASK XML: `Repetition` must precede `StartBoundary` and needs a
   `Duration` (else 0x8004131a, naming no element), and the declaration must say
-  UTF-16 because Register-ScheduledTask takes a .NET string. Measured
-  2026-09-07. ops/ResinCompute-Supervisor.xml asserts the opposite in a comment
-  and has NEVER been registered on this machine.
-- THE PRE-PUSH HOOK GRADES THE WORKING TREE, NOT THE PUSHED COMMIT. It now
+  UTF-16 because Register-ScheduledTask takes a .NET string.
+  ops/ResinCompute-Supervisor.xml asserts the opposite in a comment and has
+  NEVER been registered on this machine.
+- THE PRE-PUSH HOOK GRADES THE PUSHED COMMIT, not just the working tree. It
   reads the ref list and refuses when a pushed sha is not HEAD. Do not re-drain
-  stdin "because the content is unused". A sibling measured a commit reaching
-  its remote without the hook ever grading it; the mechanism is UNMEASURED and
-  this tree's check cannot see past its own return.
+  stdin "because the content is unused".
 - WORKSPACE TRUST HAS TWO SPELLINGS. ~/.claude.json keys projects by exact path
   string; an untrusted workspace makes a headless run DISCARD permissions
-  SILENTLY. str(Path("C:/x")) normalises to a backslash on Windows, so a
-  Path-keyed lookup cannot see a forward-slash entry at all.
-- HEREDOC PLUS A NON-RAW PYTHON STRING MANGLES BACKSLASHES. It has put a BEL
-  byte into docs/LEDGER.md and silently no-opped a replacement. Use Write/Edit
-  for content with backslashes.
+  SILENTLY. str(Path("C:/x")) normalises to a backslash on Windows.
+- HEREDOC PLUS A NON-RAW PYTHON STRING MANGLES BACKSLASHES, and a heredoc
+  carrying apostrophes broke a ledger splice this session. Use Write/Edit for
+  content with backslashes or quoting.
 - taskkill under Git Bash needs //F //PID. A lone /F becomes F:/ and fails
   SILENTLY when redirected. Never Stop-Process. Never blanket-kill by image
   name: this box runs five sibling projects.
 - A MEASURED NEGATIVE NEEDS A POSITIVE CONTROL IN THE SAME COMMAND FAMILY. This
   tree's refs/pull count is ZERO, armed by refs/heads returning 1.
 - BACKGROUND TASK NAMES MUST CARRY AN EXPECTED DURATION, e.g. "(3 min)". Hard
-  rule, operator 2026-09-07. Elapsed time alone cannot say whether a task is
-  stuck, and partial compliance is worse than none.
+  rule, operator 2026-09-07.
+
+THE SESSION SHAPE EARNED ITSELF ON 2026-09-08 AND IS NOT OPTIONAL. Four slices
+ran; all four were reported COMPLETE by their own builders with passing arms,
+clean ruff and honest counts; all four were then refuted or defect-found by an
+agent that did not write them. Two independent adversaries found six and seven
+findings respectively. The agent that produced a thing never grades it.
 
 OPEN WORK, highest priority first. Full list in ROADMAP.md.
 
 1. OPERATOR DECISION, NOT A SESSION'S. 89 of 91 commits in this PUBLIC repo
-   carry the operator's personal email in the author field, measured against
-   origin/main. DO NOT rewrite history without an explicit instruction: a
-   sibling measured four traps doing one, including that a mirror clone fetches
-   refs/pull/*/head and that a content scrub can be complete and still publish
-   names because a filename is not content.
-2. The responder has STILL never answered real mail, after two attempts. Every
-   arm is against a stub or a scratch inbox.
-3. State the eligibility rule IN the agreement record, and assert a non-zero
-   pending count at arming time. Both failure directions are now measured: a
-   since bound that admits nothing, and an empty answered record that makes the
-   ENTIRE backlog eligible so a budget of one is spent on the oldest note.
-4. A refused note re-refuses forever, and _hold writes held/<epoch>-<name> with
-   a fresh epoch each cycle - 288 files a day at a 5-minute tick for one note
-   that can never pass.
-5. Our refusals tell the sender nothing. Answered to the channel with a shape
-   NOT implemented here: a bounce written as a file that is not a note, so it is
-   visible to a human, ineligible as responder input, and incapable of a bounce
-   war by construction.
-6. Note filenames here are long enough to be refused by a sibling's grammar.
-   Nothing in this tree enforces a length; the convention is habit, not a guard.
-7. scripts/watch_inbox.py has no invocation log, so /clear survival is
-   UNMEASURABLE AS BUILT here. The responder has one; copy the shape.
+   carry the operator's personal email in the author field. DO NOT rewrite
+   history without an explicit instruction: a sibling measured four traps doing
+   one, including that a mirror clone fetches refs/pull/*/head and that a
+   content scrub can be complete and still publish names because a filename is
+   not content.
+2. OPERATOR ACT. Rearm the responder if the trial is to continue - see the
+   dormancy note above. State the eligibility rule IN the agreement record and
+   assert a non-zero pending count at arming time. Both failure directions are
+   measured: a since bound that admits nothing, and an empty answered record
+   that makes the ENTIRE backlog eligible.
+3. Six of seven mutant kills in the task-liveness slice rest on the builder's
+   own word. The merger re-ran exactly one, M12, and the builder's KILLED was
+   WRONG as stated. Re-run the other six.
+4. One task-liveness mutant survives by construction and was never graded:
+   PREPENDING a failing command to the PowerShell probe rather than replacing
+   it, because a non-terminating error leaves exit 0. Its author declined to
+   grade its own work; nobody has ruled since.
+5. An evicted refusal row can still re-hold one local file. Bounded and
+   disclosed, not closed.
+6. Whether the SessionStart watcher fires on a COLD session and survives /clear
+   is now measurable for the first time - ops/runtime/inbox_invocations.log.
+   Taking the measurement needs a future cold session. THIS IS THAT SESSION:
+   read the log before doing anything else and report what a cold boot wrote.
+7. A sibling's refutation rests on a premise it declines to assert - that a
+   hook's stdout does not inject on non-zero exit. Unmeasured here too; this
+   tree has only the adjacent positive control that exit 0 DOES inject.
 8. Nothing writes a provenance row yet. A schema with no producer has never met
    a real value.
+9. ops/ResinCompute-Supervisor.xml has never been registered on this machine.
 
 DO NOT REDO: the slots.py re-pin (closed, three carriers hash equal at
 71fa2a68), the manifest-as-key proposal (withdrawn by its own author), the
 caveman dialect question (settled), and the wenyan experiment (run and reverted
 2026-06-27 as too lossy to skim). Do not re-predict a phantom underscore note
-during a counterparty's hard-link window - that prediction was REFUTED by
-measurement: their tmp names carry .tmp, which this reader demotes.
+during a counterparty's hard-link window - REFUTED by measurement.
 
 THE CROSS-REPO INBOX IS NOT OPTIONAL READING. Review moon_sync_inbox/ AND its
-subdirectories, then ingest, implement and respond. Reading the filename list is
-not reviewing it. Verbatim bytes SUPERSEDE any paraphrase of them. Triage every
-file into one of four buckets - ingested, already-have-an-equivalent,
-not-applicable-because-X, or applicable-and-not-done - and the fourth reaches
-the roadmap. SILENCE IS NOT AGREEMENT. Reading is not acknowledging: --mark is a
-separate deliberate act and an inflated watermark is worse than none. Outbound
-drafts live in ops/runtime/outbox_drafts/, deliberately OUTSIDE the watcher's
-view: a file named from-RSC-* inside moon_sync_inbox/ is classified [sent], so
-an undelivered draft parked there reads as already sent.
+subdirectories, then ingest, implement and respond. Verbatim bytes SUPERSEDE any
+paraphrase of them. Triage every file into one of four buckets - ingested,
+already-have-an-equivalent, not-applicable-because-X, or
+applicable-and-not-done - and the fourth reaches the roadmap. SILENCE IS NOT
+AGREEMENT. Reading is not acknowledging: --mark is a separate deliberate act and
+an inflated watermark is worse than none. THE 2026-09-08 SESSION DID NOT MARK -
+it triaged that day's Sibling-A and Sibling-D notes only, leaving fourteen
+older ones untriaged. Outbound drafts live in ops/runtime/outbox_drafts/,
+deliberately OUTSIDE the watcher's view: a file named from-RSC-* inside
+moon_sync_inbox/ is classified [sent], so an undelivered draft parked there
+reads as already sent.
 
 Session shape is orchestrated, multi-agent, self-adjudicating and
-self-adversarial BY DEFAULT. The agent that produced a thing never grades it.
-Agreement between two agents is not evidence - find their shared input and test
-THAT. Keep chat under 500 output tokens, CAVEMAN ULTRA dialect, 7-bit ASCII
-everywhere, no em-dashes or smart quotes ever.
+self-adversarial BY DEFAULT. Agreement between two agents is not evidence - find
+their shared input and test THAT. Keep chat under 500 output tokens, CAVEMAN
+ULTRA dialect, 7-bit ASCII everywhere, no em-dashes or smart quotes ever.
 ```
