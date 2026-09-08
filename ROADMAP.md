@@ -11,6 +11,35 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **HALF-CLOSED 2026-09-08, and the other half is the NEXT session's first
+  measurement.** The runtime invocation log under `ops/runtime/`, gitignored and
+  so named in prose, now records which hook fired: commit `3964544` gives
+  `SessionStart` and `UserPromptSubmit` distinct `--source` labels. A real
+  `UserPromptSubmit` fire was measured writing `userpromptsubmit` on both of its
+  lines, exit 0, which is this tree's first end-to-end proof that a hook delivers
+  argv. **`SessionStart` is still unmeasured and this change made it
+  argv-dependent for the first time.** Read that log FIRST in the next cold
+  session. A `sessionstart` pair closes it. No new pair means the hook died, and
+  the recovery is a hand edit of `.claude/settings.json`, which needs no working
+  hook. Whether it survives `/clear` remains untested either way.
+
+- **OPEN, SIBLING OF THE SLICE ABOVE, SAME ROOT CAUSE, LEFT UNFIXED
+  DELIBERATELY.** `tools/moon_sync_responder.py:1318,1324,1326` hardcodes the
+  label `run_once` for BOTH the scheduled task and a manual run, so the responder
+  invocation record cannot separate its callers either - 48 rows, one label.
+  Worse, `grep -n "environ\|getenv\|RESINCOMPUTE" tools/moon_sync_responder.py`
+  returns nothing: it has no env routing at all, unlike `scripts/watch_inbox.py`,
+  so the subprocess-isolation fix that stopped a suite writing into the
+  operator's live record was never carried to it. Found by an adversary on the
+  scope-and-siblings lens. It was scoped out to keep the slice's write-list
+  disjoint, which is a reason to file it, not a reason it is closed.
+
+- **OPEN. Nothing grades a document against `.claude/settings.json`.**
+  `docs/INBOX_TRIAGE_2026-09-07-0710.md` quotes both hook commands without the
+  flags they now carry. The docs gate catches a backticked path that git does not
+  store; it does not catch a quoted command that no longer matches the wiring.
+
+
 - **OPEN, OPERATOR DECISION, HIGHEST PRIORITY. 89 of 91 commits in this PUBLIC
   repository carry the operator's personal email in the author field.** Measured
   2026-09-07 against `origin/main`. A sibling redacted the same string from a
