@@ -140,6 +140,36 @@ plus two planted fixture keys in `ops/runtime/inbox_reported.json`. So:
 Neither is required and neither is a test-only door: a scheduled task or an
 operator probe can name itself the same way. What matters is the direction of
 the default - absent, the label stays the honest one a real hook writes.
+
+THE ENTRY-POINT LABEL HAS THREE SOURCES, IN THIS ORDER
+======================================================
+
+  1. RESINCOMPUTE_INVOCATION_SOURCE, the environment.
+  2. `--source LABEL`, the flag. See `source_from_argv`.
+  3. `cli`, the fallback a bare run writes.
+
+THE ENVIRONMENT OUTRANKS THE FLAG, and the direction is load-bearing.
+`tests/test_session_hooks.py` proves a hook fires by launching THE DECLARED
+COMMAND out of `.claude/settings.json`, argv and all - it cannot edit that argv
+without no longer testing the declared command. The environment is then the
+only channel left that can mark a suite-launched child as suite noise, so it
+has to win. Inverted, every arm that fires the real hook command would write
+lines labelled `sessionstart` into whatever log it could reach, and the
+instrument would be measuring its own suite again.
+
+THE FLAG IS A FLAG AND NOT A SECOND VARIABLE because a hook command is handed
+to a shell this tree has not measured. `RESINCOMPUTE_INVOCATION_SOURCE=x python
+...` is POSIX syntax and this is Windows; `cmd.exe` reads it as a program name
+and the hook then fails AT THE HOOK, where nothing in this suite would see it.
+Argv is argv on every shell there is.
+
+WHY THIS EXISTS AT ALL. `.claude/settings.json` wires BOTH `SessionStart` AND
+`UserPromptSubmit` to this one script, and a manual terminal run is a third
+caller, so all three wrote `cli`. Measured 2026-09-08 at HEAD 0e9491a: the
+complete log carried ONE label, `cli`, on every fire, three of them stamped
+within two seconds of one cold boot while only TWO watch_inbox hook events were
+visible in that session. The question the log exists to answer - did
+SessionStart fire, and does it survive /clear - is about ONE of those events.
 """
 from __future__ import annotations
 
@@ -219,6 +249,37 @@ SOURCE_CLI = "cli"
 #: label an operator reading the log has nothing to look it up against.
 SOURCE_SUITE = "suite"
 
+#: The HOOK EVENT labels. `cli` said "not an in-process call" and stopped there,
+#: and `.claude/settings.json` wires TWO events to this one script, so both of
+#: them plus a manual terminal run wrote the same word. Measured 2026-09-08 at
+#: HEAD 0e9491a: the complete log carried ONE label, `cli`, on every fire,
+#: three of them stamped within two seconds of one cold boot while only TWO
+#: watch_inbox hook events were visible in that session. The log's entire
+#: purpose is to answer "did SessionStart fire, and does it survive /clear",
+#: and it could not separate a SessionStart fire from a per-prompt fire.
+#:
+#: SPELLED AS THE EVENT NAME LOWERCASED, with nothing else changed. A reader
+#: holding a log line and the settings file maps one to the other by eye,
+#: without a table to look anything up in; a prettier `session-start` would be
+#: a second spelling of a name Claude Code already owns.
+SOURCE_SESSION_START = "sessionstart"
+SOURCE_USER_PROMPT_SUBMIT = "userpromptsubmit"
+
+#: Claude Code hook event -> the label a hook on that event must declare.
+#:
+#: DECLARED HERE RATHER THAN IN THE SUITE. `tests/test_session_hooks.py` reads
+#: this mapping and grades the REAL `.claude/settings.json` against it, so a
+#: wiring that forgets the flag is red, and an event added tomorrow inherits
+#: the guard rather than needing somebody to remember it.
+HOOK_EVENT_SOURCES = {
+    "SessionStart": SOURCE_SESSION_START,
+    "UserPromptSubmit": SOURCE_USER_PROMPT_SUBMIT,
+}
+
+#: How a caller names itself on ARGV. See `source_from_argv` for why the label
+#: arrives this way rather than through the environment.
+SOURCE_FLAG = "--source"
+
 #: Names WHO invoked this process, for the case a module attribute cannot
 #: reach. See `resolve_source`.
 ENV_INVOCATION_SOURCE = "RESINCOMPUTE_INVOCATION_SOURCE"
@@ -265,6 +326,66 @@ def resolve_source(fallback: str) -> str:
     if _SOURCE_LABEL_SHAPE.match(raw):
         return raw
     return fallback
+
+
+def source_from_argv(argv: list[str] | None) -> str | None:
+    """The `--source` label on this argv, or `None` if there is not a valid one.
+
+    WHY ARGV RATHER THAN THE ENVIRONMENT. The label has to reach the process
+    from `.claude/settings.json`, and a hook command there is handed to a shell
+    this tree has not measured. `RESINCOMPUTE_INVOCATION_SOURCE=x python ...`
+    is POSIX syntax; `cmd.exe` reads it as a program name and the hook fails at
+    the hook, where no test in this tree would ever see it. A flag is argv on
+    every shell there is.
+
+    PRECEDENCE: ENVIRONMENT, THEN THIS FLAG, THEN THE `cli` FALLBACK. The
+    caller composes it as `resolve_source(source_from_argv(argv) or
+    SOURCE_CLI)`, so this value is only ever the FALLBACK the environment gets
+    to override. That direction is load-bearing rather than arbitrary:
+    `tests/test_session_hooks.py` proves a hook fires by launching THE DECLARED
+    COMMAND, argv and all, and cannot edit that argv without no longer testing
+    the declared command. The environment is the one channel left that can tell
+    a suite-launched child from a real fire, so it has to win. Inverted, every
+    arm that fires the real hook command would write `sessionstart` lines.
+
+    WHY A HAND SCAN RATHER THAN THE PARSER. `main` writes its `start` line
+    BEFORE it calls `_main`, which is where `parse_args` runs - see `main`. A
+    plain argparse flag could therefore only label the terminal line, and the
+    two lines of one fire would name two different callers. Worse, the `start`
+    line is the ONLY evidence left by a fire killed at the hook's five second
+    ceiling, so it is precisely the line that must carry the label. This runs
+    at the process entry point instead, before `main`.
+
+    IT NEVER RAISES AND NEVER EXITS. A malformed flag returns `None` and the
+    fire falls back to `cli`, exactly as a malformed variable does: this runs
+    before a single line has been written, so an exception here would leave a
+    fire with NO record at all - which reads afterwards like a hook that is not
+    wired. `_build_parser` still declares `--source`, so `_main` reports a
+    genuinely bad argv through the normal `argv-rejected` disposition.
+
+    THE LAST OCCURRENCE WINS, matching argparse, for the form this scan
+    accepts. The two readers do NOT agree everywhere, and claiming they did
+    was an overclaim found by an adversary: argparse honours the abbreviation
+    `--sour x`, accepts `--source=` as the empty string, and raises
+    `SystemExit(2)` for a trailing `--source` with no value, while this scan
+    returns None for all three. Every divergence falls on the conservative
+    side - None means the label falls back to `cli` - and `_main` never reads
+    `args.source`, so no divergence can reach the log. Measured 2026-09-08.
+    """
+    if not argv:
+        return None
+
+    inline = SOURCE_FLAG + "="
+    found: str | None = None
+    for index, item in enumerate(argv):
+        if item == SOURCE_FLAG:
+            found = argv[index + 1] if index + 1 < len(argv) else ""
+        elif item.startswith(inline):
+            found = item[len(inline):]
+
+    if found is None or not _SOURCE_LABEL_SHAPE.match(found):
+        return None
+    return found
 
 #: The OPENING line of a fire, and NOT a termination. It is written before the
 #: body runs, so a fire killed part way through - this hook is declared with a
@@ -816,6 +937,23 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print nothing at all when there is nothing to report",
     )
+    # DECLARED HERE, CONSUMED AT THE `__main__` GUARD. `_main` never reads it:
+    # by the time this parser runs the `start` line is already on disk, which
+    # is why `source_from_argv` scans argv at the process entry point instead.
+    #
+    # It is declared all the same, and that is not decoration. Without it every
+    # hook wired with `--source` would leave through argparse as `argv-rejected`
+    # with exit code 2, printing a usage block into the session context on every
+    # single session start.
+    parser.add_argument(
+        SOURCE_FLAG,
+        default=None,
+        help=(
+            "name this entry point in the invocation log; overridden by "
+            f"{ENV_INVOCATION_SOURCE}, and ignored unless it is a plain "
+            "lowercase label"
+        ),
+    )
     return parser
 
 
@@ -936,4 +1074,16 @@ if __name__ == "__main__":
     # point, rather than inside `log_invocation`: the variable describes how
     # this PROCESS was invoked, and an in-process call already carries an
     # explicit label from its caller that ambient environment must not override.
-    raise SystemExit(main(source=resolve_source(SOURCE_CLI)))
+    #
+    # THE THREE-WAY PRECEDENCE IS SPELLED OUT BY THIS ONE LINE, and it reads
+    # right to left: `SOURCE_CLI` is what a bare `python scripts/watch_inbox.py`
+    # writes, `--source` lets the WIRING say which hook event this is, and
+    # `resolve_source` lets the ENVIRONMENT outrank both - which is how the
+    # suite tells its own launches of the declared command from a real fire.
+    # See `source_from_argv` for why that direction and not the other one.
+    #
+    # Resolved BEFORE `main` is entered, because `main` writes its `start` line
+    # before argv is ever parsed and both lines of one fire must agree.
+    raise SystemExit(
+        main(source=resolve_source(source_from_argv(sys.argv[1:]) or SOURCE_CLI))
+    )
