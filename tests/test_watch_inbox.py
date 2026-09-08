@@ -1863,12 +1863,36 @@ def test_the_command_line_entry_point_declares_itself_as_such(watch):
     variable unset proves the observed label is `cli`; only the source says
     that `cli` is what an unset variable resolves TO, rather than a value some
     ambient environment happened to supply.
+
+    IT USED TO PIN THE LITERAL `resolve_source(SOURCE_CLI)`, AND THAT SPELLING
+    IS GONE. The guard now composes three sources - environment, then the
+    `--source` flag, then `cli` - and a literal match on the old two-term form
+    would have gone red for a change that strengthened exactly the property it
+    was guarding. So it is stated as the ORDERING it cares about instead: the
+    environment reader on the outside, the honest fallback innermost, and the
+    argv reader between them. A shape arm pins format and not input, so the
+    behaviour is graded by the spawn arms below and this one grades the wiring.
     """
     source = SCRIPT.read_text(encoding="utf-8")
+    guard = source.split('if __name__ == "__main__":', 1)
+    assert len(guard) == 2, "the script has no `__main__` guard at all"
+    body = guard[1]
 
-    assert "resolve_source(SOURCE_CLI)" in source, (
-        "the `__main__` guard does not label its own entry point with the "
-        "honest fallback, so a hook fire is recorded under some other source"
+    for fragment in ("resolve_source(", "source_from_argv(sys.argv[1:])", "or SOURCE_CLI"):
+        assert fragment in body, (
+            f"the `__main__` guard does not carry {fragment!r}, so the entry-point "
+            "label is not composed the way the precedence rule says it is"
+        )
+
+    assert body.index("resolve_source(") < body.index("source_from_argv(sys.argv[1:])") < body.index(
+        "or SOURCE_CLI"
+    ), (
+        "the guard composes the three label sources in the wrong order. "
+        "`resolve_source` must be OUTERMOST - the environment outranks the flag, "
+        "which is what lets tests/test_session_hooks.py fire the declared hook "
+        "command without its lines being mistaken for real ones - and "
+        f"{watch.SOURCE_CLI!r} must be the innermost fallback, because a hook "
+        "fires with nothing set at all"
     )
 
 
@@ -2302,4 +2326,233 @@ def test_a_forged_label_cannot_reach_a_spawned_log(watch, monkeypatch, tmp_path)
         assert len(line.split("\t")) == 3, f"a forged label grew a column: {line!r}"
     assert {ln.split("\t")[1] for ln in lines} == {watch.SOURCE_CLI}, (
         f"a rejected label did not fall back to the honest one: {lines}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE ENTRY-POINT LABEL, PER HOOK EVENT.
+#
+# `cli` answered "a hook fired" and nothing finer. `.claude/settings.json` wires
+# BOTH `SessionStart` AND `UserPromptSubmit` to this same script, and a manual
+# terminal run is a third caller, so all three landed in the log under one word.
+# Measured 2026-09-08 at HEAD 0e9491a: every fire in the complete live log
+# was labelled `cli`, three of them stamped within two seconds
+# of one cold boot while only TWO watch_inbox hook events were visible in the
+# session. The log could not say which event produced which line, which is the
+# one axis it was built to separate.
+#
+# So the wiring names the entry point. The label reaches the process on ARGV,
+# because `RESINCOMPUTE_INVOCATION_SOURCE=x python ...` is POSIX shell syntax
+# and this is Windows - an env prefix a shell does not parse fails AT THE HOOK,
+# where nothing in this suite would ever see it.
+# ---------------------------------------------------------------------------
+
+
+def test_the_declared_hook_labels_pass_the_shape_the_log_enforces(watch):
+    """A label the validator rejects would fall back and separate nothing.
+
+    The wiring is only worth writing if the labels survive `resolve_source`.
+    Checked against the module's own compiled shape rather than re-spelled here.
+    """
+    labels = sorted(set(watch.HOOK_EVENT_SOURCES.values()))
+    assert len(labels) >= 2, f"the wiring declares {labels}, so no event is separable"
+
+    for label in [*labels, watch.SOURCE_CLI, watch.SOURCE_SUITE]:
+        assert watch._SOURCE_LABEL_SHAPE.match(label), (
+            f"{label!r} fails the label shape, so it would be discarded and the "
+            "line would read as the fallback"
+        )
+
+    everything = [*labels, watch.SOURCE_CLI, watch.SOURCE_SUITE, watch.SOURCE_MAIN]
+    assert len(set(everything)) == len(everything), (
+        f"two entry-point labels are the same string, so the column collapses: {everything}"
+    )
+
+
+def test_the_source_flag_is_read_off_argv_rather_than_through_the_parser(watch):
+    """THE `start` LINE IS WRITTEN BEFORE ARGV IS PARSED, and that is the trap.
+
+    `main` writes `log_invocation(source, PHASE_START)` and only THEN calls
+    `_main`, which is where `parse_args` runs. A plain argparse flag therefore
+    cannot label the opening line: the two lines of one fire would disagree,
+    and the `start` line is the only evidence a fire killed at the hook's five
+    second ceiling ever happened. So the label is scanned off argv at the
+    process entry point, before `main` is entered.
+    """
+    assert watch.source_from_argv(["--source", "sessionstart"]) == "sessionstart"
+    assert watch.source_from_argv(["--source=userpromptsubmit"]) == "userpromptsubmit"
+    assert watch.source_from_argv(["--quiet-when-empty"]) is None
+    assert watch.source_from_argv([]) is None
+    assert watch.source_from_argv(None) is None
+
+    assert watch.source_from_argv(["--source", "a", "--source", "b"]) == "b", (
+        "the scan disagrees with argparse, which lets the last occurrence win; "
+        "two readers of one argv must not reach two answers"
+    )
+    assert watch.source_from_argv(["--source"]) is None, (
+        "a trailing --source with no value must fall back rather than raise; "
+        "raising at the entry point would leave a fire with NO line at all"
+    )
+
+
+def test_a_malformed_source_flag_falls_back_rather_than_forging_a_line(watch):
+    """The record is TAB separated and line oriented.
+
+    A tab in the label forges the disposition column and a newline forges a
+    whole line, timestamp and all. The flag is exactly as untrusted as the
+    variable, so it is validated by the same shape and falls back rather than
+    being repaired into something nobody can trace.
+    """
+    for bad in [
+        "SessionStart",
+        "session start",
+        "suite" + chr(9) + watch.TERMINAL_MARKED,
+        "suite" + chr(10) + "forged",
+        "-leading-hyphen",
+        "x" * (watch.MAX_SOURCE_LABEL_CHARS + 1),
+        "",
+    ]:
+        assert watch.source_from_argv(["--source", bad]) is None, (
+            f"{bad!r} was accepted as an entry-point label"
+        )
+
+
+def test_the_environment_outranks_the_source_flag(watch, monkeypatch):
+    """PRECEDENCE: environment, then flag, then the honest `cli` fallback.
+
+    STATED IN THIS DIRECTION DELIBERATELY, and it is what keeps this suite
+    isolated. `tests/test_session_hooks.py` proves a hook fires by launching
+    THE DECLARED COMMAND, argv and all - it cannot edit that argv without no
+    longer testing the declared command. The environment is then the only
+    channel left that can tell a suite-launched child from a real one, so it
+    has to win. Invert this and every arm that fires the real hook command
+    writes lines labelled `sessionstart` into whatever log it can reach.
+    """
+    monkeypatch.setenv(watch.ENV_INVOCATION_SOURCE, watch.SOURCE_SUITE)
+    argv = ["--source", watch.HOOK_EVENT_SOURCES["SessionStart"]]
+
+    assert watch.resolve_source(watch.source_from_argv(argv) or watch.SOURCE_CLI) == (
+        watch.SOURCE_SUITE
+    ), "the flag overrode the variable, which un-isolates every subprocess arm in this tree"
+
+    monkeypatch.delenv(watch.ENV_INVOCATION_SOURCE)
+    assert watch.resolve_source(watch.source_from_argv(argv) or watch.SOURCE_CLI) == (
+        watch.HOOK_EVENT_SOURCES["SessionStart"]
+    ), "with nothing in the environment the flag must label the fire"
+
+    assert watch.resolve_source(watch.source_from_argv([]) or watch.SOURCE_CLI) == (
+        watch.SOURCE_CLI
+    ), "the honest fallback did not survive; a bare run is not a hook fire"
+
+
+def test_the_parser_accepts_the_source_flag_so_a_hook_is_not_argv_rejected(watch, tmp_path):
+    """The flag is scanned at the entry point AND declared on the parser.
+
+    Scanning alone is not enough: `_main` runs `parse_args`, and an undeclared
+    flag leaves through `SystemExit` as `argv-rejected` with exit code 2. A hook
+    wired with a label the parser had never heard of would fail on every single
+    session start, print a usage block into the session context, and the only
+    trace would be the very log line this work exists to make readable.
+    """
+    parsed = watch._build_parser().parse_args(["--source", "sessionstart"])
+    assert getattr(parsed, "source", None) == "sessionstart"
+
+    inbox = _one_note_inbox(tmp_path)
+    for label in sorted(set(watch.HOOK_EVENT_SOURCES.values())):
+        rc = watch.main(
+            [
+                "--dir",
+                str(inbox),
+                "--state",
+                str(tmp_path / "seen.json"),
+                "--reported",
+                str(tmp_path / "reported.json"),
+                "--source",
+                label,
+            ]
+        )
+        assert rc == 0, f"--source {label} exited {rc}"
+
+    assert watch.TERMINAL_ARGV_REJECTED not in _terminals(watch), (
+        f"the parser rejected a declared hook label: {_log_lines(watch)}"
+    )
+
+
+def test_a_spawned_fire_carries_the_flag_label_on_both_of_its_lines(watch, monkeypatch, tmp_path):
+    """THE TRAP-1 ARM, on the real `__main__` path in a real child process.
+
+    A fire writes two lines: a `start` before the body runs and exactly one
+    terminal after. The `start` is written before argv is parsed, so a label
+    resolved inside `_main` would appear on the second line only and the two
+    lines of one fire would name two different callers.
+
+    ISOLATED: the runtime directory is redirected, so nothing here can reach
+    `ops/runtime/`. `RESINCOMPUTE_INVOCATION_SOURCE` is deliberately UNSET,
+    because it outranks the flag and setting it would make this arm a statement
+    about the variable it is not testing.
+    """
+    for label in sorted(set(watch.HOOK_EVENT_SOURCES.values())):
+        redirected = tmp_path / f"runtime-{label}"
+        done = _spawn(
+            ["--dir", str(tmp_path / "absent"), "--source", label],
+            {watch.ENV_RUNTIME_DIR: str(redirected), watch.ENV_INVOCATION_SOURCE: None},
+        )
+        assert done.returncode == 0, f"stderr: {done.stderr[:400]!r}"
+
+        lines = _spawned_lines(redirected, monkeypatch, watch)
+        phases = [ln.split("\t")[-1] for ln in lines]
+        assert len(lines) == 2 and watch.PHASE_START in phases, (
+            f"--source {label} left {phases}, not a start and one terminal; the "
+            "two-line property this arm grades is not present to grade"
+        )
+        assert {ln.split("\t")[1] for ln in lines} == {label}, (
+            f"the two lines of one fire disagree about who fired it: {lines}. The "
+            "start line is written before argv is parsed, which is exactly the "
+            "trap a plain argparse flag falls into"
+        )
+
+
+def test_a_spawned_fire_with_no_flag_still_says_cli(watch, monkeypatch, tmp_path):
+    """THE FALLBACK ARM, restated against the flag rather than the variable.
+
+    A hook fires with nothing set, and an operator running the script by hand
+    sets nothing either. Adding a flag must not have quietly moved the default:
+    if a bare run stopped saying `cli`, every line already in the operator's
+    log would be describing a caller that no longer exists.
+    """
+    redirected = tmp_path / "runtime-bare"
+    done = _spawn(
+        ["--dir", str(tmp_path / "absent")],
+        {watch.ENV_RUNTIME_DIR: str(redirected), watch.ENV_INVOCATION_SOURCE: None},
+    )
+    assert done.returncode == 0, f"stderr: {done.stderr[:400]!r}"
+
+    lines = _spawned_lines(redirected, monkeypatch, watch)
+    assert {ln.split("\t")[1] for ln in lines} == {watch.SOURCE_CLI}, lines
+
+
+def test_a_forged_flag_label_cannot_reach_a_spawned_log(watch, monkeypatch, tmp_path):
+    """The validator on the real path, driven through ARGV this time.
+
+    The variable half of this is already armed. Argv is the newer channel and
+    is no more trustworthy: a hook command is a string in a settings file that
+    anything editing the tree can write.
+    """
+    redirected = tmp_path / "runtime-forged"
+    done = _spawn(
+        [
+            "--dir",
+            str(tmp_path / "absent"),
+            "--source",
+            "sessionstart" + chr(9) + watch.TERMINAL_MARKED,
+        ],
+        {watch.ENV_RUNTIME_DIR: str(redirected), watch.ENV_INVOCATION_SOURCE: None},
+    )
+    assert done.returncode == 0, f"stderr: {done.stderr[:400]!r}"
+
+    lines = _spawned_lines(redirected, monkeypatch, watch)
+    for line in lines:
+        assert len(line.split("\t")) == 3, f"a forged flag label grew a column: {line!r}"
+    assert {ln.split("\t")[1] for ln in lines} == {watch.SOURCE_CLI}, (
+        f"a rejected flag label did not fall back to the honest one: {lines}"
     )

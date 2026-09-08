@@ -165,9 +165,14 @@ QUIET_SHAPE = re.compile(r"\A\s*\Z|^unread: \d+\s*$", re.MULTILINE)
 #: differently. Exact lookup also strengthens the non-vacuity property already
 #: recorded above: a hook cannot acquire a flag that changes what it prints
 #: without somebody stating the new expectation here.
+#: The `--source` labels are PART OF THE KEY, deliberately. Adding the flag
+#: changed both watcher commands, and this table refused them until they were
+#: restated here - which is the exact-lookup property working rather than an
+#: inconvenience. A hook cannot acquire a flag without somebody saying what it
+#: must now print, and neither of these labels changes the stdout at all.
 EXPECTED_SHAPE = {
-    "python scripts/watch_inbox.py": REPORT_SHAPE,
-    "python scripts/watch_inbox.py --quiet-when-empty": QUIET_SHAPE,
+    "python scripts/watch_inbox.py --source sessionstart": REPORT_SHAPE,
+    "python scripts/watch_inbox.py --quiet-when-empty --source userpromptsubmit": QUIET_SHAPE,
     "python tools/caveman_default.py": BANNER_SHAPE,
 }
 
@@ -466,7 +471,18 @@ def _live_runtime_records() -> dict[str, Path]:
     }
 
 
-def _isolated_env(runtime: Path) -> dict[str, str]:
+#: Sentinel for `_isolated_env(source=...)` and `_fire(source=...)`: keep the
+#: suite label. It is a string the label validator can never accept - a NUL is
+#: outside `[a-z0-9._-]` - so a caller that passed it by accident would fall
+#: back to `cli` rather than silently writing a plausible-looking label.
+#:
+#: A sentinel rather than `None` meaning "default", because `None` is the value
+#: one arm genuinely needs: UNSET the variable, so the `--source` flag on the
+#: declared command is what labels the fire.
+KEEP_SUITE_LABEL = "\0keep-suite-label"
+
+
+def _isolated_env(runtime: Path, source: str | None = KEEP_SUITE_LABEL) -> dict[str, str]:
     """The environment every launch in this file uses.
 
     BOTH HALVES ARE LOAD-BEARING AND NEITHER IS REDUNDANT. The runtime redirect
@@ -474,11 +490,24 @@ def _isolated_env(runtime: Path) -> dict[str, str]:
     suite line that does get written - a child launched some other way, a
     variable someone forgot - TELLABLE from a real hook fire. One protects the
     file, the other protects the reading.
+
+    `source` IS APPENDED AT THE END WITH A DEFAULT, per `CLAUDE.md`: a mid-
+    signature required parameter breaks every existing call. `None` unsets the
+    variable entirely, which exactly one arm needs - the variable OUTRANKS the
+    `--source` flag on the declared command, so an arm grading that flag has to
+    take the variable out of the way. The runtime redirect is not optional in
+    that case and is not made optional here: the file protection stays on every
+    single launch, whatever the label says.
     """
     watcher = _watcher_module()
     env = dict(os.environ)
     env[watcher.ENV_RUNTIME_DIR] = str(runtime)
-    env[watcher.ENV_INVOCATION_SOURCE] = watcher.SOURCE_SUITE
+    if source == KEEP_SUITE_LABEL:
+        env[watcher.ENV_INVOCATION_SOURCE] = watcher.SOURCE_SUITE
+    elif source is None:
+        env.pop(watcher.ENV_INVOCATION_SOURCE, None)
+    else:
+        env[watcher.ENV_INVOCATION_SOURCE] = source
     return env
 
 
@@ -794,7 +823,9 @@ class Fired(NamedTuple):
     runtime: Path | None = None
 
 
-def _fire(argv: list[str], tmp_path: Path, label: str) -> Fired:
+def _fire(
+    argv: list[str], tmp_path: Path, label: str, source: str | None = KEEP_SUITE_LABEL
+) -> Fired:
     """Launch `argv` at the repo root and read its streams back off disk.
 
     FILES rather than pipes, for both reasons the existing arm gives: an exit
@@ -815,7 +846,7 @@ def _fire(argv: list[str], tmp_path: Path, label: str) -> Fired:
             status = subprocess.call(
                 argv,
                 cwd=str(REPO_ROOT),
-                env=_isolated_env(runtime),
+                env=_isolated_env(runtime, source),
                 stdout=out,
                 stderr=err,
                 stdin=subprocess.DEVNULL,
@@ -1272,3 +1303,182 @@ def test_the_banner_pin_is_not_vacuous():
     assert mutant != banner, "the mutation did not change the bytes; it proves nothing"
     assert hashlib.sha256(mutant).hexdigest() != BANNER_SHA256
     assert len(mutant) != BANNER_BYTES
+
+
+# ---------------------------------------------------------------------------
+# (g) THE ENTRY-POINT LABEL, AND IT IS AN ENFORCED-GATE SECTION.
+#
+# `.claude/settings.json` wires BOTH `SessionStart` AND `UserPromptSubmit` to
+# `scripts/watch_inbox.py`, and the watcher's `__main__` guard fell back to one
+# label - `cli` - for both, and for a manual terminal run as well. Measured
+# 2026-09-08 at HEAD 0e9491a: every fire in the complete live log was `cli`,
+# every one labelled `cli`, three of them stamped within two seconds of one cold
+# boot while only TWO watch_inbox hook events were visible in the session. The
+# instrument could not discriminate the axis it was built for - which hook, on
+# which event, and does SessionStart survive `/clear`.
+#
+# AN ARM ON `resolve_source`'s RETURN VALUE PROVES NOTHING ABOUT THIS. A gate
+# tested as a pure predicate is not an enforced gate, and that has recurred four
+# times in this tree. So the arms below parse the REAL settings file and read
+# the label off the REAL declared command, and one of them fires that command
+# and reads the entry-point column back off disk.
+# ---------------------------------------------------------------------------
+
+
+def _declared_source(command: str) -> str | None:
+    """The `--source` label a declared hook command carries, if any.
+
+    Read with the WATCHER'S OWN SCANNER over the command's tokens, not with a
+    regex written here. Two readers of one argv reaching two answers is the
+    defect this whole section is about, and the scanner is the reader that
+    actually runs at the process entry point.
+    """
+    watcher = _watcher_module()
+    return watcher.source_from_argv(_tokens(command)[1:])
+
+
+def _watcher_hooks() -> list[HookCommand]:
+    return [
+        hook
+        for hook in _hook_commands(_load_settings())
+        if WATCHER in _repo_relative_command(hook.command)
+    ]
+
+
+def test_every_declared_watcher_hook_names_its_own_entry_point():
+    """THE DECLARATION HALF. Read off the tracked settings file, not a fixture.
+
+    DISCOVERED FROM THE WATCHER, NEVER LISTED HERE. The event-to-label mapping
+    lives in `scripts/watch_inbox.py` as `HOOK_EVENT_SOURCES`, so an event wired
+    tomorrow inherits this arm rather than needing somebody to remember it, and
+    a label renamed in the script turns this red instead of drifting.
+    """
+    watcher = _watcher_module()
+    hooks = _watcher_hooks()
+    assert len(hooks) >= 2, (
+        f"only {len(hooks)} declared hook(s) run {WATCHER}; the whole question is "
+        "whether two different events can be told apart, and one event cannot "
+        "make this arm mean anything"
+    )
+
+    for hook in hooks:
+        expected = watcher.HOOK_EVENT_SOURCES.get(hook.event)
+        assert expected is not None, (
+            f"hooks.{hook.event} runs {WATCHER} but the watcher declares no label "
+            f"for that event. Add it to HOOK_EVENT_SOURCES: it knows "
+            f"{sorted(watcher.HOOK_EVENT_SOURCES)}"
+        )
+        assert _declared_source(hook.command) == expected, (
+            f"hooks.{hook.event} declares `{hook.command}`, which labels itself "
+            f"{_declared_source(hook.command)!r} rather than {expected!r}. Without "
+            f"it the fire lands in the log as {watcher.SOURCE_CLI!r}, exactly like "
+            "every other caller of this script"
+        )
+
+
+def test_no_two_hook_events_share_one_entry_point_label():
+    """THE PROPERTY, stated without naming an event.
+
+    Two events writing one label is the state this work exists to leave, and it
+    is not caught by checking each event against its own expectation - a copied
+    mapping entry satisfies that and still collapses the column.
+    """
+    labels = {hook.event: _declared_source(hook.command) for hook in _watcher_hooks()}
+    assert len(labels) >= 2, f"only {len(labels)} event(s) run the watcher: {labels}"
+    assert None not in labels.values(), f"an event declares no label at all: {labels}"
+    assert len(set(labels.values())) == len(labels), (
+        f"two hook events write the same entry-point label: {labels}. The log then "
+        "answers 'something fired' and the question is WHICH hook fired"
+    )
+
+
+def test_the_declared_labels_are_not_the_fallback_every_caller_writes():
+    """NON-VACUITY. `cli` in a hook command would satisfy every arm above.
+
+    It would parse, it would be distinct from nothing, and it would leave the
+    log exactly as unreadable as it was - which is the shape a mapping filled
+    in without reading this section would take.
+    """
+    watcher = _watcher_module()
+    declared = {_declared_source(hook.command) for hook in _watcher_hooks()}
+    assert declared, "no declared label to grade"
+    for label in declared:
+        assert label not in (watcher.SOURCE_CLI, watcher.SOURCE_SUITE, watcher.SOURCE_MAIN), (
+            f"a hook declares {label!r}, which is the label a bare run, this suite "
+            "or an in-process call already writes; the fire stays unseparable"
+        )
+
+
+def test_the_declared_source_flag_is_still_a_relative_machine_neutral_command():
+    """The new token must not have smuggled anything machine-specific in.
+
+    A sibling's `.claude/settings.json` carried eleven hardcoded `C:\\Users\\`
+    paths. The absolute-path guard already sweeps every token, and this arm
+    states the narrower fact for the token this work added, so a label like
+    `C:/x` would be red here as well as there.
+    """
+    watcher = _watcher_module()
+    for hook in _watcher_hooks():
+        tokens = _tokens(hook.command)
+        assert watcher.SOURCE_FLAG in tokens, (
+            f"hooks.{hook.event} carries no {watcher.SOURCE_FLAG} token: {hook.command!r}"
+        )
+        assert WATCHER in [_repo_relative(token) for token in tokens], (
+            f"hooks.{hook.event} no longer names {WATCHER} as a relative path: "
+            f"{hook.command!r}"
+        )
+        for token in tokens:
+            assert not _is_absolute(_repo_relative(token)), (
+                f"hooks.{hook.event} pins itself to one machine: {token!r}"
+            )
+
+
+def test_a_fired_hook_writes_its_declared_label_on_both_lines(tmp_path):
+    """THE ENFORCED-GATE ARM. Fire the declared command, read the column back.
+
+    BOTH LINES, AND THAT IS THE POINT. `main` writes its `start` line BEFORE
+    `_main` parses argv, so a label resolved by argparse alone would appear on
+    the terminal line only and the two lines of one fire would name two
+    different callers. A fire killed at the hook's five second ceiling writes
+    only the `start` line, which would then be the unlabelled one - the exact
+    case the log exists to catch.
+
+    `RESINCOMPUTE_INVOCATION_SOURCE` IS UNSET FOR THIS ARM ALONE, because it
+    outranks the flag by design and leaving it set would make this a statement
+    about the variable rather than about the declared command. The runtime
+    redirect stays, so nothing here can reach `ops/runtime/` -
+    `test_this_file_leaves_the_live_runtime_records_byte_unchanged` is what
+    holds that claim rather than this comment.
+    """
+    hooks = _watcher_hooks()
+    assert len(hooks) >= 2, f"only {len(hooks)} declared watcher hook(s) to fire"
+
+    observed: dict[str, set[str]] = {}
+    for index, hook in enumerate(hooks):
+        fired = _fire(_argv(hook.command), tmp_path, f"entrypoint-{index}", source=None)
+        assert fired.status == 0, (
+            f"`{hook.command}` exited {fired.status}; a label the parser rejects "
+            f"fails on EVERY fire. stderr: {fired.noise.strip()[:400]!r}"
+        )
+        assert fired.runtime is not None
+
+        lines = _isolated_lines(fired.runtime)
+        phases = [line.split("\t")[-1] for line in lines]
+        assert len(lines) == 2 and _watcher_module().PHASE_START in phases, (
+            f"`{hook.command}` left {phases}, not a start and one terminal, so the "
+            "two-line property this arm grades is not present to grade"
+        )
+        sources = {line.split("\t")[1] for line in lines}
+        assert sources == {_declared_source(hook.command)}, (
+            f"`{hook.command}` wrote {sources} but declares "
+            f"{_declared_source(hook.command)!r}. If the two lines disagree the "
+            "start line is being labelled before argv is read, which is the trap"
+        )
+        observed[hook.event] = sources
+
+    distinct = {label for sources in observed.values() for label in sources}
+    assert len(distinct) == len(observed), (
+        f"the fires were not separable on disk: {observed}. This is the arm that "
+        "would have caught the state at HEAD 0e9491a, where every fire from "
+        "three different callers all read `cli`"
+    )

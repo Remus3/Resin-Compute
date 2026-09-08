@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python scripts/watch_inbox.py",
+            "command": "python scripts/watch_inbox.py --source sessionstart",
             "timeout": 5
           },
           {
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python scripts/watch_inbox.py --quiet-when-empty",
+            "command": "python scripts/watch_inbox.py --quiet-when-empty --source userpromptsubmit",
             "timeout": 5
           }
         ]
