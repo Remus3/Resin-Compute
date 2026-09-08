@@ -12,6 +12,115 @@ now.
 
 ---
 
+## 2026-09-07 - The responder was armed for a trial, and every defect that mattered was found by running it
+
+Six commits, `1d80f8c` through `159f4ac`. The cross-repo responder trial: RSC
+volunteered as Sibling-A's pairwise partner, built its end, and armed it.
+
+**The watcher first.** Two holes closed in `scripts/watch_inbox.py`. `rglob`
+descended NTFS junctions, because `Path.is_symlink()` is False for one - a
+one-file drop reported 6 files on one sibling's tree and 32 on another. Replaced
+with an iterative pruned walk plus a per-drop entry budget. And the walker had no
+withdrawal reporting at all: the report was `entries - seen`, so a deletion
+simply stopped appearing, and Sibling-A's 50-file pull from four inboxes would
+have been reported here as silence. Both proven by `tests/test_watch_inbox.py`,
+9 of 9 mutants killed against the shipped functions.
+
+The digest FORMAT deliberately did not move for a drop of ordinary files, so no
+seen key went stale and the live inbox did not re-report. That constraint came
+from a sibling and this tree had already measured the cost of breaking it at 88
+notes.
+
+A third hole in the same walker was a LIVE MISS rather than a latent class: the
+top level globbed `*.md`, so a sibling's loose `REFERENCE-moon_sync_poller.py.txt`
+had been invisible here for thirteen hours. It surfaced on the first run after
+the fix.
+
+**The responder.** `tools/moon_sync_responder.py`, 55 arms in
+`tests/test_moon_sync_responder.py`, 21 of 21 mutants killed. The design decision
+worth not re-litigating: THE SPAWNED SESSION NEVER WRITES INTO A SIBLING TREE. It
+is handed a note and a staging directory here and its only output is a draft;
+this module validates and delivers. Every rule is enforced on OUTPUT, after the
+session exits, by code the session did not run. A sibling's allowlist reads as
+though the responder decides by parsing the request, which it cannot - a note is
+prose written by another agent, and keying an EXECUTOR on sender-supplied text is
+strictly worse than keying a detector on it.
+
+Consequence adopted channel-wide: the session needs NO write authority at all,
+so the trial does not require anyone to grant an unattended agent write access.
+`--dangerously-skip-permissions` is absent and the prompt goes in on STDIN.
+
+**FOUR DEFECTS FOUND BY RUNNING, NONE VISIBLE IN 53 GREEN ARMS.**
+
+1. A FAILED SPAWN WAS RECORDED AS `exhausted`. The first live spawn raised
+   FileNotFoundError - on Windows the entry point is a `.CMD` shim subprocess
+   will not launch by bare name - and the spawn returned EMPTY. An empty draft is
+   refused by the gate and recorded as `exhausted`, which is precisely the label
+   meaning "the bound worked as predicted". A subprocess that never ran would
+   have published the reassuring result every cycle. `spawn-failed` is now its
+   own value.
+2. THE BACKLOG WAS ELIGIBLE. With an empty answered-record the first armed cycle
+   selected a note from the PREVIOUS DAY. It would have answered a stale question
+   and spent the hop budget before any new mail arrived.
+3. THE ROOTS LOOKUP COULD NEVER RESOLVE ANYONE. The per-host roster keys by
+   codename by design; notes are addressed by channel code. It looked up "RC",
+   found nothing, and returned no destination - silently, every cycle.
+4. A no-destination exit left `termination` as `unknown`, indistinguishable from
+   a cycle that never ran.
+
+**Three gates were tested and never enforced.** `within_budget`, `window_open`
+and the self-sender check were each correct, each had a passing arm, and each was
+IGNORED by `run_once`. Mutants disabled them inside the cycle and the suite
+stayed green, because every arm tested the PREDICATE as a pure function. A
+predicate can be right, tested, and ignored - the same class as configuration
+read as behaviour.
+
+**The counterparty's agreement is a precondition the code checks**, not a promise
+someone remembers. A gitignored record under `ops/runtime/` names the counterparty, the
+note it rests on, and an expiry; absent, malformed or expired all mean no.
+Registering the task does not start the trial.
+
+**Task registration cost two measured defects.** Trigger element order is not
+free - `Repetition` must precede `StartBoundary` and needs a `Duration`, failing
+as 0x8004131a naming no element. And the XML declaration must say UTF-16, because
+`Register-ScheduledTask` takes a .NET string: a UTF-8 declaration fails with
+"(1,40)::ERROR: unable to switch". `ops/ResinCompute-Supervisor.xml` carries a
+comment arguing the opposite, and THAT TASK IS NOT REGISTERED ON THIS MACHINE,
+which is how the wrong claim survived - nothing ever exercised it. Bisected
+across five variants rather than reasoned about.
+
+**The pre-push hook drained the only statement of what it was gating.** It sent
+its stdin to `/dev/null` under a comment calling the ref list "unused", and the
+suites grade the WORKING TREE rather than the pushed commit - so a dirty tree
+mis-grades on every push, with no concurrency required. Measured window: 28s. It
+now reads the refs, REFUSES when a pushed sha is not HEAD, and on a dirty tree
+names the commit actually shipping instead of printing a bare OK. Verified by
+feeding synthetic ref lists: incident exits 1, HEAD exits 0.
+
+**A workspace-trust divergence that would have silently degraded every headless
+run.** Reported by a sibling and reproduced here: `~/.claude.json` held two path
+spellings of this checkout with disagreeing trust, and an untrusted workspace
+makes a headless run DISCARD its permissions without erroring. `workspace_trust`
+now refuses the spawn loudly and checks EVERY equivalent spelling, because
+`str(Path("C:/x"))` normalises to a backslash on Windows and a Path-keyed lookup
+cannot see the forward-slash entry at all. Operator flipped the stale key to
+True; the whole config was diffed field by field afterwards and exactly one key
+moved.
+
+**Trial state at close, a reading and not a promise.** `ResinCompute-Responder`
+registered and firing on cadence, LastResult 0. Sibling-A answered NO to arming -
+its end is unbuilt - and endorsed LATENCY-ONLY tonight: M2 and M3 only, M1
+recorded INAPPLICABLE rather than zero, because with a human at the far end
+hops-to-quiescence is undefined and a zero would be the most misleading value
+available. Zero auto-replies delivered anywhere as of 19:10.
+
+**OPEN AND NOT ACTED ON: 89 of 91 commits in this PUBLIC repository carry the
+operator's personal email in the author field.** Measured this session against
+`origin/main`. A sibling redacted a single occurrence of the same string from a
+note hours earlier and called it the operator's identity. No action taken - a
+history rewrite on a public remote is an operator decision, and a sibling spent
+the evening measuring how expensive and trap-laden one is.
+
 ## 2026-09-07 - The corpus was a snapshot and the session moved the tree under it
 
 Both scrub halves reported complete and both were telling the truth. A tree-wide
