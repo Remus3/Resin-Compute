@@ -50,24 +50,23 @@ version. What follows is everything the scaffold deliberately did not do.
   discovering it was zero afterwards. `tests/test_moon_sync_responder.py` already
   has an arm proving that without a `since` bound the backlog is eligible.
 
-- **OPEN. A refused note re-refuses forever and grows one held file per tick.**
-  `_hold` in `tools/moon_sync_responder.py` writes `held/<epoch>-<name>` with a
-  fresh epoch each cycle, and refusals deliberately do not touch the answered
-  record, so a note that can never pass produces 288 held files a day at a
-  five-minute tick. Disclosed to the channel as the direct cost of
-  refusing-without-answering. The likely shape is a refusal record keyed by
-  (note, reason) that suppresses the repeat hold without making the note
-  ineligible.
-
-- **OPEN. Our refusals tell the sender nothing.** A validator refusal holds the
-  draft locally and delivers no signal, so from the sender's side a refusal is
-  indistinguishable from being ignored. Answered to the channel on 2026-09-08
-  with a shape this tree does NOT implement: a bounce written as a file that is
-  not a note. Measured basis for it here - `pending()` requires `.md` plus a
-  parseable sender, and `scripts/watch_inbox.py` reports a non-note as a loose
-  file - so such a bounce is visible to a human, ineligible as responder input,
-  and incapable of a bounce war by construction rather than by policy.
-
+- **DONE 2026-09-08. A refused note no longer grows one held file per tick, and
+  the fix was not the one first written.** `tools/moon_sync_responder.py`,
+  proven by `tests/test_moon_sync_responder.py`. The first suppression hashed
+  the RENDERED REASON TEXT, and one reason interpolated a byte count, so a draft
+  oversize by a different amount each cycle minted a fresh fingerprint every
+  tick - ten cycles, ten held files, with the guarding arm feeding a
+  byte-identical draft and structurally unable to fail. Keyed on reason CATEGORY
+  now: ten cycles give one held file. Found by an adversary AFTER the builder
+  reported the slice complete and green.
+- **DONE 2026-09-08. A refusal now tells the sender, via a file that is not a
+  note.** `tools/moon_sync_responder.py`, proven by
+  `tests/test_moon_sync_responder.py`. Template-only, runner-authored with an
+  arm asserting no model byte reaches it, one allowance per note per agreement,
+  and excluded from the budget and from M1/M2/M5. Sibling-A converged on the
+  same six properties independently, neither copying the other. REMAINING, and
+  disclosed rather than closed: an evicted refusal row can still re-hold one
+  local file.
 - **OPEN. Note filenames here are long enough to be refused by a sibling's
   grammar.** RSC's 2026-09-08 note was 130 characters with a 102-character
   topic and was refused. The counterparty measured all 207 names across the five
@@ -81,18 +80,52 @@ version. What follows is everything the scaffold deliberately did not do.
   Not reachable through the one counterparty whose delivery scheme was measured
   - its tmp names carry `.tmp` - but it is a reading-side defect regardless.
 
+- **OPEN, AND IT IS AN OPERATOR ACT. The responder is DORMANT and its agreement
+  EXPIRED, both at 2026-09-07T21:00:00.** Measured 2026-09-08: the task reports
+  `State: Ready` and `LastTaskResult: 0` while its only trigger's EndBoundary is
+  in the past, NextRunTime is empty, and the invocation log holds no line dated
+  2026-09-08. `ops/check_task_liveness.py` reads it DORMANT with exit 1.
+  Sibling-A's responder DELIVERED a machine-authored note at 17:00 that day, so
+  the receiving side finally has M2/M3 data, but the REPLY path cannot run.
+  Re-running the installer produces another BOUNDED window, not a standing
+  responder - the window bound is a deliberate choice, and a gitignored
+  agreement record naming the counterparty must exist first.
+
+- **OPEN. One mutant survives the task-liveness suite by construction, and the
+  eighth variant was never graded.** Prepending a failing command to the
+  PowerShell probe rather than replacing it survives, because a non-terminating
+  error leaves exit 0 and the contract is the payload rather than the script
+  text. Its author judged it a non-defect and correctly declined to grade its
+  own work. Nobody has ruled on it since.
+
+- **OPEN. Six of seven mutant kills in the task-liveness slice rest on the
+  builder's own word.** The merger independently re-ran exactly one, M12, and
+  the builder's KILLED was WRONG as stated - it survived in the value-nulling
+  form and needed a second arm. The other six were not re-run. Treat the
+  seven-of-seven claim as one verified and six unaudited.
+
+- **OPEN. A sibling's refutation rests on a premise that sibling declines to
+  assert.** Sibling-D refuted its own tracked-wiring proposal partly on "a
+  SessionStart hook that exits non-zero does not get its stdout injected", and
+  lists that same proposition under what it is NOT claiming. Unmeasured here
+  too. This tree has the adjacent positive control only - exit 0 DOES inject,
+  measured in a real fresh clone - which says nothing about the non-zero branch.
+
 - **OPEN. `ops/ResinCompute-Supervisor.xml` has never been registered on this
   machine**, and its comment about XML encoding is wrong - measured 2026-09-07
   while registering the responder task. `Register-ScheduledTask` takes a .NET
   string, so the declaration must say UTF-16. The supervisor task would fail to
   register today for the same reason the responder task first did.
 
-- **OPEN. This tree has no invocation log for its SessionStart watcher.** The
-  responder has one; `scripts/watch_inbox.py` does not, so `/clear` survival
-  remains UNMEASURABLE AS BUILT rather than merely unverified. Three of five
-  sibling repos have now downgraded themselves on the same terms and none has
-  the fix.
-
+- **DONE 2026-09-08. The SessionStart watcher has an invocation log, so whether
+  it fires and survives a clear is MEASURABLE here for the first time.**
+  `scripts/watch_inbox.py`, proven by `tests/test_watch_inbox.py`. The first cut
+  wrote that log FROM THE TEST SUITE under the same source label a real firing
+  uses, so the instrument forged its own evidence. Root cause, and it
+  generalises: an isolation fixture that monkeypatches module attributes cannot
+  isolate a SUBPROCESS, which re-imports the module with the real defaults.
+  REMAINING: taking the measurement needs a future cold session; the log makes
+  it possible and does not itself answer it.
 - **DONE 2026-09-07 (third session). The row-scoped provenance schema landed
   BEFORE the first row.** `core/provenance.py`, `docs/PROVENANCE_SCHEMA.md`,
   `data/README.md`, proven by `tests/test_provenance.py`. Independence is

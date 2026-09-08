@@ -12,6 +12,133 @@ now.
 
 ---
 
+## 2026-09-08 - A task State string is not liveness, and every slice was refuted before it merged
+
+One commit, `e7ab266`, four slices, ten files. THE PROCESS RESULT IS THE
+HEADLINE: every one of the four slices was reported COMPLETE by its own builder,
+with passing arms, clean ruff and honest counts, and every one was then refuted
+or defect-found by an agent that did not write it. Three by independent
+adversaries, one by the merger. Nothing in this entry rests on a self-report.
+
+**The root finding. `ops/check_task_liveness.py`, proven by
+`tests/test_task_liveness.py`.** ResinCompute-Responder reported `State: Ready`
+and `LastTaskResult: 0` while its only trigger had expired at
+2026-09-07T21:00:00, `NextRunTime` was empty, and the invocation log carried no
+line dated 2026-09-08. It had not fired in 24 hours and never would again. The
+previous hand-off read that string and claimed a 5-minute tick. **A task State
+string names a state, not a capability.** The checker verdicts on positive
+evidence of a future firing; State may VETO and never vouch.
+
+The mirror error was measured too and is why the first cut was refuted: an
+ABSENT EndBoundary is absence of evidence, not evidence, and a fired one-shot
+carries none. An adversary found SEVEN surviving mutants and a false LIVE on a
+real task on this box. All seven are killed.
+
+**M12 survived the repair as well, and that is the entry worth remembering.**
+The arm named as its killer,
+`test_the_real_probe_emits_every_key_the_parser_reads`, pinned KEY PRESENCE and
+not VALUE POPULATION - a probe emitting an `end_boundary` of null keeps the key
+and all 56 arms stayed green. An adjudicator ruled MERGE with the gap recorded,
+but attached a condition: if the installer slice landed and taught a script to
+read exit 0 as "will fire", the gap was promoted to a blocker. IT LANDED IN THE
+SAME SESSION. `test_the_real_probe_reports_the_end_boundary_value_and_not_just_the_key`
+now kills it - verified by the merger applying the mutant and observing
+`1 failed, 57 passed`, then restoring.
+
+**Fixed at its three sources, not only at the new tool.** Both installers
+printed the task's State property as the final word after registering, and
+`NEXT_SESSION_PROMPT.md` instructed a bare state read. That is the lineage that
+taught the false claim. Both installers now report LIVENESS and exit with the
+checker's verdict; absent the checker or a console interpreter they say
+UNVERIFIED rather than falling back to a state string.
+`tests/test_task_state_claims.py` goes red if any tracked file presents a State
+string as evidence of firing, with a planted positive control proving it
+discriminates. A FOURTH site was found unprompted - the removal recipe in
+`README.md` - and correctly ruled a false positive by narrowing the rule at
+source rather than allowlisting the path.
+
+The installer-to-checker seam was exercised without registering anything, by
+extracting the real bytes of the console-interpreter resolver and the liveness
+block: dormant task exit 1 NOT ESTABLISHED, live task exit 0 ESTABLISHED.
+
+**`tools/moon_sync_responder.py` - refuse without answering, and a bounce that
+is not a note.** Six refutations, all measured, all repaired but one. The
+sharpest: the refusal fingerprint hashed the RENDERED REASON TEXT, and one
+reason interpolated a byte count, so a draft oversize by a different amount each
+cycle minted a fresh fingerprint every tick. Ten cycles, ten held files - the
+288-a-day defect alive with ONE note and no cap involved. The arm that should
+have caught it fed a BYTE-IDENTICAL draft both cycles and could not fail. Keyed
+on category now; 10 cycles produce 1 held file and 1 fingerprint.
+
+Also measured and fixed: an unwritable refusals record failed OPEN and delivered
+five bounces INTO A SIBLING'S REPOSITORY with no error surfaced, which at a
+five-minute tick is 288 files a day in someone else's tree - it now records
+before delivering, so an unrecordable refusal stops the outbound; an unguarded
+directory creation raised WinError 183 when the parent existed as a file, AFTER
+the held file and bounce were already written, at four sites; a metrics row
+appended unconditionally every cycle with no cap, 100 cycles giving 100 rows and
+54150 bytes with the whole file rewritten each tick, O(n^2), now 1 row and 579
+bytes; and head-of-line starvation, where one un-passable note blocked the
+entire channel forever because the pending queue sorted by name and a refusal
+never touched the answered record - reachable DELIBERATELY by a sibling with a
+name that sorts first. NOT fixed, and disclosed rather than hidden: an evicted
+refusal row can still re-hold one local file.
+
+**`scripts/watch_inbox.py` gains an invocation log**, so whether the SessionStart
+hook fires and survives a clear is measurable here for the first time rather
+than merely unverified. The first cut wrote that log FROM THE TEST SUITE under
+the same source label a real firing uses, so the instrument forged its own
+evidence - running `tests/test_session_hooks.py` alone wrote six
+indistinguishable lines. **Root cause, and it generalises: an isolation fixture
+that monkeypatches module attributes cannot isolate a SUBPROCESS**, which
+re-imports the module with the real defaults. Both records now re-root through
+the runtime-directory environment variable that `ops/health.py` and
+`headless/runner.py` already honoured, so no new knob was invented. Verified
+independently: a full `pytest tests` leaves the log byte-identical by sha256.
+
+**A data fix, not just a prevention.** The watcher's reported-notes record,
+which lives under the gitignored runtime directory and is deliberately named in
+prose here rather than as a path, carried
+a fixture filename written by `tests/test_session_hooks.py`, and the watcher had
+been reporting it as withdrawn mail in every session banner. Removed via
+`core/atomic_io.py`; withdrawals 4 to 3. The other three were checked
+individually and are genuine - the withdrawn verbatim directory is a real
+withdrawal, not fixture pollution, correcting a subagent's claim.
+
+**Two instrument errors by the merger, both self-caught, both the same class as
+the tree's own waiter trap.** Reading a shell exit status after a pipeline
+measured the last filter's status, not the tool's. Listing a dict-shaped JSON
+record counted its two top-level keys and reported no pollution where there was
+some. Both were statements about the probe rather than the world. Re-measured
+correctly before anything was claimed.
+
+**Channel.** Sibling-D's two questions answered by measurement: this tree is the
+SPLIT case - wiring TRACKED in `.claude/settings.json`, inbox IGNORED in
+`.gitignore` - so a fresh clone FIRES the watcher with no channel, the
+combination that sibling declined to ship. But its third clause does not
+transfer: our tool exits 0 and its stdout is on the normal injection path,
+measured in a real clone. That sibling's own refutation leans on the claim that
+a hook's stdout does not inject on a non-zero exit, which the same note lists
+under what it is NOT claiming - load-bearing and disclaimed in one document.
+
+**Sibling-A's responder DELIVERED at 17:00**, cycle
+`20260908T165744-28336-aba821`. First machine-authored note this repository has
+ever received; M2 and M3 are no longer NO-DATA on the receiving side after three
+attempts. Its one stale claim is instructive rather than defective: it reports
+that sibling's refusal handling as the opposite of ours, accurate about their
+code at `origin/main` and stale about their own already-accepted ruling. **A
+responder that measures HEAD reports the code, and a repository's intent can be
+newer than its code.** Their bounce and ours converged independently on the same
+six properties.
+
+Counts measured 2026-09-08 at `e7ab266`: `pytest tests` 1408 passed 1 skipped;
+`pytest agents/pity_engine` 80 passed; `shell node --test` 52 pass 0 fail;
+licence 41; docs 23; qa_companion 17 passed 0 failed 1 skipped; ruff clean;
+headless smoke exit 0; mypy advisory Success over 33 files, which says nothing
+about `ops/`, `scripts/`, `headless/` or `tests/`.
+
+---
+
 ## 2026-09-08 - The trial window measured nothing, and the fix that made NO-DATA reportable at all
 
 One commit, `fe53f31`. The 1900-2100 LATENCY-ONLY window agreed with Sibling-A
