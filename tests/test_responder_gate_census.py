@@ -123,6 +123,31 @@ name-grammar class above.
      the distinct-line conjunct is False. The proxy leaves it GREEN and the real
      conjunct reddens it. Measured 2026-09-09: with the proxy substituted that
      arm is the ONLY failure in the file.
+     THAT ARM DEFEATS ONE LITERAL AND ITS NAME CLAIMED A CLASS, corrected
+     2026-09-09 after an independent refutation measured it. SEVEN other wrong
+     fourth conjuncts, and one wrong `_colliding_site_lines` body, each left all
+     71 cases green: `len(_colliding_site_lines(source)) != 1`,
+     `... % 2 == 0`, `len(site_lines) == len(_TAG_LINES)`,
+     `len(site_lines) <= len(_TAG_LINES)`, `len(site_lines) <= _FLOOR`,
+     `len(site_lines) == 18`, and `lines.count(lineno) == 2` in the helper. They
+     fail in OPPOSITE directions, which is why one source could not see them:
+     the first two UNDER-FIRE, reading TRUE while TWO real collisions sit in the
+     file, and the four `site_lines` conjuncts OVER-FIRE, reddening a clean
+     fully tagged responder that merely gained a gate. The repair is IDENTITY AT
+     SEVERAL ARITIES rather than a longer count.
+     `test_the_collision_detector_names_every_colliding_line_at_three_arities`
+     pins `_colliding_site_lines` by EQUALITY at one, two and three sites per
+     line, which also kills the `[:1]` and `[-1:]` truncations that let the
+     failure message name one colliding line where two existed.
+     `test_the_coverage_arm_fires_on_every_collision_arity_and_not_on_a_clean_extra_gate`
+     drives THE ARM over those same three sources requiring a RAISE, and then
+     over a hand-typed responder carrying one EXTRA CORRECTLY TAGGED gate - 19
+     nodes, 19 distinct lines, 19 tags, nothing untagged - requiring NO raise.
+     That over-fire control is what kills the four `site_lines` conjuncts, and
+     no collision source of any arity can.
+     WHAT REMAINS OPEN: the arities are a SAMPLE. A wrong conjunct agreeing with
+     the real one on a clean source, on one collision, on two collisions and on
+     three sites sharing a line passes every arm here.
      WHAT IS NOW GUARDED: a new gate added to `_run_once` in a shape
      `_is_a_consult_site` accepts, and never tagged, turns that arm RED and is
      reported by line. The detector is PROVED to fire rather than assumed to:
@@ -146,6 +171,18 @@ name-grammar class above.
      deletes the first and the last tag in one pass and requires BOTH sites back
      by line and by statement; with `reported[:1]` substituted it is the ONLY
      failure in the file.
+     THAT ARM IS DEPTH-ONE, corrected 2026-09-09. Removing exactly two tags
+     grades multiplicity at one literal, and `return reported[:2]` and
+     `return reported[:3]` each left all 71 cases green against it. Depth is now
+     graded by SET EQUALITY between the reported lines and the removed tag lines
+     at k = 1, 2 and 3 in
+     `test_removing_k_tags_reports_exactly_those_k_sites_as_a_set`, over gates
+     asserted to be non-neighbours in tag order. NO FIXED ARITY BOUNDS AN
+     ARBITRARY TRUNCATION - an arm removing k tags is satisfied by `[:k]` - so
+     `test_removing_every_tag_reports_every_site_and_bounds_no_truncation`
+     removes EVERY tag and requires all 18 sites back by set equality, which
+     kills `reported[:n]` for every n below the tag count and claims nothing
+     about an n at or above it.
      WHAT KILLS AN UNCONDITIONAL REPORTER, STATED OVER THE WHOLE FILE, because
      the two earlier readings of this sentence were each measured over part of
      it and each reversed the other. Substituting a detector that reports EVERY
@@ -504,6 +541,16 @@ def _colliding_site_lines(
     coverage arm's failure message can NAME the colliding line rather than only
     say that a collision exists. Empty on a source with one site per line, so a
     message built from it says nothing when there is nothing to say.
+
+    THE LIST IS PINNED BY EQUALITY, and until 2026-09-09 only its length was.
+    Truncating this body to `sorted(...)[:1]` or to `[-1:]` left the whole file
+    green at 71 passed, so the message named ONE colliding line where TWO
+    existed - which is the naming this helper was split out to provide.
+    `lines.count(lineno) == 2` stayed green as well and calls a line carrying
+    THREE accepted sites clean.
+    `test_the_collision_detector_names_every_colliding_line_at_three_arities`
+    now asserts this list by equality at one, two and three sites per line, and
+    kills all three. It says nothing about arities above three.
     """
     lines = _consult_site_node_lines(source, function_name)
     return sorted({lineno for lineno in lines if lines.count(lineno) > 1})
@@ -965,6 +1012,16 @@ def test_removing_two_tags_reports_both_sites_and_not_only_the_first():
     window by one cannot satisfy this either. The expected line numbers are
     ARITHMETIC stated here rather than read back out of the detector: the lower
     site loses the one deleted line above it, the upper site loses two.
+
+    THIS ARM IS DEPTH-ONE, corrected 2026-09-09 after an independent refutation
+    measured it. It removes exactly TWO tags, so it grades multiplicity at one
+    literal: `return reported[:2]` and `return reported[:3]` each left all 71
+    cases green against it, and an author who forgot three gates was still told
+    about two. What this arm does pin, and the arms below do not, is the
+    reported STATEMENT TEXT and the ORDER of the two reports. Depth is graded by
+    `test_removing_k_tags_reports_exactly_those_k_sites_as_a_set` at k = 1, 2
+    and 3 by set equality, and bounded for every truncation below the tag count
+    by `test_removing_every_tag_reports_every_site_and_bounds_no_truncation`.
     """
     lower_tag = _line_of_tag_named("counterparty-agreement")
     upper_tag = _line_of_tag_named("delivery-write-all")
@@ -1385,10 +1442,27 @@ def test_the_coverage_arm_reddens_on_the_collision_and_not_on_a_count_identity(
 
     Under that source `len(sites) == len(_TAG_LINES)` is 18 == 18 and TRUE, the
     other two conjuncts are TRUE, and ONLY the distinct-line conjunct is False.
-    A proxy therefore leaves the arm GREEN here and the real conjunct reddens
+    That proxy therefore leaves the arm GREEN here and the real conjunct reddens
     it, which is the discrimination the sibling arm cannot make. The three
     non-judgement conjuncts are asserted below before the arm is driven, so a
     failure cannot be blamed on one of them.
+
+    WHAT THIS ARM DOES NOT DO, corrected 2026-09-09 after an independent
+    refutation measured it. Its name says "not on a count identity" and that is
+    a claim about a CLASS; what it defeats is ONE LITERAL, the proxy
+    `len(sites) == len(_TAG_LINES)`. Seven other wrong fourth conjuncts each
+    left all 71 cases green against it - `len(_colliding_site_lines(source))`
+    compared `!= 1` or `% 2 == 0`, `len(site_lines)` compared `== len(_TAG_LINES)`,
+    `<= len(_TAG_LINES)`, `<= _FLOOR` or `== 18`, and the helper body written
+    `lines.count(lineno) == 2`. One collision source cannot see any of them: the
+    first two need TWO collisions and the next four need a CLEAN source that
+    gained a gate. Those are covered by
+    `test_the_coverage_arm_fires_on_every_collision_arity_and_not_on_a_clean_extra_gate`
+    and `test_the_collision_detector_names_every_colliding_line_at_three_arities`
+    at the end of this file. WHAT IS STILL NOT COVERED anywhere here: a wrong
+    conjunct that agrees with the real one on a clean source, on one collision,
+    on two collisions and on three sites sharing a line is invisible to all of
+    them, because the arities are a sample and not a proof.
 
     The bytes go out through `write_bytes` for the reason the sibling arm
     records: `Path.write_text` emits CRLF on this platform and a surviving
@@ -1421,3 +1495,316 @@ def test_the_coverage_arm_reddens_on_the_collision_and_not_on_a_count_identity(
     monkeypatch.setitem(globals(), "RESPONDER", clean_file)
 
     test_every_consult_site_inside_run_once_carries_a_tag()
+
+
+# ---------------------------------------------------------------------------
+# IDENTITY OVER MORE THAN ONE ARITY. Everything above this line pins a SINGLE
+# LITERAL of each property it grades, and a single literal is not a class.
+# Measured 2026-09-09 against the file as it stood: SEVEN wrong fourth conjuncts
+# and one wrong `_colliding_site_lines` body each left all 71 cases GREEN -
+# `len(_colliding_site_lines(source)) != 1`,
+# `len(_colliding_site_lines(source)) % 2 == 0`,
+# `len(site_lines) == len(_TAG_LINES)`, `len(site_lines) <= len(_TAG_LINES)`,
+# `len(site_lines) <= _FLOOR`, `len(site_lines) == 18`, and the helper's own
+# `lines.count(lineno) > 1` written as `== 2`; plus `return reported[:2]` and
+# `return reported[:3]` in `_untagged_consult_sites`. The single literal the
+# arms above pin is `len(sites) == len(_TAG_LINES)`, and killing it says nothing
+# about the other seven.
+#
+# THE SHAPE OF THE ANSWER IS EQUALITY AT SEVERAL ARITIES, NOT A LONGER `len`.
+# The mutants fail in OPPOSITE directions and a fix aimed at one leaves the
+# other alive: `!= 1` and `% 2 == 0` UNDER-FIRE, staying green on a source
+# carrying two real collisions, while `== len(_TAG_LINES)`, `<= _FLOOR` and
+# `== 18` OVER-FIRE, reddening a clean and fully tagged responder that simply
+# gained a gate. So the block below drives BOTH directions: three collision
+# arities that must redden the arm, and one clean-extra-gate source that must
+# not.
+# ---------------------------------------------------------------------------
+
+
+#: THE COLLISION FAMILY, at three arities. Every fragment here is HAND-TYPED.
+#: Each is appended onto a line that ALREADY carries a tagged accepted site, so
+#: the mutation adds accepted-site NODES without adding a site LINE and without
+#: leaving anything untagged - the only property that changes is the one the
+#: fourth conjunct is about. The anchors are matched against the live responder
+#: rather than written as line numbers, so a responder edit relocates the probe
+#: instead of rotting it.
+_COLLISION_ANCHOR_SECOND = 'result["delivered"] = all(ok for ok, _ in written) and bool(written)'
+_COLLISION_APPENDED_SECOND = '; result["advL_second"] = written or True'
+_COLLISION_APPENDED_PAIR = (
+    '; result["advL_pair_a"] = written or True'
+    '; result["advL_pair_b"] = written or True'
+)
+
+#: THE OVER-FIRE CONTROL. One EXTRA accepted site, on its own new line, with a
+#: correct tag above it - a responder that simply grew a gate and tagged it. Its
+#: site count and node count both rise to 19 against an import-time `_TAG_LINES`
+#: frozen at 18, which is exactly the difference every count-shaped proxy reads
+#: as a fault and the real property does not. Hand-typed, both lines.
+_CLEAN_EXTRA_TAG = f"{_TAG}advl-extra"
+_CLEAN_EXTRA_STATEMENT = 'result["advL_extra"] = bool(written) and True'
+
+
+def _collision_source_one() -> tuple[str, list[int]]:
+    """The live responder with ONE line carrying two accepted sites."""
+    source, line = _appended_to_anchor_line(
+        _LIVE_SOURCE, _COLLISION_ANCHOR, _COLLISION_APPENDED
+    )
+    return source, [line]
+
+
+def _collision_source_two() -> tuple[str, list[int]]:
+    """The live responder with TWO separate lines each carrying two sites.
+
+    This is the arity `!= 1` and `% 2 == 0` cannot survive: both read TRUE at
+    two collisions and so leave the coverage arm green while two real collisions
+    sit in the file. Appending never renumbers a line, so the second anchor
+    match is still valid after the first append.
+    """
+    source, first = _appended_to_anchor_line(
+        _LIVE_SOURCE, _COLLISION_ANCHOR, _COLLISION_APPENDED
+    )
+    source, second = _appended_to_anchor_line(
+        source, _COLLISION_ANCHOR_SECOND, _COLLISION_APPENDED_SECOND
+    )
+    return source, sorted([first, second])
+
+
+def _collision_source_three_on_one_line() -> tuple[str, list[int]]:
+    """The live responder with ONE line carrying THREE accepted sites.
+
+    Both fragments go on in a single append, because `_appended_to_anchor_line`
+    matches the anchor against the STRIPPED line and the first append would make
+    a second match impossible. This is the arity the helper mutant
+    `lines.count(lineno) == 2` cannot survive: a line with three sites is not a
+    line with two, so that body returns nothing and calls a triple collision
+    clean.
+    """
+    source, line = _appended_to_anchor_line(
+        _LIVE_SOURCE, _COLLISION_ANCHOR, _COLLISION_APPENDED_PAIR
+    )
+    return source, [line]
+
+
+def _clean_extra_gate_source() -> tuple[str, int]:
+    """The live responder plus one EXTRA, CORRECTLY TAGGED accepted site."""
+    return _lines_inserted_after_anchor(
+        _LIVE_SOURCE, _PROBE_ANCHOR, [_CLEAN_EXTRA_TAG, _CLEAN_EXTRA_STATEMENT]
+    )
+
+
+def test_the_collision_detector_names_every_colliding_line_at_three_arities():
+    """`_colliding_site_lines` by EQUALITY, at one, two and three sites a line.
+
+    An arm that pins only the `len` of this list grades a number and not the
+    list. Measured 2026-09-09: with the body truncated to `sorted(...)[:1]` or
+    to `[-1:]` the whole file stayed GREEN at 71 passed, so the coverage arm's
+    message named ONE colliding line where TWO existed - defeating the stated
+    reason this helper was split out of `_sites_sit_on_distinct_lines` at all.
+    Writing `lines.count(lineno) == 2` instead of `> 1` also stayed green, and
+    it calls a line carrying THREE accepted sites clean.
+
+    Equality against the anchor-derived lines at all three arities kills those
+    three in one arm. The FIRST assertion is the control that stops a helper
+    returning a constant from scoring full marks on the other three.
+    """
+    assert _colliding_site_lines(_LIVE_SOURCE) == []
+
+    one, expected_one = _collision_source_one()
+    assert _colliding_site_lines(one) == expected_one, _colliding_site_lines(one)
+    assert len(_consult_site_node_lines(one)) == len(_consult_site_spots(one)) + 1
+
+    two, expected_two = _collision_source_two()
+    assert len(expected_two) == 2, expected_two
+    assert _colliding_site_lines(two) == expected_two, _colliding_site_lines(two)
+    assert len(_consult_site_node_lines(two)) == len(_consult_site_spots(two)) + 2
+
+    three, expected_three = _collision_source_three_on_one_line()
+    assert _colliding_site_lines(three) == expected_three, _colliding_site_lines(three)
+    assert _consult_site_node_lines(three).count(expected_three[0]) == 3, (
+        _consult_site_node_lines(three)
+    )
+    assert len(_consult_site_node_lines(three)) == len(_consult_site_spots(three)) + 2
+
+
+def test_the_coverage_arm_fires_on_every_collision_arity_and_not_on_a_clean_extra_gate(
+    tmp_path, monkeypatch
+):
+    """THE ARM ITSELF, over both directions, because the mutants run both ways.
+
+    `test_the_coverage_arm_reddens_on_the_collision_and_not_on_a_count_identity`
+    drives the arm over ONE collision source and so grades one literal. Seven
+    wrong fourth conjuncts survive it, measured 2026-09-09, and they divide:
+
+      UNDER-FIRE, green while real collisions exist -
+        `len(_colliding_site_lines(source)) != 1` and `... % 2 == 0` are both
+        TRUE at two collisions, so the two-collision source below is what kills
+        them. Neither survives ONE collision, which is why one source was not
+        enough and three arities are.
+      OVER-FIRE, red on a clean file -
+        `len(site_lines) == len(_TAG_LINES)`, `len(site_lines) <= len(_TAG_LINES)`,
+        `len(site_lines) <= _FLOOR` and `len(site_lines) == 18` are all FALSE on
+        a responder that gained ONE correctly tagged gate, because its nodes go
+        to 19 against an import-time `_TAG_LINES` frozen at 18. Every collision
+        source in the world leaves those four alive; the CLEAN-EXTRA control at
+        the end of this arm is what kills them, and it is also what stops a
+        conjunct hardcoded to today's 18 from re-pinning in the fourth position
+        a number the ceiling says is deliberately not pinned there.
+
+    No `parametrize` here on purpose: an empty list is `1 skipped` at exit 0
+    rather than a failure, and these four sources are the arm's own judgement
+    rather than its scale. The case count is asserted before the loop, so a case
+    silently dropped is a failure.
+
+    The bytes go out through `write_bytes` for the reason the sibling arms
+    record: `Path.write_text` emits CRLF on this platform and a surviving `\\r`
+    sits past the `$` anchor in `_GATE_STRICT`, which would raise `GateTagError`
+    on every real tag and redden this arm for a reason about the harness.
+    """
+    cases = [
+        ("one collision", _collision_source_one()),
+        ("two collisions", _collision_source_two()),
+        ("three sites on one line", _collision_source_three_on_one_line()),
+    ]
+    assert len(cases) == 3, cases
+
+    for index, (why, (mutated, expected)) in enumerate(cases):
+        assert _untagged_consult_sites(mutated, "synthetic") == [], why
+        assert _problems(mutated, "synthetic") == [], why
+        assert len(_consult_site_spots(mutated)) >= _FLOOR, why
+        assert _colliding_site_lines(mutated) == expected, why
+
+        mutated_file = tmp_path / f"collision_{index}_responder.py"
+        mutated_file.write_bytes(mutated.encode("ascii"))
+        monkeypatch.setitem(globals(), "RESPONDER", mutated_file)
+
+        with pytest.raises(AssertionError) as caught:
+            test_every_consult_site_inside_run_once_carries_a_tag()
+
+        message = str(caught.value)
+        assert f"Colliding lines: {expected}" in message, (why, message)
+        assert "Untagged consult sites: none" in message, (why, message)
+
+    clean, tag_line = _clean_extra_gate_source()
+    assert _untagged_consult_sites(clean, "synthetic") == []
+    assert _problems(clean, "synthetic") == []
+    assert _colliding_site_lines(clean) == []
+    assert len(_consult_site_node_lines(clean)) == len(_TAG_LINES) + 1
+    assert len(_consult_site_spots(clean)) == len(_TAG_LINES) + 1
+    assert len(_tags(clean, "synthetic")) == len(_TAG_LINES) + 1
+    assert clean.split("\n")[tag_line - 1].strip() == _CLEAN_EXTRA_TAG
+
+    clean_file = tmp_path / "clean_extra_gate_responder.py"
+    clean_file.write_bytes(clean.encode("ascii"))
+    monkeypatch.setitem(globals(), "RESPONDER", clean_file)
+
+    test_every_consult_site_inside_run_once_carries_a_tag()
+
+
+#: THE MULTIPLICITY ARITIES, and the gates each case deletes. The names are
+#: spread through the file so no two chosen tags are neighbours in tag order: a
+#: detector that merely widened its window by one cannot satisfy k = 2 or k = 3.
+#: Names rather than line numbers, because a line rots on the next responder
+#: edit and a gate name does not. Whether this tuple has emptied is asserted by
+#: `test_removing_every_tag_reports_every_site_and_bounds_no_truncation`, which
+#: is not parametrized and therefore always runs.
+_MULTIPLICITY_TAG_NAMES = ("counterparty-agreement", "empty-queue", "refusal-recorded")
+_MULTIPLICITY_ARITIES = (1, 2, 3)
+
+
+def _tag_lines_named(names: tuple[str, ...]) -> list[int]:
+    """The live lines of these gates, ascending."""
+    return sorted(_line_of_tag_named(name) for name in names)
+
+
+def _expected_untagged_lines_after_removal(removed: list[int]) -> set[int]:
+    """Where each orphaned site lands once every line in `removed` is deleted.
+
+    ARITHMETIC STATED HERE rather than read back out of the detector, which is
+    the whole point of a set-equality assertion. A tag at line `t` sits directly
+    above its site at `t + 1`. The doomed lines at or below `t` are, for the
+    `j`-th tag in ascending order, every doomed line up to and including its
+    own - `j + 1` of them - so that site moves from `t + 1` to `t - j`.
+    """
+    return {lineno - index for index, lineno in enumerate(sorted(removed))}
+
+
+@pytest.mark.parametrize(
+    "arity", _MULTIPLICITY_ARITIES, ids=[f"k{n}" for n in _MULTIPLICITY_ARITIES]
+)
+def test_removing_k_tags_reports_exactly_those_k_sites_as_a_set(arity):
+    """MULTIPLICITY AT THREE ARITIES, BY SET EQUALITY rather than by length.
+
+    `test_removing_two_tags_reports_both_sites_and_not_only_the_first` removes
+    exactly TWO tags, so it grades depth at one literal. Measured 2026-09-09:
+    with `_untagged_consult_sites` truncated to `return reported[:2]` the whole
+    file stayed GREEN at 71 passed, and `return reported[:3]` did too. An author
+    who forgot three gates was told about two, and the arm that exists to grade
+    multiplicity could not see it.
+
+    Set equality at k = 1, 2 and 3 is strictly stronger than the length check it
+    joins: it kills `[:1]` and `[:2]`, and it kills them by naming WHICH sites
+    are missing rather than by disagreeing about a count. The unbounded half -
+    what stops `[:3]`, `[:4]` and every larger truncation - is
+    `test_removing_every_tag_reports_every_site_and_bounds_no_truncation` below,
+    because no fixed arity can bound an arbitrary truncation and this arm does
+    not claim to.
+
+    NON-ADJACENCY IS ASSERTED, not assumed. The chosen gates are checked to be
+    non-neighbours in tag order, so a detector that reported a forgotten site
+    plus its neighbour cannot pass k = 2 or k = 3 by accident.
+    """
+    chosen = _tag_lines_named(_MULTIPLICITY_TAG_NAMES)[:arity]
+    assert len(chosen) == arity, chosen
+
+    ordered = sorted(_TAG_LINES)
+    positions = [ordered.index(lineno) for lineno in chosen]
+    assert all(
+        later - earlier > 1 for earlier, later in zip(positions, positions[1:])
+    ), positions
+
+    mutated = _tag_lines_removed(_LIVE_SOURCE, chosen)
+    untagged = _untagged_consult_sites(mutated, "synthetic")
+    reported_lines = {int(report.split(":")[1]) for report in untagged}
+
+    assert reported_lines == _expected_untagged_lines_after_removal(chosen), (
+        arity,
+        untagged,
+    )
+    assert _problems(mutated, "synthetic") == [], _problems(mutated, "synthetic")
+
+
+def test_removing_every_tag_reports_every_site_and_bounds_no_truncation():
+    """DEPTH WITHOUT AN ARITY CEILING, which no fixed k can give.
+
+    Set equality at k = 1, 2 and 3 kills `reported[:1]` and `reported[:2]` and
+    leaves `reported[:3]` alive - measured 2026-09-09, `[:3]` passed all 71
+    cases. Any arm that removes k tags is satisfied by a truncation at k, so the
+    only assertion that bounds the whole family is one whose expected set is as
+    large as the census gets: every tag removed, every site orphaned, all of
+    them named. That kills `reported[:n]` for every n below the tag count, and
+    claims nothing about an n at or above it.
+
+    THE ARITY LIST IS GUARDED HERE, and a standalone assertion is right for it.
+    An empty `parametrize` list reports `1 skipped` at exit 0 rather than a
+    failure, so the block above could silently stop running; this arm is not
+    parametrized and always does. Standalone rather than welded into the
+    judgement below, following the rule this file already applies to `_FLOOR`: a
+    floor is WELDED when it makes the arm's OWN judgement non-vacuous, and
+    STANDALONE when it pins the SCALE some other block runs at. The arities are
+    that other block's scale.
+    """
+    assert tuple(_MULTIPLICITY_ARITIES) == (1, 2, 3), _MULTIPLICITY_ARITIES
+    assert len(_MULTIPLICITY_TAG_NAMES) == 3, _MULTIPLICITY_TAG_NAMES
+
+    ordered = sorted(_TAG_LINES)
+    assert len(ordered) >= _FLOOR, ordered
+
+    mutated = _tag_lines_removed(_LIVE_SOURCE, ordered)
+    untagged = _untagged_consult_sites(mutated, "synthetic")
+    reported_lines = {int(report.split(":")[1]) for report in untagged}
+
+    assert reported_lines == _expected_untagged_lines_after_removal(ordered), untagged
+    assert len(untagged) == len(ordered), untagged
+    assert _tags(mutated, "synthetic") == []
+    assert _problems(mutated, "synthetic") == [], _problems(mutated, "synthetic")
