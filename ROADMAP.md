@@ -47,24 +47,85 @@ version. What follows is everything the scaffold deliberately did not do.
   HAND-OFF WAS STALE - its two worst entries were already fixed - so re-derive
   rather than trusting any list, including this one.
 
-- **OPEN, and three independent adversaries pointed at it with different
-  lenses.** `tests/conftest.py` routes EVERY non-128 non-zero exit from
-  `git rev-parse --git-dir` to a SKIP, so a genuinely broken git wears the same
-  face as an absent repository. Measured: injecting exit 7 gives 29 passed, 4
-  skipped, EXIT=0 in one file alone. Mitigating and the reason it was not
-  rushed: the reason text names the tool failure honestly, so it is a DECLARED
-  could-not-check rather than a disguised one. Nothing anywhere in `tests/`
-  stubs `git rev-parse --git-dir`, so the 128 and non-128 branches are
-  separated by NO TEST AT ALL. It is the shared file every other test imports,
-  which is why no builder was allowed to touch it mid-flight; it needs its own
-  slice with the whole suite as the blast radius.
+- **CLOSED 2026-09-09 for the coverage, and the disposition is an ADJUDICATED
+  CALL - NOT AN OPERATOR DECISION.** `tests/conftest.py` routed all three
+  outcomes of `git rev-parse --git-dir` with NO TEST AT ALL on any of them.
+  Commit `9e9f7e4` extracts a pure `classify_git_probe(returncode, stdout,
+  stderr, exec_error)` and adds 14 arms.
 
-- **OPEN. Two more files carry the same root cause, found by an adversary and
-  never started.** `tests/test_machine_identity.py:236` has its own
-  `_tracked_files()` running `git ls-files` with `check=True` and returning a
-  bare tuple; `tests/test_licence_posture.py:162` consumes `_git("ls-files")`
-  with no floor and no anchors. Re-derive both before fixing - the coordinates
-  are one agent's reading.
+  THE ADJUDICATED CALL, overturnable by reading this paragraph. The non-128
+  non-zero branch STAYS A SKIP and was NOT promoted to a FAIL. Criteria the
+  adjudicator ruled against, stated before it read the candidate: which of the
+  three dispositions the exit code names; whether a false red could be NAMED in
+  a real environment; whether a shipped arm required the current behaviour;
+  blast radius; and separability. Findings: every git FATAL exits 128 -
+  measured, git 2.53.0.windows.3, including outside a repository and on a bogus
+  flag - so a non-128 non-zero exit IS git running and breaking, the second
+  disposition, and the promote-to-FAIL argument WINS on meaning. It loses
+  anyway, because the FAIL already exists ONE LAYER UP:
+  `tests/test_commit_trailers.py` cross-checks the helper against an
+  INDEPENDENT signal, a `.git` entry on disk, and reddens the suite for any
+  non-None reason inside a checkout. Firing inside the helper would move the red
+  into the archive-shaped population this file was written to serve. The
+  adjudicator could NOT NAME a healthy-repo environment producing a non-128
+  non-zero exit; that is a finding, not a gap, and a measured case would reopen
+  this. WHAT WOULD OVERTURN IT: showing that
+  `tests/test_commit_trailers.py::test_the_missing_git_skip_path_is_not_taken_in_a_real_checkout`
+  can be skipped or deselected inside a real checkout, at which point the helper
+  is the only door.
+
+  THE PREVIOUS HAND-OFF'S FIGURE WAS SCOPED WRONG. "Injecting exit 7 gives 29
+  passed, 4 skipped, EXIT=0" is TRUE WITHIN ONE FILE and FALSE SUITE-WIDE.
+
+- **OPEN, and it is the residual of the slice above.** The claim that
+  `git_unusable_reason()`'s reason strings survived the refactor byte-identical
+  is TRUE TODAY - measured across 15 returncode shapes and 5 exec errors with
+  the old and new module loaded side by side in one process, ZERO differing
+  bytes - and GUARDED BY NOTHING. Changing the brackets from `(detail)` to
+  `[detail]` or `<detail>` leaves all 14 arms green, because the arm advertising
+  byte-identity CALLS the classifier it grades: both sides of its `==` are one
+  code path. Closing it needs a HAND-COPIED expected-reason fixture that does
+  not read its answer out of the file it audits.
+
+- **OPEN. A FOURTH DISPOSITION, named 2026-09-09 and not in the standing list
+  of three.** With `GIT_DIR` exported, `git rev-parse --git-dir` SUCCEEDS while
+  no `.git` sits on disk, so `tests/conftest.py` and the disk cross-check in
+  `tests/test_commit_trailers.py` DISAGREE - one reports a usable repository and
+  the other reports none. That state is neither ran-and-found-nothing,
+  ran-and-broke, nor not-present-at-all: it is live-repo-relocated-GITDIR, and
+  under it the cross-check that the adjudicated call above depends on can carry
+  a FALSE reason or false-red. Nothing in either file clears `GIT_DIR` or
+  `GIT_WORK_TREE`. Measured separately: the pre-push gate does not currently hit
+  this, `git hook run` shows `GIT_DIR=[]`.
+
+- **CLOSED 2026-09-09 by commit `5f9e312`, AND THE CLAIM THIS ITEM MADE WAS
+  FALSE.** The previous wording said `tests/test_machine_identity.py` and
+  `tests/test_licence_posture.py` consumed `git ls-files` "with no floor and no
+  anchors". BOTH ALREADY HAD ONE: a hand-written floor of 100 plus named
+  anchors, five in the first file and six in the second, and the `_sweep()`
+  docstring's claim that the count is asserted separately was TRUE. The
+  coordinates were also off - `_tracked_files()` begins at line 231, not 236.
+  This is what re-deriving a handed-off list is for.
+
+  THE HOLE THAT WAS ACTUALLY OPEN is narrower and was real: the floor lived in a
+  SEPARATE arm from the sweep, so the PRIMARY arm passed GREEN OVER ZERO FILES -
+  `assert not offenders` holds trivially on an empty corpus - and `check=True`
+  reported an exit code while DROPPING stderr. Repaired with a pure
+  `_classify_enumeration(returncode, stdout, stderr)` at each site holding four
+  outcomes apart, `check=False`, and `pytest.fail` at the point of use, with
+  `require_git_repository()` still first so a no-repository copy stays a SKIP.
+
+  An adversary supplied the measurement the author could not: in a genuine
+  no-git extract the tree gives 62 passed / 26 skipped against a baseline copy's
+  62 passed / 14 skipped. The PASSED COUNT IS IDENTICAL, so no pre-existing arm
+  turned a pass into a skip and no false red was installed.
+
+- **OPEN, low severity, and a PRE-EXISTING blindness rather than a regression.**
+  The sweep floor's VALUE is ungraded in both files above. Mutating
+  `_MIN_TRACKED_PATHS` from 100 to 10 leaves the suite green, because the arm
+  that checks the floor is reachable asserts only `>= 10`. The pre-change inline
+  literals were equally free to be edited, so this is a gap in a new arm's
+  advertised claim.
 
 - **OPEN, pre-existing, and NOT from this session.** In a `git archive` extract
   the whole suite is EXIT=1 for the BASELINE as well as the current tree, with
@@ -73,9 +134,38 @@ version. What follows is everything the scaffold deliberately did not do.
   `tests/conftest.py` exists to serve is already red before any of this
   session's work.
 
-- **OPEN. The responder runner, and it is now a two-party matter.** This tree
-  has `tools/moon_sync_responder.py` (48 defs) and 134 arms across
-  `tests/test_moon_sync_responder.py` and `tests/test_responder_task_argv.py`.
+- **OPEN, RESHAPED 2026-09-09, and the reshaping is the point. THE MISSING
+  ARTIFACT IS THE MUTATION RUNNER, NOT THE REGISTRY.** Measured here and
+  independently re-probed: `tools/moon_sync_responder.py` has **47** defs, not
+  48; `# GATE:` tags in the file = **0**; and source-mutating arms across
+  `tests/test_moon_sync_responder.py` and `tests/test_responder_task_argv.py` =
+  **0** - the single `.replace()` in the latter mutates task XML, not the
+  responder source. So building the four machine-checked companions FIRST would
+  ship a VACUOUSLY GREEN apparatus: needle-uniqueness and mutates-this-gate would
+  each have zero inputs, and every registry tuple would be empty. That is a
+  decorative guard by construction, so it was NOT built this session.
+
+  Correct order, and it is strictly sequential: tag the gates, then build the
+  mutation runner, THEN the registry and its companions. The first
+  decomposition attempted had two slices both writing
+  `tests/test_moon_sync_responder.py`, so DISJOINTNESS FAILED and they cannot
+  run in parallel. Smallest slice with standalone value: tag the gates and land
+  even three mutants that disable a gate at its OWN call site - that alone makes
+  RC's finding checkable here. Honest cost: too large for one session.
+
+  A ceiling to carry rather than discover twice: the mutates-this-gate companion
+  as specified uses a bounded TEXT WINDOW, which is not an AST statement and
+  cannot tell code from a comment or string inside the window. An AST version IS
+  feasible - `ast.parse`, walk to the `If`/`Try` whose `lineno` is the tagged
+  line plus one, require `lineno <= needle_line <= end_lineno` - at no dependency
+  cost. Prefer it; keep the window only as a fallback.
+
+  "Gate" does have an unambiguous referent here, supplied by the file's own
+  regression prose at `tests/test_moon_sync_responder.py:927`: the consult site
+  inside `_run_once` where a predicate's value binds the cycle, as distinct from
+  the predicate function itself.
+
+  Previous framing, kept because the consensus it records still stands.
   It has ZERO `# GATE:` tags and NO runner spec, so RC's finding that two of
   its 26 gates had no mutant on the gate's OWN call site cannot yet be checked
   here. Consensus asked in `moon_sync_inbox` 2026-09-08-2155 and narrowed to
