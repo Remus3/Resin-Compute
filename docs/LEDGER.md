@@ -12,6 +12,108 @@ now.
 
 ---
 
+## 2026-09-09 - Two sweeps green over zero files, and the diagnosis handed over was wrong
+
+Commit `5f9e312`. Files: `tests/test_machine_identity.py`,
+`tests/test_licence_posture.py`. One slice, worktree isolated, refuted by an
+adversary on the softened-shipped-arm lens before it was believed.
+
+**THE HANDED-OFF CLAIM WAS FALSE and correcting it is half the value.** The
+previous session's ranked list said both files consumed `git ls-files` "with no
+floor and no anchors". Both already had one: a hand-written floor of 100 plus
+named anchors, five in the first file and six in the second. `_tracked_files()`
+begins at line 231, not the 236 that was handed over. Re-deriving a handed-off
+list is not ceremony.
+
+**The hole that WAS open is narrower and was real.** The floor lived in a
+SEPARATE arm from the sweep, so the PRIMARY arm passed GREEN OVER ZERO FILES:
+`assert not offenders` holds trivially on an empty corpus. `check=True` also
+reported an exit code while DROPPING stderr - the one string that names the
+cause.
+
+Repaired with a pure `_classify_enumeration(returncode, stdout, stderr)` at each
+site, holding non-zero-exit, exit-0-empty, under-floor and missing-anchor apart,
+consumed through an `_Enumeration` NamedTuple with `check=False` and
+`pytest.fail` at the point of use. `require_git_repository()` still runs FIRST,
+so a copy with no repository stays a SKIP with a true reason - the third
+disposition, and the one a correct fix most often breaks.
+
+**The adversary supplied the measurement the author could not.** In a genuine
+no-git extract built with `git ls-files -z | tar` outside any repository: 62
+passed / 26 skipped, against a baseline copy's 62 passed / 14 skipped. The
+PASSED COUNT IS IDENTICAL, so not one pre-existing arm turned a pass into a
+skip. A node-ID diff showed 8 additions and ZERO deletions, and each file kept
+its OWN anchor list - the five and the six were never merged.
+
+Measured 2026-09-09, as a reading and not a claim about now: `pytest tests`
+1592 passed / 1 skipped exit 0; `pytest agents/pity_engine` 80 passed exit 0;
+ruff, licence, docs, qa, headless each exit 0 run separately; `node --test`
+52 pass 0 fail.
+
+CEILING, recorded rather than hidden: the floor VALUE is ungraded. Mutating
+`_MIN_TRACKED_PATHS` from 100 to 10 leaves the suite green. Pre-existing
+blindness, not a regression.
+
+---
+
+## 2026-09-09 - The three-way git probe had no test at all, and two survivors name the ceiling
+
+Commit `9e9f7e4`. Files: `tests/conftest.py`, `tests/test_conftest_git_gate.py`.
+The shared file every module under `tests/` imports, so the blast radius was the
+whole suite and it got its own slice and its own refuter.
+
+Verified before editing: nothing anywhere in `tests/` stubbed
+`git rev-parse --git-dir`, so all three branches - OSError, exit 128, any other
+non-zero - were separated by NO TEST AT ALL. Extracted a pure
+`classify_git_probe(returncode, stdout, stderr, exec_error)` with four category
+tokens and added 14 arms. All four parameters are required: a constant bound as a
+default argument cannot be mutated by patching the constant, so such a mutant
+survives vacuously.
+
+**THE DISPOSITION IS AN ADJUDICATED CALL, NOT AN OPERATOR DECISION**, recorded in
+`ROADMAP.md` with its criteria and overturnable by reading one paragraph. Exit 7
+still SKIPs. The promote-to-FAIL argument WINS on meaning - every git fatal exits
+128, measured on git 2.53.0.windows.3 including outside a repository and on a
+bogus flag, so a non-128 non-zero exit is git running and breaking - and loses
+anyway, because the FAIL already exists one layer up in
+`tests/test_commit_trailers.py`, cross-checked against an independent disk
+signal. The previous hand-off's "29 passed, 4 skipped, EXIT=0" under exit 7 is
+TRUE WITHIN ONE FILE and FALSE SUITE-WIDE.
+
+**NOT REFUTED ON BEHAVIOUR DRIFT, and the refutation is the evidence.** The old
+and new modules were loaded side by side in ONE process with `subprocess.run`
+stubbed and driven across 15 returncode shapes and 5 exec errors - whitespace-only
+stderr with whitespace-only stdout, a negative Windows returncode, every rung of
+the detail ladder. ZERO differing bytes. Signatures, the `lru_cache` and its
+`cache_clear`, all 18 importing modules and every per-file collection count
+unchanged; the only delta is this file's 0 to 14.
+
+**TWO MUTANTS SURVIVED and are recorded rather than papered over.** Changing the
+reason string's brackets from `(detail)` to `[detail]` or `<detail>` leaves all 14
+arms green, because the arm advertising byte-identity CALLS the classifier it
+grades - both sides of its `==` are one code path. Byte-identity is TRUE TODAY,
+measured, and UNPROTECTED TOMORROW.
+
+**A general false-red generator, traced from a transient 3-FAILED run.** When a
+mutation's replacement is a NET-ZERO byte-size change and is restored within the
+same second, Python's `(mtime, size)` pyc invalidation reuses the MUTANT's
+bytecode against source identical to HEAD. Purge `__pycache__` and
+`.pytest_cache` on BOTH sides of every mutation, not only after.
+
+**A FOURTH DISPOSITION, named here and not in the standing list of three.** With
+`GIT_DIR` exported, `git rev-parse --git-dir` succeeds while no `.git` sits on
+disk, so the helper and the disk cross-check disagree - live-repo-relocated-GITDIR,
+under which the cross-check the adjudicated call depends on can carry a FALSE
+reason or false-red. Nothing in either file clears `GIT_DIR` or `GIT_WORK_TREE`.
+The pre-push gate does not currently hit it: `git hook run` shows `GIT_DIR=[]`.
+
+Measured 2026-09-09 at the seam with caches purged, as a reading: `pytest tests`
+1606 passed / 1 skipped exit 0 - reconciling exactly as 1580 baseline plus 12 plus
+14; `pytest agents/pity_engine` 80 passed exit 0; licence, docs, qa, ruff,
+headless each exit 0 run separately; `node --test` 52 pass 0 fail.
+
+---
+
 ## 2026-09-08 - One root cause in four test files, and every first repair installed a false red
 
 Files: `tests/test_watch_inbox.py`, `tests/test_line_endings.py`,
