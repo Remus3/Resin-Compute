@@ -143,6 +143,40 @@ version. What follows is everything the scaffold deliberately did not do.
   guard does NOT degrade to a silent green when the invocations are moved into
   a script, and does not pass with the parser welded to an empty list.
 
+  AND READING THE GREEN RUN FOUND A DEFECT THAT NO LOCAL REASONING HAD. Both
+  workflows passed at ef295f2, CI skips fell 19 to 17, and none of the 17
+  mentions a shallow clone - so the trailer sweep genuinely runs there now. The
+  DOCS lane log then showed those same two arms still skipping, by name, with a
+  reason ending "raise fetch-depth in the workflow to make this arm meaningful".
+  On the only lane where that reason still fires, it is WRONG ADVICE: that lane
+  is depth 1 on purpose and raising it would be a regression. A skip naming a
+  fix that must not be applied is the failure this tree calls worse than a
+  failure.
+
+  THE FIRST REPAIR OF IT WAS REFUTED, and the refutation is the entry. The new
+  wording dropped the words "in the workflow" and told the reader not to raise
+  a fetch-depth at all, which is FALSE in a hand-made shallow clone where
+  `git fetch --unshallow` is exactly the right move. Reproduced cold in a
+  depth-1 clone. The repair had WIDENED the false implication rather than
+  narrowing it, and it had fixed only one of the two arms sharing the root
+  cause. It also asserted the docs lane skip is the CORRECT disposition, which
+  overclaims: that lane selects any module MENTIONING a markdown path, and this
+  module reads none, so it is collected by an over-approximating heuristic
+  rather than by design. Both arms now state the condition and the
+  per-population remedy, and name no file they do not read.
+
+  A SENTENCE WRITTEN EARLIER THE SAME DAY WAS MEASURED FALSE. It claimed a
+  `git archive` extract and a shallow clone are one population. They are not:
+  an extract never reaches the shallow branch, being stopped one layer earlier
+  by the not-a-git-repository skip in the repo-root conftest. Measured 4 passed
+  and 4 skipped in a real extract.
+
+  THE UNGUARDED HALF IS NOW GUARDED. Nothing pinned the docs lane at depth 1,
+  so raising it would have made the new reason text quietly false with no test
+  going red. `tests/test_ci_history_depth.py` now asserts the OPPOSITE of its
+  ci.yml arm for that lane, with the census in the same assertion, verified red
+  under mutation and green restored with both caches purged on each side.
+
   STILL UNGRADED, and it is the third reason a local green says nothing about
   CI. Every pinned dev tool is OLDER on this box than what CI installs - ruff
   0.15.12 against a 0.16.6 pin, pytest 9.0.3 against 9.1.1, mypy 2.1.0 against

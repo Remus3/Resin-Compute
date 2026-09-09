@@ -38,8 +38,13 @@ THE SKIP BRANCHES BELOW ARE NOT DEAD, and deleting them would break a lane.
 `.github/workflows/docs-guards.yml` deliberately keeps depth 1, and its
 selection is DERIVED at CI time from every test module mentioning a markdown
 path - which is this module, twice. So it is collected and run SHALLOW on every
-docs-only push, both branches fire there, and both are correct there. A `git
-archive` extract and a fork's shallow clone are the same population.
+docs-only push, both branches fire there, and both are correct there.
+
+AND A `git archive` EXTRACT IS NOT THE SAME POPULATION, though an earlier
+draft of this paragraph said it was. Measured: an extract never reaches the
+shallow branches at all. It is stopped one layer earlier by the
+not-a-git-repository skip in the repo-root conftest, which reports 4 passed
+and 4 skipped with trackedness as the stated reason.
 """
 from __future__ import annotations
 
@@ -102,8 +107,12 @@ def _history() -> list[tuple[str, str, str]]:
 def test_no_commit_in_history_carries_an_agent_trailer():
     if _is_shallow():
         pytest.skip(
-            "shallow clone - a full-history sweep here would pass by construction; "
-            "raise fetch-depth in the workflow to make this arm meaningful"
+            "shallow clone - a full-history sweep here would pass by construction, so "
+            "this arm DECLINES TO MEASURE rather than sweeping one commit and calling it "
+            "clean. This is not a verdict about the history. In a local clone, run `git "
+            "fetch --unshallow` to re-arm it. In CI, check WHICH lane is shallow before "
+            "changing any checkout depth - at least one lane in this tree is shallow "
+            "deliberately, and raising it would be a regression rather than a fix"
         )
 
     offenders = []
@@ -118,7 +127,11 @@ def test_no_commit_in_history_carries_an_agent_trailer():
 def test_the_history_sweep_is_not_vacuous():
     """A sweep that stopped seeing commits would pass forever."""
     if _is_shallow():
-        pytest.skip("shallow clone - commit count is not meaningful here")
+        pytest.skip(
+            "shallow clone - the history is truncated, so this non-vacuity floor would "
+            "be measuring the clone depth rather than the sweep. It DECLINES TO MEASURE "
+            "for the same reason as the arm above, and takes the same remedy"
+        )
     assert len(_history()) >= 10
 
 
