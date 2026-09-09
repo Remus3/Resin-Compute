@@ -11,31 +11,37 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **STATE AS MEASURED 2026-09-09 AT `800db8f`, a reading and not a promise.**
-  `python -m pytest tests` 1695 passed 1 skipped. `agents/pity_engine` 80
+- **STATE AS MEASURED 2026-09-09 AT `c372861`, a reading and not a promise.**
+  `python -m pytest tests` 1759 passed 1 skipped. `agents/pity_engine` 80
   passed. `node --test` 52 pass 0 fail. ruff, mypy, qa_companion, licence
-  posture 47, docs consistency 29 and the headless dry run all exit 0.
-  CI GREEN on BOTH workflows at `800db8f`, and the green runs were READ rather
-  than trusted: the ci lane names 17 skips and the docs lane names 11, every
-  reason true on the lane it fires on, and NONE of the ci lane's 17 mentions a
-  shallow clone, so the trailer sweep genuinely runs there. The two
-  shallow-clone skips on the docs lane now carry the per-population wording
-  repaired at `b1a3eab`, and it reads correctly on the only lane where it
-  fires. This session introduced no new skip on either lane.
+  posture, docs consistency 29 and the headless dry run all exit 0.
+  CI GREEN on BOTH workflows at `c372861`, and the ci run was READ rather than
+  trusted: 1743 passed and 17 skipped, so 1760 collected on both lanes and the
+  arithmetic closes against the local 1759 plus 1. THE SKIP COUNT IS UNCHANGED
+  AT 17 across 64 NEW ARMS, and neither new file contributes a skip - grepped
+  for both module names against the run log, zero hits. None of the ci lane's
+  17 mentions a shallow clone, so the trailer sweep genuinely runs there.
 
-  READING THE GREEN RUN FOUND NOTHING THIS TIME, and that is worth recording
-  rather than omitting. It is the third session running that the method was
-  applied; twice it found a defect no local reasoning had, and once it did not.
-  A clean read is a result.
+  READING THE GREEN RUN FOUND NOTHING THIS TIME EITHER. Fourth session running
+  for the method; twice it found a defect no local reasoning had, twice it did
+  not. A clean read is a result, and two clean reads do not retire the method.
 
   WHAT THIS SESSION DID NOT TOUCH, so the next one does not re-derive it: the
-  responder gate-tag census and its runner are still unstarted, nothing
-  inspects the pre-push hook's OUTPUT, `git_unusable_reason()`'s byte-identical
-  reason strings are still graded by an arm that calls the classifier it
-  grades, the sweep floor's VALUE is still ungraded, and
-  `ops/ResinCompute-Supervisor.xml` has still never been registered. The
+  gate MUTATION RUNNER and the registry are still unstarted and are steps two
+  and three, nothing inspects the pre-push hook's OUTPUT, the sweep floor's
+  VALUE is still ungraded, and `ops/ResinCompute-Supervisor.xml` has still
+  never been registered. `core/atomic_io.py` still leaks a 0-byte temp on a
+  non-OSError write failure - filed, not fixed, and not a regression. The
   responder task was re-confirmed DORMANT by the checker, exit 1, and NOTHING
   WAS ARMED.
+
+  A ROW IN THIS FILE WAS STALE FOR TWO SESSIONS AND COST A WHOLE SLICE. It said
+  a contract was guarded by nothing; `docs/LEDGER.md` had recorded the closure
+  and the two documents disagreed, so the hand-off propagated the wrong one.
+  RE-PROBE A ROW BEFORE SPENDING A SLICE ON IT - a residual is a claim with a
+  measurement date and it decays. The merger dispatched that slice, so the
+  DISPATCH PROMPT was the defect rather than the builder, which is the same
+  lesson this file recorded one session earlier and did not apply.
 
 - **CLOSED 2026-09-09, AND THE DISPOSITION IS AN ADJUDICATED CALL - NOT AN
   OPERATOR DECISION.** It is overturnable by reading this entry. The question
