@@ -6,186 +6,205 @@ anything other than exactly one fenced block, on non-ASCII, or on a block under
 2000 bytes. Edit the block here; never retype it anywhere else.
 
 ```
-Session start on ResinCompute (C:\Resin Compute, github.com/Remus3/Resin-Compute).
+RSC - next session, HEADLESS, operator AWAY.
+
+Repo: C:\Resin Compute (github.com/Remus3/Resin-Compute). Counterparty: RC.
+CS, LW and LL are on ORDERED STANDBY - silence is NOT dissent, do not write
+into their trees.
 
 READ FIRST: CLAUDE.md, README.md, docs/SPEC_SCAFFOLD.md, ROADMAP.md,
 docs/LEDGER.md, git log. Before planning any character build read
-docs/GOAL_SPEC_SEED_TEAM.md. Before adding any data source read
-docs/LICENSE_NOTES.md. Before re-litigating a past choice read docs/adr/README.md.
+docs/GOAL_SPEC_SEED_TEAM.md. Before adding a data source read
+docs/LICENSE_NOTES.md. Before re-litigating read docs/adr/README.md.
 
-DO NOT RE-DERIVE GACHA CONSTANTS from memory or a web search. Verified in
-docs/SPEC_SCAFFOLD.md section 3, corrections in docs/adr/ADR-003-forecaster-model.md.
-The 50/50 is 55.000% consolidated since 5.0. Weapon soft-pity saturates at pull 77
-under a 7% increment - 79 or 80 is arithmetically impossible. 1.600% is
-1/E[wishes per 5-star], NEVER a per-wish Bernoulli parameter.
+DO NOT RE-DERIVE GACHA CONSTANTS. Verified in docs/SPEC_SCAFFOLD.md section 3,
+corrections in ADR-003. 50/50 is 55.000% consolidated since 5.0. Weapon
+soft-pity saturates at pull 77 under a 7% increment. 1.600% is 1/E[wishes per
+5-star], NEVER a per-wish Bernoulli parameter.
 
-GATES, in the order /done runs them:
-  python -m pytest tests/test_licence_posture.py -q
-  python -m pytest tests/test_docs_consistency.py -q
+OPERATOR AWAY. NO BLOCKING QUESTIONS. Where you would escalate, dispatch an
+ADJUDICATOR and record the ruling in ROADMAP.md MARKED PLAINLY AS AN
+ADJUDICATED CALL. SEVEN stand: the conftest non-128 disposition, the
+2026-09-09 MIXED ruling on the os.name-forcing arms, the do-not-widen ruling
+on the mkdir ValueError sites, the OVERTURN of that ruling for ONE site only,
+the MIXED ruling on the dev-pin guard shape, the gate REFERENT (broad reading)
+and slice B as MERGED-REDUCED. Read before touching any of them.
+
+DO NOT ARM ANYTHING. RC disarmed, hop budget spent, task Disabled. Verified
+DORMANT this session via ops/check_task_liveness.py, exit 1.
+
+GATES, in /done order, EACH AS ITS OWN COMMAND. Chaining with && reports only
+the LAST link.
+  python -m pytest tests/test_licence_posture.py
+  python -m pytest tests/test_docs_consistency.py
   python scripts/qa_companion.py
   python -m ruff check .
   python -m pytest tests
   python -m pytest agents/pity_engine
   cd shell && node --test
   python -m headless.runner --once --dry-run
-Never `pytest .` from the root. mypy is ADVISORY and traverses only the files=
-roots in mypy.ini - its Success line says NOTHING about scripts/, headless/, ops/,
-surface/ or tests/.
+DO NOT PASS -q ON THE COMMAND LINE. pytest.ini already sets -q; a second makes
+it -qq and suppresses the count.
 
-RUN EACH GATE AS ITS OWN COMMAND. Chaining them with && and reading the final
-exit code reports only the LAST link: on 2026-09-08 a chain ending in the
-headless smoke test reported exit 0 while the application suite inside it had
-already failed, and a real leak nearly shipped behind that false clean.
+STATE AS OBSERVED 2026-09-09 at 1c596e3, a reading not a promise. RE-MEASURE.
+  pytest tests   1840 passed, 1 skipped     agents/pity_engine   80 passed
+  node --test    52 pass 0 fail             headless / ruff / qa / licence / docs  exit 0
+  mypy 34 source files. Census 77 arms, up from 43 at session start.
+  tests/test_gate_mutation_runner.py new at 47. 1793 + 47 = 1840, closes.
+  CHECK EVERY SESSION: gh run list --limit 5
 
-STATE AS OBSERVED 2026-09-08, a reading and not a promise:
-  pytest tests            1469 passed, 1 skipped
-  pytest agents/pity_engine  80 passed
-  licence / docs gates    41 passed / 29 passed
-  qa_companion            17 passed, 0 failed, 1 skipped
-  shell node --test       52 passed
-  ruff                    all checks passed
-  headless smoke          exit 0
-Pre-merge baseline 1422 collected was re-derived this session, not carried from
-the previous hand-off. Re-measure before citing any of these.
+1. THE HIGHEST-VALUE ROW IN ROADMAP.md: EIGHT GATES ARE EXERCISED BY NOTHING.
+   Measured at 1c596e3 by python -m tools.gate_mutation_runner - 35 mutants,
+   27 killed, 8 SURVIVED, 0 false kills, exit 1. A survivor left the WHOLE
+   application suite green with that gate neutralised.
+     no-destination/if-false        workspace-trust/if-false
+     refusal-recorded/if-false      bounce-mark/if-true
+     bounce-write-all/operand-1     bounce-write-all/operand-2
+     delivery-write-all/operand-1   delivery-write-all/operand-2
+   FIX delivery-write-all/operand-1 FIRST. It drops the bool(written) term the
+   responder's own comment at tools/moon_sync_responder.py:1861-1863 calls the
+   guard and not decoration - the term that stops all([]) reporting a delivery
+   to ZERO DESTINATIONS as delivered. THE WORK IS ARMS, NOT A FIX: the gates
+   are correct, nothing drives them. VERIFY WITH THE RUNNER, NOT BY EYE -
+   python -m tools.gate_mutation_runner --gate delivery-write-all runs one
+   gate, and a survivor becoming a kill is the proof the arm lands.
 
-CHECK TASK LIVENESS WITH THE CHECKER, NEVER WITH A STATE STRING:
+2. THE GATE CENSUS IS AT STEP TWO OF THREE. Step one tagged 18 sites
+   (c372861). Step two is tools/gate_mutation_runner.py (1c596e3). STEP THREE
+   IS THE REGISTRY and is unstarted. Order is still strictly sequential;
+   building companions first ships a VACUOUSLY GREEN apparatus.
+   TWO EXCLUSIONS, TWO REASONS, and do not merge them: SELF_TEST_MODULE is a
+   module that decides its own verdict; SHAPE_GRADER_MODULES is a module that
+   grades the TARGET FILE'S SHAPE, which answers a syntax question while the
+   runner asks a behaviour one. An --ignore of a MISSING path is a SILENT
+   NO-OP, so verify_exclusions raises before any campaign.
+
+3. THE CAMPAIGN WAS WRONG TWICE AND BOTH ERRORS WERE FOUND BY MEASUREMENT.
+   First run said 35/35 KILLED and measured NOTHING - the runner's own test
+   module sorts ahead of the responder's and decided every verdict under -x.
+   The tell was the WALL CLOCK: 35 full-suite runs in 3 minutes is impossible
+   unless every run aborted early. Second run said 31/4 and FOUR were FALSE
+   KILLS - the census reads the responder AT IMPORT and grades its AST SHAPE,
+   so a dropped BoolOp operand reddens it for a non-behavioural reason. All
+   four scored 32 of 32 failing nodes in the census, ZERO elsewhere, and
+   survive at 1716 passed 1 skipped once it is ignored.
+
+4. FILED, NOT FIXED, and NOT a regression: core/atomic_io.py leaks a 0-byte
+   temp file when the write fails with anything that is not an OSError -
+   _discard(tmp) sits INSIDE the except OSError at line 100. The sibling
+   atomic_write_json's docstring advertises the opposite property. Untouched
+   because that module is the only sanctioned state-write path.
+
+5. RESIDUALS, each with its measurement in ROADMAP.md. RE-PROBE BEFORE
+   SPENDING A SLICE - a residual is a claim with a date and it decays.
+   - The evidence ledger TRIMS rather than rotates (tools/moon_sync_responder.py:1037).
+   - Which ledger instance is live has never been CHECKED here.
+   - Nothing guards the SENDER side against editing a note after delivery.
+   - The sweep floor's VALUE is ungraded: _MIN_TRACKED_PATHS 100 -> 10 leaves
+     the suite green. Pre-existing blindness, not a regression.
+   - Half of tests/test_conftest_skip_path_pinned.py is DEAD as shipped.
+   - Nothing inspects the pre-push hook's OUTPUT. The arms are a token scan.
+   - ops/ResinCompute-Supervisor.xml never registered, Exec argv graded by
+     nothing.
+   - THREE hand-typed transcriptions of one reason wording exist and NOT ONE
+     derives from a CONSUMER's stated requirement.
+
+6. UNGRADED AND HONEST ABOUT IT, in the census: whether each of the 18 tag
+   NAMES describes the site it sits above. The collision arities are a SAMPLE
+   not a proof - a wrong conjunct agreeing with the real one on a clean
+   source, one collision, two collisions and three-on-a-line still passes. The
+   depth arm bounds reported[:n] only for n BELOW the tag count. The runner's
+   27 kills are attributed by parsing the FIRST failure under -x, which names
+   the killer but is not proof no other test would also have failed.
+
+7. PRE-EXISTING AND NOT OURS: in a git archive extract the whole suite is
+   EXIT=1 for the BASELINE too. An extract and a shallow clone are NOT one
+   population. 25 stale worktrees under .claude/worktrees/.
+
+SESSION SHAPE is orchestrated, multi-agent, self-adjudicating, self-adversarial
+by DEFAULT. The agent that produced a thing NEVER grades it. FREEZE THE
+CANDIDATE before dispatching a grader. Spawn refuters with DISTINCT LENSES.
+AGREEMENT BETWEEN TWO AGENTS IS NOT EVIDENCE - find their shared input and test
+THAT.
+
+THE METHOD LESSONS THAT PAID OFF MOST THIS SESSION.
+
+- FOUR TIMES AN AGENT CORRECTED THE INSTRUCTION IT WAS GIVEN, and every one of
+  those corrections was right. One measured that the brief's k = 1,2,3 does NOT
+  kill reported[:3] and added the arm the brief had not asked for. One declined
+  to ship a refuter's measurement it could not reproduce and shipped the weaker
+  verified claim instead. One derived a disputed count itself and disagreed
+  with both the refuter and the earlier builder. One STOPPED and wrote nothing
+  when its worktree came up at the wrong commit. WHEN A REFUTER SAYS A BUILDER
+  WAS WRONG, CHECK WHO WROTE THE INSTRUCTION FIRST.
+- A SHAPE ARM PINS FORMAT, NOT INPUT, and it cost TWO rounds here. An arm
+  proving a conjunct is welded pinned a phrase the message emits
+  UNCONDITIONALLY, so a coincidental proxy passed all 69. The repair defeated
+  ONE literal and a further lens found SEVEN more conjuncts passing all 71,
+  failing in OPPOSITE directions - some green on a source with two real
+  collisions, some reddening a CLEAN fully tagged responder. PIN IDENTITY AT
+  MORE THAN ONE ARITY, and always include an OVER-FIRE control.
+- FIVE DISTINCT LENSES FOUND FIVE CLASSES OF DEFECT AND NO TWO OVERLAPPED.
+  Vacuity, prose-truth, false-green, does-it-reproduce, equivalent-mutant.
+  The reproduce lens is the one that found the four false kills, and nothing
+  in any report could have shown it.
+- A MODULE'S WRITTEN CLAIM ABOUT ITS OWN LIMITS IS A TESTABLE ASSERTION. EIGHT
+  false ones were corrected this session, on top of four the session before.
+- THE DOCS GUARDS CATCH THE MERGER EVERY SESSION. Run test_docs_consistency.py
+  AND test_docs_hook_commands.py after ANY doc edit.
+
+TRAPS THAT ACTUALLY BIT, every one measured.
+
+- A WORKTREE MATERIALISES AT AN ANCESTOR OF THE DECLARED FORK POINT. It fired
+  on FOUR of five dispatches today. Put an explicit `git merge --ff-only <sha>`
+  in every brief PLUS an assertion on the materialised bytes - a line count and
+  a grep for a symbol that exists only at the intended commit. A dispatch
+  without it is the defect, not the builder.
+- UNCOMMITTED SLICE WORK IS INVISIBLE TO THE NEXT WORKTREE. A repair builder
+  must be told to `cp` the predecessor's files in by absolute path.
+- A NET-ZERO-BYTE-SIZE mutate-and-restore WITHIN THE SAME SECOND runs the
+  MUTANT'S BYTECODE against restored source. Purge __pycache__ AND
+  .pytest_cache on BOTH sides; prefer a replacement of different length.
+- NEVER `git checkout --` to restore a mutation. Restore from saved bytes and
+  verify by sha256. Responder is 02469d15...b87f94.
+- `assert source.count(old) == 1` before substituting.
+- A QUOTED HEREDOC STILL MANGLES BACKSLASHES. Write .py with the editor tools.
+- write_text EMITS CRLF ON WINDOWS and .gitattributes eol=lf hides it. tests/
+  is OUTSIDE test_no_crlf_writers.py's corpus, so nothing catches it there.
+- grep -c '[^\x00-\x7F]' IS NOT A CHARACTER CLASS. It reported 1785 non-ASCII
+  lines in a file with ZERO non-ASCII bytes. Check bytes IN PYTHON.
+- SendMessage IS DISABLED. A running agent CANNOT be amended - dispatch a new
+  disjoint slice.
+- AN AGENT CAN LOOP ON STALE `sleep` WAIT-BLOCKS AFTER FINISHING, burning
+  tokens and re-notifying. TaskStop it once its report has landed.
+- A NEW TEST FILE MUST BE `git add`ed BEFORE test_docs_consistency.py passes
+  once ROADMAP.md backticks it - the guard checks git-tracked.
+- The default `python` here is 3.14, not 3.11. CI runs 3.11.
+- An empty pytest parametrize is `1 skipped`, exit 0, NOT a failure.
+- pytest.raises(Exception) DOES NOT CATCH Skipped - BaseException-derived.
+- A FLOOR IN A SEPARATE ARM LEAVES THE PRIMARY ARM VACUOUS. One assertion.
+- A PYTEST PROGRESS LINE IS 72 DOTS, NOT THE WHOLE RUN.
+- exit=$? AFTER A PIPE READS THE LAST PIPE STAGE. Redirect to a file.
+- mypy files= covers core/, engines/, ingest/, agents/pity_engine/, tools/
+  ONLY - its Success is ZERO OUT OF ZERO about tests/ or scripts/.
+- NEVER NAME A SIBLING PROJECT IN PLAIN TEXT. RC, CS, LW, LL, RSC.
+- Never Stop-Process. taskkill //F //PID under Git Bash.
+- NEVER ADD A Co-Authored-By TRAILER, and never file its absence as a defect.
+
+CHECK TASK LIVENESS WITH THE CHECKER, NEVER A STATE STRING, NEVER THROUGH A PIPE:
   python ops/check_task_liveness.py ResinCompute-Responder
-Exit 0 LIVE, 1 DORMANT, 2 ABSENT, 3 UNKNOWN, 4 AMBIGUOUS.
+Exit 0 LIVE, 1 DORMANT, 2 ABSENT, 3 UNKNOWN, 4 AMBIGUOUS. Observed 1 DORMANT.
 KILL SWITCH: powershell -ExecutionPolicy Bypass -File .\ops\install_responder_task.ps1 -Remove
-THE RESPONDER IS DORMANT AND ITS AGREEMENT EXPIRED, both 2026-09-07T21:00:00.
-Rearming is an OPERATOR act and re-running the installer produces another BOUNDED
-window, not a standing responder.
 
-OPEN WORK, highest priority first. Full list in ROADMAP.md.
+DO NOT REDO: the slots.py re-pin (closed 71fa2a68), manifest-as-key (withdrawn),
+the caveman dialect question (settled), wenyan (reverted 2026-06-27). Do not
+hunt mutants M1-M11 - only M12 exists. Do not re-derive the two ceilings in
+docs/LEDGER.md. Do not re-litigate the seven adjudicated calls without reading
+them first. Do not re-sweep the mkdir sites. Do not rebuild the git-reason
+hand-typed fixture. Do not re-open the census REFERENT - _is_a_consult_site was
+adjudicated at c372861 and WIDENING A MATCHER is the response this tree has
+been defeated by three times.
 
-1. THE READ-ONLY GUARD OVER ops/check_task_liveness.py DOES NOT DO WHAT ITS NAME
-   SAYS, and this is the THIRD time this shape has been caught. It was rewritten
-   2026-09-08 from a seven-token denylist to an inverted allowlist plus a
-   whole-file mutating-verb scan. An adversary defeated it DESTRUCTIVELY:
-   PowerShell aliases carry NO HYPHEN and the scan matches a hyphenated
-   Verb-Noun shape, so `ri` (= Remove-Item) planted in the probe template RAN,
-   deleted a canary file from disk, and every arm still reported green at exit 0.
-   Also surviving: del, rm, sc, kill (= Stop-Process), ni, a verb built by string
-   concatenation, cmd /c, and .Delete(). SEPARATELY the whole-file regex has no
-   re.IGNORECASE while the comment above it asserts case-insensitivity, so
-   lowercase stop-process and uppercase TASKKILL both pass. The three non-vacuity
-   controls are real value assertions and STILL could not see either hole,
-   because every injection they plant is capitalised ASCII.
-2. OPERATOR DECISION, NOT A SESSION'S. The overwhelming majority of commits in
-   this PUBLIC repo carry the operator's personal email. Do NOT cite a stored
-   number and do NOT rewrite history without an explicit instruction; a sibling
-   measured four traps doing one. Re-measure with:
-     git rev-list --count HEAD
-     git log --format='%ae' | sort | uniq -c | sort -rn
-   Read 2026-09-08: 90 personal, 6 platform forwarding, 2 assistant, of 98. The
-   figure that stood before that was 89 of 91 and hid the forwarding bucket.
-3. OPERATOR ACT. Rearm the responder if the trial continues. State the
-   eligibility rule IN the agreement record and assert a NON-ZERO pending count
-   at arming.
-4. The task-liveness ambiguity arm SKIPS when it cannot find a duplicated task
-   name, and a discovery that FAILS is indistinguishable from a machine that
-   legitimately has none. No positive control that discovery ran. On CI or a
-   fresh clone that arm asserts nothing - zero out of zero reading as a pass.
-5. The responder isolation arm is named for enforcing that nothing is written
-   outside the override and does NOT enforce it. NTFS reports a DIRECTORY
-   st_size as 0 whatever it contains, so a file created inside a watched
-   directory is invisible to an existence-plus-size snapshot; and any path that
-   is not a DEFAULT_ constant is unwatched, including the sibling inbox dirs
-   deliver() really writes to. WHAT DOES HOLD, measured twice: the suite does not
-   reach the operator's live responder record. Real for the runtime dir, ABSENT
-   for live mail.
-6. Nothing grades the scheduled task's argv against the code it calls.
-   ops/ResinCompute-Responder.xml gained --source scheduledtask BY HAND at the
-   2026-09-08 merge and no test asserts it is there.
-7. /clear survival is UNMEASURABLE as instrumented, not merely unmeasured. The
-   --source flag hardcodes one literal per event, so the log names which HOOK
-   fired and never which SOURCE the harness fired it from. The harness
-   distinguishes startup, clear, compact and resume; the wiring collapses all
-   four. More cold boots cannot close it. Filed, not built, on operator
-   instruction.
-8. The hook-command doc gate needs the literal string .claude/settings.json near
-   the citation. Reword a sentence to "the hook declared for this tree" and the
-   identical stale quotation goes silent.
-9. Six items from the 2026-09-08 inbox triage, in ROADMAP.md - including that
-   this roadmap twice claims a "positive control" for our refs/pull zero while
-   naming no subject and no command.
-10. An evicted refusal row can still re-hold one local file. Bounded, not closed.
-11. Nothing writes a provenance row yet. A schema with no producer has never met
-    a real value.
-12. ops/ResinCompute-Supervisor.xml has never been registered on this machine.
-
-TRAPS THAT HAVE ACTUALLY BITTEN. Every one measured here.
-
-- A CHAINED GATE RUN REPORTS ONLY ITS LAST COMMAND. Newest member of the
-  false-clean family, 2026-09-08. Run each gate separately.
-- A GATE TESTED AS A PURE PREDICATE IS NOT AN ENFORCED GATE - FIVE recurrences.
-- AN ARM WHOSE NAME CLAIMS MORE THAN IT CHECKS IS WORSE THAN NO ARM, because the
-  next reader stops looking. Three instances found on 2026-09-08 alone.
-- A NON-VACUITY CONTROL THAT ONLY PLANTS THE CASE THE MATCHER HANDLES CANNOT
-  DISCOVER THAT THE MATCHER IS CASE-SENSITIVE. Vary the shape, not just the value.
-- A BUILDER'S SUBPROCESS PROBE OF A DECLARED COMMAND PROVES THE TEST, NOT THE
-  HARNESS. When the question is "does the harness do X", make the harness write
-  the artifact.
-- A COUNT BAKED INTO A COMMITTED ARTIFACT GOES STALE WITHIN THE HOUR. Name the
-  property, not the number.
-- A `||` BRANCH AFTER A FAILING grep PRINTS A FALSE CLEAN. grep -P dies on locale.
-  Prefer a Python byte scan and carry a POSITIVE CONTROL for every negative.
-- exit=$? AFTER A PIPE READS THE LAST PIPE STAGE, not the command you cared about.
-- A TASK State STRING NAMES A STATE, NOT A CAPABILITY. Use ops/check_task_liveness.py.
-- A SHAPE ARM PINS FORMAT, NOT VALUE. Assert the VALUE for a case known to carry one.
-- AN ISOLATION FIXTURE THAT MONKEYPATCHES MODULE ATTRIBUTES CANNOT ISOLATE A
-  SUBPROCESS; it re-imports with the real defaults.
-- NTFS REPORTS A DIRECTORY st_size AS 0 WHATEVER IT CONTAINS. A snapshot built
-  from existence plus size cannot see a file created inside a watched directory.
-- AN INTERPOLATED REASON STRING DEFEATS ITS OWN FINGERPRINT. Key on CATEGORY.
-- A FAIL-OPEN STATE RECORD WRITES INTO SOMEONE ELSE'S REPOSITORY.
-- THE DOCS GATE CATCHES A BACKTICKED PATH GIT DOES NOT STORE. Name a gitignored
-  runtime file in PROSE, never as a backtick path.
-- NEVER NAME A SIBLING PROJECT IN PLAIN TEXT. This is a PUBLIC repo and
-  tests/test_no_sibling_names.py enforces it - it caught 26 occurrences on the
-  way out of the 2026-09-08 session. Use the codenames LL, LW, RC, CS.
-- A GITIGNORED FILE DOES NOT SURVIVE A WORKTREE MERGE. Outbound drafts live under
-  ops/runtime/ and must be copied BY PATH before a worktree is torn down.
-- A FIXTURE SIZED FROM THE VALUE UNDER TEST IS AN AMPLIFIER. Cap with a LITERAL.
-- HEREDOC PLUS A NON-RAW PYTHON STRING MANGLES BACKSLASHES. Use Write/Edit.
-- write_text EMITS CRLF ON WINDOWS and eol=lf in .gitattributes hides it.
-- taskkill under Git Bash needs //F //PID. Never Stop-Process. Never blanket-kill
-  by image name: this box runs five sibling projects.
-- THE PRE-PUSH HOOK GRADES THE PUSHED COMMIT and runs both suites.
-- EVERY BACKGROUNDED CALL CARRIES AN EXPECTED DURATION IN ITS NAME, e.g. "(3 min)".
-  This means AGENT DISPATCHES TOO, not only Bash. Elapsed time alone cannot say
-  whether a task is stuck.
-
-DO NOT REDO: the slots.py re-pin (closed, three carriers hash equal at 71fa2a68),
-the manifest-as-key proposal (withdrawn by its author), the caveman dialect
-question (settled), the wenyan experiment (reverted 2026-06-27). Do not re-predict
-a phantom underscore note during a counterparty's hard-link window - REFUTED. Do
-NOT hunt for mutants M1 through M11: a byte scan of every tracked text file on
-2026-09-08 found they do not exist as recorded claims anywhere, only M12 does.
-
-THE CROSS-REPO INBOX IS NOT OPTIONAL READING. 22 unread, and STILL NOT MARKED as
-of 2026-09-08. A full triage landed in docs/INBOX_TRIAGE_2026-09-08-1834.md: 11
-ingested, 9 have-an-equivalent, 15 not-applicable, 6 applicable-and-not-done now
-on the roadmap. The inbox currently holds ZERO subdirectories - the three
-verbatim drops were withdrawn by their senders - so re-check for them rather than
-assuming either way. Reading is not acknowledging: --mark is a separate
-deliberate act and an inflated watermark is worse than none. SILENCE IS NOT
-AGREEMENT. A reply to the outstanding note on hook portability is DRAFTED AND
-UNDELIVERED in the sender-side draft store under ops/runtime/, which sits outside
-the watcher's view because a file named from-RSC inside moon_sync_inbox/
-classifies as [sent] and would read as already delivered.
-
-CODE_OF_CONDUCT.md carries one marked MAINTAINER PLACEHOLDER for a conduct
-contact. No email address appears in any community-standards file; reports route
-through GitHub private vulnerability reporting, which is enabled and verified.
-
-Session shape is orchestrated, multi-agent, self-adjudicating and self-adversarial
-BY DEFAULT. The agent that produced a thing never grades it. Agreement between two
-agents is not evidence - find their shared input and test THAT. Spawn refuters with
-DISTINCT LENSES; on 2026-09-08 four adversaries refuted more than they confirmed,
-and the two most valuable findings came from lenses that went looking for a
-mechanism rather than for a restatement. Keep chat under 500 output tokens,
-CAVEMAN ULTRA dialect, 7-bit ASCII everywhere, no em-dashes or smart quotes ever.
-Never add a Co-Authored-By trailer - .githooks/commit-msg strips it per operator
-policy.
+Keep chat under 500 output tokens, CAVEMAN ULTRA, 7-bit ASCII, no em-dashes, no
+en-dashes, no smart quotes.
 ```

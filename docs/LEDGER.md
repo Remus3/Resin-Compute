@@ -12,6 +12,151 @@ now.
 
 ---
 
+## 2026-09-09 - The mutation runner ships, four of its own kills were false, and the census arms pinned literals where they claimed classes
+
+Files: `tools/gate_mutation_runner.py` (new, 851 lines),
+`tests/test_gate_mutation_runner.py` (new, 47 arms),
+`tests/test_responder_gate_census.py` (43 arms to 77), `ROADMAP.md`,
+`docs/LEDGER.md`. Commits `25f5858`, `e87e26c`, `621e4ab`, `1c596e3`.
+Measured at the merge, 2026-09-09: `pytest tests` 1840 passed 1 skipped,
+`agents/pity_engine` 80 passed, `node --test` 52 pass 0 fail, and licence, docs,
+qa_companion 16 passed 0 failed, ruff, mypy at 34 source files and the headless
+dry run all exit 0.
+
+**STEP TWO OF THREE OF THE GATE CENSUS IS DONE.** Ceiling item 3 of the census
+said "no mutation runner exists in this tree; this census is the tagging step
+such a runner would consume, not the runner". It exists now. It reads the 18
+`# GATE:` tags, neutralises each tagged consult site in `_run_once` in turn,
+runs the application suite per mutant, and calls the mutant KILLED on a non-zero
+exit and SURVIVED on a zero one. The registry is step three and stays open.
+
+**THE ARITHMETIC IS DERIVED FROM THE LIVE FILE, NOT DECLARED:** 14 `If` gates at
+two polarities, 1 `Try` neutralised by re-raising in its handler, 1 `IfExp` at
+two polarities, and 2 subscript-write `BoolOp` gates at one mutant per dropped
+operand. 35 mutants from 18 gates. Verified independently by a refuter.
+
+**THE CAMPAIGN WAS WRONG TWICE AND BOTH ERRORS WERE FOUND BY MEASUREMENT.**
+The first reported 35 of 35 KILLED and its own author retracted it: the runner's
+test module sorts ahead of the responder's modules and under `-x` decided every
+verdict, because an already-applied `if True:` mutant re-plans to a
+byte-identical mutant and trips its own no-op assertion. The corroborating
+evidence was the WALL CLOCK - 35 full-suite runs in about three minutes is only
+possible if every run aborted early.
+
+**THE SECOND CAMPAIGN'S 31 KILLS INCLUDED FOUR FALSE ONES, AND NOTHING IN THE
+REPORT COULD HAVE SHOWN IT.** It took a refuter running the suite by hand.
+`tests/test_responder_gate_census.py` reads the responder AT IMPORT and grades
+its AST SHAPE, so a mutant that DROPS A BoolOp OPERAND changes that shape and
+the census reddens for a reason that is not about behaviour. Under `-x` that is
+indistinguishable from a real kill. Measured both ways with the self-test module
+ignored throughout, so only the census varied:
+
+    all four BoolOp mutants, census included   32 failed, 32 of 32 failing
+                                               nodes in the census, 0 elsewhere
+    all four BoolOp mutants, census ignored    1716 passed 1 skipped, exit 0
+
+The defect is CONFINED and that was measured too: `if True`, `if False` and the
+`try` mutant all PRESERVE the shape the census grades, so it cannot false-kill
+them, and both `IfExp` mutants are genuine behavioural kills in
+`tests/test_moon_sync_responder.py`.
+
+**TWO EXCLUSIONS, TWO REASONS, KEPT APART IN CODE.** `SELF_TEST_MODULE` is a
+module that decides its own verdict; `SHAPE_GRADER_MODULES` is a module that
+grades the TARGET FILE'S SHAPE, which answers a question about syntax while the
+runner asks one about behaviour. An `--ignore` of a path that does not exist is
+a SILENT NO-OP, so `verify_exclusions` raises before any campaign and an arm
+feeds it a bogus path to prove the check fires. Verification pointer:
+`tests/test_gate_mutation_runner.py`, the exclusion arms and the six HAND-TYPED
+pytest fixtures that grade `parse_first_failure` - none produced by running
+pytest and none by the parser, two of them proving it degrades to `unknown`
+rather than to a wrong name.
+
+**THE STANDING RESULT, re-run on the shipped bytes at `1c596e3` and reproduced
+at the merge: 35 mutants, 27 KILLED, 8 SURVIVED, 0 false kills, exit 1.** Every
+one of the 27 names a node in `tests/test_moon_sync_responder.py`; not one names
+a shape grader. The eight survivors name gates in `_run_once` that no test in
+the campaign suite depends on: `no-destination/if-false`,
+`workspace-trust/if-false`, `refusal-recorded/if-false`, `bounce-mark/if-true`,
+`bounce-write-all/operand-1`, `bounce-write-all/operand-2`,
+`delivery-write-all/operand-1`, `delivery-write-all/operand-2`.
+`delivery-write-all/operand-1` drops the `bool(written)` term the responder's
+own comment at `tools/moon_sync_responder.py:1861-1863` calls the guard and not
+decoration - the term that stops `all([])` reporting a delivery to zero
+destinations as delivered. It read KILLED before the repair and reads SURVIVED
+after it. Closing the eight needs the responder and its test modules and is
+recorded in `ROADMAP.md` as the next work.
+
+**THE CENSUS GAINED THE MISSING DIRECTION OF ITS COMPARISON.** It asserted
+`not tagged - tight` and never the reverse, so a NEW consult site added to
+`_run_once` and never tagged was invisible. Both directions are asserted now,
+by `test_every_consult_site_inside_run_once_carries_a_tag`, whose anti-vacuity
+floor is welded into the same assertion as the judgement.
+
+**THE MECHANISM SURVIVED EVERY LENS AND THE PROSE FELL EIGHT TIMES.** Two
+refuters on distinct lenses graded the first build; three more graded the
+repairs. Falsified and corrected: that the tagged set and the site set are
+IDENTICAL, when they are identical as LINE NUMBERS and two accepted sites on one
+line shared a tag; that the `_FLOOR` conjunct served the arm's own vacuity, when
+it serves the parametrized block's non-emptiness; that the control does not kill
+an unconditional reporter, when it does along with 9 other arms and 27 of 71
+cases; that a choosing expression in a CALL ARGUMENT is invisible, when the
+discriminator is the ASSIGNMENT TARGET because the predicate walks the whole
+value; that there are 4 orphan choosing expressions, when under the stated
+predicate there are 3 at 1643, 1644 and 1645 and the 4 is the `bare - tight`
+line difference adding 1737; a third conjunct that is the fourth; five `_FLOOR`
+assertions that were six; and a control docstring claiming it buys nothing when
+it carries the ONLY call that grades `_LIVE_SOURCE`, the snapshot every mutation
+case is cut from.
+
+**A SHAPE ARM PINS FORMAT, NOT INPUT, AND IT COST TWO ROUNDS.** The arm proving
+the distinct-line requirement is welded into the coverage arm pinned the phrase
+`distinct lines`, which that message emits UNCONDITIONALLY: replacing the fourth
+conjunct with the coincidental proxy `len(sites) == len(_TAG_LINES)` - true at 18
+and 18, and not the distinct-line property at all - passed all 69 arms, and so
+did replacing the payload with `assert caught.value is not None`. The repair
+defeated that proxy BY CONSTRUCTION and a further lens then found SEVEN more
+conjuncts passing all 71, failing in OPPOSITE directions: `!= 1` and `% 2 == 0`
+left the arm green on a source with TWO real collisions, while `== 18`,
+`<= _FLOOR` and `== len(_TAG_LINES)` REDDENED a clean, fully tagged responder
+carrying one extra correctly tagged gate. Multiplicity was depth-one the same
+way - `return reported[:1]` passed all 69 and `[:2]` and `[:3]` passed all 71.
+
+**THE REPAIR STOPPED PINNING `len(...)` AND PINNED IDENTITY AT MORE THAN ONE
+ARITY.** `_colliding_site_lines` is graded by list EQUALITY against hand-typed
+expectations at one collision, two collisions and three sites on one line; the
+coverage arm ITSELF is driven over those three requiring a raise and over a
+clean responder with one extra tagged gate requiring NO raise; and the
+multiplicity arm asserts SET EQUALITY at k = 1, 2 and 3 non-adjacent tags, plus
+an all-tags arm. Eight of eight named mutants die, plus three the brief did not
+name, and both controls that already died still die. Verification pointer:
+`tests/test_responder_gate_census.py`,
+`test_the_collision_detector_names_every_colliding_line_at_three_arities`,
+`test_the_coverage_arm_fires_on_every_collision_arity_and_not_on_a_clean_extra_gate`,
+`test_removing_k_tags_reports_exactly_those_k_sites_as_a_set` and
+`test_removing_every_tag_reports_every_site_and_bounds_no_truncation`.
+
+**WHAT IS STILL OPEN IS STATED IN THE ARMS RATHER THAN HIDDEN.** The arities are
+a SAMPLE and not a proof: a wrong conjunct agreeing with the real one on a clean
+source, one collision, two collisions and three-on-a-line still passes. The
+depth arm bounds `reported[:n]` only for n below the tag count, so `[:18]` and
+above are untouched. The 27 kills are attributed by parsing the FIRST failure
+under `-x`, which names the killer but is not proof no other test would also
+have failed.
+
+**FOUR TIMES THIS SESSION AN AGENT CORRECTED THE INSTRUCTION IT WAS GIVEN,** and
+that is the method result worth keeping. A repair builder measured that k = 1, 2
+and 3 does NOT kill `reported[:3]` and added the all-tags arm the brief had not
+asked for. Another declined to ship a refuter's measurement it could not
+reproduce - "only the control reddens when `_LIVE_SOURCE` diverges" is false,
+26 cases across 10 arms redden - and shipped the weaker verified claim instead.
+A third derived the orphan count itself and disagreed with both the refuter and
+the earlier builder. And a fourth STOPPED without writing anything when its
+worktree materialised at `199aaae`, the PARENT of the declared fork point
+`25f5858`, rather than re-deriving the target from the brief's prose. That trap
+fired on FOUR of five worktrees dispatched today; the fix is an explicit
+`git merge --ff-only <sha>` plus an assertion on the materialised bytes, and a
+dispatch that omits it is the defect rather than the builder.
+
 ## 2026-09-09 - The responder gates are tagged, and three lenses found three defects no two of which overlapped
 
 Files: `tools/moon_sync_responder.py` (comments only),
