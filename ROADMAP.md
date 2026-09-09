@@ -835,6 +835,13 @@ version. What follows is everything the scaffold deliberately did not do.
   not feared, and it is the reason the mutation runner is step two rather than
   an optional companion.
 
+  SUPERSEDED IN PART, 2026-09-09, and the paragraph above is kept because a
+  reader arriving at the entry it belongs to should see what was true when it
+  was written. The census now asserts BOTH directions of the comparison, so an
+  untagged consult site in a shape `_is_a_consult_site` accepts is no longer
+  invisible. What survives of the hole is narrower and is stated at its own
+  entry above, in the census module's ceiling item 2, and nowhere else.
+
   STILL OPEN, unchanged in order: build the mutation runner, THEN the registry
   and its companions. Building the companions first still ships a vacuously
   green apparatus. The two census hazards below are now CLOSED IN CODE - the
