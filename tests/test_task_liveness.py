@@ -499,6 +499,143 @@ def _verdict(payload, now=NOW):
     return liveness.verdict(liveness.parse_facts(payload), now=now)
 
 
+# --- THE WALL CLOCK IS AN INPUT, SO IT GETS PINNED LIKE ANY OTHER ----------
+#
+# THE THIRD FINDING, and this file shipped it. `_verdict` above pins `now`, so
+# every arm that goes through it is deterministic forever. But `liveness.main`
+# calls `verdict(facts)` with NO `now` (ops/check_task_liveness.py:731), and
+# `verdict` then falls back to `dt.datetime.now()` (line 388). So EVERY arm
+# that drives `main` was graded against the REAL wall clock, with a hardcoded
+# calendar date as the other operand.
+#
+# A HARDCODED FUTURE TIMESTAMP GRADED AGAINST THE REAL CLOCK IS A TEST THAT
+# DECAYS. It does not fail because something regressed; it fails because time
+# passed. The LIVE positive control below carried EndBoundary
+# "2026-09-09T21:00:00", read naive and therefore in the RUNNER's local zone.
+# CI runs UTC, so it expired at 21:00 UTC on 2026-09-09 and the suite went red
+# at 21:11 UTC while the same commit stayed green on a UTC-5 box, where that
+# instant had not arrived yet. Two arms had the same defect in the other
+# polarity - they assert DORMANT and depend on a hardcoded date being in the
+# PAST - and while the past stays past, they are still wall-clock-graded and
+# would flip on a runner whose clock is set wrong.
+#
+# The repair pins the clock instead of moving the date. Moving the date to a
+# later one is the SAME defect with a longer fuse.
+#
+# WHERE THE ROOT CAUSE STILL LIVES, recorded and NOT fixed here: this repair is
+# in the TEST, not in the checker. `main` still calls `verdict(parse_facts(...))`
+# with no `now`, so the seam between `main` and `verdict` remains
+# non-deterministic for every caller that is not a test holding a monkeypatch.
+# Threading a `now` through `main` - a `--now` argument, or a parameter - is the
+# fix that would retire this whole shim. Until then the determinism belongs to
+# these arms only, and any new arm driving `main` must call `_freeze_clock`
+# itself or it inherits the same decay.
+#
+# WHAT THIS SEAM CANNOT CATCH: it pins what the checker reads through its own
+# `dt` binding. If `main` or `verdict` ever stopped reading the clock through
+# `liveness.dt.datetime.now()` - a switch to `time.time()`, or to a
+# `from datetime import datetime` name bound at import - the patch would
+# silently no-op and these arms would go back to being wall-clock-graded.
+# `test_non_vacuity_a_no_op_clock_freeze_would_be_caught` below closes exactly
+# that, and it pins an instant in 2020 so it can never decay either.
+
+
+def _pinned_datetime(real_datetime, instant):
+    """A `datetime` subclass whose `now()` is `instant` and nothing else."""
+
+    class _PinnedDatetime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is not None:
+                raise AssertionError(
+                    "the checker reads a NAIVE clock - a tz-aware read is a change of "
+                    "shape this seam must not paper over"
+                )
+            return instant
+
+    return _PinnedDatetime
+
+
+class _PinnedClockModule:
+    """Stand-in for the `datetime` module with `datetime.now()` pinned.
+
+    Every other attribute delegates to the real module, so the code under test
+    is unchanged in every respect except which instant it calls "now". Scoped
+    to the `liveness` module's own binding - the stdlib module is not mutated.
+    """
+
+    def __init__(self, real_module, instant):
+        self._real_module = real_module
+        self.datetime = _pinned_datetime(real_module.datetime, instant)
+
+    def __getattr__(self, name):
+        return getattr(self._real_module, name)
+
+
+def _freeze_clock(monkeypatch, instant=NOW):
+    """Pin the wall clock `liveness` reads, for the duration of one test."""
+    monkeypatch.setattr(liveness, "dt", _PinnedClockModule(dt, instant))
+    return instant
+
+
+# An instant that is in the past today and will still be in the past on every
+# day this repo is ever checked out. It is BEFORE the EndBoundary of
+# MEASURED_DORMANT, and it is the EndBoundary - not the StartBoundary - that
+# decides: that trigger carries one, so `evaluate_trigger` returns on the
+# EndBoundary arm (ops/check_task_liveness.py:323) and NEVER reaches the
+# StartBoundary check at line 344. That is what makes the non-vacuity arm
+# below decisive.
+LONG_PAST = dt.datetime(2020, 1, 1, 0, 0, 0)
+
+# One second after the LIVE positive control's EndBoundary. This is the exact
+# instant CI crossed when the suite went red.
+JUST_AFTER_THE_LIVE_BOUNDARY = dt.datetime(2026, 9, 9, 21, 0, 1)
+
+
+def test_the_pinned_clock_seam_is_actually_in_effect(monkeypatch):
+    # A negative that is a statement about the instrument is not a statement
+    # about the world. This asserts the instrument.
+    _freeze_clock(monkeypatch, LONG_PAST)
+    assert liveness.dt.datetime.now() == LONG_PAST
+    assert liveness.dt.timedelta(seconds=1) == dt.timedelta(seconds=1), (
+        "everything except now() must still be the real datetime module"
+    )
+
+
+def test_the_pinned_clock_is_undone_after_the_test_that_used_it():
+    # monkeypatch's teardown restores the real module. If it did not, every
+    # arm ordered after a frozen one would inherit a fake clock.
+    #
+    # RECORDED LIMIT, not fixed here: this arm is VACUOUS IN ISOLATION. Run on
+    # its own - `pytest -k the_pinned_clock_is_undone` - nothing has frozen the
+    # clock before it, so it asserts that an unpatched module is unpatched. Its
+    # content comes entirely from file order putting it after a frozen arm, and
+    # a reordering or a `-k` selection retires that content silently.
+    assert liveness.dt is dt
+
+
+def test_non_vacuity_a_no_op_clock_freeze_would_be_caught(monkeypatch, capsys):
+    # THE ARM THAT PROVES THE SEAM. Pinned to 2020, the responder's ONLY
+    # trigger has an EndBoundary of 2026-09-07T21:00:00 that has not been
+    # reached yet, so the correct verdict is LIVE. The reason the checker
+    # actually emits for it, measured rather than transcribed, is
+    #   trigger 1 (MSFT_TaskTimeTrigger) is enabled and its EndBoundary
+    #   2026-09-07T21:00:00 is still ahead
+    # which is the EndBoundary arm at ops/check_task_liveness.py:323. The
+    # StartBoundary check at line 344 is never reached on this fixture, so no
+    # claim about a StartBoundary describes what runs here. Under the real
+    # clock the same payload is DORMANT. If the freeze ever stops reaching the
+    # code - a refactor to time.time(), a rebound import - this arm goes red
+    # immediately, and it cannot decay because 2020 stays past.
+    _freeze_clock(monkeypatch, LONG_PAST)
+    monkeypatch.setattr(liveness, "collect_facts", lambda *a, **k: MEASURED_DORMANT)
+    code = liveness.main(["ResinCompute-Responder"])
+    out = capsys.readouterr().out
+    assert "LIVE" in out, "a trigger whose EndBoundary is still ahead has not expired"
+    assert "DORMANT" not in out
+    assert code == liveness.EXIT_LIVE
+
+
 # --- FINDING ONE: an expired EndBoundary, and its positive control ---------
 
 
@@ -726,6 +863,7 @@ def test_positive_control_a_single_match_of_the_same_shape_is_answered():
 
 
 def test_main_gives_ambiguity_its_own_exit_code(monkeypatch, capsys):
+    _freeze_clock(monkeypatch)
     monkeypatch.setattr(liveness, "collect_facts", lambda *a, **k: MEASURED_AMBIGUOUS)
     code = liveness.main(["Backup"])
     assert "AMBIGUOUS" in capsys.readouterr().out
@@ -818,6 +956,7 @@ def test_main_routes_through_the_verdict_function_and_exits_nonzero_on_dormant(m
         seen["task_name"] = task_name
         return MEASURED_DORMANT
 
+    _freeze_clock(monkeypatch)
     monkeypatch.setattr(liveness, "collect_facts", fake_collect)
     code = liveness.main(["ResinCompute-Responder"])
     out = capsys.readouterr().out
@@ -829,6 +968,10 @@ def test_main_routes_through_the_verdict_function_and_exits_nonzero_on_dormant(m
 
 
 def test_positive_control_main_exits_zero_when_the_same_path_finds_it_live(monkeypatch, capsys):
+    # The clock is pinned to the same NOW every other arm in this file uses.
+    # Without that pin this arm was graded against the real wall clock, and it
+    # went red on CI at 2026-09-09T21:11Z for no reason but the hour.
+    _freeze_clock(monkeypatch)
     live_payload = _payload(trigger_end_boundary="2026-09-09T21:00:00")
     monkeypatch.setattr(liveness, "collect_facts", lambda *a, **k: live_payload)
     code = liveness.main(["ResinCompute-Responder"])
@@ -837,7 +980,23 @@ def test_positive_control_main_exits_zero_when_the_same_path_finds_it_live(monke
     assert code == liveness.EXIT_LIVE == 0
 
 
+def test_main_flips_to_dormant_one_second_past_that_same_boundary(monkeypatch, capsys):
+    # THE CI FAILURE, PINNED. Same payload, same path, one instant later. This
+    # is what the wall clock used to decide by accident, and it is now an
+    # asserted transition rather than a race with the calendar.
+    _freeze_clock(monkeypatch, JUST_AFTER_THE_LIVE_BOUNDARY)
+    live_payload = _payload(trigger_end_boundary="2026-09-09T21:00:00")
+    monkeypatch.setattr(liveness, "collect_facts", lambda *a, **k: live_payload)
+    code = liveness.main(["ResinCompute-Responder"])
+    out = capsys.readouterr().out
+    assert "DORMANT" in out
+    assert "LIVE" not in out
+    assert code == liveness.EXIT_DORMANT
+    assert code != 0
+
+
 def test_main_exits_dormant_on_the_spent_one_shot(monkeypatch, capsys):
+    _freeze_clock(monkeypatch)
     monkeypatch.setattr(liveness, "collect_facts", lambda *a, **k: MEASURED_SPENT_ONE_SHOT)
     code = liveness.main(["RunPlatformExperienceHelper_Metrics"])
     assert "DORMANT" in capsys.readouterr().out
@@ -874,6 +1033,7 @@ def test_a_probe_failure_degrades_friendly_and_leaks_no_raw_error(monkeypatch, c
 
 
 def test_positive_control_a_working_probe_prints_no_degraded_banner(monkeypatch, capsys):
+    _freeze_clock(monkeypatch)
     monkeypatch.setattr(liveness, "collect_facts", lambda *a, **k: MEASURED_DORMANT)
     liveness.main(["ResinCompute-Responder"])
     assert "UNKNOWN" not in capsys.readouterr().out

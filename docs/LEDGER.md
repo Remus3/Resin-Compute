@@ -12,6 +12,89 @@ now.
 
 ---
 
+## 2026-09-09 - CI went red on a test that decayed, and the lane split was a timezone rather than a platform
+
+Files: `tests/test_task_liveness.py`, `ROADMAP.md`, `docs/LEDGER.md`.
+`ops/check_task_liveness.py` NOT touched and byte-identical at
+`be081ce182ea244c0129c9fa2c58b7131b093f10f5bb1271f6b091f6897ea265`.
+Measured at the merge, 2026-09-09: `pytest tests` 1859 passed 1 skipped at the
+local zone AND at `TZ=UTC0`, `agents/pity_engine` 80 passed, `node --test` 52
+pass 0 fail, and licence posture 47, docs consistency 29, qa_companion 16
+passed 0 failed, ruff, mypy at 34 source files and the headless dry run all
+exit 0.
+
+**NOTHING REGRESSED - TIME PASSED.** GitHub run 34405450182 failed on
+ubuntu-latest at Python 3.11 at 2026-09-09T21:11:41Z with
+`tests/test_task_liveness.py:836: AssertionError, assert "LIVE" in out`, at a
+commit whose suite was green on this box. `liveness.main` calls
+`verdict(parse_facts(...))` with NO `now` and `verdict` falls back to
+`dt.datetime.now()`, so five arms were graded against the REAL CLOCK while
+every `_verdict` sibling pins `now=NOW` at 2026-09-08 10:00. The payload's
+boundary `2026-09-09T21:00:00` is NAIVE and is therefore read in the runner's
+LOCAL zone - expired at 21:00 on a UTC runner, five hours later at UTC-5.
+
+**THE LESSON IS AN ORDERING ONE: DIFF THE CLOCK BEFORE THE ENVIRONMENT.**
+Green-here-red-on-CI at one commit reads as a platform or interpreter
+difference. It was neither, and chasing that reading would have cost the slice.
+
+**THE FIX IS CLOCK INJECTION, NOT A LATER DATE.** A stamp further in the future
+is the same defect with a longer fuse. Five arms pin the clock through a shim
+that swaps the module binding the checker actually reads, and the CI failure is
+now an ASSERTED TRANSITION rather than a race with the calendar: a sibling arm
+pins one second past the same boundary and requires DORMANT. The checker was
+left alone - `verdict` already offers `now=`, and widening the kill-switch
+tool's signature for the tests' benefit would trade a test defect for a worse
+one.
+
+**THE BUILDER CORRECTED THE DIAGNOSIS IT WAS GIVEN, which is now the sixth
+time this session.** The brief said ONE arm was clock-graded. Three were: the
+other two are the same defect in PAST polarity and flip under a backwards
+clock, and two more reach `verdict` unpinned while being outcome-independent.
+All five were fixed together, which is the root-cause rule rather than the
+line.
+
+**THE REFUTER BUILT ITS OWN INSTRUMENT AND THAT IS WHY THE RESULT COUNTS.** It
+reproduced the CI red byte-exact on the PRE-FIX bytes under `TZ=UTC0` and green
+on the POST-FIX bytes, then re-ran the mechanism on CI's Python 3.11 where no
+pytest is installed by driving `main` directly. It proved `TZ` actually moves
+`datetime.now()` on this Windows CPython before relying on it - offset 18000 to
+0 - rather than assuming, because a fake that silently no-ops produces a green
+that means nothing. The file is green at a stdlib clock shift of -20000 to
++40000 days and the whole suite at UTC, UTC+14 and UTC-12.
+
+**A SUITE RUN AT TWO OFFSETS IS A SAMPLE, NOT A PROOF**, and the refuter said
+so rather than accepting the sweep: an arm whose boundary lies outside the
+window is invisible to it. It then established the population - every
+`YYYY-MM-DD` literal in `tests/*.py` lies between 2026-01-04 and 2026-09-09, so
+the window happened to cover all of it. One arm that moves at +4000 days,
+`test_a_live_pass_writes_the_run_summary`, was cleared and the asymmetry is the
+proof: it fails only FORWARD because a future timestamp is documented as
+not-stale, and its payload carries a freshly written real timestamp rather than
+a hardcoded date.
+
+**A THIRD ROUND CORRECTED A REASON THAT NAMED THE WRONG BRANCH** - this tree's
+own interpolated-reason-string class. The non-vacuity arm's verdict is right
+and its stated cause was not: `MEASURED_DORMANT`'s trigger HAS an
+`end_boundary`, so `evaluate_trigger` returns on the EndBoundary arm and NEVER
+reaches the StartBoundary check. The measured reason line is "trigger 1
+(MSFT_TaskTimeTrigger) is enabled and its EndBoundary 2026-09-07T21:00:00 is
+still ahead", captured by running the checker rather than hand-typed. The
+assertion MESSAGE said StartBoundary and is the text the next reader would
+have got. That builder also refused the brief's framing: the sentence was TRUE
+as a bare fact and IRRELEVANT as a cause, so it repaired the causal claim and
+said so.
+
+**TWO LIMITS RECORDED IN THE FILE RATHER THAN FIXED.** The teardown arm is
+VACUOUS IN ISOLATION - alone it passes with nothing frozen before it, and it
+has content only because file order puts it after a frozen arm. And the root
+cause is closed in the test only: `main` still never threads `now` into
+`verdict`.
+
+Verification pointer: `TZ=UTC0 python -m pytest tests/test_task_liveness.py`,
+which must be 84 passed, and the same file under any clock shift.
+
+---
+
 ## 2026-09-09 - The eight gates exercised by nothing get arms, the campaign reaches 35 of 35, and six prose claims were false
 
 Files: `tests/test_responder_delivery_gates.py` (new, 8 arms),
