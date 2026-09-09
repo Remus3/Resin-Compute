@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -1828,4 +1829,427 @@ def test_a_deprioritised_note_is_still_answered_when_it_is_alone(rsp, tmp_path):
     assert result["note"] == name, f"the only note in the inbox was never selected: {result}"
     assert rsp._answered(rsp.DEFAULT_ANSWERED) == set(), (
         "a refusal reached the answered record, which means REPLIED TO"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE ENTRY-POINT LABEL, AND THE ENVIRONMENT THAT ISOLATES A CHILD.
+#
+# Two defects with one root cause, both measured at HEAD 9f6839e.
+#
+# (1) `run_once` passed the LITERAL `run_once` to `log_invocation` on all three
+#     of its lines, so the Windows scheduled task, a manual terminal run and an
+#     in-process cycle wrote the same word. The live record carried exactly one
+#     label across every row it held, and the record exists to say WHICH caller
+#     fired. `scripts/watch_inbox.py` had already solved this at commit 3964544
+#     with an argv flag; this is that shape, on this file's own CLI.
+#
+# (2) `grep -c "environ\|getenv\|RESINCOMPUTE" tools/moon_sync_responder.py`
+#     returned 0 against 17 in `scripts/watch_inbox.py`. The responder read
+#     NOTHING from the environment, so it had no isolation channel at all - and
+#     AN ISOLATION FIXTURE THAT MONKEYPATCHES MODULE ATTRIBUTES CANNOT ISOLATE
+#     A SUBPROCESS. The `rsp` fixture above redirects every `DEFAULT_` Path by
+#     enumeration, which is complete and confined to ONE interpreter. Anything
+#     that launches `python tools/moon_sync_responder.py` got a fresh import
+#     with the real defaults and wrote into the operator's LIVE responder
+#     record. That is the harm, and it is why the arms below spawn.
+#
+# EVERY ARM THAT MATTERS HERE SPAWNS. A GATE TESTED AS A PURE PREDICATE IS NOT
+# AN ENFORCED GATE, and this tree has been bitten by that repeatedly. An arm on
+# `resolve_source` proves nothing about the `__main__` guard, which is what the
+# scheduled task and an operator actually run.
+# ---------------------------------------------------------------------------
+
+
+def _reimport(monkeypatch, env: dict[str, str | None]):
+    """Import the responder FRESH under `env`, bypassing the `rsp` fixture.
+
+    The module resolves its runtime location from the ENVIRONMENT at import,
+    because the environment is what a child process inherits. An arm about that
+    behaviour has to re-import; re-assigning an attribute measures the fixture.
+    """
+    for name, value in env.items():
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    spec = importlib.util.spec_from_file_location("moon_sync_responder_env_probe", MODULE)
+    assert spec is not None and spec.loader is not None, f"cannot load {MODULE}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+#: A literal ceiling on a spawned run, never derived from anything under test.
+#: A fixture sized from the value it measures is an amplifier.
+_SPAWN_TIMEOUT_SECONDS = 60
+
+
+def _spawn(argv: list[str], env_extra: dict[str, str | None]):
+    """Run the REAL responder in a REAL child process under `env_extra`.
+
+    `sys.executable` rather than a bare `python`: the arm at
+    `test_a_spawn_that_never_ran_is_not_recorded_as_exhausted` above measured a
+    subprocess call that never ran and returned the reassuring shape of one
+    that did.
+    """
+    import subprocess
+    import sys
+
+    env = dict(os.environ)
+    for name, value in env_extra.items():
+        if value is None:
+            env.pop(name, None)
+        else:
+            env[name] = value
+    return subprocess.run(
+        [sys.executable, str(MODULE), *argv],
+        cwd=str(ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=_SPAWN_TIMEOUT_SECONDS,
+    )
+
+
+def _spawn_bed(tmp_path):
+    """An EMPTY inbox and a disposable runtime directory for a spawned cycle.
+
+    The inbox is empty and disposable on purpose. A spawn pointed at the real
+    `moon_sync_inbox` would make the arm's outcome depend on whatever a sibling
+    happened to have sent, and this file's whole subject is a record that must
+    not be written by the thing measuring it.
+    """
+    inbox = tmp_path / "spawn_inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    return inbox, tmp_path / "spawn_runtime"
+
+
+def _spawned_lines(redirected: Path, module) -> list[str]:
+    """The invocation lines a spawned child left, located through the MODULE.
+
+    The filename is derived rather than spelled here. A hand-written copy of
+    `responder_invocations.log` in this file would go stale silently the day
+    the record is renamed, and the arm guarding the operator's live state would
+    then be reading a path nothing writes.
+    """
+    log = redirected / module.DEFAULT_INVOCATIONS.name
+    if not log.is_file():
+        return []
+    return [ln for ln in log.read_text(encoding="ascii", errors="replace").splitlines() if ln]
+
+
+def _live_runtime_snapshot(monkeypatch, module) -> dict[str, tuple[bool, int]]:
+    """Every live `DEFAULT_` record as an UNREDIRECTED import sees it.
+
+    Derived from an unredirected re-import rather than listed here, for the same
+    reason `test_no_default_path_can_reach_live_runtime_state` enumerates: a
+    hand-maintained list of things to watch goes stale the moment someone adds
+    the next one, and it fails silently.
+    """
+    plain = _reimport(monkeypatch, {module.ENV_RUNTIME_DIR: None})
+    snapshot: dict[str, tuple[bool, int]] = {}
+    for name in [n for n in dir(plain) if n.startswith("DEFAULT_")]:
+        value = getattr(plain, name)
+        if not isinstance(value, Path):
+            continue
+        try:
+            snapshot[name] = (True, value.stat().st_size)
+        except OSError:
+            snapshot[name] = (False, -1)
+    return snapshot
+
+
+def test_the_responder_reads_the_same_runtime_override_as_the_rest_of_the_tree(rsp):
+    """One contract, not two wearing one name.
+
+    `ops/health.py` defines the variable and `headless/runner.py` and
+    `scripts/watch_inbox.py` already honour it. A private spelling here would be
+    a second knob, and the knob an operator forgets to set is always the one
+    that writes into live state.
+    """
+    import ops.health as health_mod
+
+    assert rsp.ENV_RUNTIME_DIR == health_mod.ENV_RUNTIME_DIR, (
+        f"the responder reads {rsp.ENV_RUNTIME_DIR!r} while the rest of the tree "
+        f"reads {health_mod.ENV_RUNTIME_DIR!r}; that is two contracts wearing one name"
+    )
+
+
+def test_every_runtime_record_follows_the_override_and_the_inbox_does_not(
+    rsp, monkeypatch, tmp_path
+):
+    """TWO GUARDS. The records move, and the INBOX survives.
+
+    A redirect that also moved the inbox would isolate a caller by handing the
+    responder an empty channel - green, and blind. The inbox is an INPUT.
+    """
+    redirected = tmp_path / "redirected"
+    plain = _reimport(monkeypatch, {rsp.ENV_RUNTIME_DIR: None})
+    fresh = _reimport(monkeypatch, {rsp.ENV_RUNTIME_DIR: str(redirected)})
+
+    live_runtime = plain.DEFAULT_INVOCATIONS.parent
+    followers = [
+        n
+        for n in dir(plain)
+        if n.startswith("DEFAULT_")
+        and isinstance(getattr(plain, n), Path)
+        and getattr(plain, n).parent == live_runtime
+    ]
+
+    assert len(followers) >= 4, (
+        f"the discovery found almost nothing, so this arm is vacuous: {followers}"
+    )
+    for name in followers:
+        assert redirected in getattr(fresh, name).parents, (
+            f"{name} ignored {rsp.ENV_RUNTIME_DIR} and stayed at "
+            f"{getattr(fresh, name)}; a subprocess cannot be isolated any other way"
+        )
+    assert fresh.DEFAULT_INBOX == plain.DEFAULT_INBOX, (
+        "the override moved the INBOX, which isolates a caller by blinding it"
+    )
+
+
+def test_a_spawned_responder_writes_where_the_environment_points_and_nowhere_else(
+    rsp, monkeypatch, tmp_path
+):
+    """THE ENFORCED-GATE ARM, and the defect it names is the measured harm.
+
+    Before this slice the responder read nothing from the environment, so this
+    child wrote its lines into the operator's live responder record. The `rsp`
+    fixture could not stop it: the child re-imports with the real defaults.
+    """
+    inbox, redirected = _spawn_bed(tmp_path)
+    before = _live_runtime_snapshot(monkeypatch, rsp)
+
+    done = _spawn(
+        ["--dir", str(inbox)],
+        {rsp.ENV_RUNTIME_DIR: str(redirected), rsp.ENV_INVOCATION_SOURCE: rsp.SOURCE_SUITE},
+    )
+
+    assert done.returncode == 0, f"stderr: {done.stderr[:400]!r}"
+    assert _spawned_lines(redirected, rsp), (
+        f"the child left no lines, so the arm below is vacuous. stdout: {done.stdout[:200]!r}"
+    )
+    assert _live_runtime_snapshot(monkeypatch, rsp) == before, (
+        "a spawned responder changed the operator's live runtime records although "
+        "the environment pointed somewhere disposable"
+    )
+
+
+def test_a_spawned_responder_is_not_labelled_like_an_in_process_cycle(rsp, tmp_path):
+    """THE HONEST-DEFAULT ARM. A bare terminal run says `cli`, not `run_once`.
+
+    `run_once` is what an IN-PROCESS call writes - a test, or another tool
+    importing this one. Before this slice the real entry point wrote it too, so
+    the column could not tell a process from a function call.
+    """
+    inbox, redirected = _spawn_bed(tmp_path)
+    done = _spawn(
+        ["--dir", str(inbox)],
+        {rsp.ENV_RUNTIME_DIR: str(redirected), rsp.ENV_INVOCATION_SOURCE: None},
+    )
+    assert done.returncode == 0, f"stderr: {done.stderr[:400]!r}"
+
+    sources = {ln.split("\t")[1] for ln in _spawned_lines(redirected, rsp)}
+
+    assert sources == {rsp.SOURCE_CLI}, (
+        f"a bare entry-point run labelled itself {sources}; the fallback a real "
+        f"unattended fire writes must be {rsp.SOURCE_CLI!r}"
+    )
+    assert rsp.SOURCE_CLI != rsp.SOURCE_RUN_ONCE, (
+        "the two labels are the same string, so the column separates nothing"
+    )
+
+
+def test_the_source_flag_names_the_caller_on_the_real_entry_point(rsp, tmp_path):
+    """The WIRING declares which caller this is, and BOTH lines of one fire agree.
+
+    Two lines per fire, a `start` and a terminal. A label resolved on only one
+    of them would make the two lines of a single fire name two callers, and the
+    `start` line is the only evidence a fire killed mid-cycle leaves at all.
+    """
+    inbox, redirected = _spawn_bed(tmp_path)
+    done = _spawn(
+        ["--dir", str(inbox), rsp.SOURCE_FLAG, rsp.SOURCE_SCHEDULED_TASK],
+        {rsp.ENV_RUNTIME_DIR: str(redirected), rsp.ENV_INVOCATION_SOURCE: None},
+    )
+    assert done.returncode == 0, f"stderr: {done.stderr[:400]!r}"
+
+    lines = _spawned_lines(redirected, rsp)
+    sources = {ln.split("\t")[1] for ln in lines}
+
+    assert len(lines) >= 2, f"a fire writes a start and a terminal line; got {lines}"
+    assert sources == {rsp.SOURCE_SCHEDULED_TASK}, (
+        f"the flag did not reach the log: {sources}. A caller that cannot name "
+        "itself leaves the record saying only that something ran"
+    )
+
+
+def test_the_environment_outranks_the_source_flag_across_a_subprocess(rsp, tmp_path):
+    """PRECEDENCE: environment, then flag, then the honest `cli` fallback.
+
+    The direction is load-bearing rather than arbitrary. A test that proves a
+    real wiring fires launches THE DECLARED COMMAND, argv and all, and cannot
+    edit that argv without no longer testing the declared command. The
+    environment is then the only channel left that can mark suite noise, so it
+    has to win. Inverted, every such arm writes lines that read as real fires.
+
+    ACROSS A SUBPROCESS BOUNDARY, because that is the only boundary that was
+    failing. Asserting the precedence in-process would measure the fixture.
+    """
+    inbox, redirected = _spawn_bed(tmp_path)
+    done = _spawn(
+        ["--dir", str(inbox), rsp.SOURCE_FLAG, rsp.SOURCE_SCHEDULED_TASK],
+        {rsp.ENV_RUNTIME_DIR: str(redirected), rsp.ENV_INVOCATION_SOURCE: rsp.SOURCE_SUITE},
+    )
+    assert done.returncode == 0, f"stderr: {done.stderr[:400]!r}"
+
+    sources = {ln.split("\t")[1] for ln in _spawned_lines(redirected, rsp)}
+
+    assert sources == {rsp.SOURCE_SUITE}, (
+        f"the flag overrode the variable and the fire is labelled {sources}; "
+        "that un-isolates every spawning arm in this file"
+    )
+
+
+def test_the_source_flag_is_accepted_by_the_parser_rather_than_rejected(rsp, tmp_path):
+    """Declared in the parser even though the guard is what consumes it.
+
+    Without the declaration every wiring that names itself would leave through
+    argparse with exit code 2 and a usage block, and an unattended task would
+    fail at the task, where nothing in this suite would ever see it.
+    """
+    inbox = tmp_path / "parser_inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+
+    assert rsp.main(["--dir", str(inbox), rsp.SOURCE_FLAG, rsp.SOURCE_SCHEDULED_TASK]) == 0, (
+        "the parser rejected the flag the wiring must carry"
+    )
+
+
+@pytest.mark.parametrize(
+    "forgery",
+    ["has space", "UPPER", "tab\there", "line\nbreak", "", "-leading", "x" * 64],
+)
+def test_a_malformed_label_falls_back_rather_than_forging_a_line(rsp, forgery, monkeypatch):
+    """The label is the one field this module does not choose.
+
+    The record is TAB separated and line oriented, so a tab forges the outcome
+    column and a newline forges a whole line, timestamp and all. Anything that
+    is not a plain lowercase label falls back rather than being trimmed into
+    one: a silently repaired label is a label nobody can trace.
+    """
+    monkeypatch.setenv(rsp.ENV_INVOCATION_SOURCE, forgery)
+
+    assert rsp.resolve_source(rsp.SOURCE_CLI) == rsp.SOURCE_CLI, (
+        f"{forgery!r} reached the log through the environment"
+    )
+    assert rsp.source_from_argv([rsp.SOURCE_FLAG, forgery]) is None, (
+        f"{forgery!r} reached the log through the flag"
+    )
+
+
+def test_a_forged_label_cannot_write_a_second_line_into_the_spawned_log(rsp, tmp_path):
+    """THE NON-VACUITY ARM FOR THE PREDICATE ABOVE, on the real entry point.
+
+    A newline in the label is the forgery the shape exists to refuse. Proved by
+    counting the lines a real child left, not by asking the validator what it
+    thinks of a string.
+    """
+    inbox, redirected = _spawn_bed(tmp_path)
+    honest = _spawn(
+        ["--dir", str(inbox)],
+        {rsp.ENV_RUNTIME_DIR: str(redirected), rsp.ENV_INVOCATION_SOURCE: None},
+    )
+    assert honest.returncode == 0, f"stderr: {honest.stderr[:400]!r}"
+    baseline = len(_spawned_lines(redirected, rsp))
+    assert baseline >= 2, f"a fire writes at least two lines; got {baseline}"
+
+    forged = _spawn(
+        ["--dir", str(inbox)],
+        {
+            rsp.ENV_RUNTIME_DIR: str(redirected),
+            rsp.ENV_INVOCATION_SOURCE: "sneak\tcol\nforged\tline",
+        },
+    )
+    assert forged.returncode == 0, f"stderr: {forged.stderr[:400]!r}"
+
+    lines = _spawned_lines(redirected, rsp)
+    assert len(lines) == baseline * 2, (
+        f"the forged label changed the line count: {baseline} then {len(lines)}"
+    )
+    assert {ln.split("\t")[1] for ln in lines} == {rsp.SOURCE_CLI}, (
+        "a forged label reached the entry-point column"
+    )
+
+
+def test_an_in_process_cycle_still_names_itself_run_once(rsp, tmp_path):
+    """THE NEIGHBOUR-SURVIVED ARM. The in-process label is not collateral.
+
+    The defect was that `run_once` was the label for EVERY caller, and the fix
+    is that the other callers stop borrowing it - not that the in-process label
+    changes. A tool importing this module and calling `run_once` directly must
+    still be tellable from a process entry point.
+    """
+    inbox = tmp_path / "inprocess_inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+
+    rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=False))
+
+    lines = [
+        ln for ln in rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines() if ln
+    ]
+    assert lines, "the in-process cycle logged nothing at all"
+    assert {ln.split("\t")[1] for ln in lines} == {rsp.SOURCE_RUN_ONCE}, (
+        f"the in-process label moved: {lines}"
+    )
+
+
+def test_a_caller_can_name_itself_on_an_in_process_cycle_too(rsp, tmp_path):
+    """Not a test-only door: any caller may name itself, in process or out.
+
+    A label the suite invents privately is a label an operator reading the log
+    has nothing to look up, so the spelling lives in the module and the
+    parameter is on the public function.
+    """
+    inbox = tmp_path / "named_inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+
+    rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=False), source=rsp.SOURCE_SUITE)
+
+    lines = [
+        ln for ln in rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines() if ln
+    ]
+    assert {ln.split("\t")[1] for ln in lines} == {rsp.SOURCE_SUITE}, (
+        f"the caller's own label did not reach the log: {lines}"
+    )
+
+
+def test_a_crashing_cycle_carries_the_caller_label_to_the_log(rsp, tmp_path):
+    """The crash line is a line of the same fire and must name the same caller.
+
+    A fire whose `start` says one caller and whose crash line says another is
+    two records of one event, and the one that matters - what died - is the one
+    that would carry the wrong name.
+    """
+    inbox = tmp_path / "crash_inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("planted")
+
+    rsp.pending = _boom
+    with pytest.raises(RuntimeError):
+        rsp.run_once(
+            inbox=inbox, roots={}, bounds=rsp.Bounds(armed=False), source=rsp.SOURCE_SUITE
+        )
+
+    lines = [
+        ln for ln in rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines() if ln
+    ]
+    outcomes = [ln.split("\t")[3] for ln in lines]
+    assert "crashed" in outcomes, f"the crash was not recorded at all: {lines}"
+    assert {ln.split("\t")[1] for ln in lines} == {rsp.SOURCE_SUITE}, (
+        f"the crash line named a different caller from the start line: {lines}"
     )

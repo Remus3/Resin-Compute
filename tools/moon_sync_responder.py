@@ -87,6 +87,7 @@ ordering rather than the wording.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import sys
 import time
@@ -99,6 +100,13 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from core.atomic_io import atomic_write_json, atomic_write_text, read_json  # noqa: E402
+
+# `ENV_RUNTIME_DIR` IS RE-EXPORTED ON PURPOSE and is not dead. It is this
+# module's statement of which variable isolates a CHILD of this script, and a
+# caller that spelled the literal itself would go stale silently the day the
+# name moved. F401 is switched ON in this tree by choice - see `ruff.toml` - so
+# the suppression is stated here with its reason rather than inherited.
+from ops.health import ENV_RUNTIME_DIR, runtime_dir  # noqa: E402, F401
 
 #: This repo's code in the `from-<CODE>-` convention.
 SELF_CODE = "RSC"
@@ -225,10 +233,36 @@ _NAME_SAFE = frozenset(
 #: Building is not arming. See the module docstring.
 ARMED_BY_DEFAULT = False
 
+#: Correspondence lives here, and it is an INPUT.
+#:
+#: NOT re-rooted by `RUNTIME_DIR`. A redirect that moved the inbox would isolate
+#: a caller by handing the responder an empty channel - green, and blind.
+#: `test_every_runtime_record_follows_the_override_and_the_inbox_does_not`
+#: asserts that in both directions.
 DEFAULT_INBOX = REPO_ROOT / "moon_sync_inbox"
-DEFAULT_STAGING = REPO_ROOT / "ops" / "runtime" / "responder"
-DEFAULT_METRICS = REPO_ROOT / "ops" / "runtime" / "responder_metrics.json"
-DEFAULT_ANSWERED = REPO_ROOT / "ops" / "runtime" / "responder_answered.json"
+
+#: Where every runtime record below lives, resolved from the environment at
+#: IMPORT so a CHILD PROCESS inherits it.
+#:
+#: AN ISOLATION FIXTURE THAT MONKEYPATCHES MODULE ATTRIBUTES CANNOT ISOLATE A
+#: SUBPROCESS, and that is the whole reason this reads the environment. The
+#: fixture in `tests/test_moon_sync_responder.py` redirects every `DEFAULT_`
+#: Path by enumeration - complete, and confined to one interpreter. Anything
+#: that LAUNCHES `python tools/moon_sync_responder.py` gets a fresh import with
+#: the real defaults, and before this existed such a launch wrote into the
+#: OPERATOR'S LIVE responder record. `scripts/watch_inbox.py` had already been
+#: bitten by exactly this and carries the same fix.
+#:
+#: `RESINCOMPUTE_RUNTIME_DIR` IS NOT A NEW KNOB. `ops/health.py` defines it and
+#: `headless/runner.py` and `scripts/watch_inbox.py` already honour it, so this
+#: tool joins one contract rather than standing a second one beside it - and
+#: the variable an operator forgets to set is always the one that writes into
+#: live state.
+RUNTIME_DIR = runtime_dir()
+
+DEFAULT_STAGING = RUNTIME_DIR / "responder"
+DEFAULT_METRICS = RUNTIME_DIR / "responder_metrics.json"
+DEFAULT_ANSWERED = RUNTIME_DIR / "responder_answered.json"
 
 #: THE REFUSAL RECORD, AND IT IS NOT THE ANSWERED RECORD.
 #:
@@ -246,7 +280,7 @@ DEFAULT_ANSWERED = REPO_ROOT / "ops" / "runtime" / "responder_answered.json"
 #: than on the note: a note refused for a NEW reason must hold again, because
 #: a new defect in the draft is the one thing an operator reads that directory
 #: to find.
-DEFAULT_REFUSALS = REPO_ROOT / "ops" / "runtime" / "responder_refusals.json"
+DEFAULT_REFUSALS = RUNTIME_DIR / "responder_refusals.json"
 
 #: LITERAL CAPS ON THE RECORD, because the record is otherwise the held
 #: directory again in JSON. A note whose reasons vary every cycle would
@@ -297,7 +331,154 @@ MAX_INVOCATION_LINES = 2_000
 
 #: One line per invocation. See `log_invocation` for why this is a
 #: requirement of the trial rather than an improvement filed against it.
-DEFAULT_INVOCATIONS = REPO_ROOT / "ops" / "runtime" / "responder_invocations.log"
+DEFAULT_INVOCATIONS = RUNTIME_DIR / "responder_invocations.log"
+
+
+#: THE ENTRY-POINT COLUMN, AND WHY IT USED TO SAY ONE WORD FOR EVERY CALLER.
+#:
+#: `run_once` passed the LITERAL `run_once` on all three of its log lines, so
+#: the Windows scheduled task, a manual terminal run and an in-process call by
+#: a test or another tool all wrote the same label. Measured 2026-09-08 at HEAD
+#: 9f6839e: every row in the live responder record carried ONE label. An
+#: unattended responder whose record cannot say WHICH caller fired answers
+#: "something ran" when the question is which thing ran, which is the exact
+#: failure `scripts/watch_inbox.py` measured and fixed at commit 3964544.
+#:
+#: `run_once` KEEPS ITS MEANING and does not just move. It is now the honest
+#: label for an IN-PROCESS cycle, which is what it always described; the other
+#: callers stop borrowing it.
+SOURCE_RUN_ONCE = "run_once"
+
+#: A REAL PROCESS ENTRY POINT that did not name itself - a bare
+#: `python tools/moon_sync_responder.py` at a terminal. THE FALLBACK IS THE
+#: HONEST ONE: an unattended fire happens with nothing set, so an absent label
+#: must produce the label a real fire produces. Inverted, every genuine run
+#: would be filed as suite noise.
+SOURCE_CLI = "cli"
+
+#: What a TEST-SPAWNED child calls itself. Named here rather than in the suite
+#: so the tree carries one spelling: a label the tests invent privately is a
+#: label an operator reading the log has nothing to look it up against.
+SOURCE_SUITE = "suite"
+
+#: What the WINDOWS SCHEDULED TASK must call itself. The task is the caller the
+#: record exists to prove fired, because it is the one nobody is watching.
+#:
+#: THE TASK'S OWN ARGV LIVES IN `ops/ResinCompute-Responder.xml`, which is where
+#: this label has to be spelled for the task to carry it. Declared here all the
+#: same, so the wiring names a constant this module owns rather than inventing a
+#: second spelling of it, and so an operator holding a log line and that file
+#: maps one to the other by eye.
+SOURCE_SCHEDULED_TASK = "scheduledtask"
+
+#: How a caller names itself on ARGV. See `source_from_argv` for why the label
+#: arrives this way rather than through a second environment variable.
+SOURCE_FLAG = "--source"
+
+#: Names WHO invoked this process, for the case a module attribute cannot
+#: reach - which is every case that crosses a process boundary. See
+#: `resolve_source`.
+ENV_INVOCATION_SOURCE = "RESINCOMPUTE_INVOCATION_SOURCE"
+
+#: Ceiling on a label, as a literal. The log line is written on an unattended
+#: path and the label is the one field this module does not choose.
+MAX_SOURCE_LABEL_CHARS = 32
+
+#: `\A` and `\Z`, NEVER `^` and `$`. In Python `$` also matches immediately
+#: before a trailing newline, so `^[a-z]+$` accepts `cli` followed by a newline
+#: - which is precisely the forgery this shape exists to refuse, since a
+#: newline in the label writes a second line into a line-oriented log.
+_SOURCE_LABEL_SHAPE = re.compile(
+    r"\A[a-z0-9][a-z0-9._-]{0," + str(MAX_SOURCE_LABEL_CHARS - 1) + r"}\Z"
+)
+
+
+def resolve_source(fallback: str) -> str:
+    """The entry-point label this PROCESS writes, from the environment.
+
+    AN ISOLATION FIXTURE THAT MONKEYPATCHES MODULE ATTRIBUTES CANNOT ISOLATE A
+    SUBPROCESS, and that is the whole reason this reads the environment. The
+    `rsp` fixture in `tests/test_moon_sync_responder.py` redirects every
+    `DEFAULT_` Path by enumeration - complete, and confined to one interpreter.
+    An arm that launches `python tools/moon_sync_responder.py` gets a fresh
+    import with the real defaults, so before `RUNTIME_DIR` existed such an arm
+    wrote into the operator's live responder record, indistinguishably from an
+    unattended fire. An instrument its own suite writes to that way is not
+    evidence about the world.
+
+    THE FALLBACK IS THE HONEST ONE. An unattended fire happens with nothing
+    set, so an absent variable must produce the label a real fire produces.
+    Inverting that would report every genuine run as suite noise.
+
+    THE LABEL IS VALIDATED BECAUSE IT IS THE ONE FIELD THIS MODULE DOES NOT
+    CHOOSE. The record is TAB separated and line oriented, so a tab forges the
+    outcome column and a newline forges a whole line, timestamp and all.
+    Anything that is not a plain lowercase label falls back rather than being
+    trimmed into one: a silently repaired label is a label nobody can trace.
+    """
+    raw = os.environ.get(ENV_INVOCATION_SOURCE, "")
+    if _SOURCE_LABEL_SHAPE.match(raw):
+        return raw
+    return fallback
+
+
+def source_from_argv(argv: list[str] | None) -> str | None:
+    """The `--source` label on this argv, or `None` if there is not a valid one.
+
+    WHY ARGV RATHER THAN A SECOND VARIABLE. The label has to reach the process
+    from `ops/ResinCompute-Responder.xml`, whose `Arguments` element is argv and
+    nothing else - a scheduled task action names a command and its arguments,
+    and there is no place in it to set a variable. `RESINCOMPUTE_INVOCATION_
+    SOURCE=x python ...` is POSIX syntax besides, and this is Windows under
+    `pythonw.exe`; the task would fail AT THE TASK, silently, where nothing in
+    this suite would ever see it. Argv is argv on every shell there is.
+
+    PRECEDENCE: ENVIRONMENT, THEN THIS FLAG, THEN THE `cli` FALLBACK. The
+    caller composes it as `resolve_source(source_from_argv(argv) or
+    SOURCE_CLI)`, so this value is only ever the FALLBACK the environment gets
+    to override. That direction is load-bearing rather than arbitrary: a test
+    that proves a real wiring fires launches THE DECLARED COMMAND, argv and
+    all, and cannot edit that argv without no longer testing the declared
+    command. The environment is the one channel left that can tell a
+    suite-launched child from a real fire, so it has to win.
+
+    RESOLVED AT THE `__main__` GUARD, BEFORE `main` IS ENTERED, rather than by
+    the parser. `main` hands the label to `run_once`, which writes its `start`
+    line first, and the `start` line is the ONLY evidence left by a fire killed
+    part way through - so it is precisely the line that must carry the label.
+    Resolving at the entry point also keeps an IN-PROCESS `main([...])` call
+    from labelling itself as a process entry point merely because the argv it
+    was handed happened to contain the flag.
+
+    IT NEVER RAISES AND NEVER EXITS. A malformed flag returns `None` and the
+    fire falls back to `cli`, exactly as a malformed variable does: this runs
+    before a single line has been written, so an exception here would leave a
+    fire with NO record at all - which reads afterwards like a task that is not
+    registered. The parser still DECLARES `--source`, so a genuinely bad argv
+    is reported through the normal argparse path instead.
+
+    THE LAST OCCURRENCE WINS, matching argparse, for the form this scan
+    accepts. The two readers do not agree everywhere - argparse honours the
+    abbreviation `--sour x`, takes `--source=` as the empty string, and exits 2
+    on a trailing `--source` with no value, while this scan returns `None` for
+    all three. Every divergence falls on the conservative side, and `main`
+    never reads `args.source`, so none can reach the log.
+    """
+    if not argv:
+        return None
+
+    inline = SOURCE_FLAG + "="
+    found: str | None = None
+    for index, item in enumerate(argv):
+        if item == SOURCE_FLAG:
+            found = argv[index + 1] if index + 1 < len(argv) else ""
+        elif item.startswith(inline):
+            found = item[len(inline):]
+
+    if found is None or not _SOURCE_LABEL_SHAPE.match(found):
+        return None
+    return found
+
 
 #: THE COUNTERPARTY'S WRITTEN AGREEMENT, recorded by the operator.
 #:
@@ -313,7 +494,7 @@ DEFAULT_INVOCATIONS = REPO_ROOT / "ops" / "runtime" / "responder_invocations.log
 #: and until then every cycle holds and says why. Whether a reply constitutes
 #: agreement is a human judgement, so the operator records it - the machine only
 #: refuses to proceed without it.
-DEFAULT_CONFIRMATION = REPO_ROOT / "ops" / "runtime" / "trial_confirmed.json"
+DEFAULT_CONFIRMATION = RUNTIME_DIR / "trial_confirmed.json"
 
 #: The machine-level config carrying per-workspace trust. A DEFAULT_ so the
 #: suite's fixture redirects it like every other one - an arm that read the
@@ -1296,6 +1477,7 @@ def run_once(
     spawn: Callable[..., str] | None = None,
     now: float | None = None,
     grammar: str = GRAMMAR,
+    source: str = SOURCE_RUN_ONCE,
 ) -> dict:
     """One cycle, with its outcome guaranteed to reach the invocation log.
 
@@ -1313,17 +1495,29 @@ def run_once(
 
     Two lines per fire, a `start` and a terminal. The `start` is not redundant:
     it is the only evidence that a fire which dies mid-cycle ever happened.
+
+    `source` NAMES THE CALLER, AND IT IS APPENDED AT THE END WITH A DEFAULT so
+    every existing positional construction still builds. Its default is the
+    honest in-process label: a test or another tool importing this module and
+    calling this function IS `run_once`. What changed is that the two callers
+    that are not in-process - the Windows scheduled task and a terminal run -
+    stop borrowing that word. See `SOURCE_RUN_ONCE`.
+
+    ONE LABEL FOR THE WHOLE FIRE, including the crash line. A fire whose `start`
+    names one caller and whose terminal line names another is two records of one
+    event, and the line that matters most - what died - would be the one
+    carrying the wrong name.
     """
     started = time.time() if now is None else now
-    log_invocation("run_once", None, "start", now=started)
+    log_invocation(source, None, "start", now=started)
     try:
         result = _run_once(inbox, roots, bounds, spawn, started, grammar)
     except BaseException:
         # A responder that tracebacks out of a scheduled task surfaces nothing
         # at all. The log says so before the exception continues on its way.
-        log_invocation("run_once", None, "crashed")
+        log_invocation(source, None, "crashed")
         raise
-    log_invocation("run_once", result.get("note"), result["termination"])
+    log_invocation(source, result.get("note"), result["termination"])
     return result
 
 
@@ -1637,7 +1831,13 @@ def _spawn_unwired(prompt: str, bounds: Bounds) -> str:
     )
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, source: str | None = None) -> int:
+    """The CLI. `source` names the caller and is APPENDED AT THE END.
+
+    `None` means an in-process call, which is exactly what `run_once` labels
+    `run_once`. The `__main__` guard below passes a resolved label instead, so a
+    real process entry point never borrows the in-process word.
+    """
     import argparse
 
     parser = argparse.ArgumentParser(description="Answer one cross-repo note, unattended.")
@@ -1656,6 +1856,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--window-opens", default=None, help="ISO local, e.g. 2026-09-07T19:00:00")
     parser.add_argument("--window-closes", default=None, help="ISO local")
+    # DECLARED HERE, CONSUMED AT THE `__main__` GUARD. `main` never reads
+    # `args.source`: the label must be resolved before `run_once` writes its
+    # `start` line, which is why `source_from_argv` scans argv at the process
+    # entry point instead.
+    #
+    # It is declared all the same, and that is not decoration. Without it the
+    # scheduled task, once its `Arguments` element names itself, would leave
+    # through argparse with exit code 2 and a usage block - under `pythonw.exe`,
+    # where nobody would ever see it.
+    parser.add_argument(
+        SOURCE_FLAG,
+        default=None,
+        help=(
+            "name this entry point in the invocation log; overridden by "
+            f"{ENV_INVOCATION_SOURCE}, and ignored unless it is a plain "
+            "lowercase label"
+        ),
+    )
     args = parser.parse_args(argv)
 
     def _stamp(text: str | None) -> float | None:
@@ -1685,7 +1903,12 @@ def main(argv: list[str] | None = None) -> int:
     grammar = GRAMMAR_LATENCY_ONLY if args.latency_only else GRAMMAR
     if args.latency_only:
         print("responder: LATENCY-ONLY - M1 will be recorded INAPPLICABLE, not zero")
-    outcome = run_once(inbox=Path(args.dir), bounds=bounds, grammar=grammar)
+    outcome = run_once(
+        inbox=Path(args.dir),
+        bounds=bounds,
+        grammar=grammar,
+        source=source or SOURCE_RUN_ONCE,
+    )
     if outcome["note"] is None:
         print("responder: nothing to answer")
     elif outcome["delivered"]:
@@ -1701,4 +1924,17 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # THE THREE-WAY PRECEDENCE IS SPELLED OUT BY THIS ONE LINE, and it reads
+    # right to left: `SOURCE_CLI` is what a bare
+    # `python tools/moon_sync_responder.py` writes, `--source` lets the WIRING
+    # say which caller this is - the scheduled task's `Arguments` element in
+    # `ops/ResinCompute-Responder.xml` is the one that matters - and
+    # `resolve_source` lets the ENVIRONMENT outrank both, which is how the suite
+    # tells its own launches of the real entry point from an unattended fire.
+    # See `source_from_argv` for why that direction and not the other one.
+    #
+    # Resolved BEFORE `main` is entered, because `run_once` writes its `start`
+    # line before anything else and both lines of one fire must agree.
+    raise SystemExit(
+        main(source=resolve_source(source_from_argv(sys.argv[1:]) or SOURCE_CLI))
+    )

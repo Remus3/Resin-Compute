@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 import subprocess
 import sys
 
@@ -261,6 +262,37 @@ def test_positive_control_a_repetition_window_still_open_is_live():
         trigger_start_boundary="2026-09-08T06:00:00",
         trigger_repetition_interval="PT5M",
         trigger_repetition_duration="PT8H",
+    )
+    result = _verdict(payload)
+    assert result.status == "LIVE"
+
+
+def test_a_repetition_window_that_closes_exactly_at_now_is_spent_not_live():
+    # The BOUNDARY of the repetition window, and the exact counterpart of
+    # test_an_end_boundary_exactly_equal_to_now_is_expired_not_live. `closes <=
+    # now` and `closes < now` differ ONLY here: with StartBoundary 06:00 and a
+    # PT4H duration the window closes at 10:00:00, which is NOW to the second.
+    # Without this arm the operator flip survives, and the two boundaries in
+    # this module are graded asymmetrically.
+    payload = _payload(
+        MEASURED_SPENT_ONE_SHOT,
+        trigger_start_boundary="2026-09-08T06:00:00",
+        trigger_repetition_interval="PT5M",
+        trigger_repetition_duration="PT4H",
+    )
+    result = _verdict(payload)
+    assert result.status == "DORMANT", "a repetition window closing exactly at now has closed"
+    assert result.live_trigger_indexes == []
+    assert any("CLOSED" in reason for reason in result.reasons)
+
+
+def test_positive_control_a_repetition_window_closing_one_second_from_now_is_live():
+    # ONE second differs from the arm above, through the same code path.
+    payload = _payload(
+        MEASURED_SPENT_ONE_SHOT,
+        trigger_start_boundary="2026-09-08T06:00:00",
+        trigger_repetition_interval="PT5M",
+        trigger_repetition_duration="PT4H1S",
     )
     result = _verdict(payload)
     assert result.status == "LIVE"
@@ -525,28 +557,189 @@ def test_positive_control_a_working_probe_prints_no_degraded_banner(monkeypatch,
 # --- The tool is READ ONLY ------------------------------------------------
 
 
+# A DENYLIST PINS TOKENS, NOT INTENT, and the first version of this section was
+# exactly that: a list of seven literal strings. A mutation sweep on 2026-09-08
+# prepended
+#
+#     Remove-Item -Path 'ZZ-no-such-path-9f6839e' -ErrorAction SilentlyContinue
+#
+# to the probe and the whole suite stayed green, because Remove-Item was not one
+# of the seven. Nor were Set-Content, Out-File, New-Item, Enable-ScheduledTask
+# or - despite the arm's own name saying "never stops anything" -
+# Stop-ScheduledTask. Extending the list by six would only move the hole.
+#
+# So the scan is INVERTED. The probe text is the only thing this module ever
+# hands to PowerShell, and every command-shaped token in it must be one of a
+# named, sanctioned, read-only set. An unfamiliar cmdlet fails whether or not
+# anybody thought to ban it, which is the difference between grading intent and
+# grading a token list.
+
+# The five cmdlets the probe is allowed to be built from. Adding to this set is
+# a deliberate act, and the verb check below constrains what may be added.
+_SANCTIONED_PROBE_CMDLETS = frozenset(
+    {
+        "Get-ScheduledTask",
+        "Get-ScheduledTaskInfo",
+        "ConvertTo-Json",
+        "Where-Object",
+        "ForEach-Object",
+    }
+)
+
+# PowerShell verbs that only READ. Get and Select and their kin cannot change
+# the scheduler; Set, Remove, Register, Start, Stop, Enable, Disable, New, Out
+# and Write can, and none of them may appear in the set above.
+_READ_ONLY_PS_VERBS = frozenset(
+    {"get", "convertto", "where", "foreach", "select", "measure", "sort", "compare"}
+)
+
+# Verbs whose presence ANYWHERE in the module - not merely in the probe - would
+# mean this tool had grown a way to change the machine. Matched by SHAPE, so a
+# verb nobody enumerated is still caught the moment it is used on a noun.
+_MUTATING_VERB_RE = re.compile(
+    r"\b(?:Set|Remove|New|Start|Stop|Register|Unregister|Enable|Disable|Add|Clear|Out|Write|"
+    r"Move|Rename|Invoke|Restart|Suspend|Resume|Export|Import|Copy)-[A-Za-z][A-Za-z0-9]*\b"
+)
+
+# A PowerShell command is Verb-Noun. Case-insensitive because PowerShell is:
+# `remove-item` runs exactly as well as `Remove-Item`.
+_PS_COMMAND_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*-[A-Za-z][A-Za-z0-9]*")
+
+
+def _commands_in(script: str) -> set[str]:
+    """Every command-shaped token in EXECUTABLE position in a PowerShell script.
+
+    Single-quoted literals are blanked first: they are inert data, and blanking
+    them keeps the datetime format 'yyyy-MM-ddTHH:mm:sszzz' from reading as a
+    command while leaving any injected command outside the quotes visible.
+    """
+    inert = re.sub(r"'[^']*'", "''", script)
+    return set(_PS_COMMAND_RE.findall(inert))
+
+
+def test_the_probe_is_built_only_from_sanctioned_read_only_commands():
+    found = _commands_in(liveness._PS_TEMPLATE)
+    assert found, "the scan found no command at all in the probe - it is not reading the template"
+    assert "Get-ScheduledTask" in found, "the scan must see the probe's real content, not an empty haystack"
+
+    unsanctioned = sorted(name for name in found if name not in _SANCTIONED_PROBE_CMDLETS)
+    assert unsanctioned == [], (
+        f"the probe carries {unsanctioned}, which is not in the sanctioned read-only set. "
+        "A read-only liveness probe runs Get- and nothing else."
+    )
+
+    # The allowlist itself is constrained, so it cannot be widened into a
+    # mutating cmdlet by whoever finds this arm inconvenient.
+    for name in sorted(_SANCTIONED_PROBE_CMDLETS):
+        verb = name.split("-", 1)[0].lower()
+        assert verb in _READ_ONLY_PS_VERBS, f"{name} carries verb {verb!r}, which is not a read-only verb"
+
+
+def test_non_vacuity_the_allowlist_catches_every_verb_the_old_denylist_missed():
+    # The same scan, run over the template with one command PREPENDED, must
+    # report it. These are exactly the verbs the seven-token denylist let past,
+    # plus the Get-Item of the non-terminating-error mutant.
+    injections = [
+        "Remove-Item -Path 'ZZ-no-such-path-9f6839e' -ErrorAction SilentlyContinue",
+        "Set-Content -Path 'ZZ' -Value 'x'",
+        "Out-File -FilePath 'ZZ'",
+        "New-Item -Path 'ZZ' -ItemType File",
+        "Enable-ScheduledTask -TaskName 'ZZ'",
+        "Stop-ScheduledTask -TaskName 'ZZ'",
+        "Get-Item 'ZZ-no-such-item-9f6839e'",
+    ]
+    for line in injections:
+        mutated = line + "\n" + liveness._PS_TEMPLATE
+        unsanctioned = sorted(n for n in _commands_in(mutated) if n not in _SANCTIONED_PROBE_CMDLETS)
+        assert unsanctioned, f"the allowlist scan let {line!r} through"
+
+    # The positive control, through the same scan: the pristine template passes.
+    assert sorted(n for n in _commands_in(liveness._PS_TEMPLATE) if n not in _SANCTIONED_PROBE_CMDLETS) == []
+
+
 def test_the_module_never_stops_modifies_or_unregisters_anything():
+    # The whole-file half, also by SHAPE rather than by a list of names: any
+    # Verb-Noun built on a mutating verb, anywhere in the module.
     source = liveness.__file__
     with open(source, encoding="ascii") as handle:
         body = handle.read()
-    banned = [
-        "Stop-Process",
-        "taskkill",
-        "Unregister-ScheduledTask",
-        "Disable-ScheduledTask",
-        "Register-ScheduledTask",
-        "Set-ScheduledTask",
-        "Start-ScheduledTask",
-    ]
-    for token in banned:
+    found = sorted(set(_MUTATING_VERB_RE.findall(body)))
+    assert found == [], f"a read-only liveness probe must never carry {found}"
+    for token in ("Stop-Process", "taskkill"):
         assert token not in body, f"a read-only liveness probe must never carry {token}"
 
 
 def test_non_vacuity_the_read_only_scan_would_catch_a_planted_mutation():
     # Proves the guard above is a detector and not a tautology over an empty
-    # haystack: the same scan run over a deliberately bad body must FAIL.
-    body = "subprocess.run(['powershell', '-Command', 'Unregister-ScheduledTask -TaskName x'])"
-    assert "Unregister-ScheduledTask" in body
+    # haystack: the same scan run over a deliberately bad body must FAIL, for
+    # every one of the six verbs the old seven-token denylist missed.
+    for verb_noun in (
+        "Unregister-ScheduledTask",
+        "Remove-Item",
+        "Set-Content",
+        "Out-File",
+        "New-Item",
+        "Enable-ScheduledTask",
+        "Stop-ScheduledTask",
+    ):
+        body = f"subprocess.run(['powershell', '-Command', '{verb_noun} -TaskName x'])"
+        assert _MUTATING_VERB_RE.findall(body) == [verb_noun], f"the shape scan missed {verb_noun}"
+
+
+# --- NOTHING RUNS BEFORE THE ERROR PREFERENCE -----------------------------
+#
+# $ErrorActionPreference = 'Stop' is what makes a failure inside the probe
+# TERMINATING, which is what makes it reach a non-zero exit code, which is the
+# only thing collect_facts reads to decide the scheduler could not be answered.
+# A command placed BEFORE that line runs under the default Continue: a
+# non-terminating error, exit code still 0, payload unchanged, and every arm in
+# this file green. Measured 2026-09-08 - prepending
+#
+#     Get-Item 'ZZ-no-such-item-9f6839e'
+#
+# to the template left collect_facts('ResinCompute-Responder') returning
+# exists=True and a DORMANT verdict with the injected line in the template head.
+#
+# So the ORDER is asserted, not just the presence. The line must be the first
+# thing the interpreter executes.
+
+_ERROR_PREFERENCE_LINE = "$ErrorActionPreference = 'Stop'"
+
+
+def _first_executable_line(script: str) -> str:
+    """The first line PowerShell would actually run - blanks and comments skipped."""
+    for line in script.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        return stripped
+    return ""
+
+
+def test_the_probe_sets_its_error_preference_before_it_runs_anything():
+    first = _first_executable_line(liveness._PS_TEMPLATE)
+    assert first == _ERROR_PREFERENCE_LINE, (
+        f"the probe's first executable line is {first!r}. Anything running ahead of "
+        f"{_ERROR_PREFERENCE_LINE!r} runs under the default Continue, so its failure leaves exit 0 "
+        "and the probe answers as though nothing went wrong."
+    )
+    assert _ERROR_PREFERENCE_LINE in liveness._PS_TEMPLATE
+
+
+def test_non_vacuity_a_command_prepended_before_the_error_preference_is_caught():
+    # The same derivation over the mutated template must NOT return the
+    # preference line. Both a benign-looking Get- and a destructive verb are
+    # shown, because the defect is the POSITION and not the verb.
+    for injected in ("Get-Item 'ZZ-no-such-item-9f6839e'", "Remove-Item -Path 'ZZ'"):
+        mutated = injected + "\n" + liveness._PS_TEMPLATE
+        assert _first_executable_line(mutated) != _ERROR_PREFERENCE_LINE, (
+            f"{injected!r} was prepended and the first-line check did not notice"
+        )
+        assert _first_executable_line(mutated) == injected
+
+    # Positive control through the same helper: a leading blank line and a
+    # leading comment are NOT injections and must still pass.
+    assert _first_executable_line("\n\n# a comment\n" + liveness._PS_TEMPLATE) == _ERROR_PREFERENCE_LINE
 
 
 # --- THE NAME GATE IS ENFORCED on the real path, not merely correct -------
@@ -796,6 +989,108 @@ def test_the_real_probe_reports_a_name_nothing_holds_as_absent():
     payload = liveness.collect_facts("ResinCompute-NoSuchTask-20260908")
     assert payload.get("exists") is False
     assert liveness.verdict(liveness.parse_facts(payload)).status == "ABSENT"
+
+
+# --- THE PROBE'S OWN AMBIGUITY BRANCH, not the parser's -------------------
+#
+# A GATE TESTED AS A PURE PREDICATE IS NOT AN ENFORCED GATE, and every ambiguity
+# arm above this line feeds MEASURED_AMBIGUOUS straight to parse_facts. That
+# grades the PARSER. The decision that a name matched more than once is taken in
+# PowerShell, at `if ($all.Count -gt 1)`, and nothing above tests it: the three
+# real-probe arms deliberately select names that are UNIQUE, so they cannot
+# reach it. Measured 2026-09-08 - changing that threshold to 99 makes the probe
+# silently answer about $all[0] and the whole suite stays green.
+#
+# This arm runs the REAL probe against a name the scheduler really does hold
+# more than once. The name is DISCOVERED, never hardcoded: measured on this
+# machine 2026-09-08, 'Backup', 'CreateObjectTask' and 'WiFiTask' each match two
+# TaskPaths, and any of the three may be gone next week.
+#
+# READ ONLY. Get-ScheduledTask and nothing else.
+
+_DUPLICATE_NAME_DISCOVERY = """
+$ErrorActionPreference='Stop'
+$hit = $null
+foreach ($g in @(Get-ScheduledTask | Group-Object TaskName | Where-Object { $_.Count -gt 1 })) {
+    if ($g.Name -notmatch '^[A-Za-z0-9 ._-]{1,200}$') { continue }
+    $hit = $g
+    break
+}
+if ($null -eq $hit) {
+    [pscustomobject]@{ found = $false } | ConvertTo-Json -Compress
+    exit 0
+}
+[pscustomobject]@{
+    found = $true
+    name = [string]$hit.Name
+    paths = @($hit.Group | ForEach-Object { [string]$_.TaskPath })
+} | ConvertTo-Json -Compress -Depth 5
+"""
+
+
+def _a_name_registered_more_than_once():
+    """Ask the scheduler, read only, for a TaskName held under two TaskPaths.
+
+    Returns (name, paths) or (None, None) when this machine holds no duplicated
+    name or the enumeration could not be run.
+    """
+    exe = liveness._powershell_executable()
+    done = subprocess.run(
+        [exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", _DUPLICATE_NAME_DISCOVERY],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    if done.returncode != 0 or not done.stdout.strip():
+        return None, None
+    got = json.loads(done.stdout.strip())
+    if not got.get("found"):
+        return None, None
+    paths = got.get("paths")
+    # Windows PowerShell 5.1 can collapse a one-element array to a scalar. This
+    # group has at least two members, but the shape is normalised anyway rather
+    # than trusted.
+    if not isinstance(paths, list):
+        paths = [paths]
+    return got.get("name") or None, [str(p or "").strip() for p in paths]
+
+
+@_WINDOWS_ONLY
+def test_the_real_probe_answers_a_duplicated_name_as_ambiguous():
+    name, paths = _a_name_registered_more_than_once()
+    if name is None:
+        pytest.skip(
+            "no TaskName matching the module's own validator is registered under two TaskPaths on this "
+            "machine, so the probe's ambiguity branch cannot be reached here - the machine, not the tool"
+        )
+
+    payload = liveness.collect_facts(name)
+    assert payload.get("exists") is True, f"{name} was enumerated a moment ago and must still exist"
+    assert payload.get("ambiguous") is True, (
+        f"the scheduler holds {name} under {paths}, and the probe answered about a single one of them "
+        "instead of refusing - a silently picked task is worse than no answer"
+    )
+    # The VALUES, not merely the flag: the probe must name every path it saw.
+    assert sorted(payload.get("matches") or []) == sorted(paths)
+    assert len(payload.get("matches") or []) > 1
+    # The probe must NOT have answered as though it had resolved one task.
+    assert "state" not in payload, "an ambiguous answer must carry no single task's State"
+
+    result = liveness.verdict(liveness.parse_facts(payload))
+    assert result.status == "AMBIGUOUS"
+    assert result.status not in ("LIVE", "DORMANT", "UNKNOWN")
+
+    # POSITIVE CONTROL, same probe, same command family, one field different:
+    # the very same name WITH a TaskPath resolves to exactly one task. This is
+    # also the proof that the advice the AMBIGUOUS report prints actually works.
+    resolved = liveness.collect_facts(name, task_path=paths[0])
+    assert resolved.get("exists") is True
+    assert resolved.get("ambiguous") is False, "a name plus its TaskPath names exactly one task"
+    assert resolved.get("task_path") == paths[0]
+    assert liveness.verdict(liveness.parse_facts(resolved)).status != "AMBIGUOUS"
+
+    print(f"\n[probe ambiguity arm] RAN against {name}, matched under {paths}")
 
 
 # --- THE PROBE MUST REPORT THE ENDBOUNDARY VALUE, NOT MERELY THE KEY ------

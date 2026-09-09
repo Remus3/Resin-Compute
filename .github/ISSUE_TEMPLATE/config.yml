@@ -1,0 +1,22 @@
+# GitHub issue template chooser.
+#
+# Blank issues stay ENABLED on purpose. Two templates cannot anticipate every
+# report, and forcing a bad fit produces a worse issue than a blank one.
+blank_issues_enabled: true
+
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/Remus3/Resin-Compute/security/advisories/new
+    about: >-
+      Never report a security problem in a public issue. This opens a private
+      advisory visible only to you and the maintainer. See SECURITY.md.
+  - name: Contributing guide and the project's gates
+    url: https://github.com/Remus3/Resin-Compute/blob/main/CONTRIBUTING.md
+    about: >-
+      How to install the hooks, which suites to run and how, the ASCII rule,
+      and the rule against vendoring game data.
+  - name: Architectural decisions
+    url: https://github.com/Remus3/Resin-Compute/blob/main/docs/adr/README.md
+    about: >-
+      Read this before proposing a change that reverses a past decision. Each
+      ADR records what was considered and refused, and why.

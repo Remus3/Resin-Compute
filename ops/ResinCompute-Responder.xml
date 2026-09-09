@@ -90,7 +90,7 @@
   <Actions Context="Author">
     <Exec>
       <Command>__PYTHONW_EXE__</Command>
-      <Arguments>tools/moon_sync_responder.py --arm --latency-only --window-opens __START_BOUNDARY__ --window-closes __END_BOUNDARY__</Arguments>
+      <Arguments>tools/moon_sync_responder.py --arm --latency-only --source scheduledtask --window-opens __START_BOUNDARY__ --window-closes __END_BOUNDARY__</Arguments>
       <WorkingDirectory>__INSTALL_ROOT__</WorkingDirectory>
     </Exec>
   </Actions>

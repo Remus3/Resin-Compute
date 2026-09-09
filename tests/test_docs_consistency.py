@@ -56,7 +56,18 @@ TREE_ROOTS = (
 #: hand-off - and it is read at the moment a session is wrapping up, which is
 #: the worst possible time to discover a pointer went stale. It is not under
 #: `docs/`, so the directory sweep below does not reach it.
-GOVERNING_DOCS = ("CLAUDE.md", "README.md", "ROADMAP.md", ".claude/commands/done.md")
+GOVERNING_DOCS = (
+    "CLAUDE.md",
+    "README.md",
+    "ROADMAP.md",
+    ".claude/commands/done.md",
+    # The three outward-facing root docs. They are the first thing a stranger
+    # reads and they are the LEAST likely to be re-read by anyone here, so a
+    # rotted path or a smuggled non-ASCII glyph would sit in them unnoticed.
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+)
 
 #: File suffixes this tree actually contains. A backticked token whose last
 #: segment carries a dot that is NOT one of these is a dotted symbol reference -

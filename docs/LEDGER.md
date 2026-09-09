@@ -12,6 +12,172 @@ now.
 
 ---
 
+## 2026-09-08 - The cold boot answered the hook question, and four adversaries refuted more than they confirmed
+
+Files: `tools/moon_sync_responder.py`, `ops/ResinCompute-Responder.xml`,
+`tests/test_moon_sync_responder.py`, `tests/test_docs_hook_commands.py`,
+`tests/test_task_liveness.py`, `tests/test_docs_consistency.py`,
+`docs/INBOX_TRIAGE_2026-09-07-0710.md`, `docs/INBOX_TRIAGE_2026-09-08-1834.md`,
+plus the community-standards set - `CONTRIBUTING.md`, `SECURITY.md`,
+`CODE_OF_CONDUCT.md`, `.github/PULL_REQUEST_TEMPLATE.md`,
+`.github/ISSUE_TEMPLATE/`, and `README.md`.
+
+Measured 2026-09-08 at the seam, as a dated reading and not a claim about now:
+1469 passed and 1 skipped in the application suite, 80 in PityEngine, licence
+41, docs 29, qa_companion 17 passed 0 failed 1 skipped, shell 52 passed, ruff
+clean, headless exit 0, mypy advisory Success over its own roots only. The
+pre-merge baseline was re-derived in this session rather than carried from the
+hand-off: 1422 collected, which reconciles as 1421 passed plus 1 skipped.
+
+**The cold-boot measurement closed the open half, and carried a second fact
+nobody predicted.** `SessionStart` carried no `--source` flag before commit
+`3964544`, so that commit made it argv-dependent for the first time on the exact
+event the log exists to prove. The first cold session after it wrote a
+`sessionstart` start-and-reported pair, reaching `reported` rather than only
+`start`, so the hook ran to completion and not merely to entry. The unpredicted
+part: a `userpromptsubmit` pair fired ONE SECOND later from the same cold
+prompt. Both hooks fire on a cold start, in that order, and the distinct labels
+are the only reason the pair is separable at all - under the old shared label it
+would have read as one hook firing twice.
+
+**What the log still cannot answer, and why more cold boots will not help.**
+The flag hardcodes one literal string per event, so the record names which HOOK
+fired and never which SOURCE the harness fired it from. The harness distinguishes
+`startup`, `clear`, `compact` and `resume`; the wiring collapses all four onto
+`sessionstart`. `/clear` survival is therefore not a matter of taking another
+reading - the instrument lacks the resolution. Filed on operator instruction
+rather than built, because the fix touches the hook wiring and seams with the
+doc gate landed the same day.
+
+**The responder can now name its caller, and the fix was one line short until
+the merge.** `tools/moon_sync_responder.py` gained the caller label and the
+runtime override that the rest of the tree already had; measured across a real
+process boundary rather than inferred, the environment outranks the `--source`
+flag and the flag outranks the fallback. The builder correctly refused to write
+outside its declared list, and so declared itself BLOCKED on
+`ops/ResinCompute-Responder.xml`, whose `Arguments` element is the scheduled
+task's real argv and carried no flag. Without that one line the unattended task
+would have kept writing the fallback label, indistinguishable from a terminal
+run - the exact confusion the slice existed to end. Verified at the merge that
+this element is the ONLY argv site; the installer carries none and only
+path-checks. Proven by `tests/test_moon_sync_responder.py`.
+
+**An adversary REFUTED the strongest claim made about that fix, and the
+refutation is the useful part.** The isolation arm is named for enforcing that
+nothing is written outside the override, and it does not enforce that. Two
+causes, both measured: NTFS reports a DIRECTORY `st_size` as 0 whatever it
+contains, so a file created inside a watched directory is invisible to a
+snapshot built from existence plus size; and any path that is not one of the
+`DEFAULT_` constants is not watched at all, which includes the sibling inbox
+directories that `deliver()` really writes to. A planted mutant leaked two files
+while the arm reported a pass. What DOES hold, checked twice with the real tree
+byte- and mtime-identical either side: the test suite does not reach the
+operator's live responder record. The protection is real for the runtime
+directory and absent for live mail. The adversary also corrected the builder's
+own non-vacuity story - the arm does not fail against the true pre-fix module,
+where it dies on `AttributeError` before it can spawn, only against an
+isolation-stripped mutant.
+
+**Nothing graded a document against the hook wiring, and now something does.**
+`tests/test_docs_hook_commands.py` parses the real `.claude/settings.json` rather
+than storing a second copy of the truth, and went red on the four exact
+citations that had gone stale in `docs/INBOX_TRIAGE_2026-09-07-0710.md` before
+that note was corrected. An adversary re-ran it both with and without the
+`pytest.ini` `addopts`, found the results identical, and established the gate is
+fail-closed: an empty corpus asserts rather than passing vacuously, and a
+missing settings file asserts rather than skipping. It also found the real
+limit, now filed: the trigger needs the literal settings path nearby, so
+rewording a sentence to say "the hook declared for this tree" lets the identical
+stale quotation go silent. The defect that actually happened was caught partly
+by the luck of how it was phrased.
+
+**The six mutant kills the hand-off asked to re-run DO NOT EXIST as recorded
+claims.** A byte scan of every tracked text file found only `M12`, in this
+ledger. `M1` through `M11` appear nowhere - not in the commit body, not in the
+roadmap, not in the hand-off. Six claims with no recorded wording are
+unauditable, and were refuted as stated rather than excused. The adversary
+derived its own sweep instead: 18 mutants against `ops/check_task_liveness.py`,
+14 killed, FOUR surviving, so the roadmap's prepend mutant turned out to be one
+of four rather than the only one. Baseline 58 passed with ZERO skips, so the
+real-probe arms genuinely ran.
+
+**All four survivors were MISSING ARMS, not defects in the shipped code.**
+`ops/check_task_liveness.py` is byte-unchanged; only `tests/test_task_liveness.py`
+grew. Seven arms, each shown red against its mutant and green on pristine.
+
+**And then a second adversary refuted THOSE arms, destructively.** The rewritten
+read-only guard replaced a seven-token denylist with an inverted allowlist plus a
+whole-file mutating-verb scan - a real improvement that still does not do what
+its name says. PowerShell ALIASES CARRY NO HYPHEN and the scan matches a
+hyphenated Verb-Noun shape. `ri` is `Remove-Item`: planted in the probe template
+it ran, deleted a canary file from disk, and the suite reported every arm passing
+with exit 0. Also surviving both nets: `del`, `rm`, `sc`, `kill` which is
+`Stop-Process`, `ni`, a verb assembled by string concatenation, a shell-out
+through `cmd /c`, and a `.Delete()` method call. Separately the whole-file regex
+carries no `re.IGNORECASE` while the comment directly above it asserts that a
+lowercase spelling runs exactly as well as a capitalised one, so lowercase
+`stop-process` and uppercase `TASKKILL` both passed. The three non-vacuity
+controls are genuine value assertions rather than shape arms and still could not
+see either hole, because every injection they exercise is capitalised ASCII - a
+control that only plants the case the regex handles cannot discover that the
+regex is case-sensitive. The ambiguity arm has a third, unrelated defect: it
+skips when it cannot discover a duplicated task name, and a discovery that FAILS
+is indistinguishable from a machine that legitimately has none, so on CI or a
+fresh clone it asserts nothing. All filed, none fixed in the session that found
+them, because the merger had already taken the arms into the tree and an author
+does not grade the replacement for their own merge.
+
+**The tree's own guard caught a real leak on the way out.** The new triage note
+named four sibling projects in plain text - 26 occurrences over 16 lines - in a
+PUBLIC repository. `tests/test_no_sibling_names.py` went red and the names were
+replaced with the established codenames. The outbound draft carried one more,
+fixed for the same reason, since that file is delivered into a sibling tree.
+
+**A new shape of the false-clean trap, and it nearly shipped the leak.** The
+gate sweep was run as a single chained command ending in the headless smoke
+test. The harness reported the whole chain as exit 0 - which was the SMOKE
+TEST'S status, the last link - while the application suite inside it had already
+failed. A chained gate run reports only its last command. This is the fifth
+recorded form of a false clean in this tree and the first where the misreporting
+surface was the chain itself rather than a grep, a fallback branch or a State
+string.
+
+**Inbox triage, and the standing instruction had nothing to review this time.**
+All 22 unread notes and the 15 older untriaged ones were bucketed, 40 rows: 11
+ingested, 9 already-have-an-equivalent, 15 not-applicable, and 5 notes producing
+6 applicable-and-not-done items now on the roadmap. The inbox holds ZERO
+subdirectories - the three verbatim drops were withdrawn by their senders - so
+the rule that verbatim bytes supersede a paraphrase had no payload to apply to.
+A reply to the outstanding note on hook portability was drafted into the
+sender-side draft store, which sits outside the watcher's view precisely because
+a file named from-RSC inside the inbox classifies as sent. Nothing was
+delivered and the watermark was NOT marked; both remain operator acts.
+
+**The roadmap's highest-priority item carried a stale count.** It read 89 of 91
+commits; re-measured this session as 90 personal, 6 platform forwarding and 2
+assistant, of 98 - both a larger denominator and a three-bucket split where the
+old figure had two, hiding the forwarding address entirely. The stored number
+was replaced with the command that measures it, since a commit count goes stale
+on the next commit.
+
+**GitHub community standards, on operator instruction.** The five missing
+checklist items were written: code of conduct, contributing guide, security
+policy, issue templates and a pull request template. Contributor Covenant 2.1
+was transliterated to 7-bit ASCII and the adaptation is stated in the file
+itself, with its attribution kept. NO EMAIL ADDRESS APPEARS IN ANY OF THEM -
+reports route through GitHub private vulnerability reporting, which was enabled
+this session and verified as enabled on the dedicated endpoint, because
+otherwise the shipped security policy would have been a dead link. Repository
+topics went to 20, the platform cap. The slice also repaired the README
+repository tree, which named 2 of 10 files in one directory and omitted several
+others, and it correctly declined to add its own new files to that tree because
+the gate asserts trackedness through git and it had no authority to stage; the
+merger staged first and then added them. The three new root documents were added
+to the docs gate's governed set, so their paths and their ASCII are now graded
+like every other governing document.
+
+---
+
 ## 2026-09-08 - The invocation log could not name which hook fired, and the proof took a real fire
 
 Commit `3964544`. `scripts/watch_inbox.py`, `.claude/settings.json`,
