@@ -473,3 +473,123 @@ def test_a_present_but_broken_git_skips_today_and_whether_that_is_right_is_open(
         "question being answered, and this docstring is the place to record the answer"
     )
     assert not isinstance(anything.value, AssertionError)
+
+
+# ---------------------------------------------------------------------------
+# The reason strings, typed by HAND. The census that does not read its own answer
+# out of the file it audits.
+# ---------------------------------------------------------------------------
+
+#: The three unusable reasons, TYPED INTO THIS FILE BY HAND from
+#: `tests/conftest.py` and never read or derived from it.
+#:
+#: WHY, and it is a measured hole rather than a precaution.
+#: `test_the_classifier_and_the_cached_helper_agree_on_every_outcome` above
+#: advertises byte-identical reasons and is TAUTOLOGICAL: `git_unusable_reason()`
+#: CALLS `classify_git_probe()`, so both sides of its `==` are ONE CODE PATH. A
+#: GRADING ARM THAT CONSULTS THE SAME PREDICATE AS THE THING IT GRADES CANNOT SEE
+#: THAT PREDICATE BE WRONG. Verified: changing the reason strings' brackets from
+#: `(detail)` to `[detail]` or `<detail>` left all 14 arms in this file GREEN.
+#:
+#: A CENSUS THAT READS ITS OWN ANSWER OUT OF THE FILE IT AUDITS IS NOT A CENSUS,
+#: so every byte below is authored here. `{root}` is the only substitution taken
+#: from the audited module, because `REPO_ROOT` is machine-specific and pinning it
+#: would be pinning this checkout's path rather than the contract - the BRACKETS,
+#: the punctuation and the wording are all this file's own bytes.
+HAND_TYPED_NOT_RUNNABLE = (
+    "git is not runnable on this machine ({exec_error}), so trackedness cannot be "
+    "established for {root} and this guard is SKIPPED rather than passed"
+)
+
+HAND_TYPED_NOT_A_REPOSITORY = (
+    "this tree is not a git repository, so trackedness cannot be established and this "
+    "guard is SKIPPED rather than passed: `git rev-parse --git-dir` in {root} exited 128 "
+    "({detail}). That is the normal state of a Download-ZIP, sdist or `git archive` copy "
+    "- clone the repository to enforce this guard"
+)
+
+HAND_TYPED_DID_NOT_ANSWER = (
+    "git is present but did not answer for {root}, so trackedness cannot be established "
+    "and this guard is SKIPPED rather than passed: `git rev-parse --git-dir` exited "
+    "{returncode} ({detail})"
+)
+
+
+def test_the_three_unusable_reasons_match_reasons_typed_by_hand_in_this_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Byte-for-byte against expectations AUTHORED HERE, not read from conftest.
+
+    This is the arm that can see a bracket change. It drives the real helper
+    across all three non-usable outcomes through the recording stub and compares
+    the whole reason string against `HAND_TYPED_*` above. Any edit to the wording,
+    the punctuation or the bracket bytes in `tests/conftest.py` reddens here and
+    the diff shows exactly which character moved.
+
+    ITS CEILING. It pins the reason TEXT and nothing else - not the category
+    tokens, which the arms above cover, and not `{root}`, which is this machine's
+    path rather than the contract. And it is a statement about the strings, not
+    about whether SKIPPING is the right disposition for any of these outcomes;
+    that question is left open by the arm immediately above.
+    """
+    root = conftest.REPO_ROOT
+    detail = "boom on the way out"
+
+    cases: list[tuple[_FakeCompleted | BaseException, str]] = [
+        (
+            OSError("no exec for you"),
+            HAND_TYPED_NOT_RUNNABLE.format(exec_error="OSError: no exec for you", root=root),
+        ),
+        (
+            _FakeCompleted(128, stderr=detail),
+            HAND_TYPED_NOT_A_REPOSITORY.format(root=root, detail=detail),
+        ),
+        (
+            _FakeCompleted(7, stderr=detail),
+            HAND_TYPED_DID_NOT_ANSWER.format(root=root, returncode=7, detail=detail),
+        ),
+    ]
+
+    for outcome, expected in cases:
+        conftest.git_unusable_reason.cache_clear()
+        _stub_git(monkeypatch, outcome)
+        actual = conftest.git_unusable_reason()
+        assert actual == expected, (
+            "the reason string in tests/conftest.py drifted from the wording typed by hand "
+            "in tests/test_conftest_git_gate.py. Four modules under tests/ consume this "
+            "text and tests/test_hook_interpreter.py quotes it in prose, so it is a "
+            f"contract.\n  expected: {expected!r}\n  actual:   {actual!r}"
+        )
+
+
+def test_the_hand_typed_reasons_are_not_trivially_equal_to_everything(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-vacuity for the arm above: the comparison can actually fail.
+
+    A `==` against a template that happened to format into the empty string, or a
+    helper welded to returning whatever it is compared with, would satisfy the
+    census silently. So the three hand-typed reasons are asserted pairwise
+    distinct and non-empty, and one deliberately WRONG bracket spelling is shown
+    to be rejected - the exact mutation that survived all 14 arms before this.
+    """
+    root = conftest.REPO_ROOT
+    detail = "boom"
+    rendered = [
+        HAND_TYPED_NOT_RUNNABLE.format(exec_error="OSError: x", root=root),
+        HAND_TYPED_NOT_A_REPOSITORY.format(root=root, detail=detail),
+        HAND_TYPED_DID_NOT_ANSWER.format(root=root, returncode=7, detail=detail),
+    ]
+    assert all(text.strip() for text in rendered), "a hand-typed reason rendered empty"
+    assert len(set(rendered)) == 3, f"the three hand-typed reasons must be pairwise distinct: {rendered}"
+
+    conftest.git_unusable_reason.cache_clear()
+    _stub_git(monkeypatch, _FakeCompleted(128, stderr=detail))
+    actual = conftest.git_unusable_reason()
+    square_bracketed = HAND_TYPED_NOT_A_REPOSITORY.format(root=root, detail=detail).replace(
+        f"({detail})", f"[{detail}]"
+    )
+    assert actual != square_bracketed, (
+        "the census cannot distinguish `(detail)` from `[detail]`, so it would not have "
+        "caught the bracket mutation that survived every other arm in this file"
+    )
