@@ -11,13 +11,20 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **STATE AS MEASURED 2026-09-09 AT `1c596e3`, a reading and not a promise.**
-  `python -m pytest tests` 1840 passed 1 skipped. `agents/pity_engine` 80
+- **STATE AS MEASURED 2026-09-09 AT `d3af1b9`, a reading and not a promise.**
+  `python -m pytest tests` 1855 passed 1 skipped. `agents/pity_engine` 80
   passed. `node --test` 52 pass 0 fail. ruff, mypy at 34 source files,
-  qa_companion 16 passed 0 failed, licence posture, docs consistency 29 and the
-  headless dry run all exit 0. The census is at 77 arms, up from 43 at the start
-  of the session; `tests/test_gate_mutation_runner.py` is new at 47.
-  1793 plus 47 is 1840 and the arithmetic closes.
+  qa_companion 16 passed 0 failed, licence posture 47, docs consistency 29 and
+  the headless dry run all exit 0. `tests/test_responder_delivery_gates.py` is
+  new at 8 arms and `tests/test_responder_refusal_gates.py` at 7.
+  1840 plus 8 plus 7 is 1855 and the arithmetic closes.
+
+  THE GATE CAMPAIGN IS 35 OF 35 FOR THE FIRST TIME. Measured at `06f8557` in an
+  isolated worktree: 35 mutants, 35 KILLED, 0 SURVIVED, 0 false kills, exit 0,
+  where `1c596e3` had 8 survivors. `d3af1b9` moved docstring bytes only, and
+  its three refusal gates were re-run there to prove it - 6 mutants, 6 killed,
+  0 survived, 0 false kills. Six false prose claims were corrected across three
+  rounds on the way, every one found by a lens and re-derived by hand.
 
   THE SAME SUITE REPORTS A DIFFERENT SKIP COUNT UNDER THE PRE-PUSH HOOK, and
   it is NOT a regression. Measured at `9be52cc`: 1840 passed 1 skipped from an
@@ -30,11 +37,14 @@ version. What follows is everything the scaffold deliberately did not do.
   counts by editing either one; they are two environments and the skip reason
   says which.
 
-  **STEP TWO OF THREE OF THE GATE CENSUS IS DONE.** `tools/gate_mutation_runner.py`
-  consumes the 18 tags, neutralises each tagged consult site in `_run_once`, and
-  runs the application suite per mutant. STANDING RESULT, reproduced on the
-  shipped bytes at the merge: 35 mutants, 27 KILLED, 8 SURVIVED, 0 false kills,
-  exit 1. The REGISTRY is step three and is still unstarted.
+  **STEP TWO OF THREE OF THE GATE CENSUS IS DONE, AND ITS SURVIVORS ARE NOW
+  CLOSED.** `tools/gate_mutation_runner.py` consumes the 18 tags, neutralises
+  each tagged consult site in `_run_once`, and runs the application suite per
+  mutant. The result at `1c596e3` was 35 mutants, 27 KILLED, 8 SURVIVED, exit
+  1. STANDING RESULT NOW, measured at `06f8557` in an isolated worktree: 35
+  mutants, 35 KILLED, 0 SURVIVED, 0 false kills, exit 0. The REGISTRY is step
+  three and is still unstarted; building companions before it ships a
+  VACUOUSLY GREEN apparatus, so the order stays strictly sequential.
 
   WHAT THIS SESSION DID NOT TOUCH, so the next one does not re-derive it: the
   registry, nothing inspects the pre-push hook's OUTPUT, the sweep floor's VALUE
@@ -61,31 +71,98 @@ version. What follows is everything the scaffold deliberately did not do.
   with both the refuter and the earlier builder. WHEN A REFUTER SAYS A BUILDER
   WAS WRONG, CHECK WHO WROTE THE INSTRUCTION FIRST.
 
-- **OPEN, AND THE HIGHEST-VALUE ROW IN THIS FILE. EIGHT GATES IN `_run_once`
-  ARE EXERCISED BY NOTHING.** Measured 2026-09-09 at `1c596e3` by
-  `python -m tools.gate_mutation_runner`, 35 mutants, and reproduced on the
-  shipped bytes. Each name below is a mutant that left the whole application
-  suite GREEN, so no test depends on that gate doing its job:
+- **CLOSED 2026-09-09. THE EIGHT GATES EXERCISED BY NOTHING NOW HAVE ARMS, AND
+  THE CAMPAIGN IS 35 OF 35.** Measured at `06f8557` by
+  `python -m tools.gate_mutation_runner` in an isolated worktree: 35 mutants,
+  35 KILLED, 0 SURVIVED, 0 false kills, exit 0. The eight that survived at
+  `1c596e3` are each now killed by one of two new modules -
+  `tests/test_responder_delivery_gates.py` at 8 arms takes
+  `delivery-write-all/operand-1` and `operand-2`,
+  `bounce-write-all/operand-1` and `operand-2`, and `bounce-mark/if-true`;
+  `tests/test_responder_refusal_gates.py` at 7 arms takes
+  `no-destination/if-false`, `workspace-trust/if-false` and
+  `refusal-recorded/if-false`. Not one kill is named by a shape grader.
 
-      no-destination/if-false        workspace-trust/if-false
-      refusal-recorded/if-false      bounce-mark/if-true
-      bounce-write-all/operand-1     bounce-write-all/operand-2
-      delivery-write-all/operand-1   delivery-write-all/operand-2
-
-  `delivery-write-all/operand-1` IS THE ONE TO FIX FIRST. It drops the
+  THE EMPTY-LIST HALF IS NOT REACHABLE THROUGH REAL DESTINATIONS, and that is
+  a STATED limit rather than a hidden one. `deliver` returns exactly one row
+  per inbox and `_run_once` reaches the delivery step only past the
+  `GATE:no-destination` early return, so `written` is never `[]` there. The
   `bool(written)` term that the responder's own comment at
-  `tools/moon_sync_responder.py:1861-1863` calls the guard and not decoration -
-  the term that stops `all([])` reporting a delivery to ZERO DESTINATIONS as
-  delivered. The comment has been right about its importance and wrong about it
-  being covered, for as long as it has existed.
+  `tools/moon_sync_responder.py:1861-1863` calls the guard and not decoration
+  therefore guards a caller shape the current callers cannot produce, and the
+  two arms that drive it substitute the module's `deliver`.
 
-  THE WORK IS ARMS, NOT A FIX: the gates are correct, nothing drives them. Each
-  needs a test in `tests/test_moon_sync_responder.py` or a sibling that fails
-  when the gate is neutralised. VERIFY EACH ONE WITH THE RUNNER RATHER THAN BY
-  EYE - `python -m tools.gate_mutation_runner --gate delivery-write-all` runs a
-  single gate, and a survivor that becomes a kill is the proof the arm lands.
-  Re-probe this row before spending a slice on it; it is a claim with a
-  measurement date and it decays.
+  TWO ARMS SHIPPED VACUOUS AND A LENS CAUGHT THEM, NOT THE RUNNER. With
+  `GATE:bounce-once` neutralised so the bounce block ran ZERO times, both
+  bounce arms stayed GREEN on negatives alone -
+  `result["termination"] == "refused"` is assigned 60 lines above the block.
+  The repair puts a `len(attempts) == 1` floor IN THE SAME ARM, fed by a
+  wrapper that captures the module's own `deliver` before substituting and
+  calls through, so the real failing write still happens. Both arms then go RED
+  under that neutralisation and under four more. A FLOOR IN A SEPARATE ARM
+  WOULD HAVE LEFT THE PRIMARY ARM VACUOUS, which is why it is one assertion.
+
+  KNOWN LIMIT, recorded rather than fixed: `rc_inbox in handed[0]` is a
+  MEMBERSHIP test, so an extra destination appended to the list the module
+  computes leaves the arm green. Both files say so where a reader will find it.
+
+- **CLOSED 2026-09-09, AND THE DISPOSITION IS AN ADJUDICATED CALL - NOT AN
+  OPERATOR DECISION.** It is overturnable by reading this entry. The sentence
+  in `tests/test_responder_refusal_gates.py` reading "Every suppression
+  downstream is keyed on that record" has TWO live antecedents in its own
+  paragraph: the refusals FILE, which makes it true, and what
+  `_remember_refusal` writes, which makes it false. Nearest-antecedent
+  resolution steers the reader to the false one, and the correcting text sits
+  ten lines further down.
+
+  The adjudicator restated the criteria before reading the artifact - truth
+  outranks minimal change, and no assertion may move - then verified the true
+  reading in the responder rather than in the docstring three prior agents had
+  all read: `refusal_seen` at line 1359 reads the `refusals` rows,
+  `bounced_under` at 1405 reads the `bounced` ledger and says so itself,
+  `bounce_capacity` at 1417 reads the same ledger, and all key on the one path
+  `DEFAULT_REFUSALS` written by the single writer `_write_refusals` at 1345.
+
+  RULING: B, FIX NOW. A claim repaired ten lines later is not checkable at the
+  point it is made. RUNNER-UP was A, leave as is, on the argument that a reader
+  who finishes the docstring cannot end up wrong. Shipped at `d3af1b9`,
+  docstring bytes only.
+
+  THE SAME ADJUDICATION RULED A, NOTHING TO FIX, on the two figures that looked
+  like a contradiction. They are different populations and reconcile exactly:
+  `tests` collects 1848 at `f92500f`, the two `EXCLUDED_MODULES` collect 124,
+  `tests/test_responder_refusal_gates.py` collects 7, and 1848 minus 124 minus
+  7 is 1717. So 2 failed plus 1845 passed plus 1 skipped is the full suite with
+  the file present, and 1716 passed plus 1 skipped is the campaign suite with
+  it absent. Both numbers already carry their population in the prose.
+
+- **OPEN, and it is a REAL defect in the responder rather than in a test.**
+  Measured 2026-09-09 while building the `no-destination` arm: with the gate
+  neutralised and `roots={}` the cycle spawns a session, terminates
+  "delivered", writes a reply into THIS repo's own inbox, and writes the note
+  into `DEFAULT_ANSWERED`. `_remember_answered` is union-only and uncapped and
+  NOTHING in `tools/`, `scripts/` or `ops/` ever removes an entry, so a retry
+  after the roots are configured terminates "empty" - the note can never be
+  answered. The gate currently prevents that, and the gate is now armed, so
+  this is not reachable today. It is recorded because the answered record's
+  permanence is a property nothing else in the tree states.
+
+- **OPEN, small, and named by the adjudicator as out of its own scope.** The
+  assert message in `test_a_refusal_whose_record_write_fails_delivers_no_bounce`
+  still says a bounce whose record did not land "goes out again on every cycle
+  forever". The docstring twelve lines above it now measures ONE bounce, not
+  one per cycle, because `mark_bounced` is unpatched and `bounced_under`
+  suppresses the repeats. Criterion three of that adjudication forbade touching
+  an assertion, so the message was left. It is a message, not a predicate, so
+  nothing is green that should be red.
+
+- **OPEN, and it is a question about the CAMPAIGN POPULATION rather than a
+  defect.** The two new modules add 15 arms that no prior campaign figure
+  includes, and neither is excluded. That is correct as it stands - they grade
+  BEHAVIOUR, not the target file's shape, which is what `SHAPE_GRADER_MODULES`
+  is for - but the survivorship figures quoted in older entries were taken
+  against a smaller population and do not transfer. Re-derive rather than
+  compare.
 
 - **CLOSED 2026-09-09, AND THE DISPOSITION IS AN ADJUDICATED CALL - NOT AN
   OPERATOR DECISION.** It is overturnable by reading this entry. The question
