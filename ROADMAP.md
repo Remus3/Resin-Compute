@@ -11,37 +11,70 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **STATE AS MEASURED 2026-09-09 AT `c372861`, a reading and not a promise.**
-  `python -m pytest tests` 1759 passed 1 skipped. `agents/pity_engine` 80
-  passed. `node --test` 52 pass 0 fail. ruff, mypy, qa_companion, licence
-  posture, docs consistency 29 and the headless dry run all exit 0.
-  CI GREEN on BOTH workflows at `c372861`, and the ci run was READ rather than
-  trusted: 1743 passed and 17 skipped, so 1760 collected on both lanes and the
-  arithmetic closes against the local 1759 plus 1. THE SKIP COUNT IS UNCHANGED
-  AT 17 across 64 NEW ARMS, and neither new file contributes a skip - grepped
-  for both module names against the run log, zero hits. None of the ci lane's
-  17 mentions a shallow clone, so the trailer sweep genuinely runs there.
+- **STATE AS MEASURED 2026-09-09 AT `1c596e3`, a reading and not a promise.**
+  `python -m pytest tests` 1840 passed 1 skipped. `agents/pity_engine` 80
+  passed. `node --test` 52 pass 0 fail. ruff, mypy at 34 source files,
+  qa_companion 16 passed 0 failed, licence posture, docs consistency 29 and the
+  headless dry run all exit 0. The census is at 77 arms, up from 43 at the start
+  of the session; `tests/test_gate_mutation_runner.py` is new at 47.
+  1793 plus 47 is 1840 and the arithmetic closes.
 
-  READING THE GREEN RUN FOUND NOTHING THIS TIME EITHER. Fourth session running
-  for the method; twice it found a defect no local reasoning had, twice it did
-  not. A clean read is a result, and two clean reads do not retire the method.
+  **STEP TWO OF THREE OF THE GATE CENSUS IS DONE.** `tools/gate_mutation_runner.py`
+  consumes the 18 tags, neutralises each tagged consult site in `_run_once`, and
+  runs the application suite per mutant. STANDING RESULT, reproduced on the
+  shipped bytes at the merge: 35 mutants, 27 KILLED, 8 SURVIVED, 0 false kills,
+  exit 1. The REGISTRY is step three and is still unstarted.
 
   WHAT THIS SESSION DID NOT TOUCH, so the next one does not re-derive it: the
-  gate MUTATION RUNNER and the registry are still unstarted and are steps two
-  and three, nothing inspects the pre-push hook's OUTPUT, the sweep floor's
-  VALUE is still ungraded, and `ops/ResinCompute-Supervisor.xml` has still
-  never been registered. `core/atomic_io.py` still leaks a 0-byte temp on a
-  non-OSError write failure - filed, not fixed, and not a regression. The
-  responder task was re-confirmed DORMANT by the checker, exit 1, and NOTHING
-  WAS ARMED.
+  registry, nothing inspects the pre-push hook's OUTPUT, the sweep floor's VALUE
+  is still ungraded, and `ops/ResinCompute-Supervisor.xml` has still never been
+  registered. `core/atomic_io.py` still leaks a 0-byte temp on a non-OSError
+  write failure - filed, not fixed, and not a regression. The responder task was
+  re-confirmed DORMANT by the checker, exit 1, and NOTHING WAS ARMED. The inbox
+  was re-measured at zero unread and ZERO subdirectories, 146 files.
 
-  A ROW IN THIS FILE WAS STALE FOR TWO SESSIONS AND COST A WHOLE SLICE. It said
-  a contract was guarded by nothing; `docs/LEDGER.md` had recorded the closure
-  and the two documents disagreed, so the hand-off propagated the wrong one.
-  RE-PROBE A ROW BEFORE SPENDING A SLICE ON IT - a residual is a claim with a
-  measurement date and it decays. The merger dispatched that slice, so the
-  DISPATCH PROMPT was the defect rather than the builder, which is the same
-  lesson this file recorded one session earlier and did not apply.
+  THE WORKTREE TRAP FIRED ON FOUR OF FIVE DISPATCHES. A worktree here
+  materialises at an ANCESTOR of the declared fork point. One builder STOPPED
+  and wrote nothing rather than re-deriving its target from the brief's prose,
+  which was the right call and cost only a re-dispatch. The fix that worked is
+  an explicit `git merge --ff-only <sha>` in the brief PLUS an assertion on the
+  materialised bytes - a line count and a grep for a symbol that only exists at
+  the intended commit. A dispatch that omits it is the defect rather than the
+  builder, which is the third session running for that lesson.
+
+  FOUR TIMES AN AGENT CORRECTED THE INSTRUCTION IT WAS GIVEN, and that is the
+  method result worth keeping. One measured that the brief's k = 1, 2, 3 does
+  NOT kill `reported[:3]` and added the arm the brief had not asked for. One
+  declined to ship a refuter's measurement it could not reproduce and shipped
+  the weaker verified claim. One derived a disputed count itself and disagreed
+  with both the refuter and the earlier builder. WHEN A REFUTER SAYS A BUILDER
+  WAS WRONG, CHECK WHO WROTE THE INSTRUCTION FIRST.
+
+- **OPEN, AND THE HIGHEST-VALUE ROW IN THIS FILE. EIGHT GATES IN `_run_once`
+  ARE EXERCISED BY NOTHING.** Measured 2026-09-09 at `1c596e3` by
+  `python -m tools.gate_mutation_runner`, 35 mutants, and reproduced on the
+  shipped bytes. Each name below is a mutant that left the whole application
+  suite GREEN, so no test depends on that gate doing its job:
+
+      no-destination/if-false        workspace-trust/if-false
+      refusal-recorded/if-false      bounce-mark/if-true
+      bounce-write-all/operand-1     bounce-write-all/operand-2
+      delivery-write-all/operand-1   delivery-write-all/operand-2
+
+  `delivery-write-all/operand-1` IS THE ONE TO FIX FIRST. It drops the
+  `bool(written)` term that the responder's own comment at
+  `tools/moon_sync_responder.py:1861-1863` calls the guard and not decoration -
+  the term that stops `all([])` reporting a delivery to ZERO DESTINATIONS as
+  delivered. The comment has been right about its importance and wrong about it
+  being covered, for as long as it has existed.
+
+  THE WORK IS ARMS, NOT A FIX: the gates are correct, nothing drives them. Each
+  needs a test in `tests/test_moon_sync_responder.py` or a sibling that fails
+  when the gate is neutralised. VERIFY EACH ONE WITH THE RUNNER RATHER THAN BY
+  EYE - `python -m tools.gate_mutation_runner --gate delivery-write-all` runs a
+  single gate, and a survivor that becomes a kill is the proof the arm lands.
+  Re-probe this row before spending a slice on it; it is a claim with a
+  measurement date and it decays.
 
 - **CLOSED 2026-09-09, AND THE DISPOSITION IS AN ADJUDICATED CALL - NOT AN
   OPERATOR DECISION.** It is overturnable by reading this entry. The question
@@ -842,9 +875,9 @@ version. What follows is everything the scaffold deliberately did not do.
   invisible. What survives of the hole is narrower and is stated at its own
   entry above, in the census module's ceiling item 2, and nowhere else.
 
-  STILL OPEN, unchanged in order: build the mutation runner, THEN the registry
-  and its companions. Building the companions first still ships a vacuously
-  green apparatus. The two census hazards below are now CLOSED IN CODE - the
+  STEP TWO CLOSED 2026-09-09 at `1c596e3`: `tools/gate_mutation_runner.py`.
+  STILL OPEN: the REGISTRY and its companions. Building the companions first
+  still ships a vacuously green apparatus. The two census hazards below are now CLOSED IN CODE - the
   strict pattern anchors the whole line, captures the name, and every
   comparison is between captured groups for EQUALITY - but they are kept in
   this entry because a later rewrite can reintroduce either one.

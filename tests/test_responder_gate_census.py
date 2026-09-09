@@ -280,10 +280,25 @@ name-grammar class above.
      conjunct is what reddens an untagged site: stripping every tag from the
      responder gives 18 untagged reports and turns the FIRST conjunct alone
      False while both floors stay True.
-  3. WHETHER A GATE IS EXERCISED. It says nothing about any test driving a
-     gate, and nothing about whether a mutation at a gate's own call site turns
-     a suite red. No mutation runner exists in this tree; this census is the
-     tagging step such a runner would consume, not the runner.
+  3. WHETHER A GATE IS EXERCISED. THIS CENSUS still says nothing about any test
+     driving a gate, and nothing about whether a mutation at a gate's own call
+     site turns a suite red. It is the tagging step, not the runner. The
+     sentence that used to sit here - "no mutation runner exists in this tree" -
+     WAS TRUE WHEN WRITTEN AND IS FALSE NOW: `tools/gate_mutation_runner.py`
+     landed 2026-09-09 and CONSUMES these tags. Measured by it on that date,
+     35 mutants over the 18 tagged sites: 27 killed, 8 survived. So the answer
+     to "is this gate exercised" is NO for eight of them, and it is the runner's
+     report that says so rather than anything here.
+     ONE COUPLING RUNS THE OTHER WAY AND IS RECORDED HERE BECAUSE IT IS THIS
+     MODULE'S DOING. This module reads the responder AT IMPORT and grades its
+     AST SHAPE, so a mutant that DROPS A BoolOp OPERAND reddens it for a reason
+     that is not about behaviour, and under `pytest -x` that was
+     indistinguishable from a real kill: all four such mutants scored 32 of 32
+     failing nodes HERE and zero elsewhere, and survive at 1716 passed 1 skipped
+     once this file is ignored. The runner therefore excludes this module by
+     name as a SHAPE GRADER. Adding a shape-grading arm here does not affect its
+     verdicts and does enlarge that exclusion, which is the price of the
+     coupling and is stated rather than discovered later.
   4. SCOPE, WITH THE HALF OF ITS OWN CLAIM THAT WAS FALSE CORRECTED. It reads
      the one file `tools/moon_sync_responder.py` and the one function
      `_run_once`. WITHIN THAT FILE the claim holds and is measured: a tag in
