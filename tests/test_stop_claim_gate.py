@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -63,10 +64,35 @@ SUBTESTS_SUMMARY = (
     "2 failed, 19547 passed, 144 skipped, 1 warning, 4575 subtests passed in 177.97s (0:02:57)"
 )
 
-# tools/qa_companion.py prints its own tally. It is NOT a pytest terminal
+# scripts/qa_companion.py prints its own tally. It is NOT a pytest terminal
 # summary - there is no "in <float>s" - and crediting it would launder a number
 # no pytest run produced. This is the ONE lexical refuser that survives.
-QA_COMPANION_TALLY = "  16 passed, 0 failed, 2 skipped"
+#
+# A SHAPE FIXTURE, NOT A VERBATIM CAPTURE, and the comment here used to claim
+# otherwise. It said "COPIED VERBATIM ... on 2026-09-09, leading spaces
+# included"; on the box that wrote it the script printed
+# `  16 passed, 0 failed, 2 skipped, 3 noted`, so the claim was false in the
+# tree as committed.
+#
+# THE NUMBERS CANNOT BE PINNED, which is why the fix is to stop claiming them
+# rather than to correct them. qa_companion.py probes the live machine - a
+# listening port, an installed Electron runtime, a desktop shortcut, an account
+# snapshot on disk - and reports PASS, SKIP or NOTE per probe. The four counts
+# are therefore a function of what happens to be installed and running, they
+# differ between this box and CI and between two runs on one box, and any
+# literal copied here is stale the moment something starts or stops. What IS
+# durable, and what the refuser actually depends on, is the SHAPE: four
+# `<count> <word>` pairs and NO `in <float>s` duration. The numbers below are
+# illustrative of that shape and nothing else - do not read them as a
+# measurement, and do not chase them when they drift.
+#
+# The count WORDS and their order are the part that is welded to the script, by
+# `test_the_qa_tally_fixture_quotes_the_scripts_count_words_in_order` below.
+# That weld exists because the fixture drifted once in a way that DID matter:
+# the script grew a fourth `noted` count and the fixture kept the dead
+# three-word line, so the refuser was being exercised against a shape nothing
+# emits.
+QA_COMPANION_TALLY = "  14 passed, 0 failed, 4 skipped, 3 noted"
 
 # The four shapes two adversarial passes used to launder a count past the old
 # lexical bar. Each is a perfectly-shaped summary; each is refused now because
@@ -382,6 +408,51 @@ def test_parse_summary_line_refuses_a_tally_with_no_duration():
     accepted = gate.parse_summary_line("23607 passed, 258 skipped in 1182.00s")
     assert accepted is not None
     assert accepted.passed == 23607
+
+
+def test_the_qa_tally_fixture_quotes_the_scripts_count_words_in_order():
+    """PINS THE WORD SEQUENCE. CLAIMS NOTHING ABOUT THE NUMBERS.
+
+    The old name said the fixture "still matches what the script prints", and
+    that is more than this arm can support. It reads the f-string that emits the
+    tally and compares the sequence of count WORDS - `passed`, `failed`,
+    `skipped`, `noted` - with the sequence the fixture spells. It does not run
+    the script, does not compare any number, and CANNOT: qa_companion.py probes
+    the live machine, so its counts vary by host and by run, and the fixture is
+    a shape fixture whose numbers are illustrative. A refuter demonstrated the
+    gap by swapping the interpolated variables to `{failed} passed, {passed}
+    failed` - the word sequence is identical, so this arm passed, and it should
+    have: the WORDS are what it pins.
+
+    So this is not a mechanism to be tightened until it catches that. The defect
+    a swap like that introduces is in the script's own reporting, and it belongs
+    to a guard over the script, not to a fixture-drift weld here. What this arm
+    is for is the drift that DID happen: the script grew a fourth `noted` count
+    and the fixture kept the dead three-word line, so the refuser above was
+    exercised against a shape nothing emits.
+
+    If the script's tally is ever restructured beyond one f-string this arm goes
+    red rather than silently stopping - the emitter count below is the
+    zero-out-of-zero guard for exactly that.
+    """
+    source = (
+        Path(__file__).resolve().parents[1] / "scripts" / "qa_companion.py"
+    ).read_text(encoding="utf-8")
+    emitters = re.findall(r'print\(f"\\n((?:\s*\{\w+\} \w+,?)+)"\)', source)
+    assert len(emitters) == 1, f"expected exactly one tally f-string, found {emitters}"
+
+    printed_words = re.findall(r"\{\w+\} (\w+)", emitters[0])
+    fixture_words = re.findall(r"\d+ (\w+)", QA_COMPANION_TALLY)
+    assert printed_words == fixture_words == [
+        "passed",
+        "failed",
+        "skipped",
+        "noted",
+    ], f"script prints {printed_words}; fixture quotes {fixture_words}"
+
+    # And the quoted line still carries no duration, which is the whole reason
+    # the refuser above can refuse it.
+    assert " in " not in QA_COMPANION_TALLY
 
 
 def test_an_unknown_count_word_discards_that_match_but_not_the_line():

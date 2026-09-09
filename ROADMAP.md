@@ -11,6 +11,136 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **CLOSED 2026-09-09, AND THE DISPOSITION IS AN ADJUDICATED CALL - NOT AN
+  OPERATOR DECISION.** It is overturnable by reading this entry. The question
+  carried by four hand-offs was that NOTHING compared INSTALLED dev tools
+  against DECLARED pins, and that a naive equality test would be GREEN on CI
+  and RED here, which is backwards. The SHAPE was the open question, not the
+  typing.
+
+  MEASURED FIRST, and every figure re-probed by two agents independently:
+  `requirements-dev.txt` pins exactly three tools, all with `==`. Installed on
+  this box - ruff 0.15.12, pytest 9.0.3, mypy 2.1.0, all OLDER than the pins.
+  Both workflows `pip install -r requirements-dev.txt` on ubuntu-latest at
+  Python 3.11, so CI is AT the pin BY CONSTRUCTION. That is why equality is
+  near-vacuous where it is green: it would assert that pip works, ninety
+  seconds after pip ran.
+
+  RULING: MIXED, and both halves shipped. The criteria, in the order used:
+  what the mechanism can CLAIM on BOTH lanes; truthfulness of the disposition;
+  feasibility as measured; blast radius, since a guard that only ever reddens
+  locally is a guard the operator disables; loudness of a future regression;
+  and non-vacuity. REJECTED: assert-equality, assert-floor, skip-off-CI, and
+  do-nothing. Skip-off-CI lost on the tree's own hard-won finding that a SKIP
+  is exactly how a red hid for five pushes.
+
+  PART D, `tests/test_dev_pin_declaration.py`: a claim about the DECLARATION -
+  every tool the gates INVOKE is PINNED - which is host-independent and true on
+  both lanes, with the anti-vacuity floor and the judgement in ONE assertion.
+  PART C, `scripts/qa_companion.py`: a non-failing NOTE row per tool reporting
+  the drift AND ITS DIRECTION, because "differs" alone does not tell a reader
+  whether a local green is optimistic or pessimistic. It is exit-0 on both
+  lanes and appears in the gate output the operator already reads.
+
+  THE FIRST BUILD WAS REFUTED WITH TWO FALSE GREENS, and the first of them
+  defeated the very reason part D was chosen over doing nothing.
+  FALSE GREEN ONE: the invoked-tool set was derived by looking up a CLOSED dict
+  of the three known names, so a fourth unpinned tool could never appear in it
+  and the equality was structurally satisfied. MEASURED: adding two unpinned
+  tools to a workflow left the test GREEN, while the module's own name promised
+  "every tool the CI gates invoke". The ruling had justified D by saying only D
+  would redden for a fourth unpinned tool - so as first shipped, D could not
+  make the one claim it was selected for.
+  FALSE GREEN TWO: trailing comments were not stripped, so rewriting a gate as
+  `echo lint step deleted  # ruff check .` - with ruff no longer invoked at all
+  - kept the guard green. A comment could satisfy it.
+
+  THE REPAIR INVERTS THE POLARITY, and that is the load-bearing decision. The
+  allow-lists now name what is NOT a tool, and an UNKNOWN word IS a tool, so a
+  new unpinned tool is caught by DEFAULT rather than by being anticipated. A
+  shape the scanner cannot classify RAISES and names the file and line, rather
+  than being quietly skipped - this tree has twice been defeated by widening a
+  matcher, and the standing lesson is that an unparseable shape must FAIL.
+
+  THE CEILING IS STATED HERE AND IN THE FAILURE MESSAGE rather than discovered
+  later. Invocation by path, through a variable, from inside a shell script, or
+  as `python -m dotted.module` is NOT credited, which leaves the invoked set
+  short and is caught by the floor. And adding an ordinary new shell utility to
+  a workflow REDDENS this module until that word joins the shell-word list -
+  a deliberate false red, and the message says so. The floor's message was
+  separately repaired: retiring a tool used to print two IDENTICAL lists under
+  an equality-shaped assert, and now names the floor and asks for a same-commit
+  constant update.
+
+  ALSO REPAIRED, and it was a live staleness rather than a hypothetical: the
+  stop-claim gate's fixture still pinned the DEAD three-word tally line after
+  the reporter began emitting a fourth count. A new arm reads the emitter's own
+  format out of the script and compares WORD SEQUENCES, so the fixture cannot
+  drift again. Its ceiling, stated honestly: it compares the count WORDS and
+  not the numbers, which differ per host, so it cannot see the two being wrong
+  together in the same way.
+
+  WHAT WOULD OVERTURN THIS: bringing this box to the pins, which makes plain
+  equality cheap and true and demotes part C to noise. Or a measured case where
+  the version drift caused a real local-green-with-CI-red, which promotes part
+  C from a report to an assertion.
+
+  THEN A THIRD REFUTER DEFEATED IT AGAIN, and the third defeat is the most
+  instructive of the three because the module had WRITTEN DOWN a false claim
+  about its own limits.
+  FALSE GREEN THREE: a QUOTED YAML scalar hid the command entirely.
+  `run: "pip-audit --strict"` derived the empty set, as did the single-quoted
+  form and a leading `!`. A quoted scalar is ordinary valid workflow YAML and
+  is MANDATORY when a command opens with a YAML-reserved character, so an
+  unpinned tool added that way stayed invisible. Meanwhile the docstring
+  asserted that a GitHub expression "is the one shape that could hide a tool
+  name silently". That sentence was measured FALSE and is deleted, with the
+  measurement recorded in its place.
+  THE REPAIR IS A MISSING PARSE STEP, NOT A WIDER MATCHER, and the distinction
+  was made deliberately: a quoted scalar is now unwrapped at the YAML level
+  BEFORE the shell scan runs, and the shell heuristic is untouched. Malformed
+  or unterminated quoting RAISES and names file and line rather than guessing.
+  This tree has been defeated three times on this one derivation and its
+  standing lesson is that widening a matcher is the wrong answer after the
+  second defeat - so the answer here was to parse the input correctly and to
+  let an unparseable shape FAIL.
+  THE WORKFLOW SET WAS ALSO HARDCODED to two filenames, so a THIRD workflow
+  would have been entirely ungraded, and that was not in the stated ceiling. It
+  is now enumerated from disk with the census floor welded into both consuming
+  assertions.
+  AND A COMMITTED ARTIFACT CARRIED A FALSE PROVENANCE COMMENT. The tally
+  fixture claimed to be COPIED VERBATIM from the script on 2026-09-09 while the
+  script on this box prints different numbers. The counts are HOST-DEPENDENT -
+  the reporter probes a listening port, an Electron runtime, a desktop shortcut
+  and an account snapshot - so no verbatim capture can stay true. It is now
+  labelled a SHAPE fixture with illustrative numbers, and the companion arm was
+  RENAMED to say it pins the count WORDS IN ORDER and claims nothing about the
+  numbers, because the refuter killed nothing by swapping the passed and failed
+  placeholders. The mechanism overclaiming was the defect, not the mechanism.
+
+  MUTATION TABLE AT THE MERGE, control GREEN and all five arms RED: an unpinned
+  tool added as a double-quoted, single-quoted or plain scalar; a pin removed
+  while the gate still invokes it; and every workflow file removed so the
+  enumeration is empty, which reddens the floor rather than passing over zero
+  files.
+
+  THE CEILING, STATED IN SIX NUMBERED ITEMS in the module rather than
+  discovered later. A tool is credited only when its BARE NAME stands in
+  COMMAND POSITION in workflow text. Not seen: invocation by path or glob,
+  invocation through a shell variable, a tool run from inside a script or
+  composite action the workflow merely calls, `python -m dotted.module`,
+  `python foo.py`, and a tool in ARGUMENT position - `xargs -0 ruff check` is
+  deliberately uncredited, because deciding argument position from text needs a
+  per-tool table of which arguments are commands, which is precisely the closed
+  dict this module removed. All six leave the invoked set empty or short and
+  are caught by the floor.
+
+  THE COMMON-MODE RISK IS NAMED RATHER THAN LEFT IMPLIED, in the module
+  docstring and here: both halves read `requirements-dev.txt` as truth about
+  what CI installs, and assert that the install happens only by reading the
+  workflow TEXT. No runner was ever observed. A cached wheel or a later
+  upgrade step would be invisible to both.
+
 - **CLOSED 2026-09-09, AND THIS IS AN ADJUDICATED CALL THAT OVERTURNS A
   PREVIOUS ADJUDICATED CALL FOR EXACTLY ONE SITE. NOT AN OPERATOR DECISION.**
   It is overturnable by reading this entry. The standing ruling recorded below
