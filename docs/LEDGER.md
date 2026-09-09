@@ -12,6 +12,113 @@ now.
 
 ---
 
+## 2026-09-09 - The eight gates exercised by nothing get arms, the campaign reaches 35 of 35, and six prose claims were false
+
+Files: `tests/test_responder_delivery_gates.py` (new, 8 arms),
+`tests/test_responder_refusal_gates.py` (new, 7 arms), `ROADMAP.md`,
+`docs/LEDGER.md`. Commits `06f8557`, `d3af1b9`. Measured at the seam,
+2026-09-09: `pytest tests` 1855 passed 1 skipped, `agents/pity_engine` 80
+passed, `node --test` 52 pass 0 fail, and licence posture 47, docs consistency
+29, qa_companion 16 passed 0 failed, ruff, mypy at 34 source files and the
+headless dry run all exit 0. 1840 plus 8 plus 7 is 1855 and the arithmetic
+closes.
+
+**THE CAMPAIGN IS 35 OF 35 FOR THE FIRST TIME.** Measured at `06f8557` in an
+isolated worktree by `python -m tools.gate_mutation_runner`: 35 mutants, 35
+KILLED, 0 SURVIVED, 0 false kills, exit 0, where `1c596e3` had 8 survivors.
+Each of the eight is now killed by one of the two new modules, and not one kill
+is named by a shape grader. THE WORK WAS ARMS AND NOT A FIX - the gates were
+correct all along and nothing drove them.
+
+**THE EMPTY-LIST HALF IS NOT REACHABLE THROUGH REAL DESTINATIONS, AND BOTH
+FILES SAY SO.** `deliver` returns exactly one row per inbox and `_run_once`
+reaches the delivery step only past the `GATE:no-destination` early return, so
+`written` is never `[]` there. The `bool(written)` term that the responder's
+own comment at `tools/moon_sync_responder.py:1861-1863` calls the guard and not
+decoration therefore guards a caller shape the current callers cannot produce.
+The two arms that drive it substitute the module's `deliver`, which is a stated
+limit rather than a hidden one.
+
+**TWO ARMS SHIPPED VACUOUS AND THE RUNNER COULD NOT HAVE SHOWN IT.** They
+killed their mutants and were confirmed killed by an independent re-run, yet
+with `GATE:bounce-once` neutralised so the bounce block ran ZERO times both
+stayed GREEN: they asserted only negatives, and
+`result["termination"] == "refused"` is assigned 60 lines above the block. The
+repair is a `len(attempts) == 1` floor IN THE SAME ARM - a floor in a separate
+arm would have left the primary arm vacuous - fed by a wrapper that captures
+the module's own `deliver` before substituting and calls through, so the real
+failing write still happens. Measured after: both arms RED under that
+neutralisation and under four more, and green on clean bytes.
+
+**TWO DEAD ASSERTIONS WERE REMOVED, and the proof they were dead is a
+measurement.** Each stub arm closed with `assert list(rc_inbox.iterdir()) == []`,
+which the stub decides rather than the module, because both `deliver` call
+sites resolve the same module global. Deleting both lines changed ZERO verdicts
+across 11 module mutations, verdict for verdict. They are replaced by
+`rc_inbox in handed[0]`, where `handed` records the inbox list the module
+itself computed - a floor that a refuter then proved can fail, by dropping the
+`/ "moon_sync_inbox"` from either call site. It is a MEMBERSHIP test and both
+files say so: an appended destination in a repository this tree does not own
+leaves the arm green.
+
+**SIX FALSE PROSE CLAIMS ACROSS THREE ROUNDS, on top of eight last session and
+four the session before.** Every one was found by a lens and re-derived by hand
+before it was rewritten. Measured this session, replacing what the docstrings
+had said: `refusal-recorded/if-false` over five cycles is ONE bounce and not
+five, because `mark_bounced` is unpatched and `bounced_under` suppresses cycles
+two through five; the 288-files-a-day figure belongs to the `refusals-usable`
+form where the whole record is unwritable and `mark_bounced` fails too;
+`DEFAULT_REFUSALS.is_file()` is False throughout that arm, so `refusals_usable`
+returns True having inspected NO file, passing on the `path.exists()`
+short-circuit; the bounce suppressor is `mark_bounced`'s ledger read by
+`bounced_under` while `_remember_refusal`'s rows suppress the HOLD via
+`refusal_seen`; the runner rewrites a `BoolOp`'s WHOLE expression to each
+operand in turn rather than the operand to the rest; and an absent or
+wrongly-keyed trust config is trusted BY DEFAULT, so the trusted arm cannot
+notice a plumbing error and the untrusted one can. Two hand-typed COUNTS were
+also wrong - "four of the five" negatives where five of five are, and "the four
+above" where five arms sit above - which is this tree's most repeated defect
+class.
+
+**`no-destination/if-false` COSTS MORE THAN A SESSION, and nothing else in the
+tree states this.** Measured with `roots={}`: one spawn, termination
+"delivered", `delivered` False, actions `["A5"]`, an empty destination inbox, a
+reply written into this repo's own inbox, and the note written into
+`DEFAULT_ANSWERED`. `_remember_answered` is union-only and uncapped and nothing
+removes an entry, so a retry after the roots are configured terminates "empty"
+and the note can never be answered. The gate prevents it and the gate is now
+armed.
+
+**THE ADJUDICATED CALL, operator away.** "Every suppression downstream is keyed
+on that record" has two live antecedents in its own paragraph and
+nearest-antecedent resolution reaches the FALSE one. Ruling B, fix now, against
+criteria stated before the artifact was read; runner-up A, leave as is. The
+adjudicator broke the common-mode dependency by reading
+`tools/moon_sync_responder.py` directly rather than the docstring three prior
+agents had all read. The same adjudication ruled A on the two figures that
+looked contradictory: `tests` collects 1848, the two `EXCLUDED_MODULES` collect
+124, the new refusal module collects 7, and 1848 minus 124 minus 7 is 1717, so
+the numbers are different populations that reconcile exactly.
+
+**METHOD, and it is the result worth keeping.** FIVE DISTINCT LENSES FOUND FIVE
+CLASSES OF DEFECT AND NO TWO OVERLAPPED - does-it-reproduce, vacuity and
+over-fire, prose-truth, equivalent-mutant, and the-repair-did-not-repair-it.
+The reproduce lens confirmed every kill and could not have seen the vacuity;
+the vacuity lens found it and never questioned a kill. AGREEMENT WAS NEVER
+TAKEN AS EVIDENCE: where two agents agreed, the shared input was the docstring,
+and the adjudicator tested THAT. Every builder that corrected its own brief was
+right, which is now the fifth session running for that lesson - one measured
+that the census does NOT redden under an `if-false` mutant because the AST
+shape is preserved, refuting an instruction of mine that had misquoted this
+ledger.
+
+Verification pointer: `python -m tools.gate_mutation_runner` in a clean
+worktree, which must report 35 mutants 35 killed 0 survived 0 false kills; and
+`python -m tools.gate_mutation_runner --gate delivery-write-all` for the single
+gate the hand-off named first.
+
+---
+
 ## 2026-09-09 - The mutation runner ships, four of its own kills were false, and the census arms pinned literals where they claimed classes
 
 Files: `tools/gate_mutation_runner.py` (new, 851 lines),
