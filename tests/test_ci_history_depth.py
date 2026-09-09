@@ -46,6 +46,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CI = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+DOCS_GUARDS = REPO_ROOT / ".github" / "workflows" / "docs-guards.yml"
 TRAILER_SWEEP = REPO_ROOT / "tests" / "test_commit_trailers.py"
 
 _CHECKOUT = re.compile(r"^uses:\s*actions/checkout@", re.IGNORECASE)
@@ -369,6 +370,44 @@ def test_the_matcher_flags_every_shallow_shape_and_clears_every_full_one():
         f"it failed to flag: {silent or 'none'}. Full-history shapes it wrongly flagged: "
         f"{noisy or 'none'}"
     )
+
+
+def test_the_docs_lane_is_still_shallow_on_purpose():
+    """THE OTHER HALF OF THE CLAIM, and it was unguarded until a refuter said so.
+
+    `tests/test_commit_trailers.py` skips its two history arms under a shallow
+    clone, and its skip reason tells a CI reader to check WHICH lane is shallow
+    before changing any depth, because at least one lane here is shallow
+    deliberately. That sentence is a claim about a file that module never reads.
+    Nothing pinned it, so raising the docs lane to depth 0 would have made the
+    reason text quietly false with no test going red - the exact stale-prose
+    failure this tree keeps re-finding.
+
+    The docs lane is depth 1 BY DESIGN: it derives its selection from
+    `git ls-files`, which needs an index and not a history. So this arm asserts
+    the OPPOSITE of the ci.yml arm above, and the two together are what make
+    that skip reason true.
+
+    CENSUS AND JUDGEMENT IN ONE ASSERT, same shape as the ci.yml arm: a workflow
+    whose checkout step this scanner can no longer see would otherwise satisfy
+    "no step declares depth 0" vacuously, forever.
+    """
+    steps = parse_checkout_steps(DOCS_GUARDS.read_text(encoding="utf-8"))
+    problems: list[str] = []
+    if not steps:
+        problems.append(
+            "no actions/checkout step found at all, so a rule about its depth would be "
+            "a rule about nothing"
+        )
+    for step in steps:
+        if step.depth == "0":
+            problems.append(
+                f"line {step.line}: `{step.ref}` now checks out FULL history. That may be "
+                f"correct, but tests/test_commit_trailers.py tells a CI reader that at "
+                f"least one lane is shallow deliberately - update that skip reason in the "
+                f"same commit, or this tree ships prose it has stopped meaning"
+            )
+    assert not problems, "the docs lane changed shape: " + " | ".join(problems)
 
 
 def test_the_parser_recovers_the_real_workflows_own_step():
