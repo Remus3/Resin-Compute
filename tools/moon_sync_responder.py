@@ -1658,18 +1658,21 @@ def _run_once(
     }
 
     agreed, why = counterparty_agreed(DEFAULT_CONFIRMATION, now=started)
+    # GATE:counterparty-agreement
     if bounds.armed and not agreed:
         print(f"responder: HOLDING - {why}")
         result["reasons"] = [why]
         result["termination"] = "unconfirmed"
         return result
 
+    # GATE:trial-window
     if not window_open(bounds, now=started):
         print("responder: the agreed trial window is not open - nothing done")
         result["reasons"] = ["the trial window is not open"]
         result["termination"] = "window"
         return result
 
+    # GATE:hop-budget
     if not within_budget(inbox, bounds):
         print(f"responder: hop budget of {bounds.max_hops} reached - nothing done")
         result["reasons"] = [f"hop budget of {bounds.max_hops} reached"]
@@ -1687,6 +1690,7 @@ def _run_once(
         since=bounds.window_opens,
         deprioritise=bounced_notes(DEFAULT_REFUSALS, agreement_id(DEFAULT_CONFIRMATION)),
     )
+    # GATE:empty-queue
     if not queue:
         result["termination"] = "empty"
         return result
@@ -1694,6 +1698,7 @@ def _run_once(
     note = queue[0]
     result["note"] = note.name
     dests = destinations_for(note, roots)
+    # GATE:no-destination
     if not dests:
         result["reasons"] = ["no opted-in destination for this sender"]
         # RECORDED, not left "unknown". A cycle that fell out here silently was
@@ -1702,6 +1707,7 @@ def _run_once(
         result["termination"] = "no-destination"
         return result
 
+    # GATE:armed
     if not bounds.armed:
         print(f"responder: DISARMED. Would answer {note.name}")
         for dest in dests:
@@ -1711,6 +1717,7 @@ def _run_once(
         return result
 
     trusted, why = workspace_trust(REPO_ROOT)
+    # GATE:workspace-trust
     if not trusted:
         # LOUD, not degraded. A session spawned into an untrusted workspace
         # runs with permissions it thinks it has, produces a poorer draft or
@@ -1725,6 +1732,7 @@ def _run_once(
         return result
 
     prompt = build_prompt(note, bounds)
+    # GATE:spawn-failure
     try:
         draft = (spawn or _spawn_headless)(prompt, bounds)
     except Exception:  # noqa: BLE001 - a responder must survive ANY session failure
@@ -1745,6 +1753,10 @@ def _run_once(
 
     reasons = validate_draft(draft, bounds)
     reply_name = _reply_name(note)
+    # NAMED FOR THE SITE, NOT FOR ONE OF ITS OUTCOMES. This branch emits BOTH
+    # `exhausted` and `refused`, and conflating those two is the exact thing
+    # the prose below forbids, so the tag may not be called `draft-refused`.
+    # GATE:draft-verdict
     if reasons:
         result["reasons"] = reasons
         # EXHAUSTED IS THE PREDICTED OUTCOME AND IS RECORDED SEPARATELY. A
@@ -1753,6 +1765,7 @@ def _run_once(
         # malfunction, and conflating it with a genuine refusal would hide the
         # one distinction disposition (i) exists to preserve.
         empty_only = all("empty" in r for r in reasons)
+        # GATE:termination-kind
         result["termination"] = "exhausted" if empty_only else "refused"
 
         # FAIL CLOSED BEFORE ANYTHING IS WRITTEN. Every suppression below is
@@ -1764,6 +1777,7 @@ def _run_once(
         # Measured 2026-09-08: 5 cycles, 5 held files, 5 bounces delivered,
         # silently. So a refusal that cannot be RECORDED is not acted on.
         usable, why_unusable = refusals_usable(DEFAULT_REFUSALS)
+        # GATE:refusals-usable
         if not usable:
             print(f"responder: NOT HOLDING AND NOT BOUNCING - {why_unusable}")
             result["reasons"] = [*reasons, why_unusable]
@@ -1780,6 +1794,7 @@ def _run_once(
         # still lands a file. Nothing here touches `DEFAULT_ANSWERED`: answered
         # means replied to, and this is the case where it has not been.
         repeat = refusal_seen(DEFAULT_REFUSALS, note.name, reasons)
+        # GATE:repeat-hold
         if not repeat:
             result["held"] = _hold(DEFAULT_STAGING, note.name, draft, reasons, started) is not None
 
@@ -1799,6 +1814,7 @@ def _run_once(
         recorded = _remember_refusal(
             DEFAULT_REFUSALS, note.name, reasons, agreement, False, started
         )
+        # GATE:refusal-recorded
         if not recorded:
             print("responder: NOT BOUNCING - the refusal record could not be written")
             result["reasons"] = [*reasons, "the refusal record could not be written"]
@@ -1809,6 +1825,7 @@ def _run_once(
             )
             return result
 
+        # GATE:bounce-once
         if not already_bounced and bounce_capacity(DEFAULT_REFUSALS, note.name, agreement):
             sent = deliver(
                 build_bounce(note.name, reasons, result["termination"]),
@@ -1818,7 +1835,9 @@ def _run_once(
             )
             # A FAILED WRITE IS NOT RECORDED AS BOUNCED, so the next cycle tries
             # again rather than counting a bounce nobody received.
+            # GATE:bounce-write-all
             result["bounced"] = bool(sent) and all(ok for ok, _ in sent)
+            # GATE:bounce-mark
             if result["bounced"]:
                 mark_bounced(DEFAULT_REFUSALS, note.name, agreement)
 
@@ -1830,6 +1849,7 @@ def _run_once(
         # because the whole document is re-serialized per append the bytes
         # written grew quadratically. The invocation log still records the fire,
         # which is where "this cycle happened and did nothing" belongs.
+        # GATE:zero-growth
         if repeat and already_bounced and not result["held"] and not result["bounced"]:
             return result
     else:
@@ -1838,6 +1858,10 @@ def _run_once(
         )
         # Our own copy, so a cold session sees both halves of the conversation.
         deliver(draft, reply_name, [inbox], source=source)
+        # THE `bool(written)` TERM IS THE GUARD, not decoration: `all([])` is
+        # vacuously True, so without it a delivery to zero destinations would
+        # report itself delivered.
+        # GATE:delivery-write-all
         result["delivered"] = all(ok for ok, _ in written) and bool(written)
         result["actions"] = ["A5"]
         result["termination"] = "delivered"

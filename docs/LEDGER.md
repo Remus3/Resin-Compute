@@ -12,6 +12,99 @@ now.
 
 ---
 
+## 2026-09-09 - The responder gates are tagged, and three lenses found three defects no two of which overlapped
+
+Files: `tools/moon_sync_responder.py` (comments only),
+`tests/test_responder_gate_census.py` (new, 43 arms),
+`tests/test_conftest_reason_fixture.py` (new, 21 arms), `ROADMAP.md`.
+Measured at the merge: `pytest tests` 1759 passed 1 skipped, `agents/pity_engine`
+80 passed, `node --test` 52 pass 0 fail, and licence, docs, qa_companion, ruff,
+mypy and the headless dry run all exit 0.
+
+**STEP ONE OF THE GATE CENSUS IS DONE: 18 `# GATE:` tags, up from 0.** The
+responder change is COMMENTS ONLY and that is proven rather than asserted -
+`ast.dump` of the tagged file equals `ast.dump` of the file at `817b31b`. The
+mutation runner and the registry stay open, in that order.
+
+**THE FIRST BUILD'S RULE WAS SYNTACTIC AND NOBODY HAD DECIDED IT.** Measured on
+the candidate: `_run_once` holds 14 `ast.If` and 1 `ast.Try`, and
+`sorted(tag_line + 1)` equalled that set exactly. So "tag every if and try" was
+the rule actually applied, the count of 15 was an artifact of the shape, and
+three sites that bind the cycle went untagged because of their SYNTAX - the
+`exhausted`/`refused` `IfExp` that the responder's own prose calls the one
+distinction that must not be conflated, and the two `BoolOp` writes setting
+`bounced` and `delivered`.
+
+**THE NAME GRAMMAR FAILED OPEN, and the repair was a missing PARSE step.** One
+strict regex silently ignored every near miss: a space after the colon, an
+uppercase name, an underscore, an empty name, a trailing comment. A real new
+gate tagged `# GATE: draft-skip` passed at exit 0 - the author had tagged a
+gate and the census saw nothing, counted nothing, raised nothing. A permissive
+detector now finds every line trying to be a tag, a strict grammar validates
+the name, and a line the first accepts and the second rejects RAISES naming
+file and line. Widening the one regex was available and was refused; this tree
+has been defeated three times by widening a matcher.
+
+**THEN THE REPAIR ITSELF WAS REFUTED, and that is the entry.** Accepting a bare
+`ast.BoolOp` to catch those three sites was a WIDENING WEARING A PARSE FIX'S
+CLOTHES. It bought 4 false sites - `inbox or DEFAULT_INBOX`, `bounds or
+Bounds()`, the `roots` conditional and `spawn or _spawn_headless` - and a tag
+parked on three of them passed clean. A strictly tighter rule with identical
+coverage and zero false sites had been available and not taken:
+
+    broad  If/Try/IfExp/BoolOp                        22 spots   false 4
+    tight  If/Try, or IfExp/BoolOp inside an Assign
+           whose target is a Subscript                18 spots   false 0
+
+`_ACCEPTED_SHAPES` is gone; the decision is a named predicate,
+`_is_a_consult_site`, so the rule reads as the judgement it is. Verified
+independently of its author: parking a tag on `inbox = inbox or DEFAULT_INBOX`
+is exit 1, 7 failed under the shipped rule and passed clean under the previous
+one, with the responder restored to sha256 `02469d15` afterwards.
+
+**THREE LENSES, THREE DEFECTS, NO OVERLAP.** A referent lens found the
+syntactic rule; a mechanism lens found the fail-open grammar; a
+did-the-repair-buy-its-cost lens found the widening. None could have found
+another's. Two identical skeptics would have found one of the three.
+
+**THE HOLE THAT REMAINS IS DISCLOSED, NOT DISCOVERED LATER.** Nothing
+enumerates the gates that OUGHT to exist, so a new gate added to `_run_once` and
+never tagged is invisible and every arm stays green. Measured, not feared. Two
+ceiling items were also FALSE ABOUT THEIR OWN LIMITS and are corrected: one
+claimed an unclassifiable shape raises, false for the whole name-grammar class;
+one claimed a tag in any other module is reported, when no second file is ever
+opened, so such a tag is silently ignored - the exact words that wording denied.
+
+**A SECOND SLICE WAS DISPATCHED AGAINST A DEFECT THAT DID NOT EXIST, AND THE
+DISPATCH PROMPT WAS THE DEFECT.** `ROADMAP.md` said the `git_unusable_reason()`
+byte-identity contract was "GUARDED BY NOTHING". Truthful at `52cc874`, CLOSED
+at `e714b35` which added the `HAND_TYPED_*` census, STRENGTHENED at `dda913a`
+which added the five-shape delimiter control - and the row was never updated,
+while `docs/LEDGER.md` recorded the closure. The two documents disagreed and the
+hand-off propagated the wrong one. Two agents then got the provenance wrong in
+OPPOSITE directions, the merger crediting `e714b35` alone and a builder
+crediting `dda913a` alone, which is why both commits are now named in the row.
+
+**THAT SLICE STILL MERGED, BY ADJUDICATION AND ON MEASUREMENT RATHER THAN
+ARGUMENT.** The ruling is MERGED-REDUCED and is recorded in `ROADMAP.md` as an
+adjudicated call. 32 mutants of `tests/conftest.py` through 64 invocations found
+a 12-mutant MARGINAL KILL SET that the incumbent lets pass: the `no output`
+fallback, the stdout leg of the detail chain, all four category tokens
+respelled, three 128-branch detail mutants the incumbent's census cannot reach
+because it never drives 128 with a blank stderr, and exit 0 under stream noise.
+Four functions carrying zero marginal kills were dropped with the duplicated
+delimiter tuple, 30 arms down to 21. The merger spot-checked one kill directly:
+`"no output"` to `"no output at all"` gives incumbent 22 passed exit 0 and the
+new module 2 failed exit 1. The COMMON-MODE RISK is named rather than implied:
+three hand-typed transcriptions of one wording now exist and not one derives
+from a consumer's stated requirement, so a single wrong premise about what the
+consumers need leaves all three green.
+
+**AN INSTRUMENT LIED TO THE MERGER TOO.** `grep -c '[^\x00-\x7F]'` does not mean
+what it looks like - the shell does not expand those escapes into a range - and
+it reported 1785 non-ASCII lines in a file that has zero non-ASCII bytes. Byte
+checks are done in Python here, via `read_bytes()`.
+
 ## 2026-09-09 - Three residuals closed, and a control probe caught what five refuters did not
 
 Files: `tests/test_prepush_skip_reporting.py`,

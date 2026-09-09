@@ -641,15 +641,36 @@ version. What follows is everything the scaffold deliberately did not do.
   THE PREVIOUS HAND-OFF'S FIGURE WAS SCOPED WRONG. "Injecting exit 7 gives 29
   passed, 4 skipped, EXIT=0" is TRUE WITHIN ONE FILE and FALSE SUITE-WIDE.
 
-- **OPEN, and it is the residual of the slice above.** The claim that
-  `git_unusable_reason()`'s reason strings survived the refactor byte-identical
-  is TRUE TODAY - measured across 15 returncode shapes and 5 exec errors with
-  the old and new module loaded side by side in one process, ZERO differing
-  bytes - and GUARDED BY NOTHING. Changing the brackets from `(detail)` to
-  `[detail]` or `<detail>` leaves all 14 arms green, because the arm advertising
-  byte-identity CALLS the classifier it grades: both sides of its `==` are one
-  code path. Closing it needs a HAND-COPIED expected-reason fixture that does
-  not read its answer out of the file it audits.
+- **CLOSED, AND THE ROW ABOVE IT WAS STALE FOR TWO SESSIONS - the staleness is
+  the entry.** This row previously read OPEN and said the byte-identity contract
+  was "GUARDED BY NOTHING" and that a bracket change "leaves all 14 arms green".
+  Both sentences were TRUE WHEN WRITTEN and FALSE when read. Provenance, from
+  `git log -S` against `tests/test_conftest_git_gate.py` rather than from memory:
+
+    - authored at `52cc874`, truthful at that commit;
+    - CLOSED at `e714b35`, which added `HAND_TYPED_NOT_RUNNABLE`,
+      `HAND_TYPED_NOT_A_REPOSITORY` and `HAND_TYPED_DID_NOT_ANSWER` to
+      `tests/test_conftest_git_gate.py`. THE ROW WAS NOT UPDATED.
+    - STRENGTHENED at `dda913a`, which added the five-shape
+      `WRONG_DELIMITER_SHAPES` control to the same file. Still not updated.
+
+  MEASURED ON THE SHIPPED TREE at `817b31b`, control first: the incumbent file
+  is 22 passed exit 0, and the mutant `({detail})` to `[{detail}]` in the 128
+  branch is 3 failed 19 passed exit 1. The row's own example mutant dies.
+
+  WHY IT MATTERS MORE THAN ITS SUBJECT. `docs/LEDGER.md` recorded the closure at
+  `dda913a` while this file still said OPEN, so the two documents disagreed and
+  the hand-off propagated THIS one. A whole slice was dispatched against a
+  defect that did not exist. The merger dispatched it, so the DISPATCH PROMPT
+  was the defect, not the builder - the same lesson this tree recorded one
+  session earlier and did not apply. A residual row is a claim with a
+  measurement date, and it decays; re-probe a row before spending a slice on it.
+
+  TWO AGENTS GOT THE PROVENANCE WRONG IN OPPOSITE DIRECTIONS, which is why the
+  commits are named here. The merger credited `e714b35` alone; a builder
+  credited `dda913a` alone. The fixture is `e714b35`, the delimiter control is
+  `dda913a`, and neither agent had both until the pickaxe was run against the
+  file rather than against the tree.
 
 - **HALF-CLOSED 2026-09-09 by commit `e714b35`, and ONE CLAIMED CLOSURE IS
   FALSE.** The adjudicated call that keeps `tests/conftest.py`'s non-128 SKIP
@@ -742,57 +763,78 @@ version. What follows is everything the scaffold deliberately did not do.
   `tests/conftest.py` exists to serve is already red before any of this
   session's work.
 
-- **OPEN, RESHAPED 2026-09-09, and the reshaping is the point. THE MISSING
-  ARTIFACT IS THE MUTATION RUNNER, NOT THE REGISTRY.** Measured here and
-  independently re-probed: `tools/moon_sync_responder.py` has **47** defs, not
-  48; `# GATE:` tags in the file = **0**; and source-mutating arms across
-  `tests/test_moon_sync_responder.py` and `tests/test_responder_task_argv.py` =
-  **0** - the single `.replace()` in the latter mutates task XML, not the
-  responder source. So building the four machine-checked companions FIRST would
-  ship a VACUOUSLY GREEN apparatus: needle-uniqueness and mutates-this-gate would
-  each have zero inputs, and every registry tuple would be empty. That is a
-  decorative guard by construction, so it was NOT built this session.
+- **STEP ONE OF THREE CLOSED 2026-09-09. THE GATES ARE TAGGED AND THE CENSUS
+  GUARDS THEM. The mutation runner and the registry remain OPEN, and the order
+  is still strictly sequential.** `tools/moon_sync_responder.py` carries **18**
+  `# GATE:` tags, up from 0, and `tests/test_responder_gate_census.py` guards
+  them. The responder change is COMMENTS ONLY, proven not asserted: `ast.dump`
+  of the tagged file equals `ast.dump` of the file at `817b31b`.
 
-  Correct order, and it is strictly sequential: tag the gates, then build the
-  mutation runner, THEN the registry and its companions. The first
-  decomposition attempted had two slices both writing
-  `tests/test_moon_sync_responder.py`, so DISJOINTNESS FAILED and they cannot
-  run in parallel. Smallest slice with standalone value: tag the gates and land
-  even three mutants that disable a gate at its OWN call site - that alone makes
-  RC's finding checkable here. Honest cost: too large for one session.
+  THE REFERENT IS RECORDED AS AN ADJUDICATED CALL, NOT AN OPERATOR DECISION,
+  and it is overturnable by reading this entry and changing the predicate
+  `_is_a_consult_site` in the census module. It is a PREDICATE and not a set of
+  node types, and that is itself the third defect's repair rather than a
+  detail - see below. THE BROAD READING WON: a gate is ANY consult site inside
+  `_run_once` whose value binds the cycle, whatever syntax carries it. The
+  NARROW reading - only statement-level branches count - was what the first
+  build actually shipped, and it shipped a measurable hole rather than a
+  judgement. Measured on that build:
 
-  A ceiling to carry rather than discover twice: the mutates-this-gate companion
-  as specified uses a bounded TEXT WINDOW, which is not an AST statement and
-  cannot tell code from a comment or string inside the window. An AST version IS
-  feasible - `ast.parse`, walk to the `If`/`Try` whose `lineno` is the tagged
-  line plus one, require `lineno <= needle_line <= end_lineno` - at no dependency
-  cost. Prefer it; keep the window only as a fallback.
+      _run_once:  ast.If = 14   ast.Try = 1   tags = 15
+      sorted(tag_line + 1) == sorted(If lines + Try lines)   ->   True
 
-  "Gate" does have an unambiguous referent here, supplied by the file's own
-  regression prose at `tests/test_moon_sync_responder.py:927`: the consult site
-  inside `_run_once` where a predicate's value binds the cycle, as distinct from
-  the predicate function itself.
+  The rule applied was therefore SYNTACTIC - tag every if and try - so the 15
+  was an artifact of the shape and "each tag marks a gate" was never a decision
+  anybody made. Three sites that bind the cycle were untagged BECAUSE OF THEIR
+  SYNTAX: the `exhausted`/`refused` `IfExp`, which the responder's own prose
+  calls the one distinction that must not be conflated, and the two `BoolOp`
+  writes that set `bounced` and `delivered`.
 
-  Previous framing, kept because the consensus it records still stands.
-  It has ZERO `# GATE:` tags and NO runner spec, so RC's finding that two of
-  its 26 gates had no mutant on the gate's OWN call site cannot yet be checked
-  here. Consensus asked in `moon_sync_inbox` 2026-09-08-2155 and narrowed to
-  RSC and RC on 2026-09-08-2204 by operator ruling; CS, LW and LL are on
-  ORDERED STANDBY and their silence is NOT dissent. Agreed with RC: propagate
-  the SHAPE - tagged call sites, a per-gate registry, a mutant on each gate's
-  own call site with the needle count asserted == 1 BEFORE mutation - and never
-  a repo's runner file. Carry RC's measured trap: `# GATE:measure` is a PREFIX
-  of `# GATE:measure-cap`, so a census must match the CAPTURED GROUP, never the
-  literal.
+  THREE REFUTERS ON THREE DISTINCT LENSES FOUND THREE DEFECTS, and no two of
+  them could have found each other's. That is the session's own evidence for
+  distinct lenses over N identical skeptics.
 
-  THE SECOND CENSUS HAZARD, added 2026-09-09 from the inbox triage, and it runs
-  in the OPPOSITE direction to the one above. A naive per-tag `if tag in line`
-  lookup matches the `reason-scrub` line when the tag is `scrub`, because that
-  one is a SUFFIX rather than a prefix. Two hazards, opposite directions, and
-  one discipline answers both: match the captured group and compare it for
-  EQUALITY, never containment. This is a PRECONDITION of the census slice on
-  this row rather than a row of its own - a census run without it is wrong in
-  both directions at once, and both were reported by RC rather than found here.
+  DEFECT ONE, referent lens: the syntactic rule above.
+  DEFECT TWO, mechanism lens: the tag NAME GRAMMAR FAILED OPEN. A single strict
+  regex silently ignored every near miss - `# GATE: name` with one space after
+  the colon, an uppercase name, an underscore, an empty name, a trailing
+  comment. A real new gate tagged `# GATE: draft-skip` passed at exit 0. The
+  repair is a MISSING PARSE STEP AND NOT A WIDER MATCHER, which is this tree's
+  standing lesson after three defeats on one derivation: a PERMISSIVE detector
+  finds every line trying to be a tag, a STRICT grammar validates the name, and
+  a line the first accepts and the second rejects RAISES naming file and line.
+  DEFECT THREE, and it refuted the REPAIR rather than the original: accepting a
+  bare `ast.BoolOp` to catch those three sites was itself A WIDENING WEARING A
+  PARSE FIX'S CLOTHES. It bought 4 FALSE SITES - the dependency-injection
+  defaults `inbox or DEFAULT_INBOX`, `bounds or Bounds()`, the `roots` `IfExp`
+  and `spawn or _spawn_headless` - and a tag parked on three of them passed
+  clean. A strictly tighter rule with IDENTICAL coverage and ZERO false sites
+  was available and had not been taken: an `If` or a `Try`, or an `IfExp` or
+  `BoolOp` inside an assignment whose target is a subscript, which is to say a
+  value computed INTO the cycle's own result. Re-measured by the merger:
+
+      broad  If/Try/IfExp/BoolOp   22 spots   false: 4
+      tight  the rule above        18 spots   false: 0   covers all 18 tagged
+
+  THE TIGHTENING SHIPPED. `_ACCEPTED_SHAPES` is gone and the decision is now a
+  named predicate, `_is_a_consult_site`, so the rule reads as the judgement it
+  is rather than as a tuple of node types. Verified by the merger independently
+  of its author: parking a tag on `inbox = inbox or DEFAULT_INBOX` passed clean
+  under the broad rule and is exit 1, 7 failed under the shipped one, with the
+  responder restored to sha256 `02469d15` afterwards.
+
+  THE HOLE THAT REMAINS IS DISCLOSED RATHER THAN DISCOVERED LATER. Nothing
+  enumerates the gates that OUGHT to exist, so a NEW gate added to `_run_once`
+  and never tagged is invisible and every arm stays green. That is measured,
+  not feared, and it is the reason the mutation runner is step two rather than
+  an optional companion.
+
+  STILL OPEN, unchanged in order: build the mutation runner, THEN the registry
+  and its companions. Building the companions first still ships a vacuously
+  green apparatus. The two census hazards below are now CLOSED IN CODE - the
+  strict pattern anchors the whole line, captures the name, and every
+  comparison is between captured groups for EQUALITY - but they are kept in
+  this entry because a later rewrite can reintroduce either one.
 
 - **OPEN, unverified here, offered by RC as a shape to check rather than a
   finding about this tree.** `mkdir(parents=True)` under a parent that is a
