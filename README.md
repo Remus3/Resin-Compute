@@ -369,6 +369,9 @@ Resin-Compute/
   CLAUDE.md                        agent context, hard rules, session workflow
   ROADMAP.md                       open work, newest priorities first
   NEXT_SESSION_PROMPT.md           operator hand-off, republished each session
+  CONTRIBUTING.md                  how to run the gates, and what may not be vendored
+  SECURITY.md                      private vulnerability reporting, no mailto
+  CODE_OF_CONDUCT.md               Contributor Covenant 2.1, transliterated to ASCII
   LICENSE                          GPL-3.0-or-later, verbatim and hash-pinned
   NOTICE                           copyright line and the game-data disclaimer
   ruff.toml                        lint config, ported from Sibling-C
@@ -390,6 +393,11 @@ Resin-Compute/
     pre-push                       both suites
 
   .github/
+    PULL_REQUEST_TEMPLATE.md       the gate checklist a PR must have run
+    ISSUE_TEMPLATE/
+      bug_report.md                asks for the measured output, not a guess
+      feature_request.md           asks what it would cost the licence posture
+      config.yml                   contact links shown beside the templates
     workflows/
       ci.yml                       lint, py_compile, mypy, both suites, smoke
       docs-guards.yml              fires on exactly what ci.yml declines
@@ -404,6 +412,7 @@ Resin-Compute/
     resin.py                       resin regeneration, caps, condensed, fragile
     domains.py                     weekday rotation and weekly boss resets
     ports.py                       the single owner of this project's port block
+    provenance.py                  the row-scoped receipt every data/ value carries
 
   agents/
     pity_engine/                   PityEngine - pure deterministic forecaster
@@ -445,8 +454,11 @@ Resin-Compute/
   ops/                             supervision and operational state
     supervisor.py                  watchdog, restart trigger, bounded backoff
     health.py                      the health.json contract
+    check_task_liveness.py         a task State string is not proof it still fires
     ResinCompute-Supervisor.xml    hidden ONLOGON task, elevated, no time limit
     install_scheduled_task.ps1     registers it - removal is in Quickstart 5
+    ResinCompute-Responder.xml     the cross-repo responder's own task definition
+    install_responder_task.ps1     registers that one, for a single bounded window
     runtime/                       health.json is written here, gitignored
     loop/                          shared cross-repo concurrency governor
       slots.py                     BYTE-IDENTICAL across three repos, never edit alone
@@ -465,6 +477,14 @@ Resin-Compute/
   tools/
     precommit_gate.py              banned-glyph and net-new-ruff gate
     publish_next_session.py        publishes the hand-off backup
+    stop_claim_gate.py             grades a session REPORT against its transcript
+    caveman_default.py             SessionStart hook, declares the output dialect
+    caveman.md                     the dialect's skill body, byte-shared with siblings
+    moon_sync_responder.py         answers a cross-repo note with nobody here
+    wish_authkey.py                scan, capture and pull Wish History, credential-aware
+    first_run_capture.py           watches for the unrepeatable first-launch artefacts
+    screen_capture.py              the screenshot half of that same lane
+    capture_supervisor.py          keeps the capture lane alive, reports in a file
 
   data/
     fixtures/                      hand-authored fixtures, nothing vendored
@@ -475,6 +495,7 @@ Resin-Compute/
     LEDGER.md                      append-only completion history, newest first
     GOAL_SPEC_SEED_TEAM.md         the seed-team goal, every claim stamped
     LICENSE_NOTES.md               inbound posture, read before adding a source
+    PROVENANCE_SCHEMA.md           the receipt contract every data/ value carries
     adr/                           architectural decisions, indexed
 
   tests/                           the application suite
@@ -602,6 +623,24 @@ User-Agent, honours the `ttl` on every response, and refuses bulk UID enumeratio
 - **Live-state-first.** Derive state from the current response only.
 - **Never surface a raw API or error string** to a user-facing surface. Catch it,
   render a friendly degraded state, log the raw error.
+
+## Contributing, security and conduct
+
+Three separate documents, because they answer three separate questions.
+
+- **CONTRIBUTING.md** - how to work on this. Install the hooks FIRST; a fresh
+  clone runs none. Then the gates, the ASCII rule, the TDD loop, the commit
+  message shape, and the rule against vendoring game data, which is the one a
+  well-meaning pull request is most likely to break.
+- **SECURITY.md** - how to report a vulnerability, privately. Use the
+  repository's Security tab and "Report a vulnerability" rather than a public
+  issue. It also names the two properties that look alarming in a scan and are
+  deliberate: the hidden elevated logon task, and the Wish History credential
+  tool.
+- **CODE_OF_CONDUCT.md** - Contributor Covenant 2.1, transliterated to ASCII
+  like everything else here.
+
+Issue and pull request templates live under `.github/`.
 
 ## Licence
 

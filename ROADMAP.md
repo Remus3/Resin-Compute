@@ -11,28 +11,114 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **HALF-CLOSED 2026-09-08, and the other half is the NEXT session's first
-  measurement.** The runtime invocation log under `ops/runtime/`, gitignored and
-  so named in prose, now records which hook fired: commit `3964544` gives
-  `SessionStart` and `UserPromptSubmit` distinct `--source` labels. A real
-  `UserPromptSubmit` fire was measured writing `userpromptsubmit` on both of its
-  lines, exit 0, which is this tree's first end-to-end proof that a hook delivers
-  argv. **`SessionStart` is still unmeasured and this change made it
-  argv-dependent for the first time.** Read that log FIRST in the next cold
-  session. A `sessionstart` pair closes it. No new pair means the hook died, and
-  the recovery is a hand edit of `.claude/settings.json`, which needs no working
-  hook. Whether it survives `/clear` remains untested either way.
+- **CLOSED 2026-09-08 by the cold-boot measurement the previous session left as
+  its first instruction.** The runtime invocation log under `ops/runtime/`,
+  gitignored and so named in prose, records which hook fired: commit `3964544`
+  gives `SessionStart` and `UserPromptSubmit` distinct `--source` labels. The
+  prior half was a real `UserPromptSubmit` fire writing `userpromptsubmit` on
+  both of its lines. `SessionStart` carried no flag before that commit, so the
+  commit made it argv-dependent for the first time, on the exact event the log
+  exists to prove. The next cold session wrote a `sessionstart` pair, both
+  columns, reaching `reported` and not merely `start` - so the hook ran to
+  completion rather than only to entry. BOTH hooks deliver argv on this machine.
+  Recorded here because it was the open question, not because a passing hook is
+  news.
 
-- **OPEN, SIBLING OF THE SLICE ABOVE, SAME ROOT CAUSE, LEFT UNFIXED
-  DELIBERATELY.** `tools/moon_sync_responder.py:1318,1324,1326` hardcodes the
-  label `run_once` for BOTH the scheduled task and a manual run, so the responder
-  invocation record cannot separate its callers either - 48 rows, one label.
-  Worse, `grep -n "environ\|getenv\|RESINCOMPUTE" tools/moon_sync_responder.py`
-  returns nothing: it has no env routing at all, unlike `scripts/watch_inbox.py`,
-  so the subprocess-isolation fix that stopped a suite writing into the
-  operator's live record was never carried to it. Found by an adversary on the
-  scope-and-siblings lens. It was scoped out to keep the slice's write-list
-  disjoint, which is a reason to file it, not a reason it is closed.
+  Second fact from the same reading, unpredicted: a `userpromptsubmit` pair
+  fired one second after the `sessionstart` pair, from the same cold prompt.
+  Both hooks fire on a cold session start, in that order. The distinct labels
+  are what make them separable at all - under one shared label the pair reads as
+  a single hook firing twice, which is what the log said for every earlier line.
+
+- **OPEN, AND IT IS THE REASON THE ITEM ABOVE COULD NOT CLOSE `/clear`.** The
+  `--source` flag as wired hardcodes ONE LITERAL STRING PER EVENT, so the log
+  records which HOOK fired and never which SOURCE the harness fired it from.
+  The harness distinguishes `startup`, `clear`, `compact` and `resume`; the
+  wiring collapses all four onto `sessionstart` and discards the difference.
+  So a cold-boot `sessionstart` pair is not evidence about `/clear` survival and
+  cannot be made into evidence by taking more cold boots - the instrument does
+  not have the resolution. Closing it means reading the harness's own source
+  value rather than restating a constant we chose, which is the same defect
+  class as a shape arm pinning format instead of value. Filed rather than built
+  on operator instruction 2026-09-08, and it touches `scripts/watch_inbox.py`
+  and `.claude/settings.json`, so it seams with any doc gate that grades quoted
+  hook commands.
+
+- **DONE 2026-09-08, with a remainder disclosed rather than closed.**
+  `tools/moon_sync_responder.py` now carries the caller label and the runtime
+  override, proven by `tests/test_moon_sync_responder.py`. Measured across a
+  real process boundary rather than inferred: the environment outranks the
+  `--source` flag, the flag outranks the fallback. The env-routing property went
+  from absent to present and the hardcoded `run_once` call sites went to none;
+  re-measure with the greps rather than trusting either number here.
+  `ops/ResinCompute-Responder.xml` gained the matching `--source scheduledtask`
+  at the merge, because the builder correctly refused to write outside its
+  declared list and the argv element was the one line that made the fix real.
+
+- **OPEN, AND IT IS THE OVERSTATED HALF OF THE ITEM ABOVE.** The isolation arm
+  is named for enforcing that nothing is written outside the override, and it
+  does not enforce that. An adversary broke it with a planted mutant that leaked
+  two files while the arm reported a pass. Two causes, both measured:
+  **NTFS reports a DIRECTORY `st_size` as 0 whatever it contains**, so a file
+  created inside one of the watched directories is invisible to a snapshot built
+  from existence plus size; and any path that is not one of the `DEFAULT_`
+  constants is not watched at all, which includes the sibling inbox directories
+  that `deliver()` really writes to. What IS measured and does hold: the test
+  suite does not reach the operator's live responder record, checked twice with
+  the real tree byte- and mtime-identical either side. So the protection is real
+  for the runtime directory and ABSENT for live mail. Fix the arm or rename it -
+  an arm whose name claims more than it checks is worse than no arm, because the
+  next reader stops looking.
+
+- **OPEN. Nothing grades the scheduled task's argv against the code it calls.**
+  The flag was added to `ops/ResinCompute-Responder.xml` by hand at the merge and
+  no test asserts it is there, so the same drift that produced the one-label
+  record can silently return by an edit to that file alone. This is the identical
+  defect class as the doc-versus-settings gate: a tracked artifact quoting an
+  invocation that has moved on. Deliberately not written by the merger, who would
+  then have been grading their own arm.
+
+- **OPEN, HIGHEST OF THE TESTING ITEMS, AND IT IS THE THIRD TIME THIS EXACT
+  SHAPE HAS BEEN CAUGHT.** The read-only guard over `ops/check_task_liveness.py`
+  was rewritten on 2026-09-08 from a seven-token denylist to an inverted
+  allowlist plus a whole-file mutating-verb scan. It is a real improvement and it
+  still does not do what its name says. An adversary defeated it DESTRUCTIVELY,
+  not rhetorically: **PowerShell aliases carry no hyphen, and the scan matches a
+  hyphenated Verb-Noun shape.** `ri` is `Remove-Item`. Planted in the probe
+  template, it ran, a canary file was deleted from disk, and the file's own suite
+  reported every arm passing with exit 0. Also surviving both nets: `del`, `rm`,
+  `sc`, `kill` which is `Stop-Process`, `ni`, a verb assembled by string
+  concatenation, a shell-out through `cmd /c`, and a `.Delete()` method call.
+
+  Second defect in the same arm, and it is self-contradicting: the whole-file
+  regex carries NO `re.IGNORECASE`, while the comment directly above it asserts
+  that a lowercase spelling runs exactly as well as a capitalised one. Lowercase
+  `stop-process`, lowercase `unregister-scheduledtask` and uppercase `TASKKILL`
+  all passed. The three non-vacuity controls are genuine value assertions rather
+  than shape arms, and they still could not see either hole, because every
+  injection they exercise is capitalised ASCII. A control that only ever plants
+  the case the regex handles cannot discover that the regex is case-sensitive.
+
+  Third, separate, and about portability rather than about verbs: the ambiguity
+  arm skips when it cannot discover a duplicated task name, and a discovery that
+  FAILS - non-zero return, empty stdout - is indistinguishable from a machine
+  that legitimately has no duplicate. Proved by neutering discovery: the mutant
+  survived and the run reported a pass with one skip. On CI or a fresh clone that
+  arm asserts nothing at all, which is the zero-out-of-zero reading this tree has
+  a standing rule against.
+
+  Not fixed in the session that found it, deliberately: the merger had already
+  taken the arms into the tree, and an author does not grade the replacement for
+  their own merge.
+
+- **OPEN, AND IT IS A LIMIT OF THE GATE SHIPPED THE SAME DAY.** The
+  hook-command gate in `tests/test_docs_hook_commands.py` grades a quoted command
+  only when it carries a long flag, or when the surrounding claim block spells
+  the literal settings path. An adversary measured the consequence: reword the
+  sentence to say "the hook declared for this tree" instead of naming the file,
+  and the identical stale quotation goes silent. The real defect was caught
+  partly by the luck of how it was phrased. Its live enforcement surface is five
+  citations in one of the tracked documents.
 
 - **OPEN. Nothing grades a document against `.claude/settings.json`.**
   `docs/INBOX_TRIAGE_2026-09-07-0710.md` quotes both hook commands without the
@@ -40,9 +126,22 @@ version. What follows is everything the scaffold deliberately did not do.
   store; it does not catch a quoted command that no longer matches the wiring.
 
 
-- **OPEN, OPERATOR DECISION, HIGHEST PRIORITY. 89 of 91 commits in this PUBLIC
-  repository carry the operator's personal email in the author field.** Measured
-  2026-09-07 against `origin/main`. A sibling redacted the same string from a
+- **OPEN, OPERATOR DECISION, HIGHEST PRIORITY. The overwhelming majority of
+  commits in this PUBLIC repository carry the operator's personal email in the
+  author field.** Do not cite a stored number here - a commit count goes stale
+  the moment anyone commits, and the figure that stood in this item until
+  2026-09-08 had already drifted. Re-measure instead, and the tally is three
+  buckets rather than two:
+
+  ```
+  git rev-list --count HEAD
+  git log --format='%ae' | sort | uniq -c | sort -rn
+  ```
+
+  Read 2026-09-08 as a dated reading and not a promise: 90 personal, 6 platform
+  forwarding, 2 assistant, of 98. The prior entry said 89 of 91 as of
+  2026-09-07, which was both a smaller denominator and a two-bucket split that
+  hid the forwarding address entirely. A sibling redacted the same string from a
   single note hours earlier and treated it as the operator's identity. Nothing
   has been done: a history rewrite on a public remote is an operator decision,
   and a sibling measured four separate traps doing one - a mirror clone fetches
@@ -693,6 +792,39 @@ version. What follows is everything the scaffold deliberately did not do.
   character chain reaches ascension phase 4 because the talent gate demands it
   rather than because level 60 does. The scheduler has no dating layer yet, so
   `ScheduledTask.earliest_day` is a day offset and nothing turns it into a date.
+
+- **OPEN, SIX ITEMS FROM THE 2026-09-08 INBOX TRIAGE.** The full bucketing is in
+  `docs/INBOX_TRIAGE_2026-09-08-1834.md`; these are the applicable-and-not-done
+  rows, which are the only bucket that belongs here. An untriaged file is
+  indistinguishable from a rejected one, so the other three buckets are recorded
+  there rather than dropped.
+  1. **This roadmap claims twice that our `refs/pull` zero has "a positive
+     control" and names no subject.** A sweep of the roadmap, the ledger and the
+     README found zero named repositories and zero `ls-remote` commands behind
+     that phrase. A positive control that names nothing is the false-clean
+     pattern this tree has recorded five times, sitting in our own paperwork. A
+     sibling retracted the identical defect in its own note.
+  2. **The watcher names the tree only when the inbox is ABSENT.** Measured: run
+     relatively from a worktree it reports no inbox and names the path; invoked
+     by absolute path from that same worktree it reports the main tree's inbox
+     and names no tree at all. So the one line that would disambiguate which
+     checkout answered is printed only in the case where nothing was found.
+  3. **Outbound mail leaves ZERO trace in tracked content.** 21 note names swept
+     against every tracked file, whitespace-stripped, with a control that hit 16
+     files: no outbound note is referenced anywhere in the repository. The
+     sender-side draft store exists but is gitignored, so from a clone the
+     outbound half of every conversation is invisible.
+  4. **Two path spellings for this checkout sit in the machine config with no
+     guard.** A sibling reported them carrying disagreeing trust values; that
+     half does NOT reproduce - both read the same on 2026-09-08. The two
+     spellings remain, and nothing asserts they agree.
+  5. **A machine-authored note asserts two contradictory facts about our own
+     refusal handling.** Neither has been checked here, and the note is from the
+     counterparty whose responder is the only one that has ever delivered.
+  6. **A sibling's un-clearable-withdrawal check has still never been RUN here.**
+     Both halves exist in the code and the acknowledgement path calls them; the
+     live report-acknowledge-report sequence was correctly not performed by a
+     session with no authority to move the watermark.
 
 ## Next
 
