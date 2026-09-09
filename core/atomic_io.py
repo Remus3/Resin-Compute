@@ -18,9 +18,17 @@ temp file is created as a SIBLING of the target for exactly that reason: a temp
 in the system temp dir is usually on a different filesystem, where replace
 degrades to a copy and stops being atomic.
 
-Everything here is fail-soft. A write returns a bool and logs the raw error;
-`read_json` returns the caller's default and never raises. Per the hard rule, a
-raw exception string is never handed back to a caller.
+FAIL-SOFT HERE IS SCOPED TO OS-LEVEL FAILURE, and the scope is the load-bearing
+word. A write that the filesystem refuses returns a bool and logs the raw error,
+and `read_json` returns the caller's default and never raises - so per the hard
+rule a raw exception string is never handed back to a caller. A payload the
+ENCODER refuses is a different thing: it is a programmer error rather than a
+state of the disk, and it propagates to the caller untouched. Either way the
+temp file is removed on every failure path, including that one.
+
+That contract is checked, not merely described:
+`tests/test_core_atomic_io.py::test_an_unencodable_payload_raises_rather_than_returning_false`
+pins the raise and carries the control beside it.
 """
 from __future__ import annotations
 
@@ -87,18 +95,39 @@ def atomic_write_text(path: str | os.PathLike[str], text: str) -> bool:
 
     The bytes on disk are the caller's bytes. `newline=_NEWLINE` is what makes
     that true, and it is load-bearing rather than cosmetic - see `_NEWLINE`.
+
+    Cleanup is in a `finally`, NOT in the `except`. `Path.write_text` opens the
+    file BEFORE it encodes the payload, so a payload that cannot be encoded -
+    a lone surrogate, say - leaves a zero-byte temp behind and raises a
+    UnicodeEncodeError, which is a ValueError and not an OSError. When the
+    discard lived in the `except OSError` clause it was skipped outright and
+    the temp was orphaned. Widening that clause would have been the wrong
+    repair twice over: it would change what this function returns for a
+    non-OS failure, and it still would not cover a BaseException such as a
+    KeyboardInterrupt landing mid-write, which orphans the temp the same way.
+    A `finally` is reached without catching anything, so the OSError contract
+    below is untouched and every other exit is covered.
+
+    `published` gates the discard so it cannot fire on the success path. After
+    `replace` the temp name no longer exists, so an unconditional unlink would
+    be harmless in practice - but it would say the wrong thing about what this
+    code believes, and a later reader would have to re-derive why.
     """
     target = Path(path)
     tmp = _temp_path(target)
+    published = False
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         tmp.write_text(text, encoding=_ENCODING, newline=_NEWLINE)
         tmp.replace(target)
+        published = True
         return True
     except OSError as exc:
         _log.error("atomic_write_text failed for %s: %s: %s", target, exc.__class__.__name__, exc)
-        _discard(tmp)
         return False
+    finally:
+        if not published:
+            _discard(tmp)
 
 
 def atomic_write_json(path: str | os.PathLike[str], obj: Any) -> bool:
