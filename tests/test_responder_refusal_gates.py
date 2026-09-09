@@ -371,8 +371,9 @@ def test_a_refusal_whose_record_write_fails_delivers_no_bounce(rsp, tmp_path, mo
     so the earlier gate does not fire and control reaches this one. The write
     then fails, which is the transient class: a lock, a full disk, a directory
     that vanished between the inspection and the rename. Every suppression
-    downstream is keyed on that record, so an unrecorded refusal reads as "never
-    refused, never bounced" on the NEXT cycle too.
+    downstream is keyed on the refusals FILE at `DEFAULT_REFUSALS` - the
+    `refusals` rows and the `bounced` ledger both live in it - so an unrecorded
+    refusal reads as "never refused, never bounced" on the NEXT cycle too.
 
     WITHOUT THIS GATE the bounce goes out, and the measured cost is ONE bounce -
     not one per cycle. Measured this session, the same bed with `if not recorded`
