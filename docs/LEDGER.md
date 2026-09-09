@@ -12,6 +12,120 @@ now.
 
 ---
 
+## 2026-09-08 - One root cause in four test files, and every first repair installed a false red
+
+Files: `tests/test_watch_inbox.py`, `tests/test_line_endings.py`,
+`tests/test_hook_interpreter.py`, `tests/test_hook_gate.py`. Four disjoint
+slices, worktree isolated, each refuted by an adversary with a distinct lens
+before it was believed.
+
+THE ROOT CAUSE, the same one the previous entry chased: a condition that cannot
+distinguish CHECKED-AND-FOUND-NOTHING from COULD-NOT-CHECK. Found in 13 places
+across the four files. The hand-off's ranked list named `_real_task_names` and
+`_a_task_carrying_an_end_boundary` as the two worst; BOTH WERE ALREADY REPAIRED
+at `42e3545`, so the list was re-derived rather than trusted. A corpus is a
+snapshot.
+
+**THE FINDING THAT MATTERS MORE THAN THE COUNT: the fix has a mirror image.**
+Three of the four slices, on their FIRST repair, converted a legitimate SKIP
+into a hard FAILURE somewhere off this box. Measured, not inferred:
+
+- `test_watch_inbox.py` turned 3 green skips into 4 hard failures on every
+  Linux runner - candidate `4 failed, 101 passed` EXIT=1 against baseline
+  `99 passed, 3 skipped` EXIT=0, because `subprocess.run(["cmd", ...])` raises
+  FileNotFoundError there. A merge blocker, caught before the merge.
+- `test_line_endings.py` turned 9 legitimate skips into 16 failures in a
+  `git archive` extract, and the failure text was the file's OWN skip message.
+- `test_hook_interpreter.py` fired `pytest.fail` for a git that was NOT
+  INSTALLED, while its own non-Windows branch skipped for the identical state.
+
+THERE ARE THREE DISPOSITIONS, NOT TWO. The tool ran and found nothing, and the
+tool is not present at all, may both SKIP with a reason that is TRUE. Only the
+tool ran and broke may FAIL. This tree had already written that ruling down in
+`tests/conftest.py` before the session started - trackedness is unknowable
+without a repository, so those guards skip, they must not fail, because a red
+suite a reader cannot act on trains them to ignore red. It was re-derived the
+expensive way.
+
+**A GUARD AGAINST A FALSE SKIP LEAVES THE CAPABILITY ITSELF UNGRADED.** Deleting
+the entire Windows `sh.exe` discovery from `test_hook_interpreter.py` - the only
+reason that file runs from PowerShell - left the suite GREEN at exit 0, with 17
+arms skipping for a reason true in the mutant's world. The repair proved a
+fabricated skip could not happen and proved nothing about the real capability.
+Closed with an oracle that reaches the same fact by a DIFFERENT ROUTE.
+
+**A FILE CAN ASSERT ITS OWN HOLE OPEN.** Three times, the correct fix turned a
+SHIPPED arm red because that arm REQUIRED the over-wide behaviour:
+`test_watch_inbox.py` asserted `(1, "") -> REFUSED` in the arm named for
+refusing to report a tool failure as a refusal, and later asserted a bare
+`OSError` with `errno is None` must be UNAVAILABLE. If a repair reddens an old
+arm, read the arm before softening the repair.
+
+**TWO CEILINGS, STATED RATHER THAN PATCHED AROUND.** Both reached by building
+the mutant the fix cannot catch and watching it survive:
+
+1. NO MECHANISM IN A TEST FILE CAN GRADE THE TRUTH OF ENGLISH. A skip sentence
+   that is correctly derived, carries its evidence, varies per run and is still
+   FALSE fired 21 times at exit 0. No fourth matcher was added. What the
+   mechanism supports is the STATUS, the EVIDENCE it was derived from, and that
+   the caller carries the classifier's own string. Narrowing UNAVAILABLE to a
+   single errno bought one sentence to review by eye instead of nine machine
+   states sharing one paragraph.
+2. ONLY `git ls-files` CAN OBSERVE WHETHER `git ls-files` ENUMERATES THIS
+   CORPUS. Every neighbouring route - topology, HEAD tree, ignore rules -
+   answers a different proposition and is entitled to disagree on a legitimate
+   machine. Four rounds each grafted one on as an oracle and each produced a
+   false red one frame up: empty list, then an unreachable guard, then a GATE
+   asking the wrong question, then a GRADER asking it. The conflation was not
+   fixed, it was relocated. Closed by grading the DERIVATION - the gate launches
+   no subprocess and moves with the import-time measurement in both directions -
+   and letting topology assert only the two implications it can settle, skipping
+   with its reason otherwise.
+
+MEASURED HERE, each worth its own line:
+
+- `git rev-parse --git-dir` WALKS UP. A Download-ZIP copy extracted inside any
+  other repository passes a gate built on it while `git ls-files` legitimately
+  says nothing about this tree: 20 failed of 36, EXIT=1, zero skips.
+- A grading arm that consults the SAME predicate as the thing it grades cannot
+  see that predicate be wrong. Two agents, one shared premise.
+- NTFS: `os.stat` FOLLOWS a reparse point and reads False on a real junction;
+  `os.lstat` does not. An adversary's recommended `os.stat` check would have
+  hard-failed every junction arm on this box, and the builder refuted the
+  recommendation by measurement rather than adopting it.
+- `shutil.which` is PATHEXT-aware; `subprocess.run` uses CreateProcess, which
+  appends only `.exe`. A `git.bat` shim as the only git on PATH gave 17 failures
+  reading "raised FileNotFoundError even though git resolves on PATH".
+- An ancestor COUNT cannot name a git install root: `<install>/cmd/git.exe` is
+  2 up, `<install>/mingw64/bin/git.EXE` is 3 up. The count reaching one
+  overshoots the other into the container directory. Replaced by a positive
+  install-relative marker; unidentifiable layouts SKIP.
+- `pytest.raises(Exception)` DOES NOT CATCH `Skipped` - it derives from
+  `BaseException`. Bit three of the four files independently, once turning a
+  guard green-by-skip.
+- A CONSTANT BOUND AS A DEFAULT ARGUMENT cannot be mutated by patching the
+  constant. A depth-1 mutant was a no-op and survived vacuously until the
+  mutation was re-encoded faithfully.
+- `git config --get` returns exit 1 for an absent key AND outside a repository,
+  so it needs a second readability question; `git remote` with no remotes exits
+  0 with empty stdout, so its exit code is the whole fingerprint. The two sites
+  do NOT share a fix.
+
+WHAT SURVIVED ATTACK. `tests/test_hook_gate.py`'s end-to-end property could not
+be broken: with hooks replaced by `exit 0`, or `core.hooksPath` pointed at
+nothing, both refusal arms go red naming the moved HEAD; a refuse-everything
+hook is killed by the acceptance arm; even a FORGED `precommit_gate BLOCKED`
+marker is killed. That file returned the session's only NOT REFUTED verdict.
+
+Measured 2026-09-08 after the merge, all eight gates run as separate commands,
+each exit 0: `pytest tests` 1580 passed 1 skipped, the one skip being the
+pre-existing live-fetch opt-in at `tests/test_ingest_client.py:348`;
+`pytest agents/pity_engine` 80 passed; licence, docs, `qa_companion`, `ruff`,
+`node --test` and the headless dry run all clean. Baseline at `42e3545` was
+1511 passed, 1 skipped, so the four files added 69 arms.
+
+---
+
 ## 2026-09-08 - A read-only guard defeated five times, and the sixth version says what it cannot do
 
 Files: `tests/test_task_liveness.py`, `tests/test_responder_task_argv.py`.
