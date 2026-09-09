@@ -12,6 +12,110 @@ now.
 
 ---
 
+## 2026-09-09 - The atomic-write temp leak was two defects, and three calls were adjudicated rather than decided
+
+Files: `core/atomic_io.py`, `tests/test_core_atomic_io.py`,
+`tests/test_responder_gate_census.py`, `CLAUDE.md`, `ROADMAP.md`,
+`docs/LEDGER.md`. `tools/moon_sync_responder.py` NOT touched.
+
+**THE 0-BYTE TEMP LEAK WAS TWO DEFECTS UNDER ONE ROOT CAUSE.** Measured at
+`3533965`, `atomic_write_text(target, chr(0xD800))` raised `UnicodeEncodeError`
+out of the caller AND left a 0-byte sibling temp behind. `Path.write_text`
+opens the file BEFORE it encodes, so the temp exists by the time the encoder
+refuses, and the `except OSError` clause skipped `_discard` outright for a
+`UnicodeEncodeError`, which is a `ValueError`. The repair is a `published` flag
+plus `try/finally`, and NO `except` clause was widened - checked by diffing,
+where the only `except`-bearing lines are docstring prose. A verifier that did
+not write the repair probed it on scratch copies with the bytecode caches
+purged on BOTH sides: deleting the `finally` reddens 8 arms, forcing
+`published = True` reddens 8.
+
+**SEVEN NEW ARMS, EVERY ONE WITH A POSITIVE FLOOR IN ITS OWN ARM.** Re-derived
+at this writing by `git diff -U0 tests/test_core_atomic_io.py` piped to
+`grep -c "^+def test_"`, which returns 7, in a module that
+`pytest --collect-only` reports at 24 tests. Each of the seven asserts an
+exception TYPE, a target CONTENT, or a counted call equal to one, inside the
+same arm as the negative. That was checked arm by arm rather than inferred, and
+the vacuity class that shipped in a recent session - a floor placed in a
+NEIGHBOURING arm, leaving the primary one green on negatives alone - did not
+recur.
+
+**ADJUDICATED CALL ONE: `atomic_write_text` KEEPS RAISING.** Candidate A was to
+catch and return `False`, matching `atomic_write_json`; candidate B was to keep
+raising. VERDICT B, on evidence the merger had not seen when it framed the
+question and which was re-opened at its lines before this entry was written:
+`tests/test_responder_broadcast_refusal.py:230`,
+`test_an_unencodable_draft_still_escapes_the_delivery_loop`, already asserts
+`pytest.raises(UnicodeError)` out of `deliver` at line 245, so candidate A
+would have reddened an existing arm; and `tools/moon_sync_responder.py:975`
+independently records "Loud-to-quiet is strictly worse than the silent abort".
+The residual was APPLIED rather than filed - the module docstring's "Everything
+here is fail-soft" is now scoped to OS-level failure and cites the pinning arm
+by node id. The builder's own limit is recorded with it: that arm is a
+STATEMENT and not coverage, because widening the clause to
+`except (OSError, UnicodeEncodeError)` already reddens 3 arms without it.
+
+**ADJUDICATED CALL TWO: THE HEADLESS LOOP'S HALT BOUNDARY IS MIXED.** Candidate
+ARM won fidelity, candidate BYTE won completeness and reversibility and was
+fatally worded, and the operative ruling is neither candidate. `CLAUDE.md`
+carries the standing rule and `ROADMAP.md` carries the criteria, the
+per-criterion calls and the corroboration, found BY HEADING rather than by line
+number. The corroboration is the strongest part and predates the argument:
+the gitignored per-host file ops/moon_sync_repos.json, left unbackticked
+because a backticked path in a governing doc must be git-tracked and this one
+is not, `generated` `2026-09-07`, already names
+`ops/loop/slots.py` and `ops/loop/winmutex.py` as literals whose edit is "a
+joint round with every carrier in the same window - never a scrub side effect",
+which is clause (b) reached two days earlier by another route. That file is
+gitignored at `.gitignore:125`, so it corroborates and does not guard.
+
+**ADJUDICATED CALL THREE: THE CENSUS PROSE HAD DECAYED.** The claim of 18 tags
+"all of them in the responder and none anywhere else" is half false since
+`06f8557`. The responder half re-derives to 18 by a `tokenize` pass against
+`_GATE_STRICT`; the "none anywhere else" half broke when
+`tests/test_responder_delivery_gates.py:272` shipped a section-banner tag with
+no instrument watching. It is now DERIVED from `git ls-files` plus
+`tokenize.COMMENT` tokens and asserted by dict equality with four in-arm
+floors, written red first and probed red again on a scratch copy.
+
+**EIGHT TIMES AN AGENT CORRECTED THE INSTRUCTION IT WAS GIVEN, AND EVERY
+CORRECTION HELD ON RE-MEASUREMENT.** The population being counted is
+CORRECTIONS, enumerated immediately below, measured across this session. A
+different figure of SIX is in circulation and counts AGENTS, which is a
+different population and one this entry did not independently verify, so it is
+recorded as reported rather than as measured. The corrections: (a) a wrong line
+number for the broadcast-refusal arm; (b) a false claim that a raise was
+unpinned; (c) an empty-permissions claim that was really an ABSENT key; (d) a
+wrong responder line number; (e) a second wrong responder line number; (f) a
+wrong `.gitignore` line attribution; (g) an over-broad set of strict-grammar
+tag sites, where only one of that file's banners actually clears the `$` anchor
+in `_GATE_STRICT`; (h) the seam count itself.
+
+**THE METHOD RESULT IS THE HAND-TYPED COUNT, WHICH FIRED THREE TIMES IN ONE
+SESSION.** An outbound note said an adversarial pass "found six" over an
+enumeration running to seven lettered headings; a prose-truth adversary
+grading that note INHERITED the six instead of counting the headings, so the
+adversarial pass reproduced the error rather than catching it; and a governing
+document said "five", which was a third population entirely. THE RULE ADOPTED:
+when a document states a count AND enumerates the thing counted, the
+ENUMERATION is the source and the sentence is a claim about it - grade the
+sentence against the list, never the list against the sentence. Every such
+sentence must name the population it counts: whose enumeration, of what,
+measured when. The paragraph above applies that rule to itself, which is why it
+reports eight and names what eight counts.
+
+**WHAT THIS ENTRY DOES NOT CLAIM.** The both-suites figures below are A READING
+AND NOT A PROMISE, and they are the BUILDER'S reading rather than the merge's:
+taken 2026-09-09 with `HEAD` at `3533965` and the working tree DIRTY with four
+files this slice did not write, which is not the state any commit will have.
+`python -m pytest tests` reported 1867 passed 1 skipped at exit 0 and
+`python -m pytest agents/pity_engine` reported 80 passed at exit 0. The
+merge-time reading belongs to the merge that produces it and is not this
+entry's to stamp. Every other figure above carries the command that derived it
+and can be re-derived in one line; none of them was copied out of a brief.
+
+---
+
 ## 2026-09-09 - CI went red on a test that decayed, and the lane split was a timezone rather than a platform
 
 Files: `tests/test_task_liveness.py`, `ROADMAP.md`, `docs/LEDGER.md`.

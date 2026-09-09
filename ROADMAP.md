@@ -11,6 +11,215 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **CLOSED 2026-09-09. THE 0-BYTE TEMP LEAK IN `core/atomic_io.py` IS FIXED,
+  AND IT WAS TWO DEFECTS RATHER THAN ONE.** Measured at `3533965`:
+  `atomic_write_text(target, chr(0xD800))` RAISED `UnicodeEncodeError` out of
+  the caller AND left a 0-byte sibling temp behind. One root cause under both:
+  `Path.write_text` opens the file BEFORE it encodes, so the temp already
+  exists by the time the encoder refuses, and the `except OSError` clause
+  skipped `_discard` entirely for a `UnicodeEncodeError`, which is a
+  `ValueError` and not an `OSError`.
+
+  THE REPAIR IS A `published` FLAG PLUS `try/finally`, AND NO `except` CLAUSE
+  WAS WIDENED. That was verified by diffing rather than assumed: the only
+  `except`-bearing lines anywhere in the diff are docstring prose. A verifier
+  that did not write the repair probed it on scratch copies with the bytecode
+  caches purged on BOTH sides - deleting the `finally` reddens 8 arms, forcing
+  `published = True` reddens 8.
+
+  SEVEN NEW ARMS, AND THE VACUITY CLASS THAT SHIPPED IN A RECENT SESSION DID
+  NOT RECUR. The seven is re-derived here rather than copied, by
+  `git diff -U0 tests/test_core_atomic_io.py | grep -c "^+def test_"`, which
+  returns 7. EVERY ONE of the seven carries a positive floor IN THE SAME ARM -
+  an asserted exception type, an asserted target content, or a counted call
+  asserted equal to one. That was checked per-arm rather than inferred from the
+  file, which is the whole difference from the session where a floor sitting in
+  a NEIGHBOURING arm left the primary arm vacuous.
+
+- **AN ADJUDICATED CALL, 2026-09-09. `atomic_write_text` KEEPS RAISING
+  `UnicodeEncodeError`, AND DOES NOT BECOME FAIL-SOFT FOR A PAYLOAD THE ENCODER
+  REJECTS.** Candidate A was to catch it and return `False`, matching
+  `atomic_write_json`'s shape. Candidate B was to keep raising. VERDICT:
+  CANDIDATE B.
+
+  THE DECISIVE EVIDENCE WAS NOT IN FRONT OF THE MERGER WHEN THE QUESTION WAS
+  FRAMED, and both citations were re-opened at their lines before this row was
+  written. `tests/test_responder_broadcast_refusal.py:230`,
+  `test_an_unencodable_draft_still_escapes_the_delivery_loop`, ALREADY asserts
+  `pytest.raises(UnicodeError)` out of `deliver`, at line 245. Candidate A
+  would have reddened it. Independently and about a different guard,
+  `tools/moon_sync_responder.py:975` records "Loud-to-quiet is strictly worse
+  than the silent abort". Two authors reached the same posture by two routes.
+
+  RESIDUAL APPLIED RATHER THAN FILED. The module docstring claimed "Everything
+  here is fail-soft", a sentence the ruling made measurably false. It is now
+  scoped to OS-LEVEL failure and states that a payload the ENCODER refuses is a
+  programmer error that propagates untouched, and it cites the pinning arm by
+  node id rather than by line:
+  `tests/test_core_atomic_io.py::test_an_unencodable_payload_raises_rather_than_returning_false`.
+
+  THE HONEST LIMIT, measured by a builder and recorded rather than rounded up
+  into a claim: that new arm is a STATEMENT and not coverage. Widening the
+  clause to `except (OSError, UnicodeEncodeError)` already reddens 3 arms
+  WITHOUT it, so the arm pins the intent and is not what would catch the
+  regression.
+
+- **AN ADJUDICATED CALL, 2026-09-09. THE HEADLESS LOOP'S HALT BOUNDARY IS
+  MIXED, AND NEITHER CANDIDATE WON OUTRIGHT.** `CLAUDE.md` carries the standing
+  rule; THIS entry carries the reasoning, and `CLAUDE.md` points at it BY
+  HEADING. Do not cite it by line number - a line number in this file decays on
+  the next append, which is why the pointer is worded the way it is.
+
+  CANDIDATE ARM, proposed by the counterparty repo RC: halt only at ARMING a
+  scheduled task. It WON FIDELITY. "Include the other projects" is an active
+  verb naming the moment another project must ACT, and the same operator
+  message says "keep main session quiet and clear", which penalises any
+  boundary that pings on every push.
+
+  CANDIDATE BYTE, proposed by an adversary in this tree: halt before any byte
+  leaves the working tree. It WON COMPLETENESS and REVERSIBILITY and was
+  FATALLY WORDED. As literally written it halts on EVERY push, including a
+  docs-only one. That is fatal to the wording and not to the principle, which
+  is why the ruling below keeps the principle and discards the wording.
+
+  THE OPERATIVE RULING, and this is the text a loop must actually encode. Halt
+  and ping before: (a) any write, delete, unlink or named-kernel-object
+  acquisition whose target path or namespace is OUTSIDE this repo root -
+  explicitly the machine-wide slot bucket under `C:\ProgramData` and the
+  `Global\` mutex namespace; (b) any commit or push whose diff touches
+  `ops/loop/slots.py` or `ops/loop/winmutex.py`, or that trips the sibling-name
+  sweep; (c) any arming, agreement, or behaviour change in another party's
+  tree. And explicitly NOT before an ordinary push that passes both suites and
+  the sibling-name sweep with `RESIN_SKIP_PREPUSH` unset.
+
+  THE INDEPENDENT CORROBORATION IS THE STRONGEST THING IN THIS ROW, AND IT WAS
+  WRITTEN BEFORE THE ARGUMENT EXISTED. The gitignored per-host file
+  ops/moon_sync_repos.json - deliberately not backticked, because a backticked
+  path in a governing doc must be git-tracked and this one is not - whose
+  `generated` field reads `2026-09-07`, carries a block named
+  `functional_literals_that_must_not_be_renamed`. It names `lw-loop`,
+  `ops/loop/slots.py` and `ops/loop/winmutex.py`, and says of the first that
+  renaming it from one side "silently un-serialises every loop that has not
+  moved, so it is a joint round with every carrier in the same window - never a
+  scrub side effect", and of `ops/loop/winmutex.py` that its one sibling
+  initial "needs a joint round, not a unilateral edit". That is clause (b),
+  reached by a different route two days before the adjudication. VERIFIED HERE
+  by opening the block. NOTE WHAT THAT COSTS: git check-ignore -v on that path
+  resolves to `.gitignore:125`, so the file is untracked and NO GUARD IN THIS
+  TREE WATCHES IT. It is corroboration, not a guard - and the docs-consistency
+  sweep proved the point on this very row by refusing the backticks.
+
+  RESIDUAL, UNRULED, AND THE OPERATOR HAS NOT DECIDED IT: THE NO-ANSWER RULE.
+  Three of the five participants are on ORDERED STANDBY and cannot reply, so a
+  bilateral arming agreement under clause (c) is unreachable by construction.
+  The proposed shape, recorded as PROPOSED and NOT ADOPTED, is a timeout plus
+  default-deny: park the item, record STANDBY and explicitly NOT DISSENT, and
+  continue the unblocked work. Nothing in the tree implements this and nothing
+  should, until it is ruled.
+
+- **OPEN AND RE-SPECCED. STEP THREE OF THE GATE CENSUS IS NOT THE REGISTRY THE
+  EARLIER BRIEF ASKED FOR.** A planner refuted that brief with measurements
+  rather than with an opinion, and the refutation held. Its figures, recorded
+  as THE PLANNER'S readings of 2026-09-09 and not re-derived in this row: 13 of
+  17 adjacent gate-name swaps leave the census GREEN, and rotating all 18 names
+  leaves every problem list empty. One figure IS re-derived here, by
+  `grep -o '_line_of_tag_named("[a-z0-9-]*")' tests/test_responder_gate_census.py`
+  piped to `sort -u | wc -l`, which returns 3 against a `_FLOOR` of 18: only
+  `counterparty-agreement`, `delivery-write-all` and `hop-budget` are bound to
+  a site at all, and all three by accident, through `_line_of_tag_named` in
+  arms that wanted a line number for another purpose.
+
+  A NAME-LIST REGISTRY WOULD MAKE THINGS WORSE. It would duplicate the coverage
+  arm's set equality and add a SECOND hand-typed count beside `_FLOOR`, which
+  is the exact failure class this session logged three times. THE RIGHT
+  ARTIFACT IS A NAME-TO-SITE BINDING TABLE, closing CEILING item 1, naming.
+
+  THE TRAP THAT MUST REACH THE NEXT SESSION, and it is the reason this row
+  exists rather than a one-line backlog item. 34 of 35 mutants DESTROY THEIR
+  OWN ANCHOR. A binding table shipped as a test module therefore becomes a
+  THIRD SHAPE GRADER, reporting 34 syntax reddenings as KILLED at exit 0 - and
+  `verify_exclusions` in `tools/gate_mutation_runner.py` is BLIND to it,
+  because it iterates the DECLARED list only and a module nobody declared is
+  never checked at all.
+
+  THE TWO EXISTING EXCLUSIONS HAVE TWO DIFFERENT REASONS AND MUST NOT BE
+  MERGED. `SELF_TEST_MODULE`, `tests/test_gate_mutation_runner.py`, is excluded
+  because it decides its own verdict. `SHAPE_GRADER_MODULES`, currently
+  `tests/test_responder_gate_census.py`, is excluded because it grades the
+  TARGET FILE'S SHAPE, which is a syntax question, where the runner is asking a
+  behaviour one. Same exclusion, different arguments; collapsing them loses the
+  test that tells a future module which bucket it is in.
+
+  THE ANCHOR PROPOSAL AND ITS FAILURE MODE, stated honestly rather than sold. A
+  hand-typed substring is required to be PRESENT and UNIQUE inside `_run_once`
+  for each of the 18 names, and all 18 are unique there today. It DECAYS when a
+  statement is rewritten, and the repair temptation at that moment is to TRIM
+  THE ANCHOR UNTIL IT MATCHES again - which is the widening this tree has lost
+  to three times, and the reason the decay must fail loudly instead.
+
+  THE SIX-SLICE DECOMPOSITION THE PLANNER PRODUCED IS IN A SCRATCH SPEC UNDER
+  the session temp directory and WILL NOT SURVIVE. It must be re-derived. Do
+  not cite a path under `Temp` as if it were durable; it is not, and a row that
+  did would be worse than this one.
+
+- **CLOSED 2026-09-09. A PROSE CLAIM IN THE GATE CENSUS DECAYED AND NOTHING
+  WATCHED IT.** `tests/test_responder_gate_census.py` claimed 18 tags "all of
+  them in the responder and none anywhere else". The first half still holds -
+  re-derived here with a `tokenize` pass over `tools/moon_sync_responder.py`
+  against `_GATE_STRICT`, which returns 18. THE SECOND HALF HAS BEEN FALSE
+  SINCE `06f8557`, which shipped `tests/test_responder_delivery_gates.py`
+  carrying a section-banner tag at its line 272 with no instrument watching.
+  False by DECAY rather than by error: it was true when it was written.
+
+  A BUILDER CORRECTED THE MERGER TWICE ON THIS ROW AND BOTH CORRECTIONS ARE THE
+  ROW'S REAL CONTENT. First, only that ONE site is strict-grammar. The other
+  banners in that file carry trailing prose and therefore fail the `$` anchor
+  in `_GATE_STRICT`, so a row claiming a set of strict sites would have been
+  over-broad. Second, the tag-shaped text in the runner's own self-test is
+  STRING-LITERAL FIXTURE DATA fed to the matcher, which is a different case
+  entirely - a `tokenize` pass distinguishes it by token type and a text grep
+  cannot.
+
+  THE REPAIR IS AN ARM THAT DERIVES THE POPULATION RATHER THAN ASSERTING IT.
+  It enumerates from `git ls-files`, reads `tokenize.COMMENT` tokens, and
+  asserts a dict BY EQUALITY, with four in-arm floors, so a tag appearing in
+  any new tracked file reddens it by name and line. Written RED FIRST against
+  the old claim, and probed red a second time by appending a runtime-built tag
+  to another tracked file on a scratch copy.
+
+- **OPEN, AND IT IS ABOUT THE CHANNEL RATHER THAN ABOUT THE CODE.**
+  `moon_sync_inbox` IS GITIGNORED WHOLESALE. Both figures re-derived here:
+  `git check-ignore -v moon_sync_inbox` resolves to `.gitignore:115`, and
+  `git ls-files moon_sync_inbox | wc -l` returns 0.
+
+  STATE THE MECHANISM AND NOT THE SLOGAN. The glyph gate, the licence gate, the
+  line-ending gate and the docs guards all DERIVE THEIR CORPUS FROM
+  `git ls-files`, so an untracked path is outside their reach BY CONSTRUCTION.
+  It follows that every green gate cited on either side of that channel, about
+  any note inbound or outbound, is green about the TREE and says nothing about
+  the NOTE. What does NOT follow, and must not be written, is the universal "no
+  guard reads it" - that is a claim about every guard that exists, and it is
+  not checkable.
+
+- **OPEN, AND IT IS THIS SESSION'S OWN METHOD RESULT RATHER THAN A DEFECT IN
+  THE TREE. THE HAND-TYPED COUNT CLASS FIRED THREE TIMES IN ONE SESSION, AND AN
+  ADVERSARIAL PASS REPRODUCED THE ERROR INSTEAD OF CATCHING IT.** An outbound
+  note's prose said an adversarial sweep "found six" while the note's own
+  enumeration ran to SEVEN lettered headings. A prose-truth adversary grading
+  that note INHERITED the six from the summary sentence rather than counting
+  the headings underneath it. And a governing-document sentence said "five",
+  which was a THIRD population altogether - the adjudicator's list of what one
+  candidate failed to cover. Three numbers, one list, and the disagreement was
+  never a disagreement about arithmetic.
+
+  THE RULE ADOPTED, and it is the payload of this row. WHEN A DOCUMENT STATES A
+  COUNT AND ALSO ENUMERATES THE THING COUNTED, THE ENUMERATION IS THE SOURCE
+  AND THE SENTENCE IS A CLAIM ABOUT IT. Grade the sentence against the list,
+  never the list against the sentence. And every such sentence must NAME THE
+  POPULATION IT COUNTS: whose enumeration, of what, measured when. A count with
+  no population attached cannot be checked and cannot be wrong, which is why it
+  keeps surviving review.
+
 - **CLOSED 2026-09-09. CI WENT RED ON A TEST THAT DECAYED, AND THE LANE SPLIT
   WAS A TIMEZONE.** GitHub run 34405450182 failed at 21:11:41Z on
   `tests/test_task_liveness.py:836`, `assert "LIVE" in out`, while the same
