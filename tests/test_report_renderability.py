@@ -30,17 +30,36 @@ which is strictly inner to every hook wrapper, so no wrapper-ordering assumption
 is needed. Observations are APPENDED, so a later `str()` call cannot erase an
 earlier one.
 
-WHAT THESE ARMS CANNOT CLAIM. On Windows `os.name` is already "nt", so patching
-it to "nt" reproduces nothing. The scratch test patches it to "posix" - the
-exact inverse - which drives the same hook over the same code path. It does NOT
-reproduce the crash: measured on CPython 3.14.4 on this host, `Path(".")` under
-a patched `os.name` returns a `PosixPath` without raising, because
-`pathlib.Path.__new__` selects the class and then calls `object.__new__`,
-bypassing the `PosixPath.__new__` guard. CPython 3.11 - the version CI pins in
-.github/workflows/ci.yml - raises NotImplementedError from `Path.__new__`
-itself. So these arms grade the MECHANISM (os.name is held at its real value
-during report construction and put back afterwards), not the Linux crash. The
-Linux behaviour is UNVERIFIED on this box.
+WHAT THE SCRATCH TEST PATCHES IN. It patches `os.name` to `_FOREIGN_OS_NAME`, a
+sentinel chosen so it can never equal the interpreter's real `os.name` on ANY
+host. The literal "posix" was hardcoded here until 2026-09-09, chosen as the
+inverse of this Windows host's "nt". On Linux "posix" IS the real value, so the
+patch was a NO-OP there: the protected and the unprotected run observed the
+same string, and the positive control below could not separate its two
+conditions at all. It was not merely failing on Linux, it was incapable of
+measuring anything, and the Windows green was the accident rather than the
+Linux red. `test_the_patched_value_is_foreign_on_every_host` now asserts the
+non-equality on every host, at the point of the mistake.
+
+WHY THE SENTINEL IS NOT "nt". `pathlib.Path` selects `WindowsPath` for exactly
+the string "nt" and a `PosixPath` for anything else, so patching to "nt" on a
+POSIX host is the very crash this file exists to prevent regressing - the
+unprotected control would abort the whole run with INTERNALERROR instead of
+failing cleanly. Any other string yields a `PosixPath` on Linux and is
+harmless. The specific string carries no meaning; the probe only needs the two
+observations to DIFFER.
+
+WHAT THESE ARMS CANNOT CLAIM. They do NOT reproduce the crash on this Windows
+host: measured on CPython 3.14.4 here, `Path(".")` under a patched `os.name`
+returns a `PosixPath` without raising, because `pathlib.Path.__new__` selects
+the class and then calls `object.__new__`, bypassing the `PosixPath.__new__`
+guard. CPython 3.11 - the version CI pins in .github/workflows/ci.yml, on
+ubuntu-latest - raises NotImplementedError from `Path.__new__` itself, but only
+for the flavour the running host cannot support, which on Linux is
+`WindowsPath` and is never what the sentinel selects. So these arms grade the
+MECHANISM (os.name is held at its real value during report construction and put
+back afterwards), not the Linux crash. The Linux behaviour is UNVERIFIED on
+this box.
 """
 from __future__ import annotations
 
@@ -57,7 +76,12 @@ ROOT_CONFTEST = REPO_ROOT / "conftest.py"
 # its own summary line and its own rootdir.
 _PYTEST_INI = b"[pytest]\naddopts =\n"
 
-_SCRATCH_TEST = b'''\
+# The value the scratch test patches os.name to. It must differ from the real
+# os.name on EVERY host and must not be "nt" - see the module docstring for both
+# reasons. test_the_patched_value_is_foreign_on_every_host guards it.
+_FOREIGN_OS_NAME = "resincompute-foreign-os-name"
+
+_SCRATCH_TEST_TEMPLATE = b'''\
 import os
 import pathlib
 
@@ -78,7 +102,7 @@ class ReportProbe(AssertionError):
 
 
 def test_renderability_probe(monkeypatch, request):
-    monkeypatch.setattr(os, "name", "posix")
+    monkeypatch.setattr(os, "name", "@FOREIGN_OS_NAME@")
     # Registered DURING the test body, so it is later than the monkeypatch
     # fixture's own finalizer and - finalizers being LIFO - runs BEFORE
     # monkeypatch.undo. Measured 2026-09-09: an autouse fixture's post-yield
@@ -87,6 +111,10 @@ def test_renderability_probe(monkeypatch, request):
     request.addfinalizer(lambda: _append("teardown:" + os.name))
     raise ReportProbe()
 '''
+
+_SCRATCH_TEST = _SCRATCH_TEST_TEMPLATE.replace(
+    b"@FOREIGN_OS_NAME@", _FOREIGN_OS_NAME.encode("ascii")
+)
 
 # Control A: no hook at all. This is what the tree looked like before the fix,
 # and it is the arm that proves the probe can tell protected from unprotected.
@@ -148,6 +176,38 @@ def _protected() -> tuple[int, str, list[str]]:
         return _run_case(Path(raw), ROOT_CONFTEST.read_bytes())
 
 
+def test_the_patched_value_is_foreign_on_every_host() -> None:
+    """LOUD GUARD: what the arms patch in is never the interpreter's os.name.
+
+    Hardcoding "posix" here made every arm below a no-op on Linux, where it is
+    the REAL value: the patched and the real observation were the same string,
+    so the positive control could not distinguish its two conditions and
+    asserted nothing at all. This single arm fails on the host that has the
+    problem, instead of surfacing as a confusing red through a CI round trip.
+    """
+    assert _FOREIGN_OS_NAME != os.name, (
+        f"the scratch test patches os.name to {_FOREIGN_OS_NAME!r}, which IS this "
+        "interpreter's real os.name, so the arms below cannot distinguish a "
+        "protected run from an unprotected one"
+    )
+    # Pin against the whole closed set of real os.name values, not just this
+    # host's. "posix" satisfied the check above on Windows and still broke
+    # Linux, so a this-host-only check is exactly the blind spot being closed.
+    # "nt" is doubly excluded: pathlib.Path selects WindowsPath for exactly that
+    # string, which raises from Path.__new__ on a POSIX host under CPython 3.11
+    # and would abort the unprotected control with INTERNALERROR.
+    assert _FOREIGN_OS_NAME not in {"nt", "posix", "java"}, (
+        f"{_FOREIGN_OS_NAME!r} is a real os.name value on some host, so this file "
+        "is platform-blind again"
+    )
+    # NON-VACUITY: the sentinel must actually reach the scratch source. A lost
+    # placeholder would ship the template unsubstituted and silently patch
+    # os.name to the literal string "@FOREIGN_OS_NAME@" instead.
+    assert _FOREIGN_OS_NAME.encode("ascii") in _SCRATCH_TEST, _SCRATCH_TEST
+    assert b"@FOREIGN_OS_NAME@" not in _SCRATCH_TEST, "placeholder never substituted"
+    assert b"@FOREIGN_OS_NAME@" in _SCRATCH_TEST_TEMPLATE, "template lost its placeholder"
+
+
 def test_root_conftest_is_the_artifact_under_test() -> None:
     """The protected case must run the repo's real conftest bytes, not a copy."""
     assert ROOT_CONFTEST.is_file(), f"missing {ROOT_CONFTEST}"
@@ -183,14 +243,14 @@ def test_unprotected_control_sees_the_patched_os_name() -> None:
     )
     # str(exc) is called more than once while the longrepr is built; what
     # matters is that NO observation is the real os.name.
-    assert set(observed) == {"report:posix"}, observed
+    assert set(observed) == {f"report:{_FOREIGN_OS_NAME}"}, observed
 
 
 def test_hook_puts_the_tests_own_os_name_back() -> None:
     """After the report, os.name is whatever the test set, for its teardown."""
     _rc, _out, lines = _protected()
     teardown = [ln for ln in lines if ln.startswith("teardown:")]
-    assert teardown == ["teardown:posix"], (
+    assert teardown == [f"teardown:{_FOREIGN_OS_NAME}"], (
         f"the test's own os.name was not put back for teardown; saw {teardown}"
     )
 
