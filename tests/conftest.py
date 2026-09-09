@@ -50,6 +50,68 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+#: Category tokens for `classify_git_probe`. They exist so a caller - in
+#: practice `tests/test_conftest_git_gate.py` - can tell the four outcomes apart
+#: STRUCTURALLY rather than by matching English prose. Rewording a reason string
+#: is then a readability change; merging two branches is a token change and
+#: reddens.
+GIT_PROBE_USABLE = "usable"
+GIT_PROBE_NOT_RUNNABLE = "not-runnable"
+GIT_PROBE_NOT_A_REPOSITORY = "not-a-repository"
+GIT_PROBE_DID_NOT_ANSWER = "did-not-answer"
+
+
+def classify_git_probe(
+    returncode: int | None,
+    stdout: str,
+    stderr: str,
+    exec_error: str | None,
+) -> tuple[str, str | None]:
+    """Turn one `git rev-parse --git-dir` outcome into (category, reason), PURELY.
+
+    Extracted from `git_unusable_reason()` so each of the four outcomes is
+    reachable without a subprocess. Before the extraction the non-128 non-zero
+    branch was separated from the 128 branch by NO TEST AT ALL - nothing under
+    `tests/` stubbed the probe - so it could have been deleted into its
+    neighbour with the whole suite still green.
+
+    `exec_error` carries the already-formatted `"OSError: message"` text when the
+    exec itself failed; `returncode` is then None. Every parameter is required:
+    a constant bound as a DEFAULT ARGUMENT cannot be replaced by patching the
+    constant, which would make this function untestable in exactly the way the
+    extraction exists to fix.
+
+    THE REASON STRINGS ARE A CONTRACT. `tests/test_commit_trailers.py`,
+    `tests/test_hook_gate.py` and `tests/test_line_endings.py` all consume
+    `git_unusable_reason()`'s return value, and `tests/test_hook_interpreter.py`
+    quotes this wording in prose. They are reproduced here byte-identically to
+    what this file emitted before the extraction.
+    """
+    if exec_error is not None:
+        return GIT_PROBE_NOT_RUNNABLE, (
+            f"git is not runnable on this machine ({exec_error}), so "
+            f"trackedness cannot be established for {REPO_ROOT} and this guard is "
+            "SKIPPED rather than passed"
+        )
+
+    if returncode == 0:
+        return GIT_PROBE_USABLE, None
+
+    detail = stderr.strip() or stdout.strip() or "no output"
+    if returncode == 128:
+        return GIT_PROBE_NOT_A_REPOSITORY, (
+            "this tree is not a git repository, so trackedness cannot be established "
+            "and this guard is SKIPPED rather than passed: `git rev-parse --git-dir` "
+            f"in {REPO_ROOT} exited 128 ({detail}). That is the normal state of a "
+            "Download-ZIP, sdist or `git archive` copy - clone the repository to "
+            "enforce this guard"
+        )
+    return GIT_PROBE_DID_NOT_ANSWER, (
+        f"git is present but did not answer for {REPO_ROOT}, so trackedness cannot be "
+        "established and this guard is SKIPPED rather than passed: `git rev-parse "
+        f"--git-dir` exited {returncode} ({detail})"
+    )
+
 
 @lru_cache(maxsize=1)
 def git_unusable_reason() -> str | None:
@@ -78,6 +140,12 @@ def git_unusable_reason() -> str | None:
 
     Cached: the answer cannot change during a run, and every guard in the
     directory asks.
+
+    THE SIGNATURE AND RETURN TYPE ARE A MERGE SURFACE and did not change when
+    the classification moved into `classify_git_probe()`. Four modules under
+    `tests/` consume this `str | None` directly, and returning the classifier's
+    tuple here would break them - or worse, pass a truthiness check while the
+    reason was None.
     """
     try:
         completed = subprocess.run(
@@ -88,29 +156,9 @@ def git_unusable_reason() -> str | None:
             check=False,
         )
     except OSError as exc:
-        return (
-            f"git is not runnable on this machine ({type(exc).__name__}: {exc}), so "
-            f"trackedness cannot be established for {REPO_ROOT} and this guard is "
-            "SKIPPED rather than passed"
-        )
+        return classify_git_probe(None, "", "", f"{type(exc).__name__}: {exc}")[1]
 
-    if completed.returncode == 0:
-        return None
-
-    detail = completed.stderr.strip() or completed.stdout.strip() or "no output"
-    if completed.returncode == 128:
-        return (
-            "this tree is not a git repository, so trackedness cannot be established "
-            "and this guard is SKIPPED rather than passed: `git rev-parse --git-dir` "
-            f"in {REPO_ROOT} exited 128 ({detail}). That is the normal state of a "
-            "Download-ZIP, sdist or `git archive` copy - clone the repository to "
-            "enforce this guard"
-        )
-    return (
-        f"git is present but did not answer for {REPO_ROOT}, so trackedness cannot be "
-        "established and this guard is SKIPPED rather than passed: `git rev-parse "
-        f"--git-dir` exited {completed.returncode} ({detail})"
-    )
+    return classify_git_probe(completed.returncode, completed.stdout, completed.stderr, None)[1]
 
 
 def require_git_repository() -> None:
