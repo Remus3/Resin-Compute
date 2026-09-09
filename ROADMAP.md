@@ -11,6 +11,36 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **OPEN, HIGHEST PRIORITY, AND IT IS OLDER THAN THIS SESSION. CI IS RED AND HAS
+  BEEN FOR AT LEAST FOUR CONSECUTIVE PUSHES.** Measured 2026-09-09 with
+  `gh run list`: both workflows FAIL on `dda913a`, on `460bda5`, on `e66babb` and
+  on `9d6db70`. Nothing in this session caused it and nothing in this session
+  fixed it. THE PREVIOUS HAND-OFF DECLARED EVERY GATE GREEN, and that was true of
+  the LOCAL gates only - CI was never looked at, which is exactly how a red
+  remains invisible for four pushes.
+
+  ROOT CAUSE, as far as it is measured. In the `docs-guards` job's step
+  "Run the md-reading guards - the two suites SEPARATELY", pytest reaches
+  `INTERNALERROR: NotImplementedError: cannot instantiate 'WindowsPath' on your
+  system`, raised from `_pytest/reports.py` inside `_format_failed_longrepr`.
+  That is TWO stacked defects and they must not be conflated: FIRST some guard
+  FAILS on Linux - 42 tests pass before it - and SECOND pytest cannot even RENDER
+  that failure, because building the longrepr instantiates a `WindowsPath`, which
+  is impossible off Windows. The second defect HIDES the first: the log never
+  names the failing test.
+
+  NOT YET DETERMINED, and re-derive rather than trusting this: which guard fails,
+  and where the Windows path enters. A repo-wide grep for `WindowsPath` and for
+  `PureWindowsPath` across the test, tool, script and core trees returns NOTHING,
+  so it is not a literal - it arrives through a repr, a pickle, or a parametrize
+  id. Attack the SECOND defect
+  first: make the longrepr renderable, or run that step with `--tb=line` or
+  `-p no:cacheprovider` to get the failing test NAMED. A failure you cannot name
+  cannot be fixed, and this one has been unnameable for four pushes.
+
+  This is a DIFFERENT item from the `git archive` extract red already recorded
+  below - that one is about a no-git copy, this one is about Linux.
+
 - **DIAGNOSED AND CLOSED THE SAME EVENING, and the answer is not a defect.**
   The pre-push hook reports `1579 passed, 2 skipped` where every other
   invocation reports `1580 passed, 1 skipped`. First filed as transient and
