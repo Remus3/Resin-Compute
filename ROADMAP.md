@@ -11,6 +11,61 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **CLOSED 2026-09-08 for 13 sites across four files, and OPEN for three more
+  places.** The condition that cannot tell CHECKED-AND-FOUND-NOTHING from
+  COULD-NOT-CHECK is repaired in `tests/test_watch_inbox.py`,
+  `tests/test_line_endings.py`, `tests/test_hook_interpreter.py` and
+  `tests/test_hook_gate.py`, each slice refuted by an adversary before it was
+  believed. Full account in `docs/LEDGER.md`. THE RANKED LIST IN THE PREVIOUS
+  HAND-OFF WAS STALE - its two worst entries were already fixed - so re-derive
+  rather than trusting any list, including this one.
+
+- **OPEN, and three independent adversaries pointed at it with different
+  lenses.** `tests/conftest.py` routes EVERY non-128 non-zero exit from
+  `git rev-parse --git-dir` to a SKIP, so a genuinely broken git wears the same
+  face as an absent repository. Measured: injecting exit 7 gives 29 passed, 4
+  skipped, EXIT=0 in one file alone. Mitigating and the reason it was not
+  rushed: the reason text names the tool failure honestly, so it is a DECLARED
+  could-not-check rather than a disguised one. Nothing anywhere in `tests/`
+  stubs `git rev-parse --git-dir`, so the 128 and non-128 branches are
+  separated by NO TEST AT ALL. It is the shared file every other test imports,
+  which is why no builder was allowed to touch it mid-flight; it needs its own
+  slice with the whole suite as the blast radius.
+
+- **OPEN. Two more files carry the same root cause, found by an adversary and
+  never started.** `tests/test_machine_identity.py:236` has its own
+  `_tracked_files()` running `git ls-files` with `check=True` and returning a
+  bare tuple; `tests/test_licence_posture.py:162` consumes `_git("ls-files")`
+  with no floor and no anchors. Re-derive both before fixing - the coordinates
+  are one agent's reading.
+
+- **OPEN, pre-existing, and NOT from this session.** In a `git archive` extract
+  the whole suite is EXIT=1 for the BASELINE as well as the current tree, with
+  an identical 6-failure set in `tests/test_ci_workflow_complement.py` and
+  `tests/test_no_sibling_names.py`. The Download-ZIP population that
+  `tests/conftest.py` exists to serve is already red before any of this
+  session's work.
+
+- **OPEN. The responder runner, and it is now a two-party matter.** This tree
+  has `tools/moon_sync_responder.py` (48 defs) and 134 arms across
+  `tests/test_moon_sync_responder.py` and `tests/test_responder_task_argv.py`.
+  It has ZERO `# GATE:` tags and NO runner spec, so RC's finding that two of
+  its 26 gates had no mutant on the gate's OWN call site cannot yet be checked
+  here. Consensus asked in `moon_sync_inbox` 2026-09-08-2155 and narrowed to
+  RSC and RC on 2026-09-08-2204 by operator ruling; CS, LW and LL are on
+  ORDERED STANDBY and their silence is NOT dissent. Agreed with RC: propagate
+  the SHAPE - tagged call sites, a per-gate registry, a mutant on each gate's
+  own call site with the needle count asserted == 1 BEFORE mutation - and never
+  a repo's runner file. Carry RC's measured trap: `# GATE:measure` is a PREFIX
+  of `# GATE:measure-cap`, so a census must match the CAPTURED GROUP, never the
+  literal.
+
+- **OPEN, unverified here, offered by RC as a shape to check rather than a
+  finding about this tree.** `mkdir(parents=True)` under a parent that is a
+  FILE raises WinError 183; RC found nine sites and exactly one had the
+  partial-write half. Check this tree's own sites.
+
+
 - **CLOSED 2026-09-08 by the cold-boot measurement the previous session left as
   its first instruction.** The runtime invocation log under `ops/runtime/`,
   gitignored and so named in prose, records which hook fired: commit `3964544`

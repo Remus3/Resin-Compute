@@ -29,10 +29,14 @@ WHAT THE TOOL MUST NOT DO, and each of these has an arm below:
 """
 from __future__ import annotations
 
+import errno
 import importlib.util
 import json
 import os
+import stat
+import subprocess
 import time
+import typing
 from pathlib import Path
 
 import pytest
@@ -1211,19 +1215,378 @@ def test_the_report_leaks_no_window_of_a_payload(watch, tmp_path, capsys, mode):
 # ---------------------------------------------------------------------------
 
 
-def _junction(link: Path, target: Path) -> bool:
-    """Make an NTFS junction, or report that this box will not."""
-    import subprocess
+class _JunctionMake(typing.NamedTuple):
+    """MADE, REFUSED, UNAVAILABLE or FAILED, and why. Never a bare bool.
 
-    try:
-        done = subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
-            capture_output=True,
-            timeout=30,
+    FOUR STATUSES BECAUSE THERE ARE FOUR FACTS, and collapsing any two of them
+    is how this helper has now been defeated twice. In particular there are
+    THREE dispositions and not two:
+
+      - MADE        the junction exists and the arm can proceed.
+      - REFUSED     the tool RAN and this box said no. Skip, and the skip text
+                    - "this box refused the junction" - is TRUE.
+      - UNAVAILABLE the tool could not be LAUNCHED AT ALL, so no process ever
+                    ran. Skip, and the skip text says exactly that and nothing
+                    about a refusal.
+      - FAILED      the tool ran and something went wrong. Red. This is the
+                    original defect and it stays fixed.
+
+    UNAVAILABLE is the status this NamedTuple was introduced to make
+    expressible, and the version before it did not have it: a launch failure
+    read FAILED, so `runs-on: ubuntu-latest` - where `subprocess.run(["cmd",
+    ...])` raises FileNotFoundError, an OSError - turned four arms red on
+    arrival. Measured 2026-09-08 with `subprocess.run` displaced to raise
+    FileNotFoundError for argv[0] == "cmd" and nothing else changed:
+    `4 failed, 101 passed`, exit 1. Nothing was wrong with the code under test.
+    """
+
+    status: str
+    detail: str
+
+
+def _mklink_junction(link: Path, target: Path) -> tuple[int, str]:
+    """The impure half: ask cmd for a junction and hand back (exit code, text).
+
+    Displaced wholesale by the non-vacuity arms, so every failure mode below is
+    reachable on a machine that has no mklink at all.
+    """
+    done = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+        capture_output=True,
+        timeout=30,
+    )
+    text = (done.stderr or b"").decode("ascii", "replace").strip()
+    if not text:
+        text = (done.stdout or b"").decode("ascii", "replace").strip()
+    return done.returncode, text
+
+
+#: The errno values that mean THE EXEC LOOKED FOR THE TOOL AND DID NOT FIND
+#: IT. This is the only evidence in this file that supports an UNAVAILABLE, and
+#: therefore the only evidence that supports skipping four arms.
+#:
+#: DEFEAT 3, AND IT IS THIS FILE OWN MISTAKE MADE ONE FRAME UP.
+#: `_classify_junction_make` refuses to read a bare EXIT CODE as a refusal,
+#: because exit 1 covers a privilege refusal and four ordinary tool failures
+#: alike. The launch branch then read a bare EXCEPTION CLASS as "the tool is
+#: absent", and `OSError` covers at least nine unrelated facts.
+#:
+#: MEASURED ON THIS BOX 2026-09-08 IN ONE PROCESS, WITH NOTHING INJECTED:
+#:
+#:     CONTROL (fds free)   MADE - mklink made the junction
+#:     fd table exhausted after 8189 opens
+#:     UNDER EXHAUSTION     UNAVAILABLE
+#:     SENTENCE EMITTED     "this box has no runnable mklink ... No process ran,
+#:                           so this run measured nothing ... and asserts
+#:                           nothing about this machine"
+#:
+#: The box had made a junction seconds earlier. Run under that condition the
+#: whole file reported SKIPPED [4] at exit 0 - green, and every skip false.
+#: EMFILE, EACCES, ENOTDIR, ENOMEM, EAGAIN, EPIPE and a bare `OSError` with no
+#: errno at all ALL reached that sentence.
+#:
+#: A BARE OSError CARRIES NO EVIDENCE OF ABSENCE, so it is FAILED. Absence has
+#: to be PROVED by a not-found code; it is never inferred from the absence of a
+#: code.
+#:
+#: WINDOWS NEEDS NO SEPARATE MEMBER HERE, and that was measured rather than
+#: assumed. On this box `subprocess.run` on a name that is not on PATH raises
+#: `FileNotFoundError` with `errno=2 winerror=2 strerror='The system cannot
+#: find the file specified'` - CPython maps ERROR_FILE_NOT_FOUND onto ENOENT
+#: when it builds the exception, so ENOENT already covers the Windows shape. An
+#: OSError arriving with a winerror and NO errno would read FAILED, which is
+#: the loud direction, and the fix if that is ever seen is to MEASURE it and
+#: add the code, not to widen this back to "any OSError".
+_JUNCTION_ABSENT_ERRNOS = frozenset({errno.ENOENT})
+
+
+def _classify_launch_failure(exc: OSError) -> _JunctionMake:
+    """The exec raised. Was the TOOL not found, or did THIS RUN go wrong?
+
+    Pure, so every branch is drivable on any machine, and split out of
+    `_junction` for exactly the reason `_classify_junction_make` was: a branch
+    reachable only through a real subprocess failure is a branch nobody grades.
+
+    THE FINGERPRINT IS `errno`, NEVER THE EXCEPTION CLASS. `except OSError` is
+    a catch, not a diagnosis. The two dispositions here are:
+
+      - UNAVAILABLE  a not-found code. The launcher could not find `cmd`, so no
+                     process was started. Nothing was measured, nothing
+                     malfunctioned, and the caller may skip.
+      - FAILED       anything else, INCLUDING an OSError with no errno at all.
+                     An exhausted fd table, a denied exec, an out-of-memory
+                     fork and a broken pipe are facts about this RUN, not about
+                     this machine, and skipping on one of them blames a box the
+                     run may have direct evidence against.
+
+    THE CEILING, STATED RATHER THAN PAPERED OVER. ENOENT says the launch did
+    not happen because a name was not found. It does NOT distinguish "this box
+    has no cmd" from "cmd is here and something else on the launch path was
+    not", so the sentence below claims only the narrow thing - THIS LAUNCH did
+    not happen - and deliberately claims nothing about what the box would do
+    with a junction it was actually asked for. The wider sentence is the one
+    that was false on an fd-exhausted box, and a narrower catch does not make
+    it true.
+    """
+    code = exc.errno
+    stamp = f"errno={code!r} winerror={getattr(exc, 'winerror', None)!r}"
+    if code in _JUNCTION_ABSENT_ERRNOS:
+        return _JunctionMake(
+            "UNAVAILABLE",
+            f"`cmd /c mklink` was never launched on this run: the exec raised "
+            f"{type(exc).__name__} ({exc}) with {stamp}, a NOT-FOUND code, so no process was "
+            "started and nothing about junctions was measured. THE CLAIM IS THIS LAUNCH AND "
+            "NOTHING WIDER - a name could not be found, which is not a statement about what "
+            "this box would do with a junction it was actually asked for",
         )
-    except (OSError, subprocess.SubprocessError):
+    return _JunctionMake(
+        "FAILED",
+        f"`cmd /c mklink` could not be launched, and the reason is NOT a not-found code: "
+        f"{type(exc).__name__} ({exc}) with {stamp}. An exhausted fd table, an exec denied by "
+        "policy, an out-of-memory fork and a bare OSError carrying no code at all all arrive "
+        "here, and not one of them is evidence that this box lacks mklink - on an fd-exhausted "
+        "box this run MEASURED a junction being made seconds earlier. Skipping on this would "
+        "blame the machine on evidence the run does not have",
+    )
+
+
+def _junction(link: Path, target: Path) -> _JunctionMake:
+    """Make an NTFS junction, or say which of three different things happened.
+
+    THIS RETURNED A BARE BOOL AND THAT WAS THE DEFECT. A CONDITION THAT CANNOT
+    DISTINGUISH "CHECKED AND FOUND NOTHING" FROM "COULD NOT CHECK" - the same
+    root cause `tests/test_task_liveness.py` has been refuted for three times,
+    and the same remedy is copied from it here. The old body collapsed a
+    launch failure, a timeout, a genuine refusal and an exit-0-that-created-
+    nothing into one False, and its three callers each took
+
+        pytest.skip("this box will not create an NTFS junction")
+
+    a sentence that is true for exactly one of those. Measured 2026-09-08 on a
+    box that DOES make junctions - three arms green unpatched - an injected
+    OSError produced `3 skipped` at exit 0 with all three skip texts false.
+
+    So: FAILED must fail the caller, and REFUSED and UNAVAILABLE may skip it.
+
+    THE TWO EXCEPT BRANCHES BELOW ARE NOT THE SAME FACT, and the split is the
+    whole of the second repair. Both used to return FAILED together.
+
+    AN OSError IS NOT A FINGERPRINT FOR "THE EXEC NEVER HAPPENED", and reading
+    it as one was the THIRD defeat of this helper. `OSError` is the class the
+    exec raises when the file named `cmd` is absent - the ordinary state of
+    ubuntu-latest - and it is ALSO the class it raises when this process has no
+    free file descriptors, when the exec is denied, when memory ran out, and
+    when nothing whatever is known, a bare `OSError` with `errno is None`. Only
+    the first of those is a statement about the machine.
+
+    So this branch hands the exception to `_classify_launch_failure`, which
+    fingerprints on `errno` and skips ONLY for a not-found code. Every other
+    OSError is FAILED: something about THIS RUN went wrong, and a skip would
+    blame a machine the run has no evidence against. That is the same principle
+    `_classify_junction_make` already applies one frame down to a bare exit
+    code, applied here to a bare exception class.
+
+    A subprocess.SubprocessError - in practice TimeoutExpired - is the OPPOSITE
+    fact. It is only reachable AFTER the exec succeeded: something was launched,
+    it was still running 30 seconds later, and it was killed. That is a box that
+    HAS mklink and on which mklink hung, which is a tool malfunction and exactly
+    what FAILED is for. Reading a timeout as "the tool is not present" would be
+    a false sentence about the machine, and would also hide a real hang behind
+    a green skip - the defect class this whole helper exists to close.
+    """
+    try:
+        returncode, text = _mklink_junction(link, target)
+    except OSError as exc:
+        return _classify_launch_failure(exc)
+    except subprocess.SubprocessError as exc:
+        return _JunctionMake(
+            "FAILED",
+            f"mklink was launched and then went wrong ({type(exc).__name__}: {exc}). The exec "
+            "succeeded, so this box HAS the tool and the tool misbehaved. That is a malfunction "
+            "to be read, not an absent tool to be skipped past",
+        )
+    return _classify_junction_make(returncode, text, _link_is_reparse_point(link))
+
+
+def _link_is_reparse_point(link: Path) -> bool:
+    """Is this entry REALLY a reparse point, or just some directory that exists?
+
+    THIS IS `os.lstat` AND NEVER `os.stat`, AND THAT IS THE WHOLE POINT.
+    Measured on this box 2026-09-08 against a junction this run had just made:
+
+        plain     exists=True   os.stat.rp=False  os.lstat.rp=False
+        junction  exists=True   os.stat.rp=False  os.lstat.rp=True
+        broken    exists=False  os.stat=FileNotFoundError  os.lstat.rp=True
+
+    `os.stat` FOLLOWS the reparse point and reports the attributes of the
+    TARGET, so it reads False on a real junction - a check written with it
+    would fail every one of the three arms on a box that makes junctions fine.
+    `Path.exists()` follows it too, which is the defect this replaces: it is
+    True for any ordinary directory, so a displaced maker that only calls
+    `mkdir` was MEASURED to take `test_a_junction_inside_a_drop_is_not_
+    descended` to a PASS over a fixture containing no junction at all.
+
+    The broken row is the other half: a junction whose target does not exist is
+    a REAL junction, `Path.exists()` is False for it, and the old check called
+    that "mklink exited 0 and left no link" - a false detail on a fixture that
+    was in fact built.
+
+    False on any error, including the AttributeError from a platform with no
+    `st_file_attributes`. That direction is safe: it routes to FAILED, which is
+    loud, rather than to MADE, which would be vacuous.
+    """
+    try:
+        return bool(os.lstat(link).st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except (OSError, AttributeError):
         return False
-    return done.returncode == 0 and link.exists()
+
+
+#: Lowercased substrings that make "this box refused the junction" a TRUE
+#: sentence. A non-zero exit whose text matches none of these is a tool
+#: failure, not a refusal - see `_classify_junction_make`.
+#:
+#: "sufficient privilege" is the canonical refusal - an unprivileged box
+#: outside developer mode. It is NOT measured here, because this box is
+#: privileged and makes junctions; it is the shape the shipped refusal fixture
+#: below has always used, and it is the one case the skip exists to serve.
+#:
+#: "'mklink' is not recognized" carries the TOOL NAME on purpose. The bare
+#: substring "not recognized" was MEASURED on this box 2026-09-08 to come back
+#: from cmd at rc=255 for a mangled command line - "'name' is not recognized as
+#: an internal or external command" - which is a bug in the harness, not a
+#: statement about the machine. Matching the bare phrase would mint that as a
+#: refusal and retire all three arms.
+_JUNCTION_REFUSAL_MARKERS = (
+    "sufficient privilege",
+    "'mklink' is not recognized",
+)
+
+
+def _classify_junction_make(returncode: int, text: str, link_is_reparse_point: bool) -> _JunctionMake:
+    """The pure half of _junction, so every branch is testable anywhere.
+
+    THE THIRD ARGUMENT IS A FACT, NOT A PREDICATE, and that is deliberate. The
+    reparse-point probe needs `os.lstat` and Windows file attributes; passing
+    its ANSWER in keeps this half pure, so every branch below is drivable on a
+    machine that has neither NTFS nor mklink. The platform-specific half lives
+    in `_link_is_reparse_point`, which the impure `_junction` calls.
+
+    A SHARED EXIT CODE IS NOT A FINGERPRINT. `cmd /c mklink /J` exits 1 for a
+    privilege refusal AND for at least four ordinary tool failures, all
+    measured on this box 2026-09-08:
+
+        rc=1  The system cannot find the path specified.        (link parent absent)
+        rc=1  The filename, directory name, or volume label syntax is incorrect.  (empty target)
+        rc=1  The system cannot find the file specified.        (illegal char in target)
+        rc=1  Cannot create a file when that file already exists.  (link already there)
+
+    The version this replaces made REFUSED the pure residual `returncode != 0
+    and not link_exists`, so every one of those four skipped three arms with
+    the sentence "this box refused the junction" - a claim about a machine the
+    run never measured, on a box that PROVABLY makes junctions.
+
+    So REFUSED now needs a RECOGNISED refusal text, and every other non-zero
+    exit is FAILED.
+
+    THE CEILING, STATED RATHER THAN PAPERED OVER. A localised Windows prints
+    its refusal in the system language, and no marker here will match it, so a
+    GENUINE refusal on a non-English box reads FAILED. That is the SAFE
+    direction - a loud red that names the exact text, not a silent green - and
+    the fix when it happens is to MEASURE the text on that box and add it
+    verbatim. It is NOT to broaden a marker until it matches, because a marker
+    broad enough to catch an unknown refusal is broad enough to catch the four
+    tool failures above, which is the defect this docstring describes. The same
+    ceiling covers a filesystem that cannot hold junctions at all: its message
+    is not measured here, so it reads FAILED.
+    """
+    said = text or "and said nothing"
+    if returncode == 0 and link_is_reparse_point:
+        return _JunctionMake("MADE", "mklink made the junction")
+    if returncode == 0:
+        return _JunctionMake(
+            "FAILED",
+            f"mklink exited 0 and left no reparse point ({said}). Either it made nothing, or it "
+            "made an ordinary directory. That is a tool contradicting itself, which is not "
+            "evidence about this box",
+        )
+    if link_is_reparse_point:
+        return _JunctionMake(
+            "FAILED",
+            f"mklink exited {returncode} ({said}) and a reparse point exists anyway. That is a "
+            "tool contradicting itself, which is not evidence about this box",
+        )
+    lowered = text.lower()
+    for marker in _JUNCTION_REFUSAL_MARKERS:
+        if marker in lowered:
+            return _JunctionMake(
+                "REFUSED", f"this box refused the junction - mklink exited {returncode} {said}"
+            )
+    return _JunctionMake(
+        "FAILED",
+        f"mklink exited {returncode} ({said}) and that text is not one this arm recognises as a "
+        "refusal. An exit code alone is not a fingerprint - exit 1 covers a privilege refusal, a "
+        "path that does not exist and a malformed argument alike - so this run cannot say the box "
+        "refused anything",
+    )
+
+
+def _require_junction(link: Path, target: Path) -> None:
+    """Skip when the tool refused or was not found. FAIL for everything else.
+
+    FAILED NOW COVERS TWO SHAPES AND THE MESSAGE BELOW NAMES BOTH, because
+    getting that wrong is what this gate keeps being defeated on. The tool RAN
+    and misbehaved is one of them. The LAUNCH failed for a reason that is not a
+    not-found code - an exhausted fd table, a denied exec - is the other, and
+    the sentence that used to stand here said "the tool ran" for it, which was
+    false in exactly the way the skips it polices were false.
+
+    THE COVERAGE THIS PROTECTS. The arms behind this gate are the only coverage
+    that a junction inside a verbatim drop is not descended, is named in the
+    report with its reason, and moves the drop digest rather than vanishing. A
+    tool malfunction that reads as a skip retires them all at once and silently,
+    and the cost that coverage prevents is a whole-channel outage - a junction
+    over a large tree runs the walk past the hook timeout, and a killed hook
+    surfaces nothing at all. So FAILED is red, and it stays red.
+
+    THE CORRECTION, AND THE TREE HAS ALREADY RULED ON THE PRINCIPLE. The first
+    version of this gate had two dispositions where the facts have three, and
+    sent CANNOT-MEASURE to the same place as SOMETHING-IS-WRONG. `tests/
+    conftest.py` decided the identical question for the git-dependent guards in
+    this directory, and its reasoning is quoted here rather than paraphrased:
+
+        With no git repository, TRACKEDNESS IS UNKNOWABLE, so these guards
+        SKIP.
+
+        They must not FAIL: nothing is wrong with the code under test, and a
+        red suite a reader cannot act on trains them to ignore red.
+
+    A machine with no mklink is the same shape exactly. Whether the walk
+    descends a junction is UNKNOWABLE where junctions cannot be made, nothing
+    is wrong with `scripts/watch_inbox.py`, and a reader looking at that red
+    has nothing to act on. `.github/workflows/ci.yml` is `runs-on:
+    ubuntu-latest`, so before this correction every CI run went red on arrival
+    - four arms, exit 1, on a green tree.
+
+    WHAT THE SKIP MUST NOT DO is the other half, and it is why the reason text
+    is carried through from `_junction` rather than written here. conftest's
+    companion rule - a guard that quietly changes what it measures is worse
+    than one that says it cannot measure - applies to the SENTENCE as much as
+    to the behaviour. "this box refused the junction" is false on ubuntu, where
+    nothing refused anything because nothing ran. Each skip therefore says
+    which of the two unmeasurable states it is in, and neither says the other.
+    """
+    made = _junction(link, target)
+    if made.status == "FAILED":
+        pytest.fail(
+            f"the junction fixture could not be built, so this arm proved nothing: {made.detail}. "
+            "This is NOT a case a skip is allowed for. Either the tool RAN and misbehaved, which "
+            "this run has direct evidence against the machine for, or the LAUNCH failed for a "
+            "reason that is not a not-found code, which is a fact about this run and no evidence "
+            "about this machine at all. A skip would state a claim from evidence that does not "
+            "exist"
+        )
+    if made.status in ("REFUSED", "UNAVAILABLE"):
+        pytest.skip(made.detail)
 
 
 def test_the_drop_digest_format_is_unchanged_for_a_drop_of_ordinary_files(watch, tmp_path):
@@ -1265,8 +1628,7 @@ def test_a_junction_inside_a_drop_is_not_descended(watch, tmp_path):
     (behind / "deep").mkdir(parents=True, exist_ok=True)
     for i in range(5):
         (behind / "deep" / f"f{i}.py").write_bytes(b"x\n")
-    if not _junction(drop / "link", behind):
-        pytest.skip("this box will not create an NTFS junction")
+    _require_junction(drop / "link", behind)
 
     digest, count, _manifest, _anomalies = watch._drop_manifest(drop)
 
@@ -1285,8 +1647,7 @@ def test_a_junction_is_named_in_the_report_with_its_reason(watch, tmp_path, caps
     behind = tmp_path / "behind"
     behind.mkdir()
     (behind / "f.py").write_bytes(b"x\n")
-    if not _junction(drop / "link", behind):
-        pytest.skip("this box will not create an NTFS junction")
+    _require_junction(drop / "link", behind)
     state = tmp_path / "runtime" / "seen.json"
 
     watch.main(["--dir", str(inbox), "--state", str(state), "--reported", str(tmp_path / "r.json")])
@@ -1304,8 +1665,7 @@ def test_a_junction_moves_the_drop_digest_rather_than_vanishing(watch, tmp_path)
     behind = tmp_path / "behind"
     behind.mkdir()
     (behind / "f.py").write_bytes(b"x\n")
-    if not _junction(drop / "link", behind):
-        pytest.skip("this box will not create an NTFS junction")
+    _require_junction(drop / "link", behind)
 
     after, _count2, _m2, _a2 = watch._drop_manifest(drop)
 
@@ -1313,6 +1673,637 @@ def test_a_junction_moves_the_drop_digest_rather_than_vanishing(watch, tmp_path)
         "a junction appeared inside an acknowledged drop and the key did not "
         "move, so the drop reads as already read"
     )
+
+
+def test_non_vacuity_the_junction_helper_cannot_report_a_tool_failure_as_a_refusal(monkeypatch):
+    """A COULD-NOT-CHECK must never wear the skip text that blames the box.
+
+    The version this replaces returned a bare bool and collapsed at least three
+    different facts into one False: mklink could not be launched at all, mklink
+    ran and was refused, and mklink exited 0 while creating nothing. Only the
+    middle one makes "this box will not create an NTFS junction" a true
+    sentence. Measured on this box 2026-09-08 - which DOES make junctions, all
+    three arms green unpatched - injecting an OSError at the subprocess call
+    gave `3 skipped, exit 0` with all three skip texts asserting something about
+    the machine that was false, and injecting an exit-0-with-no-link gave the
+    identical result. That silently retires the only coverage that a junction
+    inside a verbatim drop is not descended, is named with its reason, and moves
+    the drop digest.
+
+    Every branch below is driven through the PURE classifier, so this arm runs
+    on a machine where mklink does not exist at all.
+    """
+    # EVERY SHAPE BELOW WAS MEASURED FROM REAL mklink ON THIS BOX 2026-09-08,
+    # ON A BOX THAT MAKES JUNCTIONS, WITH NOTHING INJECTED. The first four all
+    # exit 1 - the same exit code as a privilege refusal - and the version this
+    # replaces classified every one of them REFUSED, because REFUSED was the
+    # pure residual `returncode != 0 and not link_exists`. Two of them were
+    # reproduced end to end as green skips reading
+    # "this box refused the junction - mklink exited 1 The system cannot find
+    # the path specified."
+    for returncode, text, reparse, why in (
+        (1, "The system cannot find the path specified.", False, "an absent link parent"),
+        (
+            1,
+            "The filename, directory name, or volume label syntax is incorrect.",
+            False,
+            "an empty or malformed target",
+        ),
+        (1, "The system cannot find the file specified.", False, "an illegal character in the target"),
+        (1, "Cannot create a file when that file already exists.", False, "a link that is already there"),
+        # THE OPPOSITE OF WHAT THIS FILE USED TO ASSERT. The arm previously
+        # pinned (1, "") to REFUSED and called it "a refusal that printed
+        # nothing", which REQUIRED the catch-all that mints every tool failure
+        # above as a refusal. An exit that printed nothing said nothing, and
+        # nothing is not a fingerprint for a refusal.
+        (1, "", False, "a non-zero exit that printed nothing at all"),
+        (0, "", False, "exit 0 having created no link"),
+        # DEFEAT 2, AT THE CLASSIFIER. `Path.exists()` follows a reparse point
+        # and is True for any ordinary directory, so a maker that only calls
+        # mkdir used to read MADE.
+        (
+            0,
+            "Junction created for C:\\x <<===>> C:\\y",
+            False,
+            "exit 0 with an ordinary directory where the junction should be",
+        ),
+        (1, "", True, "a non-zero exit with a reparse point present anyway"),
+        (9009, "'mklink' is not recognized", True, "a missing tool with a reparse point present anyway"),
+        # cmd emits "'<word>' is not recognized" for a MANGLED COMMAND LINE too
+        # - measured at rc=255 on this box when an illegal character split the
+        # argument. That is a bug in this harness, not a statement about the
+        # machine, so the marker carries the tool name and this must not match.
+        (
+            255,
+            "'name' is not recognized as an internal or external command,\r\noperable program or batch file.",
+            False,
+            "cmd choking on a mangled command line",
+        ),
+    ):
+        got = _classify_junction_make(returncode, text, reparse)
+        assert got.status == "FAILED", (
+            f"the junction helper reported {why} as {got.status}, and only REFUSED may skip. "
+            "A self-contradicting tool is not evidence about the box"
+        )
+
+    # REFUSED is the ONLY status the skip text is true for, and it must survive
+    # for the texts that really do name a refusal.
+    for returncode, text, why in (
+        (1, "You do not have sufficient privilege to perform this operation.", "a privilege refusal"),
+        (9009, "'mklink' is not recognized as an internal or external command", "no mklink on this box"),
+    ):
+        got = _classify_junction_make(returncode, text, False)
+        assert got.status == "REFUSED", f"{why} is the case the skip text describes, and it read {got.status}"
+
+    # POSITIVE CONTROL. Without it a classifier returning FAILED unconditionally
+    # passes everything above. This one plants the reparse fact as a bare bool,
+    # so it says only that the classifier routes the fact - it CANNOT discover
+    # whether the fact is computed correctly, which is exactly how the old
+    # control missed Defeat 2. The arm that grades the probe itself is
+    # test_non_vacuity_the_reparse_probe_says_yes_to_a_junction_this_run_made,
+    # with its negatives in the arm beside it.
+    made = _classify_junction_make(0, "", True)
+    assert made.status == "MADE", "a junction that really was created must not read as a failure"
+    assert len({made.status, _classify_junction_make(0, "", False).status,
+                _classify_junction_make(1, "sufficient privilege", False).status}) == 3, (
+        "the three outcomes are not distinct, so the caller cannot tell them apart"
+    )
+
+    # THE LAUNCH BRANCH lives outside the pure classifier, so it is driven
+    # through the wrapper with the real subprocess call displaced.
+    #
+    # DEFEAT 3, AND IT IS THE ROW THAT USED TO SAY THE OPPOSITE. The version
+    # this replaces asserted `(OSError("injected"), "UNAVAILABLE", ...)` - it
+    # REQUIRED the over-wide catch, exactly as an earlier version REQUIRED
+    # `(1, "")` to read REFUSED. `except OSError` is a catch, not a diagnosis:
+    # nine unrelated facts arrive through it, and only one of them says the
+    # tool was not found. Measured on this box with NO injection at all, a
+    # control junction was MADE and then, with the fd table exhausted, the same
+    # helper reported UNAVAILABLE saying "this box has no runnable mklink".
+    #
+    #   ENOENT          the exec looked for `cmd` and did not find it. No
+    #                   process existed. UNAVAILABLE - the third disposition -
+    #                   and the caller skips. This is ubuntu-latest.
+    #   any other code  something went wrong with THIS RUN and nothing was
+    #   or no code      learned about this machine. FAILED. A bare OSError with
+    #                   `errno is None` carries NO evidence of absence, so it
+    #                   is here too - absence must be proved, never inferred
+    #                   from the absence of a code.
+    #   TimeoutExpired  only reachable AFTER the exec succeeded. Something WAS
+    #                   launched and then hung for 30 seconds. That is a box
+    #                   that has mklink and on which mklink misbehaved, so it
+    #                   is FAILED, and calling it "no mklink here" would be a
+    #                   false sentence that also buries a real hang in green.
+    for exc, expected, why in (
+        (
+            FileNotFoundError(errno.ENOENT, "No such file or directory: 'cmd'"),
+            "UNAVAILABLE",
+            "the exec looked for cmd and did not find it",
+        ),
+        (
+            OSError(errno.EMFILE, "Too many open files"),
+            "FAILED",
+            "an fd table exhausted by THIS process, measured on a box that had just made a junction",
+        ),
+        (
+            PermissionError(errno.EACCES, "Permission denied"),
+            "FAILED",
+            "an exec denied by policy on a box where cmd is present",
+        ),
+        (
+            NotADirectoryError(errno.ENOTDIR, "Not a directory"),
+            "FAILED",
+            "a path component on the launch path that is not a directory",
+        ),
+        (OSError(errno.ENOMEM, "Cannot allocate memory"), "FAILED", "an out-of-memory fork"),
+        (
+            OSError(errno.EAGAIN, "Resource temporarily unavailable"),
+            "FAILED",
+            "a process table with no room left in it",
+        ),
+        (
+            OSError(errno.EPIPE, "Broken pipe"),
+            "FAILED",
+            "a pipe that broke AFTER the process had already run",
+        ),
+        (
+            OSError("injected"),
+            "FAILED",
+            "a bare OSError carrying no errno at all, which is no evidence of absence",
+        ),
+        (
+            subprocess.TimeoutExpired(cmd="mklink", timeout=30),
+            "FAILED",
+            "the tool was launched and then ran past its timeout",
+        ),
+    ):
+        def _raise(_link, _target, _exc=exc):
+            raise _exc
+
+        monkeypatch.setitem(globals(), "_mklink_junction", _raise)
+        got = _junction(Path("nowhere") / "link", Path("nowhere") / "target")
+        assert got.status == expected, (
+            f"{why} read as {got.status} rather than {expected}. Only a not-found code says the "
+            "tool was never there; every other launch failure is a fact about this run"
+        )
+
+    # THE SENTENCE IS GRADED BY ITS DERIVATION, NEVER BY ITS ADJECTIVES.
+    #
+    # DEFEAT 4. The version this replaces asserted `"refus" not in detail`.
+    # That is a SHAPE ARM - it pins the wording and not the meaning - and a
+    # mutant whose UNAVAILABLE sentence read "this box denied the junction and
+    # rejected `cmd /c mklink` outright ... Its administrator has turned
+    # junctions off" carried the identical false claim in synonyms and passed
+    # every arm in this file. Measured 2026-09-08: that mutant fired 13 times
+    # under a no-cmd simulation and the file still reported SKIPPED [4], exit 0.
+    #
+    # NO MECHANISM CAN GRADE THE TRUTH OF ENGLISH, so this stops trying to.
+    # What IS checkable is the EVIDENCE the status was derived from: the skip
+    # must carry the code it was classified on and what the exec actually said,
+    # and two DIFFERENT not-found launches must produce two DIFFERENT
+    # sentences, which is what kills a hardcoded one. The truth of the one
+    # remaining sentence is then a review property of a single branch reachable
+    # from a single errno, not a runtime property of nine machine states
+    # sharing one paragraph. That narrowing is the point: the mechanism cannot
+    # support "this sentence is true", and it can support "this sentence was
+    # derived from ENOENT and from nothing else".
+    details = []
+    for exc, expected_class in (
+        (FileNotFoundError(errno.ENOENT, "No such file or directory: 'cmd'"), "FileNotFoundError"),
+        (OSError(errno.ENOENT, "cmd disappeared between the lookup and the exec"), "FileNotFoundError"),
+    ):
+        def _raise_absent(_link, _target, _exc=exc):
+            raise _exc
+
+        monkeypatch.setitem(globals(), "_mklink_junction", _raise_absent)
+        absent = _junction(Path("nowhere") / "link", Path("nowhere") / "target")
+        assert absent.status == "UNAVAILABLE", (
+            f"a not-found exec read {absent.status}, so the one case a skip is honest for is gone"
+        )
+        assert f"errno={errno.ENOENT!r}" in absent.detail, (
+            "the skip does not carry the code it was derived from, so nothing downstream can "
+            "check that it followed from a not-found error rather than from any OSError this "
+            f"process happened to raise: {absent.detail!r}"
+        )
+        assert expected_class in absent.detail, (
+            f"the skip does not carry the exception the exec really raised: {absent.detail!r}"
+        )
+        assert str(exc) in absent.detail, (
+            f"the skip does not carry what the exec actually said: {absent.detail!r}"
+        )
+        assert "mklink" in absent.detail.lower(), (
+            f"the skip does not name the tool it could not launch: {absent.detail!r}"
+        )
+        details.append(absent.detail)
+
+    assert len(set(details)) == 2, (
+        "two different not-found launches produced the SAME skip sentence, so the sentence is a "
+        "constant and carries no evidence from the run that emitted it"
+    )
+
+
+def test_non_vacuity_the_reparse_probe_says_no_to_a_plain_directory_and_an_absent_one(tmp_path):
+    """A CONTROL THAT ONLY PLANTS THE CASE THE MATCHER HANDLES CANNOT DISCOVER
+    THAT THE MATCHER IS NARROW.
+
+    The classifier arm above hands the reparse fact in as a bare `True`, so it
+    grades the ROUTING and nothing else. That is precisely how the old positive
+    control - `_classify_junction_make(0, "", True)` - sat green while the fact
+    it stood in for was `Path.exists()`, which is True for any directory at all.
+
+    So this arm grades the PROBE, and it is SPLIT FROM ITS POSITIVE LEG on
+    purpose. These two negatives need no mklink and no NTFS: they run and are
+    GRADED on any box, ubuntu-latest included. Welding them to a leg that needs
+    a real junction would have thrown both away as a skip on exactly the
+    machine CI runs on - which is the shape an open roadmap item in this tree
+    already records, a Windows-only skipif under which every real-probe arm
+    silently vanishes on the runner. Half of this arm does not have to vanish,
+    so it does not.
+    """
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    assert _link_is_reparse_point(plain) is False, (
+        "an ordinary directory read as a reparse point, so the gate accepts a fixture that "
+        "contains no junction and every junction arm goes vacuously green"
+    )
+    assert _link_is_reparse_point(tmp_path / "absent") is False, (
+        "an entry that is not there read as a reparse point"
+    )
+
+
+def test_non_vacuity_the_reparse_probe_says_yes_to_a_junction_this_run_made(tmp_path):
+    """THE POSITIVE LEG, WHICH REALLY DOES NEED A JUNCTION, AND SAYS SO.
+
+    Split out of the negatives above because its precondition is different in
+    kind: this one cannot be asserted at all where a junction cannot be built.
+    It goes through `_require_junction`, so on a box that refuses, or a box
+    with no mklink at all, it SKIPS with a reason naming which of those two it
+    is - and the negatives above still run and are still graded.
+
+    The name and the docstring claim exactly one thing: that a junction THIS
+    RUN MADE reads as a reparse point. Where no junction was made, the arm
+    reports skipped and claims nothing. The version this replaces bundled all
+    three legs under a name that promised the discrimination, and on a
+    no-mklink box it neither skipped nor discriminated - it FAILED, and its
+    docstring said it would skip.
+    """
+    target = tmp_path / "target"
+    target.mkdir()
+    link = tmp_path / "link"
+    _require_junction(link, target)
+
+    assert _link_is_reparse_point(link) is True, (
+        "a junction this run just made did not read as a reparse point. `os.stat` follows the "
+        "reparse point and reports the TARGET, so it reads False here - the probe must use "
+        "`os.lstat`, and a probe that reads False fails all three junction arms on a box that "
+        "makes junctions perfectly well"
+    )
+    assert link.exists() is True, (
+        "the probe and Path.exists() disagree in the direction that would make this arm vacuous"
+    )
+
+
+def test_non_vacuity_the_three_junction_arms_really_fail_when_mklink_could_not_be_checked(
+    watch, tmp_path, capsys, monkeypatch
+):
+    """A GATE TESTED AS A PURE PREDICATE IS NOT AN ENFORCED GATE.
+
+    Five recurrences of that in this tree, so the classifier being right is not
+    the claim - the claim is that these three CALLERS take the right one of the
+    three dispositions. Each arm is invoked directly, in its own sandbox
+    directory, with the mklink call displaced, so this runs on a machine that
+    has no mklink at all.
+
+    FOUR OF THE FIVE CASES BELOW ARE RED, and they are the original defect:
+    the tool ran, so a skip would blame a machine this run has evidence
+    against. THE FIFTH AND THE FIRST ARE THE TWO SKIPS, and they are different
+    skips - one says the box refused, one says the tool was never launched -
+    so this arm reads the reason text and not merely the exception type. A skip
+    that borrows the other one's sentence is a false claim about the machine
+    and is graded as a failure here.
+    """
+    arms = (
+        test_a_junction_inside_a_drop_is_not_descended,
+        test_a_junction_is_named_in_the_report_with_its_reason,
+        test_a_junction_moves_the_drop_digest_rather_than_vanishing,
+    )
+
+    def _unlaunchable(_link, _target):
+        """CASE 3: THE TOOL IS NOT ON THIS BOX. Skip, and say only that.
+
+        This is ubuntu-latest, where `subprocess.run(["cmd", ...])` raises
+        FileNotFoundError from the exec itself. No process runs, so nothing
+        malfunctioned and nothing was measured. Before the repair this read
+        FAILED and took four arms red on every CI run of a green tree.
+        """
+        raise FileNotFoundError(2, "injected: no such file or directory: 'cmd'")
+
+    def _liar(_link, _target):
+        return 0, ""
+
+    def _mkdir_liar(link, target):
+        """DEFEAT 2, AT THE CALLERS. Makes a PLAIN DIRECTORY and claims a junction.
+
+        Measured against the version this replaces: with this displacement in
+        place, `test_a_junction_inside_a_drop_is_not_descended` reported PASSED
+        over a fixture containing no junction at all, because the gate's
+        `Path.exists()` is True for any directory. The other two arms errored,
+        so exactly one arm went vacuously green - and one silently-vacuous arm
+        is the whole defect class.
+        """
+        Path(link).mkdir(parents=True, exist_ok=True)
+        return 0, f"Junction created for {link} <<===>> {target}"
+
+    def _path_not_found(_link, _target):
+        """DEFEAT 1, AT THE CALLERS. A real rc=1 shape that is NOT a refusal.
+
+        Measured from real mklink on this box with an absent link parent. The
+        version this replaces skipped all three arms on it with
+        "this box refused the junction - mklink exited 1 The system cannot find
+        the path specified." on a box that makes junctions.
+        """
+        return 1, "The system cannot find the path specified."
+
+    def _refusal(_link, _target):
+        return 1, "You do not have sufficient privilege to perform this operation."
+
+    def _fd_exhausted(_link, _target):
+        """DEFEAT 3, AT THE CALLERS. The exec raised, and the tool IS present.
+
+        Measured with nothing injected at all on this box 2026-09-08: a control
+        junction was MADE, the CRT fd table was then exhausted with 8189 opens,
+        and the launch branch came back UNAVAILABLE - "this box has no runnable
+        mklink" - about the very box that had just made one. Four arms skipped,
+        exit 0. An OSError that is not a not-found code says something went
+        wrong with THIS RUN and nothing whatever about this machine.
+        """
+        raise OSError(errno.EMFILE, "Too many open files")
+
+    #: status -> the ONLY disposition `_require_junction` may take for it. The
+    #: routing is graded against this table and never against a word in prose.
+    dispositions = {"UNAVAILABLE": "SKIPPED", "REFUSED": "SKIPPED", "FAILED": "FAILED"}
+
+    for case_id, (outcome, maker, why) in enumerate((
+        ("UNAVAILABLE", _unlaunchable, "mklink is not present on this box at all"),
+        ("FAILED", _liar, "mklink exited 0 and created nothing"),
+        ("FAILED", _mkdir_liar, "mklink made an ordinary directory and called it a junction"),
+        ("FAILED", _path_not_found, "mklink exited 1 for a reason that is not a refusal"),
+        ("REFUSED", _refusal, "mklink was refused"),
+        ("FAILED", _fd_exhausted, "the exec raised a code that is not a not-found code"),
+    )):
+        monkeypatch.setitem(globals(), "_mklink_junction", maker)
+        for index, arm in enumerate(arms):
+            case = tmp_path / "arms" / f"{case_id}-{outcome}-{index}"
+            case.mkdir(parents=True)
+            names = arm.__code__.co_varnames[: arm.__code__.co_argcount]
+            pool = {"watch": watch, "tmp_path": case, "capsys": capsys}
+            try:
+                arm(**{name: pool[name] for name in names})
+            except pytest.skip.Exception as exc:
+                # BOTH SKIPS ARRIVE AS THE SAME EXCEPTION. The version this
+                # replaces told them apart by SUBSTRING - "no runnable mklink"
+                # meant UNAVAILABLE and anything else meant REFUSED - which
+                # grades the wording of a sentence rather than the status
+                # behind it, and a mutant that said the same false thing in
+                # synonyms walked straight through it. What is read here is the
+                # DISPOSITION, and the status is read from the classifier below
+                # under the same displaced maker.
+                got, detail = "SKIPPED", str(exc)
+            except pytest.fail.Exception as exc:
+                got, detail = "FAILED", str(exc)
+            else:
+                got, detail = "PASSED", "the arm reported a pass"
+            capsys.readouterr()
+
+            probe = tmp_path / "probe" / f"{case_id}-{index}"
+            probe.mkdir(parents=True)
+            (probe / "target").mkdir()
+            verdict = _junction(probe / "link", probe / "target")
+
+            assert verdict.status == outcome, (
+                f"the classifier read {why} as {verdict.status} rather than {outcome}, so the "
+                f"caller above was graded against the wrong fact. It said: {verdict.detail!r}"
+            )
+            assert got == dispositions[outcome], (
+                f"{arm.__name__} took {got} for a {outcome}, and the only disposition a "
+                f"{outcome} may take is {dispositions[outcome]}. It said: {detail!r}"
+            )
+            if got == "SKIPPED":
+                assert detail == verdict.detail, (
+                    f"{arm.__name__} minted its own skip sentence instead of carrying the one the "
+                    "classifier derived from the evidence, so the skip asserts something no part "
+                    f"of this run measured. It said {detail!r}, not {verdict.detail!r}"
+                )
+
+
+def test_on_a_box_with_no_cmd_every_junction_arm_skips_and_none_of_them_fails(
+    watch, tmp_path, capsys, monkeypatch
+):
+    """THE LINUX RUNNER, SIMULATED IN THE FILE RATHER THAN IN A SCRATCHPAD.
+
+    `.github/workflows/ci.yml` is `runs-on: ubuntu-latest` and runs
+    `python -m pytest tests`. There is no `cmd` there, so
+    `subprocess.run(["cmd", ...])` raises FileNotFoundError - an OSError - from
+    the exec itself. The first version of this junction gate sent that to
+    `pytest.fail`, and the whole suite went red on arrival: measured
+    2026-09-08 with nothing changed but that one exec, `4 failed, 101 passed`,
+    exit 1, on a tree with nothing wrong in it.
+
+    THE SIMULATION IS DISPLACED AT `subprocess.run` AND NOT AT
+    `_mklink_junction`, and that is the difference between this arm and the one
+    above it. The arm above injects at the helper boundary, which grades the
+    routing. This one injects where the failure REALLY ORIGINATES on the
+    runner, so it also grades the layer in between - the `except OSError` in
+    `_junction` - and it would go red if that clause were narrowed to a type
+    the exec does not raise, or moved back under the SubprocessError branch.
+
+    IT GRADES ALL FOUR ARMS, and four is the number: the three junction arms
+    plus the positive leg of the reparse probe. The blast radius was disclosed
+    as three when it was four, so the count is asserted here as a literal
+    rather than left as a list nobody recounts.
+
+    A SKIP IS ONLY HONEST WHILE ITS REASON IS, AND HONESTY IS GRADED BY
+    DERIVATION RATHER THAN BY VOCABULARY. Each skip must name the tool it could
+    not launch, must carry the exception the exec really raised AND the errno
+    it was classified on, and must BE the classifier's own sentence rather than
+    one the caller minted. The assertion that used to stand here - `"refus" not
+    in reason` - is gone, because a substring check on emitted prose grades
+    format and not meaning: a mutant whose skip said the box "denied ...
+    rejected ... its administrator has turned junctions off" made the identical
+    false claim in synonyms and passed it.
+    """
+    real_run = subprocess.run
+
+    def _no_cmd(args, *rest, **kwargs):
+        if list(args)[:1] == ["cmd"]:
+            raise FileNotFoundError(2, "No such file or directory: 'cmd'")
+        return real_run(args, *rest, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", _no_cmd)
+
+    # THE SIMULATION IS ARMED. Without this leg an arm could skip for some
+    # unrelated reason and the whole test would still read green.
+    with pytest.raises(FileNotFoundError):
+        subprocess.run(["cmd", "/c", "echo", "x"], capture_output=True)
+
+    arms = (
+        test_a_junction_inside_a_drop_is_not_descended,
+        test_a_junction_is_named_in_the_report_with_its_reason,
+        test_a_junction_moves_the_drop_digest_rather_than_vanishing,
+        test_non_vacuity_the_reparse_probe_says_yes_to_a_junction_this_run_made,
+    )
+    assert len(arms) == 4, (
+        "the blast radius of this gate is four arms and was once disclosed as three. If an arm "
+        "was added or removed, recount it here deliberately rather than letting the list drift"
+    )
+
+    for index, arm in enumerate(arms):
+        case = tmp_path / "nocmd" / str(index)
+        case.mkdir(parents=True)
+        names = arm.__code__.co_varnames[: arm.__code__.co_argcount]
+        pool = {"watch": watch, "tmp_path": case, "capsys": capsys}
+        try:
+            arm(**{name: pool[name] for name in names})
+        except pytest.skip.Exception as exc:
+            reason = str(exc)
+        except pytest.fail.Exception as exc:  # pragma: no cover - the defect being guarded
+            capsys.readouterr()
+            pytest.fail(
+                f"{arm.__name__} FAILED on a box with no cmd rather than skipping. That is the "
+                "merge blocker this arm exists to hold shut: nothing is wrong with the code under "
+                f"test, and a red a reader cannot act on trains them to ignore red. It said: {exc}"
+            )
+        else:  # pragma: no cover - only reachable if the fixture built itself
+            capsys.readouterr()
+            pytest.fail(
+                f"{arm.__name__} PASSED with no cmd on the box, so it proved nothing over a "
+                "fixture that cannot contain a junction. A vacuous green is worse than the red"
+            )
+        capsys.readouterr()
+
+        assert "mklink" in reason.lower(), (
+            f"{arm.__name__} skipped without naming the tool it could not launch: {reason!r}"
+        )
+        assert "FileNotFoundError" in reason, (
+            f"{arm.__name__} skipped without carrying the exception the exec actually raised, so "
+            f"the reason cannot be traced to the simulation: {reason!r}"
+        )
+        assert f"errno={errno.ENOENT!r}" in reason, (
+            f"{arm.__name__} skipped without carrying the CODE the skip was classified on, so no "
+            "reader can check that it followed from a not-found error rather than from any "
+            f"OSError this process happened to raise: {reason!r}"
+        )
+
+        probe = tmp_path / "probe" / str(index)
+        probe.mkdir(parents=True)
+        (probe / "target").mkdir()
+        verdict = _junction(probe / "link", probe / "target")
+        assert verdict.status == "UNAVAILABLE", (
+            "a runner with no cmd is the one case an UNAVAILABLE is honest for, and the "
+            f"classifier read it as {verdict.status}: {verdict.detail!r}"
+        )
+        assert reason == verdict.detail, (
+            f"{arm.__name__} minted its own skip sentence rather than carrying the one the "
+            f"classifier derived from the evidence: {reason!r} against {verdict.detail!r}"
+        )
+
+
+def test_on_a_box_whose_fd_table_is_full_every_junction_arm_fails_and_none_of_them_skips(
+    watch, tmp_path, capsys, monkeypatch
+):
+    """DEFEAT 3, END TO END. THE MIRROR OF THE ARM ABOVE, AND IT MUST BE RED.
+
+    The no-cmd arm above pins the one launch failure a skip is honest for. This
+    one pins every launch failure a skip is NOT honest for, and it exists
+    because the version it was written against was defeated WITH NO INJECTION
+    AT ALL. Measured on this box 2026-09-08 in a single process:
+
+        CONTROL (fds free)   MADE - mklink made the junction
+        fd table exhausted after 8189 opens
+        UNDER EXHAUSTION     UNAVAILABLE
+        blast radius         SKIPPED [4], exit 0, the whole file green
+
+    The skip blamed a machine the run had DIRECT EVIDENCE AGAINST, in the exact
+    wording `_require_junction` uses to explain why a FAILED may not skip. The
+    tool was present. The tool works. This process had run out of file
+    descriptors, which is a fact about the process.
+
+    ENOENT IS THE ONLY CODE THAT SAYS THE TOOL WAS NOT FOUND. Everything else -
+    EMFILE here, and EACCES, ENOTDIR, ENOMEM, EAGAIN, EPIPE and a bare OSError
+    with no code at all in the classifier arm above - is a fact about this run,
+    so it is FAILED, and FAILED is red. A red a reader can act on is the whole
+    point: the message names the code and says what it is not.
+    """
+    real_run = subprocess.run
+
+    def _emfile(args, *rest, **kwargs):
+        if list(args)[:1] == ["cmd"]:
+            raise OSError(errno.EMFILE, "Too many open files")
+        return real_run(args, *rest, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", _emfile)
+
+    # THE SIMULATION IS ARMED, and it is armed on the CODE and not merely on
+    # the class - a disarmed injector, or one raising a not-found error, would
+    # otherwise turn this whole arm into a restatement of the arm above.
+    with pytest.raises(OSError) as caught:
+        subprocess.run(["cmd", "/c", "echo", "x"], capture_output=True)
+    assert caught.value.errno == errno.EMFILE, (
+        "the fd-exhaustion simulation is not armed, so this arm proves nothing"
+    )
+
+    arms = (
+        test_a_junction_inside_a_drop_is_not_descended,
+        test_a_junction_is_named_in_the_report_with_its_reason,
+        test_a_junction_moves_the_drop_digest_rather_than_vanishing,
+        test_non_vacuity_the_reparse_probe_says_yes_to_a_junction_this_run_made,
+    )
+    assert len(arms) == 4, (
+        "the blast radius of the defeat this arm closes is four arms. If an arm was added or "
+        "removed, recount it here deliberately rather than letting the list drift"
+    )
+
+    for index, arm in enumerate(arms):
+        case = tmp_path / "emfile" / str(index)
+        case.mkdir(parents=True)
+        names = arm.__code__.co_varnames[: arm.__code__.co_argcount]
+        pool = {"watch": watch, "tmp_path": case, "capsys": capsys}
+        try:
+            arm(**{name: pool[name] for name in names})
+        except pytest.skip.Exception as exc:  # pragma: no cover - the defect being guarded
+            capsys.readouterr()
+            pytest.fail(
+                f"{arm.__name__} SKIPPED on a box whose fd table is full. That is the defeat this "
+                "arm exists to hold shut: the tool is present, this run has evidence it works, "
+                "and the skip blames the machine anyway. An exhausted fd table is a fact about "
+                f"the process, not about the box. It said: {exc}"
+            )
+        except pytest.fail.Exception as exc:
+            reason = str(exc)
+        else:  # pragma: no cover - only reachable if the fixture built itself
+            capsys.readouterr()
+            pytest.fail(
+                f"{arm.__name__} PASSED with no file descriptors left, so it proved nothing over "
+                "a fixture that cannot contain a junction"
+            )
+        capsys.readouterr()
+
+        assert f"errno={errno.EMFILE!r}" in reason, (
+            f"{arm.__name__} failed without naming the code it failed on, so the reader has "
+            f"nothing to act on: {reason!r}"
+        )
+        assert "Too many open files" in reason, (
+            f"{arm.__name__} failed without carrying what the exec actually said: {reason!r}"
+        )
+
+        probe = tmp_path / "emfile-probe" / str(index)
+        probe.mkdir(parents=True)
+        (probe / "target").mkdir()
+        verdict = _junction(probe / "link", probe / "target")
+        assert verdict.status == "FAILED", (
+            "an exhausted fd table is not evidence that this box lacks mklink, and the "
+            f"classifier read it as {verdict.status}: {verdict.detail!r}"
+        )
 
 
 #: How many files the budget arm below is allowed to create, as a LITERAL.
