@@ -8,6 +8,7 @@ exists for, so they are asserted directly rather than assumed.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -237,3 +238,229 @@ def test_the_crlf_detector_fires_on_a_planted_offender(tmp_path):
     clean = tmp_path / "clean.txt"
     clean.write_bytes(b"a\nb\n")
     assert _crlf_offenders(clean, "clean") == []
+
+
+# ---------------------------------------------------------------------------
+# The temp file must not survive ANY failure
+#
+# `Path.write_text` opens the file BEFORE it encodes the payload, so a payload
+# that cannot be encoded leaves a zero-byte temp on disk. The handler caught
+# only OSError, and a UnicodeEncodeError is a ValueError, so `_discard` was
+# skipped outright. Measured in this tree at 3533965 before the fix:
+#
+#     RAISED UnicodeEncodeError 'utf-8' codec can't encode character
+#     '\\ud800' in position 0: surrogates not allowed
+#     residue ['.state.json.27536.5013851f.tmp']  size 0
+#
+# The leak is not specific to encoding. Anything raised between the open and
+# the rename orphans the temp, including a BaseException such as a
+# KeyboardInterrupt landing mid-write. The repair therefore has to be reached
+# without catching anything, and it must NOT fire on the success path, where
+# the temp has already been renamed onto the target.
+#
+# Every arm below carries a positive floor IN THE SAME ARM - the exception type
+# raised, a counted injection, or the target's exact bytes. An arm that asserts
+# only "no temp remains" passes just as happily when the write never ran at
+# all, which is a test about nothing.
+# ---------------------------------------------------------------------------
+
+_LONE_SURROGATE = chr(0xD800)
+
+
+class _InjectedFailure(Exception):
+    """A failure that is neither an OSError nor an encoding error."""
+
+
+def _residue(directory: Path) -> list[str]:
+    """Every name left in `directory`, derived rather than hand-counted."""
+    return sorted(p.name for p in directory.iterdir())
+
+
+def _spy_write_text_then_raise(monkeypatch, exc: BaseException) -> dict[str, int]:
+    """Make `Path.write_text` do the real write and THEN raise `exc`.
+
+    Writing for real before raising is what makes these arms bite. An injected
+    failure that raises before the open never creates a temp, so "no residue"
+    would hold against the unfixed module too and the arm would prove nothing.
+    This reproduces the real shape: the temp exists on disk, then the call
+    dies.
+    """
+    calls = {"n": 0}
+    real_write_text = Path.write_text
+
+    def spy(self: Path, *args, **kwargs):
+        calls["n"] += 1
+        real_write_text(self, *args, **kwargs)
+        raise exc
+
+    monkeypatch.setattr(Path, "write_text", spy)
+    return calls
+
+
+def test_an_unencodable_payload_leaves_no_temp_behind(tmp_path):
+    """A1. The measured leak: a lone surrogate cannot be UTF-8 encoded.
+
+    The raise is the floor. It proves the write path ran and failed for the
+    encoding reason rather than the target simply never being touched. Whether
+    this case raises or returns False is a separate contract question; this arm
+    pins only that the temp is gone either way.
+    """
+    target = tmp_path / "state.json"
+    with pytest.raises(UnicodeEncodeError):
+        atomic_write_text(target, _LONE_SURROGATE)
+    assert not target.exists()
+    assert _residue(tmp_path) == []
+
+
+def test_an_unencodable_payload_leaves_the_previous_document_intact(tmp_path):
+    """A1, surviving-neighbour arm. The old state must outlive the bad write."""
+    target = tmp_path / "state.json"
+    assert atomic_write_text(target, "OLD") is True
+
+    with pytest.raises(UnicodeEncodeError):
+        atomic_write_text(target, _LONE_SURROGATE)
+
+    assert target.read_bytes() == b"OLD"
+    assert _residue(tmp_path) == ["state.json"]
+
+
+def test_a_non_oserror_failure_mid_write_leaves_no_temp_behind(tmp_path, monkeypatch):
+    """A2. An arbitrary Exception raised after the temp exists on disk."""
+    target = tmp_path / "state.json"
+    calls = _spy_write_text_then_raise(monkeypatch, _InjectedFailure("disk gremlin"))
+
+    with pytest.raises(_InjectedFailure):
+        atomic_write_text(target, "NEW")
+
+    assert calls["n"] == 1
+    assert not target.exists()
+    assert _residue(tmp_path) == []
+
+
+def test_a_baseexception_mid_write_leaves_no_temp_behind(tmp_path, monkeypatch):
+    """A3. A KeyboardInterrupt is not an Exception, and it orphans the temp too.
+
+    `pytest.raises(Exception)` does NOT catch a BaseException subclass, so this
+    arm names KeyboardInterrupt explicitly. A repair built on a wider `except`
+    clause would not cover this case at all.
+    """
+    target = tmp_path / "state.json"
+    calls = _spy_write_text_then_raise(monkeypatch, KeyboardInterrupt())
+
+    with pytest.raises(KeyboardInterrupt):
+        atomic_write_text(target, "NEW")
+
+    assert calls["n"] == 1
+    assert not target.exists()
+    assert _residue(tmp_path) == []
+
+
+def test_a_successful_write_publishes_the_bytes_and_leaves_no_residue(tmp_path):
+    """A4. Control. The cleanup must not touch the success path.
+
+    A repair that unlinks the temp unconditionally is harmless only by luck -
+    the temp name no longer exists after the rename. This arm pins the intent:
+    the caller's exact bytes land on the target and the directory holds that
+    one file and nothing else.
+    """
+    target = tmp_path / "state.txt"
+    assert atomic_write_text(target, "a\nb\n") is True
+    assert target.read_bytes() == b"a\nb\n"
+    assert _residue(tmp_path) == ["state.txt"]
+
+
+class _Recorder(logging.Handler):
+    """Collects formatted records off a single logger."""
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.ERROR)
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(record.getMessage())
+
+
+def test_an_oserror_still_returns_false_and_logs_and_leaves_no_residue(tmp_path, monkeypatch):
+    """A5. Control. The OSError contract is unchanged by the cleanup repair.
+
+    The existing rename-failure arm pins the return value and the residue; this
+    one adds the log record, so a repair that quietly stopped reporting the
+    failure would be caught.
+
+    `caplog` cannot see this record. `core.log_setup.get_logger` sets
+    `logger.propagate = False`, so nothing reaches the root handler pytest
+    installs, and a caplog-based assertion here would measure the harness
+    rather than the module. The handler is attached to the module's own logger
+    instead.
+    """
+    target = tmp_path / "state.json"
+    assert atomic_write_text(target, "OLD") is True
+
+    def boom(self: Path, other):
+        raise OSError(28, "No space left on device")
+
+    recorder = _Recorder()
+    core.atomic_io._log.addHandler(recorder)
+    try:
+        monkeypatch.setattr(Path, "replace", boom)
+        assert atomic_write_text(target, "NEW") is False
+    finally:
+        core.atomic_io._log.removeHandler(recorder)
+
+    assert len(recorder.messages) == 1, f"expected one error log, got {recorder.messages}"
+    assert "atomic_write_text failed" in recorder.messages[0]
+    assert "OSError" in recorder.messages[0]
+    assert target.read_bytes() == b"OLD"
+    assert _residue(tmp_path) == ["state.json"]
+
+
+def test_an_unencodable_payload_raises_rather_than_returning_false(tmp_path):
+    """A6. THE ADJUDICATED CONTRACT, held as a checked claim rather than prose.
+
+    NOT a mutant-coverage claim, and measured before it was written. Widening
+    the guard to `except (OSError, UnicodeEncodeError)` on a scratch copy turns
+    THREE arms red, two of them slice A's. So the absorb is already caught.
+    What it is not already is STATED: both of those arms use the raise only as
+    a floor proving the write path ran, and
+    `test_an_unencodable_payload_leaves_no_temp_behind` says in as many words
+    that whether this raises or returns False is a separate contract question
+    it does not pin. A maintainer who decided to absorb would read their red as
+    two arms needing an update, which is exactly what an unstated contract buys
+    you. This arm makes that red mean "you changed the contract".
+
+    THE RULING IS KEEP RAISING, and two measured facts decided it. A payload
+    the encoder rejects is a programmer error, not a state of the disk, and
+    `tools/moon_sync_responder.py` re-raises `UnicodeError` out of its widened
+    guard precisely so it cannot be mistaken for an ordinary `(False, target)`
+    row - "loud-to-quiet is strictly worse than the silent abort". And
+    `tests/test_responder_broadcast_refusal.py` asserts that escape end to end
+    in `test_an_unencodable_draft_still_escapes_the_delivery_loop`, so an
+    absorb here would redden a suite two modules away rather than fail locally.
+
+    THE CONTROL IS IN THIS ARM ON PURPOSE. Without it the arm cannot tell
+    "raises on a surrogate" from "raises on everything" - a module that lost
+    its ability to write at all would satisfy every negative above.
+    """
+    refused = tmp_path / "refused"
+    refused.mkdir()
+    target = refused / "state.json"
+
+    with pytest.raises(UnicodeEncodeError):
+        atomic_write_text(target, _LONE_SURROGATE)
+
+    assert not target.exists(), (
+        "the encoder refused the payload but the target was published anyway"
+    )
+    assert _residue(refused) == [], (
+        "the refused write left something behind in the target's directory"
+    )
+
+    # CONTROL. The same call, the same directory shape, a payload utf-8 accepts.
+    accepted = tmp_path / "accepted"
+    ok_target = accepted / "state.json"
+    assert atomic_write_text(ok_target, "state.json\n") is True, (
+        "an encodable payload failed too, so the arm above measured a module "
+        "that cannot write rather than one that refuses a surrogate"
+    )
+    assert ok_target.read_bytes() == b"state.json\n"
+    assert _residue(accepted) == ["state.json"]
