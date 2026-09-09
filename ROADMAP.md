@@ -11,6 +11,42 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **CLOSED 2026-09-09. CI WENT RED ON A TEST THAT DECAYED, AND THE LANE SPLIT
+  WAS A TIMEZONE.** GitHub run 34405450182 failed at 21:11:41Z on
+  `tests/test_task_liveness.py:836`, `assert "LIVE" in out`, while the same
+  commit was GREEN here. Nothing regressed - time passed. `liveness.main` calls
+  `verdict(parse_facts(...))` with NO `now`, and `verdict` at
+  `ops/check_task_liveness.py:388` falls back to `dt.datetime.now()`, so five
+  arms were graded against the REAL CLOCK while every `_verdict` sibling pins
+  `now=NOW`. The boundary `2026-09-09T21:00:00` is NAIVE, so it is read in the
+  runner's LOCAL zone: expired at 21:00 UTC on CI, five hours later here.
+
+  DIFF THE CLOCK BEFORE THE ENVIRONMENT. Green-here-red-on-CI at one commit
+  reads as a platform difference and was not one.
+
+  FIXED IN THE ARMS, NOT THE CHECKER. `ops/check_task_liveness.py` is
+  byte-identical - `verdict` already offers `now=`, and adding a parameter to
+  the kill-switch checker for the tests' benefit would be worse. Five arms now
+  pin the clock through a shim, and the CI failure is an ASSERTED TRANSITION -
+  a sibling arm pins one second past the same boundary and requires DORMANT.
+
+  MEASURED, and the refuter built its own instrument rather than the builder's:
+  pre-fix bytes under `TZ=UTC0` reproduce the CI red byte-exact, post-fix are
+  green, both re-confirmed on CI's Python 3.11. The file is green at a stdlib
+  clock shift of -20000 to +40000 days, and the whole suite is green at UTC,
+  UTC+14 and UTC-12. Baseline moved 1855 to 1859 on four new arms.
+
+  TWO LIMITS RECORDED IN THE FILE RATHER THAN FIXED. The teardown arm is
+  VACUOUS IN ISOLATION - run alone it passes with nothing frozen before it, and
+  it has content only because file order puts it after a frozen arm. And the
+  root cause is closed in the test only: `main` still never threads `now` into
+  `verdict`, so any future caller of `main` is non-deterministic at that seam.
+
+  ONE SITE FLAGGED AND DELIBERATELY NOT EDITED, for a later reading: a comment
+  says "StopAtDurationEnd applies", a scheduler field the payload does not
+  carry and the checker never reads. It is domain rationale rather than a claim
+  about a branch, so it fell outside the defect class being repaired.
+
 - **STATE AS MEASURED 2026-09-09 AT `d3af1b9`, a reading and not a promise.**
   `python -m pytest tests` 1855 passed 1 skipped. `agents/pity_engine` 80
   passed. `node --test` 52 pass 0 fail. ruff, mypy at 34 source files,
