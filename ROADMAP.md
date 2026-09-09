@@ -11,11 +11,13 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **THREE STACKED CI DEFECTS FIXED LOCALLY 2026-09-09. NOT CLOSED - the next
-  run is the only thing that can close it.** CI had been red for FIVE
-  consecutive pushes: 0aef4f4, dda913a, 460bda5, e66babb, 9d6db70. All local
+- **CLOSED 2026-09-09, AND CLOSED BY READING THE RUN RATHER THAN BY REASONING
+  ABOUT IT.** CI is GREEN at 6c6ab9d, both workflows, after SIX consecutive red
+  pushes: 0aef4f4, dda913a, 460bda5, e66babb, 9d6db70 and ca59c8e. All local
   gates were green throughout, which is exactly how it stayed invisible.
-  Check every session with a `gh run list` call.
+  Check every session with a `gh run list` call. Four stacked defects, not the
+  three the first reading found, and the fourth was only visible once the first
+  had been fixed.
 
   DEFECT ONE, the renderer. pytest builds a phase report while a test's
   monkeypatch is STILL LIVE. Several arms force os.name to nt to reach a
@@ -73,11 +75,43 @@ version. What follows is everything the scaffold deliberately did not do.
   seven-site non-vacuity floor in the same assertion as its judgement, so a
   future bare nt-forcing arm fails loudly.
 
-  STILL OPEN UNDER THIS ITEM. Nothing here is verified on Linux by running it
-  on Linux. The three arms are DERIVED to skip there, not observed skipping.
-  Other modules may fail on Linux for unrelated reasons and would have been
-  hidden behind the INTERNALERROR. Read the next run and re-open on what it
-  says.
+  DEFECT FOUR, found only because defect one was fixed first. The first push
+  went green on the docs workflow and the other named its one remaining
+  failure: the renderability file's OWN positive control. It simulated the
+  inverse by patching os.name to the literal posix, which IS the real value on
+  Linux, so both of its two conditions observed the same string. On that host
+  the control was not merely failing, it was INCAPABLE of separating a
+  protected run from an unprotected one, and the Windows green was the accident
+  rather than the Linux red. The patched value is now a runtime sentinel that
+  is neither nt nor posix, so it differs from the real name on every host while
+  never selecting the unsupported flavour. Patching it to nt would have
+  produced the difference and reintroduced the outage.
+
+  NOW OBSERVED RATHER THAN DERIVED. The three ruled arms are recorded above as
+  skipping on Linux by derivation. The run at 6c6ab9d shows them skipping, with
+  the reason leading with the Windows-only branch exactly as the ruling
+  required. The mypy result is likewise confirmed on the real gate and not only
+  through the platform flag.
+
+  AND THE REASON THE FOURTH DEFECT WAS FINDABLE AT ALL IS WORTH THE ENTRY. That
+  run reported 19 skips and named NONE of them, where this box reports one, so
+  18 arms did not run on the machine that decides red and the log said nothing
+  about which or why. All three of the workflow's pytest invocations now report
+  their skips, and the 19 read as: four for an unavailable symlink privilege,
+  five for the Windows Task Scheduler, two for Win32 named-mutex semantics, two
+  more Windows-only interpreter arms, one opt-in network fetch, the three ruled
+  arms, and two for a shallow clone. Every reason is true. The guard reuses the
+  spec parser hardened at e714b35 rather than adding a second matcher, because
+  a literal-flag matcher was defeated twice and widening it was the wrong answer
+  both times.
+
+  STILL OPEN, AND SMALLER THAN THE ITEM ABOVE. Two of those 19 say that
+  `tests/test_commit_trailers.py` skips under a shallow clone because a
+  full-history sweep would pass by construction. The trailer rule is a HARD
+  RULE in the charter and CI enforces NONE of it. The fix is a fetch-depth
+  change, and the skip already names it. Separately the docs workflow runs
+  pytest twice with no short-summary spec at all, so its skips are still
+  unnamed - the same blind spot, measured and unfixed.
 
   A THIRD REASON A LOCAL GREEN SAYS NOTHING ABOUT CI, and it is new. Every
   pinned dev tool is OLDER on this box than the version CI installs: pytest
