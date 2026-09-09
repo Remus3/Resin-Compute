@@ -11,6 +11,21 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **OPEN, found by the push that shipped `9d6db70` and NOT reproduced since.**
+  The pre-push hook reported `1579 passed, 2 skipped` for `pytest tests` while
+  the same tree measured `1580 passed, 1 skipped` immediately before and after,
+  under the verifier, under the hook's own interpreter, with git's hook
+  environment set, with stdin at EOF, and from running `.githooks/pre-push`
+  directly with a real ref line. Totals agree at 1581 collected, so nothing was
+  lost - ONE ARM CHANGED DISPOSITION FROM PASS TO SKIP, transiently, during a
+  real push. It cannot be named because the hook runs `pytest tests` WITHOUT
+  `-rs`, so a skip it observes is unattributable after the fact. Two things to
+  fix, and the second is the real one: give the hook's invocation `-rs` so the
+  gate can say WHICH arm skipped, and then find the arm. A gate that can see a
+  skip but not name it is the same defect class this session spent itself on,
+  now in the instrument that grades pushes.
+
+
 - **CLOSED 2026-09-08 for 13 sites across four files, and OPEN for three more
   places.** The condition that cannot tell CHECKED-AND-FOUND-NOTHING from
   COULD-NOT-CHECK is repaired in `tests/test_watch_inbox.py`,
