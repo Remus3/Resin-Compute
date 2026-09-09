@@ -503,11 +503,19 @@ def test_delivery_is_byte_identical_and_never_overwrites(rsp, tmp_path):
 
 
 def test_delivery_refuses_a_draft_that_failed_validation(rsp, tmp_path):
-    """The gate is not advisory. An invalid draft must not reach any disk."""
+    """The gate is not advisory. An invalid draft must not reach any disk.
+
+    RAISE-CHECKED ON THE PRIVATE TYPE, AND THAT TIGHTENING IS THE POINT. This
+    arm asked for `ValueError` and kept passing when the refusal became a
+    subclass of it - so its meaning weakened silently, and it would pass just
+    as well against a revert to a bare `raise ValueError`. A refusal and a
+    malformed destination are both `ValueError` now, and an arm that cannot
+    tell them apart is not guarding the distinction the split exists to make.
+    """
     dest = tmp_path / "a" / "moon_sync_inbox"
     dest.mkdir(parents=True)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(rsp._DraftRefused):
         rsp.deliver("untagged body\n", "2026-09-07-1905-from-RSC-reply.md", [dest], validate=True)
 
     assert list(dest.iterdir()) == [], "an invalid draft was written anyway"

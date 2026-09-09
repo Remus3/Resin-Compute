@@ -529,6 +529,34 @@ class SpawnFailed(RuntimeError):
     """
 
 
+class _DraftRefused(ValueError):
+    """The gate refused this draft, as distinct from a destination being unusable.
+
+    THE LEADING UNDERSCORE IS THE POINT, not house style. This module is a
+    FLEET tool - four sibling repositories read its behaviour off this channel -
+    and a public exception type is a catch surface any of them can bind to. A
+    name a sibling can `except` on is a contract this repo would then owe, and
+    this type exists to separate two of THIS module's own failures, not to be
+    part of anybody's interface. Private it stays.
+
+    WHAT THIS TYPE DISTINGUISHES, AND WHY THE DISTINCTION HAD TO EXIST. `deliver`
+    can stop for two unrelated reasons: the draft failed `validate_draft`, which
+    is a fact about what the spawned session WROTE, or a destination path is
+    malformed, which is a fact about WHERE it was being sent. Both surfaced as a
+    bare `ValueError` before this class existed, so a caller catching one caught
+    the other, and the loop below could not widen its guard without erasing the
+    difference. Naming the refusal separately is what makes that widening safe.
+
+    IT DERIVES FROM `ValueError` DELIBERATELY, and that is load-bearing rather
+    than decorative. Any caller written before this split catches `ValueError`
+    on exactly this raise. A narrower base would have turned a green arm red
+    for a reason unrelated to the defect it was fixing.
+
+    Sibling in spirit to `SpawnFailed` above: two different facts, one of which
+    is a finding about the channel and one of which is not.
+    """
+
+
 class Bounds(NamedTuple):
     """The trial's declared limits. Disarmed, and every field has a reason.
 
@@ -892,12 +920,28 @@ def validate_draft(text: str, bounds: Bounds) -> list[str]:
     return reasons
 
 
+def _log_label(target: Path) -> str:
+    """A destination rendered safe for a TAB-separated, line-oriented log.
+
+    NOT DECORATION. `log_invocation` writes one record per line with tab
+    separators, so a tab or a newline reaching it does not corrupt the label -
+    it forges a SECOND RECORD, which is the failure mode this module's own
+    `SOURCE_RUN_ONCE` note already names for the source field. A destination
+    path is the one field here that an operator supplies rather than the module,
+    so it is the one that can carry either byte. Replaced rather than stripped:
+    a shortened path that still looks like a path is worse to read than one
+    that visibly says something was substituted.
+    """
+    return str(target).replace("\t", "?").replace("\r", "?").replace("\n", "?")
+
+
 def deliver(
     text: str,
     name: str,
     inboxes: list[Path],
     validate: bool = False,
     bounds: Bounds | None = None,
+    source: str = SOURCE_RUN_ONCE,
 ) -> list[tuple[bool, Path]]:
     """Write one note into each inbox. NEVER overwrites an existing name.
 
@@ -906,27 +950,81 @@ def deliver(
     measured that a vanished entry is indistinguishable from one that never
     arrived unless something reports it.
 
-    `validate=True` raises rather than writing, so a caller cannot opt out of
-    the gate by calling this directly.
+    `validate=True` raises `_DraftRefused` rather than writing, so a caller
+    cannot opt out of the gate by calling this directly. That raise happens
+    BEFORE the loop and is therefore never something the loop's guard can see.
+
+    THE LOOP ABSORBS `ValueError` AS WELL AS `OSError`, AND THAT IS A
+    MEASUREMENT. `Path.mkdir` raises `ValueError` - not `OSError` - when a path
+    component carries a NUL byte, reproduced here on 3.14.4 and on 3.11, which
+    is CI's minor. With an `OSError`-only guard a single malformed destination
+    mid-broadcast escaped the loop, leaving SOME inboxes written and NO record
+    of which - the partial-and-silent ordering the paragraph above calls the
+    worst available.
+
+    WIDENING IS ONLY SAFE BECAUSE THE REFUSAL IS A DISTINCT TYPE. When the
+    refusal was a bare `ValueError` this guard would have made "the draft was
+    refused" and "the path is malformed" indistinguishable, trading one defect
+    for a worse one. Two things now keep them apart: `_DraftRefused` is its own
+    type, and it is raised above the loop where no `except` here can reach it.
+
+    `UnicodeError` IS RE-RAISED, AND THAT IS THE PRICE OF THE WIDENING.
+    `UnicodeEncodeError` is a `ValueError` subclass, and `atomic_write_text`
+    catches only `OSError`, so a draft carrying a lone surrogate escaped LOUDLY
+    before this guard widened and would be swallowed into an ordinary-looking
+    `(False, target)` row afterwards. Loud-to-quiet is strictly worse than the
+    silent abort the widening was fixing - an abort at least stops. The test is
+    `isinstance` and NEVER a message match: this tree has twice been bitten by
+    widening a string matcher, and its standing lesson is that a shape the
+    mechanism cannot parse must FAIL rather than be matched around.
+
+    EVERY ABSORBED FAILURE IS LOGGED BEFORE ITS `(False, target)` ROW IS
+    APPENDED. The row on its own carries three unrelated meanings - the target
+    already existed, the OS refused, the caller passed garbage - and `run_once`
+    reduces the whole list with `all(ok for ok, _ in written)`. A caller reading
+    that `False` therefore has no way to recover which of the three happened,
+    so the reason goes where a row cannot carry it: the invocation log, which is
+    the only log this module has and the one an operator already greps.
+
+    `source` IS THE CALLER'S LABEL AND IT IS PASSED IN, not chosen here.
+    `test_an_in_process_cycle_still_names_itself_run_once` asserts that every
+    line of one fire carries ONE label, so a line this function wrote under a
+    name of its own would split a single event across two callers. Appended at
+    the END with a default, per this module's own convention.
     """
     if validate:
         reasons = validate_draft(text, bounds or Bounds())
         if reasons:
-            raise ValueError(f"draft refused: {len(reasons)} reason(s)")
+            raise _DraftRefused(f"draft refused: {len(reasons)} reason(s)")
 
     results: list[tuple[bool, Path]] = []
     for inbox in inboxes:
         target = inbox / name
         try:
             if target.exists():
+                log_invocation(source, _log_label(target), "skipped-existing")
                 results.append((False, target))
                 continue
             inbox.mkdir(parents=True, exist_ok=True)
             # Written through the sanctioned atomic path: readers poll mid-write
             # and a half-written note in a sibling's inbox is a note that hashes
             # to nothing anybody can compare.
-            results.append((atomic_write_text(target, text), target))
-        except OSError:
+            written = atomic_write_text(target, text)
+            if not written:
+                # NO CLASS NAMED HERE, deliberately. `atomic_write_text` caught
+                # the exception itself and already logged its class through
+                # `core.log_setup`; naming a class this frame never saw would be
+                # a guess written down as a record.
+                log_invocation(source, _log_label(target), "delivery-failed-atomic-write")
+            results.append((written, target))
+        except (OSError, ValueError) as exc:
+            # A TYPE TEST, NEVER A MESSAGE MATCH. `UnicodeError` is the right
+            # node: it covers both encode and decode, and is itself a
+            # `ValueError` subclass, so it is exactly the slice of the widened
+            # tuple that must not be absorbed.
+            if isinstance(exc, UnicodeError):
+                raise
+            log_invocation(source, _log_label(target), f"delivery-failed-{type(exc).__name__}")
             results.append((False, target))
     return results
 
@@ -1511,7 +1609,7 @@ def run_once(
     started = time.time() if now is None else now
     log_invocation(source, None, "start", now=started)
     try:
-        result = _run_once(inbox, roots, bounds, spawn, started, grammar)
+        result = _run_once(inbox, roots, bounds, spawn, started, grammar, source)
     except BaseException:
         # A responder that tracebacks out of a scheduled task surfaces nothing
         # at all. The log says so before the exception continues on its way.
@@ -1528,11 +1626,19 @@ def _run_once(
     spawn: Callable[..., str] | None,
     started: float,
     grammar: str,
+    source: str = SOURCE_RUN_ONCE,
 ) -> dict:
     """The cycle itself: find a note, draft a reply, gate it, deliver or hold.
 
     `spawn` is injected so the session is a seam rather than a dependency. The
     draft comes back as TEXT and every decision about it is made out here.
+
+    `source` IS CARRIED DOWN RATHER THAN RE-DEFAULTED, for the reason the
+    wrapper's docstring gives: one fire writes one caller label. `deliver` can
+    now write a line of its own when a destination is skipped, and a line
+    labelled `deliver` inside a fire labelled `scheduledtask` would be a second
+    caller inside one event. Appended at the END with a default, per this
+    module's own convention.
     """
     inbox = inbox or DEFAULT_INBOX
     bounds = bounds or Bounds()
@@ -1708,6 +1814,7 @@ def _run_once(
                 build_bounce(note.name, reasons, result["termination"]),
                 bounce_name(note, started),
                 [d / "moon_sync_inbox" for d in dests],
+                source=source,
             )
             # A FAILED WRITE IS NOT RECORDED AS BOUNCED, so the next cycle tries
             # again rather than counting a bounce nobody received.
@@ -1726,9 +1833,11 @@ def _run_once(
         if repeat and already_bounced and not result["held"] and not result["bounced"]:
             return result
     else:
-        written = deliver(draft, reply_name, [d / "moon_sync_inbox" for d in dests])
+        written = deliver(
+            draft, reply_name, [d / "moon_sync_inbox" for d in dests], source=source
+        )
         # Our own copy, so a cold session sees both halves of the conversation.
-        deliver(draft, reply_name, [inbox])
+        deliver(draft, reply_name, [inbox], source=source)
         result["delivered"] = all(ok for ok, _ in written) and bool(written)
         result["actions"] = ["A5"]
         result["termination"] = "delivered"
