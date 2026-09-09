@@ -11,20 +11,32 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **OPEN, found by the push that shipped `9d6db70` and NOT reproduced since.**
-  The pre-push hook reported `1579 passed, 2 skipped` for `pytest tests` while
-  the same tree measured `1580 passed, 1 skipped` immediately before and after,
-  under the verifier, under the hook's own interpreter, with git's hook
-  environment set, with stdin at EOF, and from running `.githooks/pre-push`
-  directly with a real ref line. Totals agree at 1581 collected, so nothing was
-  lost - ONE ARM CHANGED DISPOSITION FROM PASS TO SKIP, transiently, during a
-  real push. It cannot be named because the hook runs `pytest tests` WITHOUT
-  `-rs`, so a skip it observes is unattributable after the fact. Two things to
-  fix, and the second is the real one: give the hook's invocation `-rs` so the
-  gate can say WHICH arm skipped, and then find the arm. A gate that can see a
-  skip but not name it is the same defect class this session spent itself on,
-  now in the instrument that grades pushes.
+- **DIAGNOSED AND CLOSED THE SAME EVENING, and the answer is not a defect.**
+  The pre-push hook reports `1579 passed, 2 skipped` where every other
+  invocation reports `1580 passed, 1 skipped`. First filed as transient and
+  unnameable; BOTH OF THOSE WERE WRONG and the correction is the entry. It is
+  deterministic under a real `git push` and absent under the hook run by hand,
+  which is why four reproduction attempts missed it - none of them was a push.
+  Named by pushing to a scratch bare repository under a scratch
+  `core.hooksPath` whose hook ran the suite with `-rs`, touching no tracked
+  file and not origin.
 
+  The extra skip is `tests/test_hook_interpreter.py:1774`, and it is CORRECT.
+  Git puts `mingw64/libexec/git-core` on PATH for its hooks, so
+  `shutil.which("git")` resolves to `git-core\git.exe`, which is not an install
+  root. The oracle added this session says so and skips with a TRUE reason -
+  the exact ceiling its author disclosed: a layout outside the marker set reads
+  as unidentifiable and skips rather than guessing.
+
+  WHAT REMAINS TRUE AND IS WORTH KEEPING: the git-install discovery control is
+  SILENT IN THE ONE ENVIRONMENT THAT GATES EVERY PUSH. It is graded on a
+  developer's shell and never by the pre-push hook. Nothing is broken; the
+  coverage simply is not where a reader would assume. Two candidate closures,
+  neither started: teach the oracle the `git-core` layout by measuring it, or
+  give the hook's invocation `-rs` so any future skip is nameable from its own
+  output instead of needing a scratch remote. Prefer the second first - a gate
+  that can see a skip and cannot say which one is this session's defect class
+  sitting in the instrument that grades pushes.
 
 - **CLOSED 2026-09-08 for 13 sites across four files, and OPEN for three more
   places.** The condition that cannot tell CHECKED-AND-FOUND-NOTHING from
