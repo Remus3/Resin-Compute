@@ -47,18 +47,343 @@ DESIGN OF THIS FILE, and it is deliberate:
     collect_facts, the gate's only caller, so deleting the gate left the suite
     green. The arms under "THE NAME GATE IS ENFORCED" stub subprocess.run
     instead of collect_facts, so the real gate runs on the real path.
+
+THE CEILING. Read this before naming any arm in this file, because five rounds
+of refutation established it and the sixth round is what wrote it down:
+
+    A TEST SUITE CANNOT PREVENT ARBITRARY RUNTIME BEHAVIOUR IN A MODULE IT
+    IMPORTS. It can grade that module's SOURCE, and it can refuse to import a
+    source that fails the grade. It cannot prove that a source which passes the
+    grade will behave the same way at runtime, because the imported module can
+    always branch on something the harness did not think to make identical.
+
+  WHAT IS GUARANTEED HERE:
+
+    A SOURCE GRADE, ENFORCED BEFORE THE IMPORT. The block under "THE SOURCE
+    GATE" reads ops/check_task_liveness.py as bytes, parses it with ast, and
+    raises if the grade fails - ahead of `from ops import check_task_liveness`,
+    so the subject's module-level code has not run when the refusal happens.
+    The grade covers: no mutating PowerShell Verb-Noun and no native mutator
+    executable anywhere in the text; no call at import time other than
+    re.compile, dataclass and field; and no reference anywhere to the channels
+    a module would use to tell a harness from production - subprocess's
+    identity or any attribute of it beyond the four it legitimately names,
+    sys.modules, __debug__, the environment, sys.argv, and isatty.
+
+  WHAT IS NOT GUARANTEED:
+
+    RUNTIME BEHAVIOUR UNDER AN ADVERSARIAL MODULE. The argv derivation below
+    must replace subprocess.run with something that does not launch a process,
+    and that single divergence is observable in principle - a module that
+    stashed the real subprocess.run at import and compared against it later
+    would build one string here and another in real use. The source gate is
+    what refuses that comparison; nothing in this file could detect it after
+    the fact. An arm here that says "the text that ACTUALLY reaches PowerShell"
+    would be claiming more than it checks, and an arm whose name claims more
+    than it checks is worse than no arm, because the next reader stops looking.
+    So no arm in this file is named that way.
 """
 from __future__ import annotations
 
+import ast
 import datetime as dt
 import json
+import pathlib
 import re
 import subprocess
 import sys
+import typing
 
 import pytest
 
-from ops import check_task_liveness as liveness
+# --- THE SOURCE GATE, AND IT RUNS BEFORE THE SUBJECT IS IMPORTED ----------
+#
+# THE THIRD 2026-09-08 KILL, and it did not defeat a matcher. It went around
+# the grading entirely. Every guard in this file used to sit BELOW
+#
+#     from ops import check_task_liveness as liveness
+#
+# and an import EXECUTES the subject's module-level code. Measured: a
+# module-level
+#
+#     import os as _diag
+#     _diag.remove('<canary>')
+#
+# planted in ops/check_task_liveness.py ran at that import, the canary file was
+# deleted from disk, and `python -m pytest tests/test_task_liveness.py -q`
+# reported every arm passing at exit 0. PREVENTION IS A CLAIM ABOUT AN INSTANT:
+# a guard that runs after the import is a statement about a machine the subject
+# has already had its way with.
+#
+# So the SOURCE IS GRADED FIRST, as bytes, through ast.parse, and the import
+# below happens only if the grade is clean. A failure here is a COLLECTION
+# error, which is stronger than a failing arm: no arm in this module runs, and
+# the subject is never imported at all.
+#
+# WHAT THIS GATE GUARANTEES IS NARROW AND IS STATED IN FULL IN THE MODULE
+# DOCSTRING UNDER "THE CEILING". It grades source and refuses to import a
+# source that fails. It does not, and structurally cannot, prove that a module
+# which passes will behave.
+
+_SUBJECT_PATH = pathlib.Path(__file__).resolve().parent.parent / "ops" / "check_task_liveness.py"
+
+# Verbs whose presence ANYWHERE in the module - not merely in the probe - would
+# mean this tool had grown a way to change the machine. Matched by SHAPE, so a
+# verb nobody enumerated is still caught the moment it is used on a noun.
+#
+# IGNORECASE, and the flag is the correction rather than a decoration. Measured
+# 2026-09-08 against the version without it: lowercase `stop-process`, lowercase
+# `unregister-scheduledtask` and uppercase `REMOVE-ITEM` all passed, while the
+# comment beside it already ASSERTED case-insensitivity. The comment was true of
+# the intent and false of the code, which is the worst of the two. PowerShell
+# resolves a cmdlet name case-insensitively, so a case-sensitive guard over
+# PowerShell text grades typography and not behaviour.
+#
+# It lives HERE, above the import, because the source gate needs it. Everything
+# further down in this file uses this same object.
+_MUTATING_VERB_RE = re.compile(
+    r"\b(?:Set|Remove|New|Start|Stop|Register|Unregister|Enable|Disable|Add|Clear|Out|Write|"
+    r"Move|Rename|Invoke|Restart|Suspend|Resume|Export|Import|Copy)-[A-Za-z][A-Za-z0-9]*\b",
+    re.IGNORECASE,
+)
+
+# Native Windows mutators that carry NO hyphen, so the Verb-Noun shape above
+# cannot see them. Deliberately NARROW: every token here was measured to occur
+# zero times in ops/check_task_liveness.py on 2026-09-08, because this set is
+# applied to PYTHON source where `set`, `start`, `move` and `copy` are ordinary
+# words. The wide alias list lives in _KNOWN_MUTATOR_TOKENS below and is applied
+# only to PowerShell text, where those words are commands.
+_NATIVE_MUTATOR_EXES = ("taskkill", "schtasks", "wmic", "rundll32", "bitsadmin", "certutil")
+
+# Calls the subject is allowed to make WHILE IT IS BEING IMPORTED. A module-level
+# statement runs at import; so does a class body, a decorator expression and a
+# default argument. A function BODY does not, and neither does the block under
+# `if __name__ == "__main__":`. Everything that DOES run may call only these
+# three, each of which builds a value and touches nothing outside the process.
+#
+# This is a STRUCTURAL rule and not a denylist, which is the point. The kill was
+# `_diag.remove(...)`; so is `_x = os.unlink(...)`, so is a decorator that
+# writes a file, and none of them is spelled like anything anybody enumerated.
+_SANCTIONED_IMPORT_TIME_CALLS = frozenset({"re.compile", "dataclass", "field"})
+
+# The only attributes of `subprocess` the subject may name, measured 2026-09-08:
+# it uses subprocess.run and subprocess.TimeoutExpired and nothing else.
+# CalledProcessError and SubprocessError are allowed ahead of use because they
+# are exception types and cannot launch anything.
+#
+# Popen, __name__, __spec__ and __file__ are absent for a REASON. Naming one is
+# how a module tells a test harness apart from production: the derivation below
+# must replace subprocess.run, and a module that asks whether Popen is there, or
+# what the module's __name__ is, is asking whether it is being watched.
+_SANCTIONED_SUBPROCESS_ATTRS = frozenset(
+    {"run", "TimeoutExpired", "SubprocessError", "CalledProcessError"}
+)
+
+# Attribute names that read the AMBIENT WORLD rather than the arguments. Each is
+# a channel a module can branch on to behave one way under a harness and another
+# way in real use. `argv` is here because `sys.argv[0].endswith('pytest')` is the
+# cheapest such test there is, and the subject's main() takes argv as a
+# parameter, so it has no need of it.
+_OBSERVATION_ATTRS = frozenset(
+    {"modules", "environ", "getenv", "isatty", "gettrace", "_getframe", "flags", "argv"}
+)
+
+# Calls that reach the interpreter's own bookkeeping. hasattr and getattr are
+# the two the first kill used - `if hasattr(subprocess, 'Popen'):` - and the
+# rest reach the same information by other routes.
+_OBSERVATION_CALLS = frozenset(
+    {
+        "hasattr", "getattr", "vars", "globals", "locals", "eval", "exec",
+        "__import__", "importlib.import_module", "sys._getframe", "sys.gettrace",
+    }
+)
+
+# Names that ARE the ambient world, with no attribute access to give them away.
+_OBSERVATION_NAMES = frozenset({"__debug__"})
+
+
+def _dotted_name(node: ast.AST) -> str:
+    """The dotted text of a Name/Attribute chain, or '' for anything else."""
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+        return ".".join(reversed(parts))
+    return ""
+
+
+def _is_main_guard(node: ast.AST) -> bool:
+    """True for `if __name__ == "__main__":`, whose body never runs on import."""
+    if not isinstance(node, ast.If) or not isinstance(node.test, ast.Compare):
+        return False
+    test = node.test
+    return (
+        isinstance(test.left, ast.Name)
+        and test.left.id == "__name__"
+        and len(test.ops) == 1
+        and isinstance(test.ops[0], ast.Eq)
+        and len(test.comparators) == 1
+        and isinstance(test.comparators[0], ast.Constant)
+        and test.comparators[0].value == "__main__"
+    )
+
+
+def _import_time_nodes(node: ast.AST) -> typing.Iterator[ast.AST]:
+    """Every node the subject EXECUTES on import, and none that it does not.
+
+    A function body is skipped because it does not run at import. Its
+    decorators, its default arguments and its return annotation DO run, so they
+    are walked in full. A class body is walked in full for the same reason: the
+    `field(default_factory=list)` in a dataclass is evaluated at import.
+    """
+    for child in ast.iter_child_nodes(node):
+        if _is_main_guard(child):
+            continue
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            heads: list[ast.AST] = list(getattr(child, "decorator_list", []))
+            args = getattr(child, "args", None)
+            if args is not None:
+                heads.extend(d for d in args.defaults if d is not None)
+                heads.extend(d for d in args.kw_defaults if d is not None)
+            returns = getattr(child, "returns", None)
+            if returns is not None:
+                heads.append(returns)
+            for head in heads:
+                yield head
+                yield from ast.walk(head)
+            continue
+        yield child
+        yield from _import_time_nodes(child)
+
+
+def _import_time_call_findings(tree: ast.AST) -> list[str]:
+    """Calls the subject would make simply by being imported."""
+    out = []
+    for node in _import_time_nodes(tree):
+        if isinstance(node, ast.Call):
+            name = _dotted_name(node.func) or "<a computed callee>"
+            if name not in _SANCTIONED_IMPORT_TIME_CALLS:
+                out.append(f"line {node.lineno}: the module CALLS {name}() while being imported")
+    return out
+
+
+def _subprocess_aliases(tree: ast.AST) -> set[str]:
+    """Every local name bound to the subprocess MODULE by an import.
+
+    `import subprocess as sp` launders every rule below that keys on the
+    spelling `subprocess`, so the rules key on this set instead.
+    """
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "subprocess" or alias.name.startswith("subprocess."):
+                    names.add(alias.asname or alias.name.split(".", 1)[0])
+    return names
+
+
+def _observation_findings(tree: ast.AST) -> list[str]:
+    """Every place the subject could ask whether it is being watched.
+
+    A PROBE THAT BEHAVES DIFFERENTLY WHEN OBSERVED IS THE DEFECT, independently
+    of what it then does, so this refuses the QUESTION and never tries to judge
+    the answer. There is no way to make a harness that neuters subprocess.run
+    indistinguishable from one that does not, so the only closable version of
+    this is a refusal to ask.
+    """
+    out = []
+    aliases = _subprocess_aliases(tree)
+    attribute_bases = {id(n.value) for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    call_funcs = {id(n.func) for n in ast.walk(tree) if isinstance(n, ast.Call)}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "subprocess":
+            out.append(
+                f"line {node.lineno}: `from subprocess import ...` binds a launcher under a name no "
+                "rule here can follow. The module must use `import subprocess`."
+            )
+        elif isinstance(node, ast.Name):
+            if node.id in _OBSERVATION_NAMES:
+                out.append(f"line {node.lineno}: the module reads {node.id}")
+            elif node.id in aliases and id(node) not in attribute_bases:
+                out.append(
+                    f"line {node.lineno}: the module names the subprocess MODULE ITSELF, which is "
+                    "how a branch on its identity is written"
+                )
+        elif isinstance(node, ast.Attribute):
+            if node.attr in _OBSERVATION_ATTRS:
+                out.append(
+                    f"line {node.lineno}: the module reads .{node.attr}, which is ambient state "
+                    "and not an argument"
+                )
+            if _dotted_name(node.value) in aliases:
+                if node.attr not in _SANCTIONED_SUBPROCESS_ATTRS:
+                    out.append(
+                        f"line {node.lineno}: the module names subprocess.{node.attr}, which is not "
+                        "one of the four attributes it needs and is a way to detect a harness"
+                    )
+                elif node.attr == "run" and id(node) not in call_funcs:
+                    # `_REAL_RUN = subprocess.run` at import, then
+                    # `if subprocess.run is _REAL_RUN:` later. Both halves name
+                    # only a sanctioned attribute, so nothing above can see it.
+                    out.append(
+                        f"line {node.lineno}: the module names subprocess.run WITHOUT CALLING IT, "
+                        "which is how the real launcher is stashed for a later identity comparison"
+                    )
+        elif isinstance(node, ast.Compare):
+            for operand in [node.left] + list(node.comparators):
+                if _dotted_name(operand).split(".")[0] in aliases:
+                    out.append(
+                        f"line {node.lineno}: the module COMPARES against "
+                        f"{_dotted_name(operand)}, which is a branch on whether subprocess is the "
+                        "one production uses"
+                    )
+        elif isinstance(node, ast.Call):
+            name = _dotted_name(node.func)
+            if name in _OBSERVATION_CALLS or name.endswith(".import_module"):
+                out.append(f"line {node.lineno}: the module calls {name}(), which inspects the runtime")
+    return sorted(out)
+
+
+def _mutating_verbs_in_source(text: str) -> list[str]:
+    """The whole-file PowerShell scan, run over the subject's bytes."""
+    out = [f"the mutating cmdlet {v}" for v in sorted(set(_MUTATING_VERB_RE.findall(text)))]
+    lowered = text.lower()
+    out.extend(
+        f"the native mutator {token}"
+        for token in ("stop-process",) + _NATIVE_MUTATOR_EXES
+        if token in lowered
+    )
+    return out
+
+
+def _source_gate_findings(text: str, tree: ast.AST) -> list[str]:
+    """Every grade this file can apply to the subject WITHOUT importing it."""
+    return (
+        _mutating_verbs_in_source(text)
+        + _import_time_call_findings(tree)
+        + _observation_findings(tree)
+    )
+
+
+if not _SUBJECT_PATH.is_file():
+    raise RuntimeError(
+        f"the subject this file grades is not at {_SUBJECT_PATH}. Refusing to import rather than "
+        "grading nothing and reporting a pass - zero out of zero reads as green."
+    )
+_SUBJECT_SOURCE = _SUBJECT_PATH.read_text(encoding="ascii")
+_SUBJECT_TREE = ast.parse(_SUBJECT_SOURCE)
+_SOURCE_GATE_FINDINGS = _source_gate_findings(_SUBJECT_SOURCE, _SUBJECT_TREE)
+if _SOURCE_GATE_FINDINGS:
+    raise RuntimeError(
+        f"{_SUBJECT_PATH} fails the source grade, so it is NOT being imported: "
+        f"{_SOURCE_GATE_FINDINGS}. Raising here rather than in an arm, because an arm runs AFTER "
+        "the import and an import runs the subject's module-level code - by then a module-level "
+        "side effect has already happened."
+    )
+
+from ops import check_task_liveness as liveness  # noqa: E402
 
 # --- Fixtures, every one of them CAPTURED FROM THE PROBE -------------------
 #
@@ -593,28 +918,764 @@ _READ_ONLY_PS_VERBS = frozenset(
     {"get", "convertto", "where", "foreach", "select", "measure", "sort", "compare"}
 )
 
-# Verbs whose presence ANYWHERE in the module - not merely in the probe - would
-# mean this tool had grown a way to change the machine. Matched by SHAPE, so a
-# verb nobody enumerated is still caught the moment it is used on a noun.
-_MUTATING_VERB_RE = re.compile(
-    r"\b(?:Set|Remove|New|Start|Stop|Register|Unregister|Enable|Disable|Add|Clear|Out|Write|"
-    r"Move|Rename|Invoke|Restart|Suspend|Resume|Export|Import|Copy)-[A-Za-z][A-Za-z0-9]*\b"
+# _MUTATING_VERB_RE and _NATIVE_MUTATOR_EXES USED TO BE DEFINED HERE. They now
+# live above the `from ops import check_task_liveness` line, because the source
+# gate that runs BEFORE that import needs them. Moving them was not cosmetic: a
+# second copy down here would be a second thing to keep in step, and the two
+# copies would drift the first time one of them was widened.
+
+# --- THE PROBE SCAN, AND WHY IT IS NO LONGER A VERB-NOUN SHAPE ------------
+#
+# The version this replaces matched `[A-Za-z]+-[A-Za-z]+` and nothing else, and
+# the comment beside it said "case-insensitive because PowerShell is". Both
+# halves were wrong. POWERSHELL ALIASES CARRY NO HYPHEN. Measured 2026-09-08, an
+# adversary prepended
+#
+#     ri 'ZZ-canary'
+#
+# to the probe template. `ri` IS Remove-Item. The probe RAN, the canary file was
+# DELETED FROM DISK, and every arm in this file reported green at exit 0,
+# because `ri` is not Verb-Noun. `del`, `rm`, `sc`, `kill`, `ni`, `cmd /c`, a
+# verb assembled by string concatenation and a bare `.Delete()` method call all
+# survived the same net.
+#
+# So the scan no longer asks "does this token look like a command". It asks
+# WHAT SITS IN EXECUTABLE POSITION - the start of a statement, or just after a
+# newline, `;`, `|`, `&`, a brace, a paren, `=` or a comma - and requires every
+# such token to be sanctioned. A bareword nobody enumerated is caught because it
+# is a bareword in command position, which is what PowerShell will execute,
+# whether or not anybody thought to ban that particular spelling.
+
+# PowerShell language keywords. These sit in executable position and are not
+# commands, so they are exempt. Everything else in that position is a command.
+_PS_KEYWORDS = frozenset(
+    {
+        "if", "else", "elseif", "foreach", "for", "while", "do", "switch",
+        "try", "catch", "finally", "return", "exit", "break", "continue",
+        "param", "function", "begin", "process", "end", "in", "throw", "data",
+        "filter", "workflow", "class", "enum", "using",
+    }
 )
 
-# A PowerShell command is Verb-Noun. Case-insensitive because PowerShell is:
-# `remove-item` runs exactly as well as `Remove-Item`.
-_PS_COMMAND_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*-[A-Za-z][A-Za-z0-9]*")
+# Statement separators. A bareword after any of these is about to be EXECUTED.
+# `=` is in the set because the right-hand side of an assignment is a statement
+# position too: without it `$i = Get-ScheduledTaskInfo ...` is invisible, and so
+# would be `$x = Remove-Item ZZ`.
+_EXECUTABLE_POSITION_RE = re.compile(
+    r"(?:^|[\n;|&{}()=,])\s*([A-Za-z_][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)*)",
+    re.MULTILINE,
+)
+
+# A method call that CHANGES something, which no Verb-Noun scan can see because
+# there is no verb and no noun. `(Get-ScheduledTask -TaskName 'x').Delete()` is
+# a read cmdlet followed by a destructive method. `.ToString(` is not here, and
+# the probe legitimately uses it.
+#
+# `(?:\.|::)` and not `\.`, and that one character is the whole of the FIRST
+# 2026-09-08 kill. A type accelerator calls a static method through `::` and
+# never through `.`, so `[System.IO.File]::Delete('ZZ')` matched nothing here
+# while `$t.Delete()` matched. Measured before the fix: the eight shapes in
+# _STATIC_AND_REDIRECTION_INJECTIONS below were each spliced into the template
+# immediately after the error-preference line and _unsanctioned_in,
+# _bare_mutators_in, _mutating_constructs_in and _MUTATING_VERB_RE all returned
+# empty for every one of them.
+_MUTATING_METHOD_RE = re.compile(
+    r"(?:\.|::)\s*(?:Delete|Remove|Stop|Kill|Start|Disable|Enable|Register|Unregister|"
+    r"Save|SetValue|SetInfo|Create|Terminate|Move|Rename|Write|Put)\s*\(",
+    re.IGNORECASE,
+)
+
+# THE SECOND HALF OF THAT KILL, and a denylist of method names could never have
+# closed it: [System.IO.File]::AppendAllText and [System.IO.File]::WriteAllBytes
+# are as destructive as ::Delete and neither is a mutating VERB. So the method
+# scan is INVERTED the same way the cmdlet scan already was. Every method the
+# probe calls must be named here, and a static `::` call is banned OUTRIGHT
+# because the probe makes none: it uses `[string]`, `[bool]`, `[int]` and
+# `[pscustomobject]` as CASTS, which carry no `::`.
+#
+# Why this rather than widening _EXECUTABLE_POSITION_RE to accept `[`. That
+# regex requires `[A-Za-z_]` after a delimiter, so a bracketed type name is
+# invisible to it - but adding `[` to the delimiter class would make `string`
+# in `kind = [string]$tr.CimClass.CimClassName` read as a command in executable
+# position and the pristine probe would fail its own scan. The bareword scan
+# grades barewords; the shape scans below grade what is not a bareword.
+_SANCTIONED_PROBE_METHODS = frozenset({"ToString"})
+_METHOD_CALL_RE = re.compile(r"(?:\.|::)\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+_STATIC_CALL_RE = re.compile(r"::")
+
+# REDIRECTION OVERWRITES A FILE AND CARRIES NO COMMAND TOKEN AT ALL. Measured
+# 2026-09-08: `'x' > 'ZZ'` spliced into the template left every scan silent,
+# because there is nothing in it for a command scan to read. The probe contains
+# no `>` of any kind, so the character is banned outright once quoted literals
+# have been blanked out.
+_REDIRECTION_RE = re.compile(r">")
+
+
+def _inert(script: str) -> str:
+    """The script with quoted literals blanked - they are data, not syntax."""
+    return re.sub(r'"[^"]*"', '""', re.sub(r"'[^']*'", "''", script))
+
+# `& ('Remo' + 've-Item')` builds a verb at runtime, so no static name scan can
+# ever see it. The call operator and string concatenation are therefore banned
+# OUTRIGHT from the probe rather than inspected. The probe carries neither.
+_CALL_OPERATOR_RE = re.compile(r"(?:^|[\n;|({])\s*&\s*[\(\"'$]", re.MULTILINE)
+_CONCATENATION_RE = re.compile(r"['\"]\s*\+|\+\s*['\"]")
 
 
 def _commands_in(script: str) -> set[str]:
-    """Every command-shaped token in EXECUTABLE position in a PowerShell script.
+    """Every bareword in EXECUTABLE position in a PowerShell script.
 
     Single-quoted literals are blanked first: they are inert data, and blanking
     them keeps the datetime format 'yyyy-MM-ddTHH:mm:sszzz' from reading as a
     command while leaving any injected command outside the quotes visible.
+
+    A bareword immediately followed by `=` is an assignment target, not a
+    command: that exemption is what keeps the hashtable keys the probe builds
+    (`exists = $false`, `kind = [string]...`) from reading as commands. It is
+    narrow - `del 'x'` and `Remove-Item -Path x` carry no `=` in that position.
     """
     inert = re.sub(r"'[^']*'", "''", script)
-    return set(_PS_COMMAND_RE.findall(inert))
+    found = set()
+    for match in _EXECUTABLE_POSITION_RE.finditer(inert):
+        token = match.group(1)
+        if re.match(r"\s*=(?!=)", inert[match.end():]):
+            continue
+        if token.lower() in _PS_KEYWORDS:
+            continue
+        found.add(token)
+    return found
+
+
+def _mutating_constructs_in(script: str) -> list[str]:
+    """Named DANGEROUS SHAPES that carry no command name for a scan to read."""
+    seen = []
+    if _MUTATING_METHOD_RE.search(script):
+        seen.append("a mutating .Method() or ::Method() call")
+    if _STATIC_CALL_RE.search(_inert(script)):
+        seen.append("a :: static call on a type, which reaches the whole .NET surface")
+    for method in sorted(set(_METHOD_CALL_RE.findall(script))):
+        if method not in _SANCTIONED_PROBE_METHODS:
+            seen.append(f"the unsanctioned method call .{method}()")
+    if _REDIRECTION_RE.search(_inert(script)):
+        seen.append("a > redirection, which overwrites a file and names no command")
+    if _CALL_OPERATOR_RE.search(script):
+        seen.append("the & call operator, which can invoke a name built at runtime")
+    if _CONCATENATION_RE.search(script):
+        seen.append("string concatenation, which can assemble a verb no scan can see")
+    return seen
+
+
+# The hyphenless spellings that reach the same cmdlets. CHOSEN, not invented:
+# every entry is either a DEFAULT PowerShell 5.1 alias for a cmdlet whose verb
+# already appears in _MUTATING_VERB_RE above, or a native Windows executable
+# that changes state. So the set is derived from the mutating-verb list this
+# file already committed to, mapped through the alias table, rather than being a
+# second denylist with its own independent holes.
+#
+# It is NOT the allowlist. The allowlist is _SANCTIONED_PROBE_CMDLETS, and
+# _commands_in catches a bareword whether or not it appears below. This set
+# exists so the non-vacuity controls plant real weapons rather than made-up
+# ones, and so a hit can be NAMED in a failure message.
+_KNOWN_MUTATOR_TOKENS = frozenset(
+    {
+        # Remove-Item and friends
+        "ri", "rm", "rmdir", "del", "erase", "rd", "rp", "rv", "rjb", "rni",
+        # New-Item / Set-* / Add-* / Clear-*
+        "ni", "md", "mkdir", "si", "sp", "sc", "ac", "clc", "cli", "sal", "nal", "sv",
+        # Move / Rename / Copy
+        "mi", "mv", "move", "ren", "cpi", "copy", "cp",
+        # Process and service control
+        "spps", "kill", "spsv", "saps", "sasv", "start",
+        # Invocation, which can carry any of the above inside a string
+        "iex", "icm", "irm", "iwr",
+        # Output that writes to disk
+        "oh", "echo", "write",
+        # Native Windows mutators
+        "cmd", "taskkill", "schtasks", "reg", "wmic", "rundll32", "net",
+        "bitsadmin", "certutil", "powershell", "pwsh", "curl",
+    }
+)
+
+
+def _bare_mutators_in(script: str) -> list[str]:
+    """Known hyphenless mutators sitting in EXECUTABLE position in PowerShell text.
+
+    Applied to PowerShell only. Running this token set over PYTHON source would
+    false-positive at once: measured 2026-09-08, ops/check_task_liveness.py
+    contains `ri`, `rd`, `start`, `set` and `powershell` as ordinary Python
+    text. The whole-file scan therefore uses _NATIVE_MUTATOR_EXES, which was
+    measured to occur zero times in that same file.
+    """
+    return sorted({t for t in _commands_in(script) if t.lower() in _KNOWN_MUTATOR_TOKENS})
+
+
+_EVASIVE_INJECTIONS = (
+    "ri 'ZZ-no-such-path-9f6839e'",
+    "del ZZ",
+    "rm ZZ",
+    "sc -Path ZZ -Value x",
+    "kill 1234",
+    "ni ZZ -ItemType File",
+    "cmd /c del ZZ",
+    "$null = schtasks /delete /tn ZZ /f",
+    "& ('Remo' + 've-Item') ZZ",
+    "$s = 'Remove'; & ($s + '-Item') ZZ",
+    "$t.Delete()",
+    "(Get-ScheduledTask -TaskName 'ZZ').Delete()",
+    "remove-item ZZ",
+    "REMOVE-ITEM ZZ",
+    "iex 'Remove-Item ZZ'",
+    "$x = Remove-Item ZZ",
+    "taskkill /F /PID 1",
+)
+
+
+# THE 2026-09-08 KILL CORPUS, every member of it MEASURED to walk through the
+# version of this file that preceded this one, with a canary file really
+# deleted from disk while the suite reported a pass at exit 0.
+#
+# SHAPE VARIATION IS THE POINT and is why the corpus looks like this. Rounds
+# two and three of this guard were both defeated because the non-vacuity
+# controls planted only the shape the matcher already handled - capitalised
+# Verb-Noun, then hyphenless alias - so neither could discover that the matcher
+# was narrow. Nothing below is Verb-Noun and nothing below is a bareword: six
+# reach .NET through a type accelerator and `::`, which carries no command
+# token, and two are bare redirection, which carries no token at all.
+_STATIC_AND_REDIRECTION_INJECTIONS = (
+    "[System.IO.File]::Delete('ZZ-no-such-path-9f6839e')",
+    "[IO.Directory]::Delete('ZZ-no-such-dir-9f6839e')",
+    "[System.IO.File]::WriteAllText('ZZ-no-such-path-9f6839e', 'x')",
+    "[System.IO.File]::Move('ZZ-a-9f6839e', 'ZZ-b-9f6839e')",
+    "[Diagnostics.Process]::Start('cmd.exe','/c del ZZ')",
+    "[Microsoft.Win32.Registry]::SetValue('HKEY_CURRENT_USER\\ZZ', 'v', 1)",
+    "'x' > 'ZZ-no-such-path-9f6839e'",
+    "'x' >> 'ZZ-no-such-path-9f6839e'",
+)
+
+
+_SANCTIONED_LOWER = frozenset(n.lower() for n in _SANCTIONED_PROBE_CMDLETS)
+
+
+def _unsanctioned_in(script: str) -> list[str]:
+    """Everything in this script that is not one of the five sanctioned cmdlets.
+
+    Membership is CASE-INSENSITIVE because PowerShell resolves cmdlet names
+    that way: `get-scheduledtask` is the same read as `Get-ScheduledTask`, and
+    `remove-item` is the same write as `Remove-Item`. Comparing case-sensitively
+    grades typography.
+
+    The dangerous SHAPES are folded in here too, so a caller cannot pass the
+    name scan while carrying a `.Delete()` or a concatenated verb.
+    """
+    named = sorted(n for n in _commands_in(script) if n.lower() not in _SANCTIONED_LOWER)
+    return named + _mutating_constructs_in(script)
+
+
+def _findings_in(script: str) -> list[str]:
+    """Every scan this file has, run over one piece of PowerShell text."""
+    return (
+        _unsanctioned_in(script)
+        + _bare_mutators_in(script)
+        + sorted(set(_MUTATING_VERB_RE.findall(script)))
+    )
+
+
+# --- A GUARD BOUND TO AN IDENTIFIER IS DEFEATED BY ADDING AN IDENTIFIER ----
+#
+# THE SECOND 2026-09-08 KILL. Every scan above was aimed at the NAME
+# `liveness._PS_TEMPLATE`. Adding a module-level
+#
+#     _PS_EXTRA = "ri 'ZZ-canary' -ErrorAction SilentlyContinue"
+#
+# and assembling `script = _PS_EXTRA + _PS_TEMPLATE.format(...)` left every one
+# of them looking at the wrong string: the template was pristine, the scans
+# reported empty, the canary was deleted from disk and the suite exited 0. The
+# whole-file half could not help either, because it grades PYTHON source with
+# _NATIVE_MUTATOR_EXES, a six-entry tuple that does not contain `ri` and cannot
+# be widened to contain it without false-positiving on the module's own text.
+#
+# So the text under test is DERIVED FROM THE MODULE'S BEHAVIOUR instead of
+# named. collect_facts is run with subprocess replaced by a shim, and whatever
+# it hands to `-Command` is what gets graded - assembled from one constant, two
+# constants, an f-string or a runtime concatenation, it makes no difference.
+#
+# AND IT RUNS AT IMPORT, WHICH IS THE DIFFERENCE BETWEEN DETECTION AND
+# PREVENTION. Both kills were caught after the fact by other arms - a second
+# subprocess.run by the spy count, an alias that threw by ProbeError - and in
+# both cases the canary had already died, because the destructive call was made
+# by the real-probe arms at the bottom of this file and a failing arm at the
+# top does not stop them. A raise here is a COLLECTION error: no arm in this
+# module runs, so no PowerShell is launched at all.
+#
+# THE HARNESS ITSELF WAS THE FOURTH KILL, and it is why this looks the way it
+# does. The version this replaces shimmed liveness.subprocess with a hand-rolled
+# class defining exactly three names - TimeoutExpired, SubprocessError and run.
+# It had NO Popen. Measured 2026-09-08, a branch on precisely that divergence,
+# planted in collect_facts right after the template format,
+#
+#     if hasattr(subprocess, 'Popen'):
+#         script = script + "\nri '<canary>' ... \nexit 0\n"
+#
+# built the pristine text under the shim and the armed text in production. The
+# equality check passed, every scan passed, the suite reported all arms green at
+# exit 0, and the canary file was deleted from disk by the real-probe arms.
+#
+# So the harness no longer BUILDS a stand-in for the subprocess module. It uses
+# THE REAL MODULE and replaces only the entry points that can start a process.
+# liveness.subprocess is therefore the identical object it is in production,
+# with the identical type, __name__, __spec__, __file__, exception classes,
+# DEVNULL and PIPE constants and every attribute stdlib adds in future - because
+# it IS that object, not a list of three attributes somebody remembered.
+#
+# Popen is replaced by a SUBCLASS of the real Popen rather than by a function,
+# so `isinstance(subprocess.Popen, type)` and `issubclass(..., Popen)` answer
+# the same as they do in production.
+#
+# ONE DIVERGENCE REMAINS AND CANNOT BE REMOVED: subprocess.run is not the real
+# subprocess.run while the derivation is in flight. A module that stashed the
+# real one at import and compared later would still tell the difference. That is
+# THE CEILING in the module docstring, and it is closed by the SOURCE GATE at
+# the top of this file - which refuses any reference to subprocess beyond the
+# four attributes the subject needs - and not by anything here.
+
+
+class _DerivationLaunchAttempt(Exception):
+    """A process-launching entry point other than run() was reached."""
+
+
+def _powershell_text_reaching_argv() -> str:
+    """The -Command payload collect_facts builds UNDER THIS HARNESS.
+
+    Not "what actually reaches PowerShell" - see THE CEILING. Under an
+    adversarial subject those are different strings, and the source gate rather
+    than this function is what refuses that subject.
+
+    No process is launched: every launching entry point on the real subprocess
+    module is replaced for the duration and restored in a finally.
+    """
+    captured: dict[str, list[str]] = {}
+
+    if liveness.subprocess is not subprocess or subprocess is not sys.modules["subprocess"]:
+        raise AssertionError(
+            "ops/check_task_liveness.py is not bound to the real stdlib subprocess module. "
+            "Refusing to run the derivation: replacing entry points on the real module would "
+            "not neuter whatever object the subject is actually holding, and calling "
+            "collect_facts would launch it."
+        )
+
+    def _capturing_run(argv, **kwargs):
+        captured["argv"] = list(argv)
+        return subprocess.CompletedProcess(
+            argv, 0, json.dumps({"exists": False, "task_name": "ZZ"}), ""
+        )
+
+    def _refusing(name: str):
+        def _launcher(argv=None, *rest, **kwargs):
+            captured.setdefault("argv", list(argv) if argv else [])
+            raise _DerivationLaunchAttempt(name)
+
+        return _launcher
+
+    class _RefusingPopen(subprocess.Popen):
+        # Popen.__del__ returns immediately when this is false, which keeps an
+        # "Exception ignored in __del__" off stderr for an object whose
+        # __init__ deliberately never completed.
+        _child_created = False
+
+        def __init__(self, argv=None, *rest, **kwargs):
+            captured.setdefault("argv", list(argv) if argv else [])
+            raise _DerivationLaunchAttempt("subprocess.Popen")
+
+    replacements: dict[str, object] = {
+        "run": _capturing_run,
+        "Popen": _RefusingPopen,
+        "call": _refusing("subprocess.call"),
+        "check_call": _refusing("subprocess.check_call"),
+        "check_output": _refusing("subprocess.check_output"),
+        "getoutput": _refusing("subprocess.getoutput"),
+        "getstatusoutput": _refusing("subprocess.getstatusoutput"),
+    }
+    saved = {name: getattr(subprocess, name) for name in replacements}
+
+    # The interpreter lookup is left ALONE wherever it works, so that on the
+    # Windows box this tool exists for there is exactly ONE divergence from
+    # production and not two. It is stubbed only where the real lookup raises,
+    # which is every machine with no PowerShell on PATH, and there the whole
+    # question of a real probe is moot anyway.
+    real_exe = liveness._powershell_executable
+    try:
+        real_exe()
+        stub_exe = False
+    except Exception:  # noqa: BLE001 - any failure here means "no interpreter", nothing more
+        stub_exe = True
+
+    for name, value in replacements.items():
+        setattr(subprocess, name, value)
+    if stub_exe:
+        liveness._powershell_executable = lambda: "powershell.exe"
+    try:
+        liveness.collect_facts(_ARGV_PROBE_NAME, task_path=_ARGV_PROBE_PATH)
+    except _DerivationLaunchAttempt:
+        # The argv was captured on the way in. Grading it is the point; the
+        # subject reaching for Popen instead of run changes nothing about that.
+        pass
+    finally:
+        for name, value in saved.items():
+            setattr(subprocess, name, value)
+        liveness._powershell_executable = real_exe
+
+    argv = captured.get("argv") or []
+    if "-Command" not in argv:
+        raise AssertionError(f"collect_facts built an argv with no -Command payload: {argv}")
+    return argv[argv.index("-Command") + 1]
+
+
+_ARGV_PROBE_NAME = "ResinCompute-Responder"
+_ARGV_PROBE_PATH = "\\GoogleUserPEH\\"
+
+# Executable string constants in the module, docstrings excluded. A docstring
+# is never run and never reaches an argv, and the module's own docstring
+# carries `->` arrows and the word Stop in prose, so grading it would flag
+# English. Comments are not in the AST at all, for the same reason.
+_MODULE_STRINGS: list[str] = []
+
+
+def _executable_string_constants(path: str) -> list[str]:
+    tree = ast.parse(open(path, encoding="ascii").read())
+    docstrings = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            body = getattr(node, "body", None)
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                if isinstance(body[0].value.value, str):
+                    docstrings.add(id(body[0].value))
+    return [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstrings
+    ]
+
+
+_MODULE_STRINGS = _executable_string_constants(liveness.__file__)
+
+# The SHAPE scans only. The bareword scan is deliberately NOT run over every
+# string: measured 2026-09-08, the module's own diagnostic "shutil.which found
+# none of: powershell.exe, powershell, pwsh.exe, pwsh" puts `powershell` and
+# `pwsh` in executable position and _KNOWN_MUTATOR_TOKENS holds both. That
+# string reaches an exception message and never an argv, and the argv
+# derivation above is what covers reachability.
+
+
+def _shape_findings_in_module_strings() -> list[str]:
+    out = []
+    for text in _MODULE_STRINGS:
+        for finding in _mutating_constructs_in(text):
+            out.append(f"{finding} in {text[:60]!r}")
+        for verb in sorted(set(_MUTATING_VERB_RE.findall(text))):
+            out.append(f"{verb} in {text[:60]!r}")
+    return out
+
+
+_ARGV_PROBE_TEXT = _powershell_text_reaching_argv()
+_ARGV_PROBE_EXPECTED = liveness._PS_TEMPLATE.format(
+    task_name=_ARGV_PROBE_NAME, task_path=_ARGV_PROBE_PATH
+)
+_IMPORT_TIME_FINDINGS = _findings_in(_ARGV_PROBE_TEXT) + _shape_findings_in_module_strings()
+if _ARGV_PROBE_TEXT != _ARGV_PROBE_EXPECTED:
+    # Text WRAPPED AROUND the template, whether or not any scan can read it as
+    # dangerous. This is here and not only in an arm because a quiet prefix is
+    # a place to hide, and an arm that fails does not stop the real-probe arms
+    # further down from running the text.
+    _IMPORT_TIME_FINDINGS.append(
+        "the -Command payload is not the formatted template alone - text is being "
+        "concatenated onto it"
+    )
+if _IMPORT_TIME_FINDINGS:
+    raise RuntimeError(
+        "ops/check_task_liveness.py would hand PowerShell text this file grades as "
+        f"able to change this machine: {_IMPORT_TIME_FINDINGS}. Raising at IMPORT rather than "
+        "in an arm, so that no test in this module runs and no subprocess is launched - a "
+        "failing assertion further down would be reported AFTER the real-probe arms had "
+        "already executed the text."
+    )
+
+
+# Every axis a mutation could test to tell this harness from production. The
+# hand-rolled three-attribute shim this replaces failed ALL of them.
+_HARNESS_AXES = (
+    "Popen", "run", "call", "check_call", "check_output", "getoutput", "getstatusoutput",
+    "CalledProcessError", "SubprocessError", "TimeoutExpired", "CompletedProcess",
+    "DEVNULL", "PIPE", "STDOUT", "list2cmdline",
+    "__name__", "__spec__", "__file__", "__doc__",
+)
+
+
+def test_the_subprocess_module_the_subject_sees_under_the_harness_is_the_real_one():
+    # THE FOURTH KILL, closed at the harness rather than at a matcher. The spy
+    # is installed on validate_task_name, which collect_facts calls AFTER the
+    # harness has swapped the launchers in, so what it records is exactly what
+    # a mutation planted in collect_facts would see.
+    real_popen = subprocess.Popen
+    real_module = subprocess
+    real_spec = subprocess.__spec__
+    real_file = subprocess.__file__
+    real_timeout = subprocess.TimeoutExpired
+    seen: dict[str, object] = {}
+    real_validate = liveness.validate_task_name
+
+    def _spy(task_name):
+        mod = liveness.subprocess
+        seen["identical"] = mod is real_module and mod is sys.modules["subprocess"]
+        seen["type"] = type(mod)
+        seen["name"] = mod.__name__
+        seen["spec"] = mod.__spec__
+        seen["file"] = mod.__file__
+        seen["missing"] = [axis for axis in _HARNESS_AXES if not hasattr(mod, axis)]
+        seen["popen_is_a_class"] = isinstance(mod.Popen, type)
+        seen["popen_subclasses_real"] = issubclass(mod.Popen, real_popen)
+        seen["timeout_is_real"] = mod.TimeoutExpired is real_timeout
+        return real_validate(task_name)
+
+    liveness.validate_task_name = _spy
+    try:
+        text = _powershell_text_reaching_argv()
+    finally:
+        liveness.validate_task_name = real_validate
+
+    assert text, "the derivation captured nothing, so this arm graded nothing"
+    assert seen, "the spy never ran, so this arm graded nothing"
+    assert seen["identical"], (
+        "the subject is not looking at the real stdlib subprocess module while the derivation "
+        "runs, so a mutation could branch on the difference"
+    )
+    assert seen["type"] is type(real_module)
+    assert seen["name"] == "subprocess"
+    assert seen["spec"] is real_spec
+    assert seen["file"] == real_file
+    assert seen["missing"] == [], f"the harness is missing {seen['missing']}, which is detectable"
+    assert seen["popen_is_a_class"], "Popen must stay a class, or isinstance(..., type) tells"
+    assert seen["popen_subclasses_real"], "Popen must stay a real Popen, or issubclass tells"
+    assert seen["timeout_is_real"]
+
+    # And the harness put everything back.
+    assert liveness.subprocess is real_module
+    assert subprocess.Popen is real_popen
+    for axis in ("run", "call", "check_call", "check_output", "getoutput", "getstatusoutput"):
+        assert getattr(subprocess, axis).__module__ == "subprocess", (
+            f"the harness did not restore subprocess.{axis}"
+        )
+
+
+def test_non_vacuity_the_shim_that_was_defeated_fails_every_axis_above():
+    # The exact three-attribute stand-in this file used to build. It is here so
+    # the arm above is a detector and not a description: `hasattr(subprocess,
+    # 'Popen')` planted in collect_facts read False under this object and True
+    # in production, which is how the pristine text got graded while the armed
+    # text ran. THIS IS NOT INSTALLED ANYWHERE - it is a fixture.
+    class _DefeatedShim:
+        TimeoutExpired = subprocess.TimeoutExpired
+        SubprocessError = subprocess.SubprocessError
+
+        @staticmethod
+        def run(argv, **kwargs):
+            return None
+
+    missing = [axis for axis in _HARNESS_AXES if not hasattr(_DefeatedShim, axis)]
+    assert "Popen" in missing, "the measured kill branched on exactly this absence"
+    assert len(missing) >= 10, (
+        f"the defeated shim diverged on {len(missing)} axes, and any one of them is a branch"
+    )
+    assert _DefeatedShim is not subprocess
+    assert type(_DefeatedShim) is not type(subprocess)
+    assert _DefeatedShim.__name__ != "subprocess"
+
+
+def test_the_powershell_text_built_under_this_harness_is_sanctioned():
+    # RENAMED, and the old name is the reason. It was
+    # test_the_text_that_actually_reaches_powershell_is_sanctioned, which claims
+    # a fact about production; this arm grades the text built while
+    # subprocess.run is replaced, which is not the same instant. See THE CEILING
+    # in the module docstring. An arm whose name claims more than it checks is
+    # worse than no arm, because the next reader stops looking.
+    #
+    # The same derivation the import-time block ran, asserted as an arm so it
+    # is named in the report rather than only in a collection error.
+    assert _ARGV_PROBE_TEXT, "no -Command payload was captured, so this arm grades nothing"
+    assert "Get-ScheduledTask" in _ARGV_PROBE_TEXT, "the captured payload is not the probe"
+    assert _findings_in(_ARGV_PROBE_TEXT) == []
+
+    # NOTHING MAY BE WRAPPED AROUND THE TEMPLATE. The kill added a second
+    # constant either side of it; equality catches that whatever the added text
+    # says, including text that carries no command shape at all.
+    assert _ARGV_PROBE_TEXT == _ARGV_PROBE_EXPECTED, (
+        "the text handed to PowerShell is not the formatted template alone - something is being "
+        "concatenated onto it"
+    )
+
+
+def test_non_vacuity_text_concatenated_around_the_template_is_caught():
+    # The kill, replayed through the same helper the arm above uses. The
+    # template is UNTOUCHED in every case, which is what defeated the previous
+    # version of this file.
+    pristine = liveness._PS_TEMPLATE.format(task_name=_ARGV_PROBE_NAME, task_path=_ARGV_PROBE_PATH)
+    assert _findings_in(pristine) == [], "the positive control must pass before the mutants fail"
+
+    for extra in (
+        "ri 'ZZ-no-such-path-9f6839e' -ErrorAction SilentlyContinue\n",
+        "del ZZ\n",
+        "[System.IO.File]::Delete('ZZ-no-such-path-9f6839e')\n",
+        "'x' > 'ZZ-no-such-path-9f6839e'\n",
+    ):
+        assert _findings_in(extra + pristine), f"prepending {extra!r} was not caught"
+        assert _findings_in(pristine + extra), f"appending {extra!r} was not caught"
+        assert extra + pristine != pristine, "the equality arm would also have seen this"
+
+    # SHAPE VARIATION on the same defect: text that carries NO command shape at
+    # all is invisible to every scan and is caught only by the equality arm.
+    # Without this case the corpus would again be planting only what the
+    # matcher handles.
+    quiet = "$ZZunused = 1\n"
+    assert _findings_in(quiet + pristine) == [], (
+        "this is the honest half - a quiet prefix passes every scan this file has, and NOTHING "
+        "in the scans can see it"
+    )
+    # It is the EQUALITY check that catches it, and that check is also part of
+    # the import-time block, so a quiet prefix is prevented rather than merely
+    # reported. Measured 2026-09-08: with the quiet prefix planted, pytest
+    # exits 2 on a collection error and no arm in this module runs.
+    assert quiet + pristine != _ARGV_PROBE_EXPECTED
+
+
+def test_non_vacuity_the_module_string_shape_scan_is_not_reading_an_empty_haystack():
+    assert len(_MODULE_STRINGS) > 20, (
+        f"the AST walk found only {len(_MODULE_STRINGS)} executable string constants in the "
+        "module, which is too few for it to be reading the real file"
+    )
+    assert any("Get-ScheduledTask" in s for s in _MODULE_STRINGS), (
+        "the probe template must be among the strings this scan grades"
+    )
+    # The module docstring must NOT be, and that exclusion is load bearing:
+    # it carries `->` arrows that the redirection scan would flag.
+    assert not any(s.startswith("check_task_liveness.py - does a Windows") for s in _MODULE_STRINGS)
+    assert _shape_findings_in_module_strings() == []
+
+    # The detector fires on a planted string, through the same helper.
+    planted = ["[System.IO.File]::Delete('ZZ')", "$x = Remove-Item ZZ", "'x' > 'ZZ'"]
+    for text in planted:
+        assert _mutating_constructs_in(text) or _MUTATING_VERB_RE.findall(text), (
+            f"the module-string shape scan would not have caught {text!r}"
+        )
+    # And the legitimate neighbours in the real module survive it.
+    for benign in ("task name must be letters, digits, space, dot, underscore, hyphen or backslash",
+                   "no PowerShell interpreter was found on PATH"):
+        assert _mutating_constructs_in(benign) == []
+        assert _MUTATING_VERB_RE.findall(benign) == []
+
+
+# --- THE SOURCE GATE IS A DETECTOR, AND IT GRADED THE IMPORTED FILE -------
+
+
+def test_the_source_gate_graded_the_same_bytes_that_were_then_imported():
+    # A gate that grades one path and imports another has graded nothing. This
+    # is the arm that would go red if _SUBJECT_PATH ever stopped agreeing with
+    # what `from ops import check_task_liveness` resolves to.
+    imported = pathlib.Path(liveness.__file__).resolve()
+    assert imported == _SUBJECT_PATH, (
+        f"the source gate graded {_SUBJECT_PATH} and the import resolved to {imported}"
+    )
+    assert _SUBJECT_SOURCE == imported.read_text(encoding="ascii"), (
+        "the file changed between the gate and this arm"
+    )
+    assert len(_SUBJECT_SOURCE) > 5000, (
+        f"the gate read only {len(_SUBJECT_SOURCE)} characters, which is too few to be the subject - "
+        "zero out of zero reads as a pass"
+    )
+    assert _source_gate_findings(_SUBJECT_SOURCE, _SUBJECT_TREE) == []
+
+
+def test_non_vacuity_the_source_gate_refuses_a_module_level_side_effect():
+    # THE MEASURED KILL, replayed: `import os as _diag` plus `_diag.remove(...)`
+    # at module scope in the subject ran at the import on line 63 of the version
+    # of this file that preceded this one, deleted the canary from disk, and the
+    # suite reported every arm passing at exit 0.
+    #
+    # SHAPE VARIATION, and it is the point rather than decoration. None of these
+    # is a PowerShell cmdlet, so nothing else in this file can see any of them,
+    # and no two of them put the call in the same syntactic place.
+    for planted in (
+        "import os as _diag\n_diag.remove('ZZ')\n",                  # the kill
+        "import shutil\n_x = shutil.rmtree('ZZ')\n",                 # hidden in an assignment
+        "import pathlib\npathlib.Path('ZZ').unlink()\n",             # chained off a constructor
+        "def _f(_unused=open('ZZ', 'w')):\n    pass\n",              # a default argument runs
+        "class _C:\n    _x = open('ZZ', 'w')\n",                     # a class body runs
+        "def _d(a):\n    return a\n@_d(open('ZZ', 'w'))\ndef _g():\n    pass\n",  # so does a decorator
+        "_MSG = f'{open(chr(90)) !r}'\n",                            # and an f-string
+    ):
+        assert _import_time_call_findings(ast.parse(planted)), (
+            f"the source gate let {planted!r} through, so it would have been imported"
+        )
+
+    # POSITIVE CONTROL, and it is the half a blind sweep would fail. The subject
+    # legitimately calls re.compile, dataclass and field while being imported,
+    # and a gate that flagged those would have to be switched off.
+    for benign in (
+        "import re\n_RE = re.compile('x')\n",
+        "from dataclasses import dataclass, field\n@dataclass\nclass C:\n"
+        "    xs: list = field(default_factory=list)\n",
+        "def main():\n    return 0\nif __name__ == '__main__':\n    raise SystemExit(main())\n",
+        # A function BODY is not import-time code, and calling it one is how a
+        # gate becomes noise nobody can leave switched on.
+        "def f():\n    import os\n    os.remove('ZZ')\n",
+    ):
+        assert _import_time_call_findings(ast.parse(benign)) == [], (
+            f"the source gate false-positived on {benign!r}"
+        )
+
+    # And the real subject passes it, which is what makes the arms above mean
+    # something rather than describing a file nobody has.
+    assert _import_time_call_findings(_SUBJECT_TREE) == []
+
+
+def test_non_vacuity_the_source_gate_refuses_a_module_that_asks_whether_it_is_watched():
+    # ROUNDS TWO, THREE AND FOUR of this guard were each defeated because the
+    # controls planted only the shape the matcher already handled. So no two of
+    # the twelve below use the same channel, and the first of them is the
+    # measured kill rather than an invented one.
+    for planted in (
+        "import subprocess\nif hasattr(subprocess, 'Popen'):\n    pass\n",   # THE KILL
+        "import subprocess\nif getattr(subprocess, 'Popen', None):\n    pass\n",
+        "import subprocess\nif subprocess.Popen:\n    pass\n",               # unsanctioned attribute
+        "import subprocess\nif subprocess.__name__ == 'subprocess':\n    pass\n",
+        "import subprocess\nimport sys\nif subprocess is sys.modules['subprocess']:\n    pass\n",
+        "import subprocess\n_R = subprocess.run\ndef f():\n    return subprocess.run is _R\n",
+        "import subprocess as sp\nif sp.Popen:\n    pass\n",                 # alias laundering
+        "from subprocess import Popen\n",                                    # from-import laundering
+        "import sys\nif sys.modules.get('pytest'):\n    pass\n",
+        "if __debug__:\n    pass\n",
+        "import os\nif os.environ.get('PYTEST_CURRENT_TEST'):\n    pass\n",
+        "import sys\nif sys.stdout.isatty():\n    pass\n",
+        "import sys\nif sys.argv[0].endswith('pytest'):\n    pass\n",
+    ):
+        assert _observation_findings(ast.parse(planted)), (
+            f"the source gate let {planted!r} through, so a module could build one PowerShell "
+            "string under this file's harness and a different one in real use"
+        )
+
+    # POSITIVE CONTROL: everything the subject genuinely does with subprocess
+    # survives. A rule that banned these would ban the module it grades.
+    for benign in (
+        "import subprocess\ncompleted = subprocess.run(['x'], check=False)\n",
+        "import subprocess\ntry:\n    pass\nexcept subprocess.TimeoutExpired as exc:\n    raise\n",
+        "import sys\nprint('x', file=sys.stderr)\n",
+        "import shutil\nfound = shutil.which('powershell.exe')\n",
+    ):
+        assert _observation_findings(ast.parse(benign)) == [], (
+            f"the source gate false-positived on {benign!r}"
+        )
+
+    assert _observation_findings(_SUBJECT_TREE) == []
 
 
 def test_the_probe_is_built_only_from_sanctioned_read_only_commands():
@@ -622,11 +1683,13 @@ def test_the_probe_is_built_only_from_sanctioned_read_only_commands():
     assert found, "the scan found no command at all in the probe - it is not reading the template"
     assert "Get-ScheduledTask" in found, "the scan must see the probe's real content, not an empty haystack"
 
-    unsanctioned = sorted(name for name in found if name not in _SANCTIONED_PROBE_CMDLETS)
+    unsanctioned = _unsanctioned_in(liveness._PS_TEMPLATE)
     assert unsanctioned == [], (
         f"the probe carries {unsanctioned}, which is not in the sanctioned read-only set. "
         "A read-only liveness probe runs Get- and nothing else."
     )
+    assert _bare_mutators_in(liveness._PS_TEMPLATE) == [], "the probe carries a hyphenless mutator"
+    assert _mutating_constructs_in(liveness._PS_TEMPLATE) == []
 
     # The allowlist itself is constrained, so it cannot be widened into a
     # mutating cmdlet by whoever finds this arm inconvenient.
@@ -647,17 +1710,31 @@ def test_non_vacuity_the_allowlist_catches_every_verb_the_old_denylist_missed():
         "Enable-ScheduledTask -TaskName 'ZZ'",
         "Stop-ScheduledTask -TaskName 'ZZ'",
         "Get-Item 'ZZ-no-such-item-9f6839e'",
+        # D3: the six shapes the capitalised-Verb-Noun corpus above could not
+        # have discovered, because every member of it was already the one shape
+        # the matcher handled. A control that plants only the case the matcher
+        # handles cannot find out that the matcher is case-sensitive.
+        "ri 'ZZ'",                              # alias
+        "remove-item 'ZZ'",                     # lowercase
+        "REMOVE-ITEM 'ZZ'",                     # uppercase
+        "& ('Remo' + 've-Item') 'ZZ'",          # concatenated verb
+        "cmd /c del ZZ",                        # shell-out
+        "(Get-ScheduledTask -TaskName 'ZZ').Delete()",  # method call
     ]
     for line in injections:
         mutated = line + "\n" + liveness._PS_TEMPLATE
-        unsanctioned = sorted(n for n in _commands_in(mutated) if n not in _SANCTIONED_PROBE_CMDLETS)
-        assert unsanctioned, f"the allowlist scan let {line!r} through"
+        assert _unsanctioned_in(mutated), f"the allowlist scan let {line!r} through"
 
     # The positive control, through the same scan: the pristine template passes.
-    assert sorted(n for n in _commands_in(liveness._PS_TEMPLATE) if n not in _SANCTIONED_PROBE_CMDLETS) == []
+    assert _unsanctioned_in(liveness._PS_TEMPLATE) == []
 
 
-def test_the_module_never_stops_modifies_or_unregisters_anything():
+def test_the_module_source_carries_no_stop_modify_or_unregister_shape():
+    # RENAMED from test_the_module_never_stops_modifies_or_unregisters_anything,
+    # which asserted a fact about the module's BEHAVIOUR from a scan of its
+    # TEXT. Those are different claims and only the second one is checkable
+    # here. See THE CEILING in the module docstring.
+    #
     # The whole-file half, also by SHAPE rather than by a list of names: any
     # Verb-Noun built on a mutating verb, anywhere in the module.
     source = liveness.__file__
@@ -665,8 +1742,15 @@ def test_the_module_never_stops_modifies_or_unregisters_anything():
         body = handle.read()
     found = sorted(set(_MUTATING_VERB_RE.findall(body)))
     assert found == [], f"a read-only liveness probe must never carry {found}"
-    for token in ("Stop-Process", "taskkill"):
-        assert token not in body, f"a read-only liveness probe must never carry {token}"
+    # Case-INSENSITIVELY, because `stop-process` is the same call as
+    # Stop-Process and the old arm compared bytes.
+    lowered = body.lower()
+    for token in ("stop-process",) + _NATIVE_MUTATOR_EXES:
+        assert token not in lowered, f"a read-only liveness probe must never carry {token}"
+    # The probe text inside this module gets the PowerShell-aware scan too, so a
+    # hyphenless alias planted in the template is caught by the whole-file arm
+    # and not only by the probe arm.
+    assert _bare_mutators_in(liveness._PS_TEMPLATE) == []
 
 
 def test_non_vacuity_the_read_only_scan_would_catch_a_planted_mutation():
@@ -681,9 +1765,132 @@ def test_non_vacuity_the_read_only_scan_would_catch_a_planted_mutation():
         "New-Item",
         "Enable-ScheduledTask",
         "Stop-ScheduledTask",
+        # D3: SHAPE variation. The seven above are all capitalised Verb-Noun,
+        # which is exactly the one spelling the matcher already handled, so
+        # none of them could ever have discovered that it was case-sensitive.
+        "stop-process",
+        "unregister-scheduledtask",
+        "REMOVE-ITEM",
+        "sToP-sChEdUlEdTaSk",
     ):
         body = f"subprocess.run(['powershell', '-Command', '{verb_noun} -TaskName x'])"
         assert _MUTATING_VERB_RE.findall(body) == [verb_noun], f"the shape scan missed {verb_noun}"
+
+    # The hyphenless half, which the Verb-Noun shape structurally cannot see.
+    # These run through the PowerShell-aware scan, in executable position.
+    for fragment in ("ri 'ZZ'", "DEL ZZ", "cmd /c del ZZ", "TASKKILL /F /PID 1", "iex 'x'"):
+        assert _bare_mutators_in(fragment), f"the hyphenless scan missed {fragment!r}"
+
+    # And the shapes that carry no command NAME at all.
+    for fragment in ("$t.Delete()", "& ('Remo' + 've-Item') ZZ"):
+        assert _mutating_constructs_in(fragment), f"the construct scan missed {fragment!r}"
+
+    # POSITIVE CONTROL for all three scans: the legitimate neighbours SURVIVE.
+    # A sweep that scores 100 percent by flagging everything has failed.
+    for benign in ("Get-ScheduledTask -TaskName x", "$i.NextRunTime.ToString($fmt)", "$ri = ''"):
+        assert _bare_mutators_in(benign) == [], f"the hyphenless scan false-positived on {benign!r}"
+        assert _mutating_constructs_in(benign) == [], f"the construct scan false-positived on {benign!r}"
+        assert _MUTATING_VERB_RE.findall(benign) == []
+
+
+def test_non_vacuity_the_probe_scan_sees_shapes_that_are_not_capitalised_verb_noun():
+    for line in _EVASIVE_INJECTIONS:
+        mutated = line + "\n" + liveness._PS_TEMPLATE
+        assert _unsanctioned_in(mutated), f"the probe scan let {line!r} through"
+
+    assert _unsanctioned_in(liveness._PS_TEMPLATE) == []
+
+
+def test_non_vacuity_the_probe_scan_sees_static_calls_and_bare_redirection():
+    # THE 2026-09-08 KILL, replayed at the position it was planted: not
+    # prepended, but spliced in AFTER the error-preference line, where the
+    # first-executable-line arm cannot see it either. Every one of these left
+    # all four scans empty before this repair; the assertion below is what
+    # turns each of them red.
+    preference = liveness._PS_TEMPLATE.index(_ERROR_PREFERENCE_LINE) + len(_ERROR_PREFERENCE_LINE)
+    for line in _STATIC_AND_REDIRECTION_INJECTIONS:
+        mutated = (
+            liveness._PS_TEMPLATE[:preference] + "\n" + line + liveness._PS_TEMPLATE[preference:]
+        )
+        assert _unsanctioned_in(mutated), f"the probe scan let {line!r} through"
+        # And the arm that would have caught a PREPENDED line is shown to be
+        # silent here, so nobody reads this repair as belonging to that one.
+        assert _first_executable_line(mutated) == _ERROR_PREFERENCE_LINE
+
+    # POSITIVE CONTROL: the shapes the probe legitimately uses are not flagged.
+    # `[string]$tr.EndBoundary` and `[pscustomobject]@{` are casts, which carry
+    # no `::`, and `.ToString(` is the one sanctioned method.
+    for benign in (
+        "$k = [string]$tr.EndBoundary",
+        "[pscustomobject]@{ exists = $false }",
+        "$next = $i.NextRunTime.ToString($fmt)",
+        "$b = [bool]$tr.Enabled",
+        "if ($all.Count -gt 1) { exit 0 }",
+    ):
+        assert _mutating_constructs_in(benign) == [], f"the shape scan false-positived on {benign!r}"
+    assert _unsanctioned_in(liveness._PS_TEMPLATE) == []
+
+
+def test_non_vacuity_the_read_only_scan_is_case_insensitive_as_its_comment_claims():
+    for spelling in ("stop-process", "unregister-scheduledtask", "REMOVE-ITEM", "Set-Content"):
+        body = f"subprocess.run(['powershell', '-Command', '{spelling} -TaskName x'])"
+        assert _MUTATING_VERB_RE.findall(body) == [spelling], f"the shape scan missed {spelling}"
+    for bare in ("TASKKILL /F /PID 1", "ri 'ZZ'", "cmd /c del ZZ"):
+        assert _bare_mutators_in(bare), f"the whole-file scan missed {bare!r}"
+
+
+def test_non_vacuity_discovery_failure_is_not_reported_as_an_empty_machine():
+    # The three reasons the old helper collapsed into one (None, None), plus
+    # the shapes a neutered enumeration produces at exit 0. Every one of them
+    # must read FAILED, because none of them is evidence about this machine.
+    def _rows(*pairs):
+        return json.dumps({"tasks": [{"name": n, "path": p} for n, p in pairs]})
+
+    for returncode, stdout, why in (
+        (1, "", "non-zero exit"),
+        (0, "", "exit 0 with no output"),
+        (0, "not json at all", "exit 0 with unparseable output"),
+        (0, '{"found": false}', "exit 0 carrying no task records at all"),
+        (0, '{"tasks": []}', "exit 0 having delivered nothing"),
+        (0, '{"tasks": null}', "exit 0 with the 5.1 empty-array collapse to null"),
+        (0, '{"tasks": ["Backup", "WiFiTask"]}', "exit 0 with records of the wrong shape"),
+    ):
+        got = _classify_discovery(returncode, stdout)
+        assert got.status == "FAILED", f"{why} was not reported as a failed discovery"
+        assert got.detail, "a FAILED discovery must say what went wrong"
+
+    # POSITIVE CONTROL, same classifier: a discovery that really ran and really
+    # found no duplicate is NONE and not FAILED. Without this arm the classifier
+    # could return FAILED unconditionally and pass everything above.
+    ran = _classify_discovery(0, _rows(("Alpha", "\\"), ("Beta", "\\X\\"), ("Gamma", "\\")))
+    assert ran.status == "NONE"
+    assert ran.total == 3
+
+    # AND THE REGRESSION THE OLD FLOOR OF TEN WOULD HAVE FAILED. A Server Core
+    # box or a Windows container holding three tasks and no duplicate is a
+    # SPARSE MACHINE, not a broken enumeration, and must not be slandered as
+    # one. The previous floor classified exactly this as FAILED.
+    assert ran.total < 10, "this control is only meaningful below the refuted floor of ten"
+
+    # POSITIVE CONTROL, the other arm of the same classifier: a real duplicate,
+    # grouped in Python from records that carry no found flag of their own.
+    hit = _classify_discovery(0, _rows(("Backup", "\\"), ("Alpha", "\\"), ("Backup", "\\X\\")))
+    assert hit.status == "FOUND"
+    assert hit.name == "Backup"
+    assert hit.paths == ["\\", "\\X\\"]
+    assert hit.total == 3
+
+    # A name the module's own gate would REFUSE is not offered, even duplicated.
+    refused = _classify_discovery(0, _rows(("bad;name", "\\"), ("bad;name", "\\X\\")))
+    assert refused.status == "NONE", "a duplicated name collect_facts would reject is not a lead"
+
+    # The 5.1 scalar-collapse normalisation still holds through the new path.
+    scalar = _classify_discovery(0, '{"tasks": {"name": "Alpha", "path": "\\\\"}}')
+    assert scalar.status == "NONE"
+    assert scalar.total == 1
+
+    # The three statuses are genuinely distinct, which is the defect closed.
+    assert len({_classify_discovery(1, "").status, ran.status, hit.status}) == 3
 
 
 # --- NOTHING RUNS BEFORE THE ERROR PREFERENCE -----------------------------
@@ -864,6 +2071,13 @@ def test_positive_control_the_default_timeout_is_used_when_none_is_given(monkeyp
 # running the REAL probe against a REAL task and checking the payload against
 # a key set RECORDED FROM THE PARSER rather than listed by hand.
 
+# AND WHAT THESE ARMS DO NOT BUY. _WINDOWS_ONLY is a skipif, so on Linux CI
+# every arm carrying it is skipped outright and the repair below buys CI
+# nothing at all. That is stated here rather than left for a reader to
+# discover, because a comment claiming otherwise would be the same defect this
+# file keeps being refuted for. What DOES run everywhere is the import-time
+# probe grading, the static threshold arm, and the pure classifier arms - all
+# of which are deliberately written to need no PowerShell.
 _WINDOWS_ONLY = pytest.mark.skipif(
     sys.platform != "win32", reason="the probe reads the Windows Task Scheduler"
 )
@@ -896,44 +2110,102 @@ def _keys_the_parser_reads():
     return top, trig
 
 
-def _real_task_names():
+class _TaskPick(typing.NamedTuple):
+    status: str
+    root: str | None
+    deep: str | None
+    deep_path: str | None
+    detail: str
+
+
+def _real_task_names() -> _TaskPick:
     """Ask the scheduler, read only, for one root task and one foldered task.
 
-    Returns (root_name, deep_name, deep_path); any element may be None. Only
-    names matching the module's own validator and carrying at least one trigger
-    are offered, and only names that are UNIQUE across paths, so the arms below
-    are not accidentally testing the ambiguity branch.
+    A CONDITION THAT CANNOT DISTINGUISH "CHECKED AND FOUND NOTHING" FROM "COULD
+    NOT CHECK" IS THE ROOT CAUSE THIS FILE HAS NOW BEEN REFUTED FOR THREE
+    TIMES. The version this replaces ended
+
+        if done.returncode != 0 or not done.stdout.strip():
+            return None, None, None
+
+    and its three callers all took a pytest.skip whose text blamed the machine.
+    Measured 2026-09-08: making this enumeration exit 3 turned a run into 65
+    passed, 3 skipped at exit 0, with every skip message asserting something
+    about the machine that was false in that run.
+
+    So it returns a STATUS. FAILED must fail; only NONE may skip.
     """
     exe = liveness._powershell_executable()
     script = (
         "$ErrorActionPreference='Stop';"
-        "$u = Get-ScheduledTask | Group-Object TaskName | Where-Object { $_.Count -eq 1 } |"
+        "$all = @(Get-ScheduledTask);"
+        "$u = $all | Group-Object TaskName | Where-Object { $_.Count -eq 1 } |"
         " ForEach-Object { $_.Group[0] };"
         "$ok = @($u | Where-Object { $_.TaskName -match '^[A-Za-z0-9 ._-]{1,200}$'"
         " -and @($_.Triggers).Count -gt 0 });"
         "$r = $ok | Where-Object { $_.TaskPath -eq '\\' } | Select-Object -First 1;"
         "$d = $ok | Where-Object { $_.TaskPath -ne '\\' } | Select-Object -First 1;"
-        "[pscustomobject]@{ root = [string]$r.TaskName; deep = [string]$d.TaskName;"
-        " deep_path = [string]$d.TaskPath } | ConvertTo-Json -Compress"
+        "[pscustomobject]@{ total = $all.Count; root = [string]$r.TaskName;"
+        " deep = [string]$d.TaskName; deep_path = [string]$d.TaskPath }"
+        " | ConvertTo-Json -Compress"
     )
-    done = subprocess.run(
-        [exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
+    try:
+        done = subprocess.run(
+            [exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return _TaskPick("FAILED", None, None, None, f"could not be launched: {type(exc).__name__}")
+    return _classify_task_pick(done.returncode, done.stdout)
+
+
+def _classify_task_pick(returncode: int, stdout: str) -> _TaskPick:
+    """The pure half of _real_task_names, so its FAILED arms are testable."""
+    if returncode != 0:
+        return _TaskPick("FAILED", None, None, None, f"the enumeration exited {returncode}")
+    if not stdout.strip():
+        return _TaskPick("FAILED", None, None, None, "the enumeration exited 0 but printed nothing")
+    try:
+        got = json.loads(stdout.strip())
+    except ValueError:
+        return _TaskPick("FAILED", None, None, None, "the enumeration printed something that is not JSON")
+    if not isinstance(got, dict) or "total" not in got:
+        return _TaskPick("FAILED", None, None, None, "the enumeration printed no task total")
+    try:
+        total = int(got["total"])
+    except (TypeError, ValueError):
+        return _TaskPick("FAILED", None, None, None, "the enumeration printed a total that is not a number")
+    if total < _MIN_ENUMERATED_TASKS:
+        return _TaskPick(
+            "FAILED", None, None, None,
+            "the enumeration saw no scheduled task at all, which is indistinguishable from an "
+            "enumeration that did not run",
+        )
+    return _TaskPick(
+        "RAN",
+        got.get("root") or None,
+        got.get("deep") or None,
+        got.get("deep_path") or None,
+        f"the enumeration saw {total} scheduled tasks",
     )
-    if done.returncode != 0 or not done.stdout.strip():
-        return None, None, None
-    got = json.loads(done.stdout.strip())
-    return (got.get("root") or None, got.get("deep") or None, got.get("deep_path") or None)
 
 
 @_WINDOWS_ONLY
 def test_the_real_probe_emits_every_key_the_parser_reads():
-    root_name, _, _ = _real_task_names()
+    pick = _real_task_names()
+    assert pick.status != "FAILED", (
+        f"the enumeration this arm selects its subject from did not run, so a skip here would "
+        f"blame the machine for a tool failure: {pick.detail}"
+    )
+    root_name = pick.root
     if root_name is None:
-        pytest.skip("no uniquely named scheduled task with a trigger was found at TaskPath \\ on this machine")
+        pytest.skip(
+            f"{pick.detail}, and none of them is a uniquely named task at TaskPath \\ carrying a "
+            "trigger and a name the module's own gate accepts"
+        )
 
     payload = liveness.collect_facts(root_name)
     assert payload.get("exists") is True, f"{root_name} was enumerated a moment ago and must still exist"
@@ -970,9 +2242,17 @@ def test_the_real_probe_answers_for_a_task_outside_the_root_task_path():
     # "The system cannot find the file specified" for anything in a folder,
     # which the refuted version reported as an account problem. -InputObject
     # does not. Measured 2026-09-08.
-    _, deep_name, deep_path = _real_task_names()
+    pick = _real_task_names()
+    assert pick.status != "FAILED", (
+        f"the enumeration this arm selects its subject from did not run, so a skip here would "
+        f"blame the machine for a tool failure: {pick.detail}"
+    )
+    deep_name, deep_path = pick.deep, pick.deep_path
     if deep_name is None:
-        pytest.skip("no uniquely named foldered scheduled task with a trigger was found on this machine")
+        pytest.skip(
+            f"{pick.detail}, and none of them is a uniquely named FOLDERED task carrying a trigger "
+            "and a name the module's own gate accepts"
+        )
 
     payload = liveness.collect_facts(deep_name, task_path=deep_path)
     assert payload.get("exists") is True, f"{deep_name} under {deep_path} must be answerable"
@@ -1001,6 +2281,13 @@ def test_the_real_probe_reports_a_name_nothing_holds_as_absent():
 # reach it. Measured 2026-09-08 - changing that threshold to 99 makes the probe
 # silently answer about $all[0] and the whole suite stays green.
 #
+# AND THE EXECUTION ARM ALONE STILL DID NOT CLOSE IT. It can only reach the
+# branch on a machine that really holds a duplicated TaskName, and on a
+# duplicate-free one it skips. Measured 2026-09-08 with that machine simulated:
+# the -gt 99 mutant survived at 64 passed, 1 skipped, exit 0, while the skip
+# text asserted "the machine, not the tool". So the threshold is ALSO pinned
+# statically, in an arm that runs on every machine and names itself as static.
+#
 # This arm runs the REAL probe against a name the scheduler really does hold
 # more than once. The name is DISCOVERED, never hardcoded: measured on this
 # machine 2026-09-08, 'Backup', 'CreateObjectTask' and 'WiFiTask' each match two
@@ -1008,62 +2295,224 @@ def test_the_real_probe_reports_a_name_nothing_holds_as_absent():
 #
 # READ ONLY. Get-ScheduledTask and nothing else.
 
+# THE ENUMERATION NO LONGER DECIDES ANYTHING, and that is the repair. The
+# version this replaces did the grouping and the `-gt 1` threshold IN
+# POWERSHELL and reported only its own conclusion plus a `total` it also
+# supplied. Both were mutable, and both were mutated on 2026-09-08: changing
+# this script's group filter to `-gt 9` simulated a duplicate-free machine, the
+# arm below took its skip, and the module's own ambiguity mutant survived while
+# the run reported 67 passed, 1 skipped at exit 0. A test that asks a script it
+# also controls whether it is allowed to skip has no independent footing.
+#
+# So the script now RETURNS RECORDS AND DRAWS NO CONCLUSION: one object per
+# registered task, name and path. The grouping, the threshold and the total are
+# all computed in Python from the records that actually arrived. There is no
+# reported total left to lie about - the total IS the record count - and no
+# PowerShell threshold left to move.
 _DUPLICATE_NAME_DISCOVERY = """
 $ErrorActionPreference='Stop'
-$hit = $null
-foreach ($g in @(Get-ScheduledTask | Group-Object TaskName | Where-Object { $_.Count -gt 1 })) {
-    if ($g.Name -notmatch '^[A-Za-z0-9 ._-]{1,200}$') { continue }
-    $hit = $g
-    break
+$rows = @()
+foreach ($t in @(Get-ScheduledTask)) {
+    $rows += [pscustomobject]@{ name = [string]$t.TaskName; path = [string]$t.TaskPath }
 }
-if ($null -eq $hit) {
-    [pscustomobject]@{ found = $false } | ConvertTo-Json -Compress
-    exit 0
-}
-[pscustomobject]@{
-    found = $true
-    name = [string]$hit.Name
-    paths = @($hit.Group | ForEach-Object { [string]$_.TaskPath })
-} | ConvertTo-Json -Compress -Depth 5
+[pscustomobject]@{ tasks = @($rows) } | ConvertTo-Json -Compress -Depth 5
 """
 
+# ONE, and the previous value of TEN was refuted from BOTH sides on 2026-09-08.
+#
+# It could never fire. Measured over totals 0..39, the set of totals reaching
+# the arm's own `assert found.total >= _MIN_PLAUSIBLE_TASK_COUNT` while being
+# below the floor was EMPTY, because the classifier had already returned FAILED
+# for every one of them. Deleting that assertion was an equivalent mutant.
+#
+# And it over-fired. A Server Core box or a Windows container that really does
+# hold five scheduled tasks was classified FAILED and HARD-FAILED the arm. The
+# floor was asked to separate a sparse machine from a broken enumeration and it
+# picked the wrong side of that line.
+#
+# The separation is now structural rather than statistical. The total counts
+# the records that ARRIVED, so a neutered enumeration cannot report a number it
+# did not deliver, and the only count that stays ambiguous is zero: a scheduler
+# that returns no task at all is indistinguishable from a call that did not
+# run, so zero fails CLOSED. Every positive count is evidence the enumeration
+# ran, and a sparse machine is no longer slandered.
+_MIN_ENUMERATED_TASKS = 1
 
-def _a_name_registered_more_than_once():
+# The module's own task-name gate, restated here BY VALUE so discovery only
+# offers names collect_facts will accept. Importing the gate a filter is
+# supposed to model would make the filter unable to notice the gate moving.
+_VALIDATOR_SHAPED_NAME = re.compile(r"^[A-Za-z0-9 ._\\-]{1,200}$")
+
+
+class _Discovery(typing.NamedTuple):
+    status: str
+    name: str | None
+    paths: list[str]
+    total: int
+    detail: str
+
+
+def _classify_discovery(returncode: int, stdout: str) -> _Discovery:
+    """Separate DISCOVERY-FAILED from DISCOVERY-RAN-AND-FOUND-NOTHING.
+
+    The version before last returned (None, None) for THREE different reasons -
+    non-zero exit, empty stdout, and found=false - and the caller skipped on all
+    three. A discovery that failed was therefore indistinguishable from a
+    machine that legitimately holds no duplicated name.
+
+    This version additionally does the GROUPING here, in Python, over records
+    the enumeration merely delivered. The previous one trusted a found/total
+    conclusion computed inside the same PowerShell it was meant to be
+    independent of. Only NONE may skip. FAILED must fail.
+    """
+    if returncode != 0:
+        return _Discovery("FAILED", None, [], 0, f"discovery exited {returncode}")
+    if not stdout.strip():
+        return _Discovery("FAILED", None, [], 0, "discovery exited 0 but printed nothing")
+    try:
+        got = json.loads(stdout.strip())
+    except ValueError:
+        return _Discovery("FAILED", None, [], 0, "discovery printed something that is not JSON")
+    if not isinstance(got, dict) or "tasks" not in got:
+        return _Discovery(
+            "FAILED", None, [], 0,
+            "discovery printed no task records, so it cannot be shown to have run",
+        )
+    rows = got.get("tasks")
+    # Windows PowerShell 5.1 collapses a one-element array to a scalar and an
+    # empty one to $null. Normalised rather than trusted.
+    if rows is None:
+        rows = []
+    elif not isinstance(rows, list):
+        rows = [rows]
+    if not all(isinstance(row, dict) for row in rows):
+        return _Discovery(
+            "FAILED", None, [], 0, "discovery printed task records of an unexpected shape"
+        )
+
+    total = len(rows)
+    if total < _MIN_ENUMERATED_TASKS:
+        return _Discovery(
+            "FAILED", None, [], total,
+            "discovery delivered no scheduled task at all. A scheduler holding nothing and a "
+            "call that never enumerated look identical from here, so this fails closed",
+        )
+
+    by_name: dict[str, list[str]] = {}
+    for row in rows:
+        name = str(row.get("name") or "")
+        if not _VALIDATOR_SHAPED_NAME.match(name):
+            continue
+        by_name.setdefault(name, []).append(str(row.get("path") or "").strip())
+
+    for name in sorted(by_name):
+        if len(by_name[name]) > 1:
+            return _Discovery(
+                "FOUND", name, sorted(by_name[name]), total,
+                f"discovery enumerated {total} scheduled tasks and {name} is held more than once",
+            )
+
+    return _Discovery(
+        "NONE", None, [], total,
+        f"discovery enumerated {total} scheduled tasks, {len(by_name)} of them carrying a name the "
+        "module's own gate accepts, and none of those is held under more than one TaskPath",
+    )
+
+
+def _a_name_registered_more_than_once() -> _Discovery:
     """Ask the scheduler, read only, for a TaskName held under two TaskPaths.
 
-    Returns (name, paths) or (None, None) when this machine holds no duplicated
-    name or the enumeration could not be run.
+    Returns a _Discovery whose status is FOUND, NONE or FAILED. It never
+    collapses the last two, which was the defect.
     """
     exe = liveness._powershell_executable()
-    done = subprocess.run(
-        [exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", _DUPLICATE_NAME_DISCOVERY],
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
+    try:
+        done = subprocess.run(
+            [exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", _DUPLICATE_NAME_DISCOVERY],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return _Discovery("FAILED", None, [], 0, f"discovery could not be launched: {type(exc).__name__}")
+    return _classify_discovery(done.returncode, done.stdout)
+
+
+_AMBIGUITY_BRANCH = "if ($all.Count -gt 1) {"
+_ABSENCE_BRANCH = "if ($all.Count -eq 0) {"
+
+
+def test_the_probe_keeps_its_ambiguity_threshold_at_more_than_one_match():
+    # THE ARM THAT RUNS ON EVERY MACHINE, and the reason it exists.
+    #
+    # The execution arm below can only reach the probe's ambiguity branch on a
+    # machine that really holds a duplicated TaskName, and it SKIPS otherwise.
+    # Measured 2026-09-08 on a simulated duplicate-free machine: changing the
+    # module's threshold from `-gt 1` to `-gt 99` - the exact mutant the comment
+    # above says this section exists to kill - left the run at 67 passed, 1
+    # skipped, exit 0. The skip is honest about the machine and says nothing
+    # about the mutant, and that is precisely the hole.
+    #
+    # This arm is STATIC and says so in its name. It reads the two thresholds
+    # out of the text that actually reaches PowerShell, so it kills the mutant
+    # on a duplicate-free box, in a container, and on Linux CI where every
+    # _WINDOWS_ONLY arm in this file is skipped outright.
+    assert _AMBIGUITY_BRANCH in _ARGV_PROBE_TEXT, (
+        f"the probe no longer carries {_AMBIGUITY_BRANCH!r}. Any other threshold makes it answer "
+        "about a silently picked one of several matched tasks"
     )
-    if done.returncode != 0 or not done.stdout.strip():
-        return None, None
-    got = json.loads(done.stdout.strip())
-    if not got.get("found"):
-        return None, None
-    paths = got.get("paths")
-    # Windows PowerShell 5.1 can collapse a one-element array to a scalar. This
-    # group has at least two members, but the shape is normalised anyway rather
-    # than trusted.
-    if not isinstance(paths, list):
-        paths = [paths]
-    return got.get("name") or None, [str(p or "").strip() for p in paths]
+    assert _ABSENCE_BRANCH in _ARGV_PROBE_TEXT, (
+        f"the probe no longer carries {_ABSENCE_BRANCH!r}, which is what makes an unregistered "
+        "name ABSENT rather than a crash"
+    )
+
+
+def test_non_vacuity_a_moved_ambiguity_threshold_is_caught_by_the_static_arm():
+    # The same two membership tests over mutated copies of the SAME text. Both
+    # mutants are the ones actually planted against this file.
+    for mutant in ("if ($all.Count -gt 99) {", "if ($all.Count -gt 2) {"):
+        moved = _ARGV_PROBE_TEXT.replace(_AMBIGUITY_BRANCH, mutant)
+        assert moved != _ARGV_PROBE_TEXT, "the replacement did not change anything, so this proves nothing"
+        assert _AMBIGUITY_BRANCH not in moved, f"the check would not have noticed {mutant!r}"
+    collapsed = _ARGV_PROBE_TEXT.replace(_ABSENCE_BRANCH, "if ($all.Count -eq 1) {")
+    assert _ABSENCE_BRANCH not in collapsed
+
+    # POSITIVE CONTROL: the pristine text passes the same two tests, so they
+    # are not simply failing on everything.
+    assert _AMBIGUITY_BRANCH in _ARGV_PROBE_TEXT and _ABSENCE_BRANCH in _ARGV_PROBE_TEXT
 
 
 @_WINDOWS_ONLY
 def test_the_real_probe_answers_a_duplicated_name_as_ambiguous():
-    name, paths = _a_name_registered_more_than_once()
-    if name is None:
+    found = _a_name_registered_more_than_once()
+
+    # DISCOVERY THAT COULD NOT BE SHOWN TO HAVE RUN IS A FAILURE, NOT A SKIP.
+    # The old arm skipped here, so on CI and in a fresh clone it asserted
+    # nothing while still reporting a pass.
+    assert found.status != "FAILED", (
+        f"the duplicate-name discovery did not run, so this arm can say nothing about the probe's "
+        f"ambiguity branch: {found.detail}"
+    )
+    # There is deliberately NO `assert found.total >= <floor>` here any more.
+    # Measured 2026-09-08 over totals 0..39: the classifier already returns
+    # FAILED for every total the assertion could have caught, so the line was
+    # an equivalent mutant - deleting it changed nothing. The floor belongs to
+    # the classifier, which is where it is tested.
+
+    if found.status == "NONE":
+        # The ONLY skip that remains. It says the enumeration ran and what it
+        # saw, and it does NOT claim the tool is therefore sound: the static
+        # arm above is what kills the threshold mutant on this machine.
         pytest.skip(
-            "no TaskName matching the module's own validator is registered under two TaskPaths on this "
-            "machine, so the probe's ambiguity branch cannot be reached here - the machine, not the tool"
+            f"{found.detail}, so the probe's ambiguity branch cannot be REACHED here. "
+            "The threshold itself is still pinned by "
+            "test_the_probe_keeps_its_ambiguity_threshold_at_more_than_one_match, which runs "
+            "everywhere"
         )
+
+    assert found.status == "FOUND", f"unexpected discovery status {found.status}: {found.detail}"
+    name, paths = found.name, found.paths
 
     payload = liveness.collect_facts(name)
     assert payload.get("exists") is True, f"{name} was enumerated a moment ago and must still exist"
@@ -1147,12 +2596,13 @@ foreach ($t in $uniq) {
     if ($has) { $hit = $t; break }
 }
 if ($null -eq $hit) {
-    [pscustomobject]@{ found = $false } | ConvertTo-Json -Compress
+    [pscustomobject]@{ total = $all.Count; found = $false } | ConvertTo-Json -Compress
     exit 0
 }
 $ebs = @()
 foreach ($tr in @($hit.Triggers | Where-Object { $null -ne $_ })) { $ebs += [string]$tr.EndBoundary }
 [pscustomobject]@{
+    total = $all.Count
     found = $true
     name = [string]$hit.TaskName
     path = [string]$hit.TaskPath
@@ -1172,36 +2622,152 @@ def _end_boundaries_reported_by(payload):
     return [str((raw or {}).get("end_boundary") or "").strip() for raw in triggers]
 
 
-def _a_task_carrying_an_end_boundary():
+class _EndBoundaryPick(typing.NamedTuple):
+    status: str
+    name: str | None
+    path: str | None
+    values: list[str]
+    detail: str
+
+
+def _a_task_carrying_an_end_boundary() -> _EndBoundaryPick:
     """Ask the scheduler, read only, for one task whose triggers carry one.
 
-    Returns (name, path, end_boundaries) with end_boundaries ordered as the
-    scheduler lists the triggers, or (None, None, None) when nothing on this
-    machine carries an EndBoundary or the enumeration could not be run.
+    THE SAME ROOT CAUSE AS _real_task_names, in the arm that matters most. The
+    version this replaces collapsed a non-zero exit, an empty stdout and a
+    genuine found=false into one (None, None, None), and its single caller
+    skipped on all three with a message blaming the machine. This is THE ONLY
+    ARM IN THIS FILE THAT PINS THE ENDBOUNDARY VALUE - the field whose expiry
+    is the whole finding the tool exists for - so a discovery failure that
+    reads as a skip silently retires the guarantee.
+
+    FAILED must fail; only NONE may skip.
     """
     exe = liveness._powershell_executable()
-    done = subprocess.run(
-        [exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", _ENDBOUNDARY_DISCOVERY],
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-    )
-    if done.returncode != 0 or not done.stdout.strip():
-        return None, None, None
-    got = json.loads(done.stdout.strip())
+    try:
+        done = subprocess.run(
+            [exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+             "-Command", _ENDBOUNDARY_DISCOVERY],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return _EndBoundaryPick("FAILED", None, None, [], f"could not be launched: {type(exc).__name__}")
+    return _classify_end_boundary_pick(done.returncode, done.stdout)
+
+
+def _classify_end_boundary_pick(returncode: int, stdout: str) -> _EndBoundaryPick:
+    """The pure half, so every FAILED branch is testable off Windows."""
+    if returncode != 0:
+        return _EndBoundaryPick("FAILED", None, None, [], f"the census exited {returncode}")
+    if not stdout.strip():
+        return _EndBoundaryPick("FAILED", None, None, [], "the census exited 0 but printed nothing")
+    try:
+        got = json.loads(stdout.strip())
+    except ValueError:
+        return _EndBoundaryPick("FAILED", None, None, [], "the census printed something that is not JSON")
+    if not isinstance(got, dict) or "total" not in got:
+        return _EndBoundaryPick("FAILED", None, None, [], "the census printed no task total")
+    try:
+        total = int(got["total"])
+    except (TypeError, ValueError):
+        return _EndBoundaryPick("FAILED", None, None, [], "the census printed a total that is not a number")
+    if total < _MIN_ENUMERATED_TASKS:
+        return _EndBoundaryPick(
+            "FAILED", None, None, [],
+            "the census saw no scheduled task at all, which is indistinguishable from a census "
+            "that did not run",
+        )
     if not got.get("found"):
-        return None, None, None
+        return _EndBoundaryPick(
+            "NONE", None, None, [],
+            f"the census RAN and read the triggers of {total} scheduled tasks, and none of them "
+            "carries a non-empty EndBoundary",
+        )
+    name = got.get("name") or None
+    if name is None:
+        return _EndBoundaryPick("FAILED", None, None, [], "the census reported found=true with no name")
     raw = got.get("end_boundaries")
     # ConvertTo-Json under Windows PowerShell 5.1 can collapse a one-element
     # array to a scalar. Normalising here rather than trusting the shape.
     if not isinstance(raw, list):
         raw = [raw]
-    return (
-        got.get("name") or None,
-        got.get("path") or None,
-        [str(value or "").strip() for value in raw],
+    values = [str(value or "").strip() for value in raw]
+    if not any(values):
+        return _EndBoundaryPick(
+            "FAILED", None, None, values,
+            f"the census named {name} as carrying an EndBoundary and then reported none - it "
+            "contradicted itself, which is not evidence about the probe",
+        )
+    return _EndBoundaryPick(
+        "FOUND", name, got.get("path") or None, values,
+        f"the census read {total} scheduled tasks and {name} carries EndBoundary values {values}",
     )
+
+
+def test_non_vacuity_neither_selection_helper_can_report_a_failure_as_an_empty_machine():
+    # THE TWO SIBLINGS OF THE SAME ROOT CAUSE, both measured on 2026-09-08 to
+    # collapse a failed enumeration into the same answer as a machine that
+    # simply holds no such task. Making both exit 3 gave 65 passed, 3 skipped,
+    # exit 0, with every skip text blaming the machine.
+    #
+    # This arm runs EVERYWHERE, including where _WINDOWS_ONLY skips everything
+    # else in this section, because the classifiers are pure.
+    for returncode, stdout, why in (
+        (3, "", "non-zero exit"),
+        (0, "", "exit 0 with no output"),
+        (0, "not json", "exit 0 with unparseable output"),
+        (0, '{"root": "Alpha"}', "exit 0 with no task total"),
+        (0, '{"total": "many"}', "exit 0 with a total that is not a number"),
+        (0, '{"total": 0}', "exit 0 having enumerated nothing"),
+    ):
+        assert _classify_task_pick(returncode, stdout).status == "FAILED", (
+            f"the task-selection helper reported {why} as something other than a failure"
+        )
+        assert _classify_end_boundary_pick(returncode, stdout).status == "FAILED", (
+            f"the EndBoundary census reported {why} as something other than a failure"
+        )
+
+    # POSITIVE CONTROLS. A run that really happened must NOT read FAILED, or
+    # both classifiers could return FAILED unconditionally and pass the above.
+    ran = _classify_task_pick(0, '{"total": 265, "root": "Alpha", "deep": "Beta", "deep_path": "\\\\X\\\\"}')
+    assert ran.status == "RAN"
+    assert (ran.root, ran.deep, ran.deep_path) == ("Alpha", "Beta", "\\X\\")
+
+    # RAN AND FOUND NOTHING SUITABLE is still RAN, and the caller skips on the
+    # None rather than on the status - the two are now different facts.
+    empty = _classify_task_pick(0, '{"total": 265, "root": "", "deep": "", "deep_path": ""}')
+    assert empty.status == "RAN"
+    assert empty.root is None and empty.deep is None
+
+    census_none = _classify_end_boundary_pick(0, '{"total": 265, "found": false}')
+    assert census_none.status == "NONE"
+
+    census_hit = _classify_end_boundary_pick(
+        0, '{"total": 265, "found": true, "name": "Alpha", "path": "\\\\", '
+           '"end_boundaries": ["2026-09-07T21:00:00"]}'
+    )
+    assert census_hit.status == "FOUND"
+    assert census_hit.values == ["2026-09-07T21:00:00"]
+
+    # The 5.1 scalar collapse, and the self-contradiction case: a census that
+    # names a task as carrying an EndBoundary and then reports none has not
+    # found anything, whatever its own flag says.
+    scalar = _classify_end_boundary_pick(
+        0, '{"total": 265, "found": true, "name": "Alpha", "path": "\\\\", '
+           '"end_boundaries": "2026-09-07T21:00:00"}'
+    )
+    assert scalar.status == "FOUND" and scalar.values == ["2026-09-07T21:00:00"]
+    contradiction = _classify_end_boundary_pick(
+        0, '{"total": 265, "found": true, "name": "Alpha", "path": "\\\\", "end_boundaries": [""]}'
+    )
+    assert contradiction.status == "FAILED"
+
+    # And the three outcomes of each are genuinely distinct.
+    assert len({_classify_task_pick(3, "").status, ran.status}) == 2
+    assert len({_classify_end_boundary_pick(3, "").status, census_none.status, census_hit.status}) == 3
 
 
 def test_non_vacuity_a_nulled_end_boundary_walks_through_the_key_presence_check():
@@ -1251,12 +2817,18 @@ def test_non_vacuity_a_nulled_end_boundary_walks_through_the_key_presence_check(
 
 @_WINDOWS_ONLY
 def test_the_real_probe_reports_the_end_boundary_value_and_not_just_the_key():
-    name, path, expected = _a_task_carrying_an_end_boundary()
-    if name is None:
+    pick = _a_task_carrying_an_end_boundary()
+    assert pick.status != "FAILED", (
+        "the EndBoundary census did not run, and this is the ONLY arm pinning the value the tool "
+        f"exists to read - a skip here would retire that guarantee silently: {pick.detail}"
+    )
+    name, path, expected = pick.name, pick.path, pick.values
+    if pick.status == "NONE":
         pytest.skip(
-            "no uniquely named registered task on this machine carries a non-empty EndBoundary on any "
-            "trigger, so there is no value for the probe to be compared against - this arm asserts "
-            "nothing here and the machine, not the tool, is why"
+            f"{pick.detail}, so there is no value for the probe to be compared against. The census "
+            "RAN - this is the machine and not a failed enumeration - and "
+            "test_non_vacuity_a_nulled_end_boundary_walks_through_the_key_presence_check still "
+            "runs here on the measured fixture"
         )
     try:
         liveness.validate_task_path(path or "")
