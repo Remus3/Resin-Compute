@@ -80,11 +80,34 @@ name-grammar class above.
      its meaning. It cannot tell whether `# GATE:hop-budget` sits above the
      hop-budget consult site rather than above some other one, so a name is a
      label for a human, not a checked claim.
-  2. UNTAGGED CONSULT SITES - THE HOLE THAT REMAINS, SAID PLAINLY. Nothing here
-     enumerates the gates that OUGHT to exist. A NEW gate added to `_run_once`
-     and never tagged is INVISIBLE to this census and every arm stays green.
-     `_FLOOR` is a count and not a per-site identity, so retiring one gate while
-     tagging an unrelated statement elsewhere also passes.
+  2. UNTAGGED CONSULT SITES - HALF-CLOSED, WITH THE OPEN HALF NAMED. Both
+     directions of one comparison are now asserted. That every TAG sits on a
+     real site is `not tagged - tight`, asserted by
+     `test_the_two_rules_are_re_derived_here_and_the_tighter_one_loses_nothing`.
+     That every real SITE carries a tag is `not tight - tagged`, asserted by
+     `test_every_consult_site_inside_run_once_carries_a_tag`, whose message
+     names each untagged line and prints the statement itself rather than a
+     count. Together they make the tagged set and the accepted-site set
+     IDENTICAL.
+     WHAT IS NOW GUARDED: a new gate added to `_run_once` in a shape
+     `_is_a_consult_site` accepts, and never tagged, turns that arm RED and is
+     reported by line. The detector is PROVED to fire rather than assumed to:
+     `test_removing_one_tag_reports_exactly_that_site_as_untagged` runs it
+     against the live source with exactly one tag line deleted, once for every
+     tag in the file, and requires that site back alone and by line number,
+     with `test_removing_no_tag_at_all_reports_nothing` as the control that
+     stops an unconditional reporter from scoring full marks. Because the two
+     sets are identical, the old reading of this item - retire one gate, tag an
+     unrelated statement elsewhere, pass - no longer holds: the stray tag is
+     reported by `_problems` and the vanished site is reported here.
+     WHAT IS STILL OPEN: the coverage arm sees only the shapes item 5 lists. A
+     consult site written as a `while`, as a `match`, or one whose chosen value
+     lands in a plain local name rather than in a subscript is not a site to
+     `_is_a_consult_site`, so leaving it untagged stays INVISIBLE exactly as
+     before. The two directions are equal ON THE ACCEPTED SHAPES and say
+     nothing whatever outside them. `_FLOOR` is still a count and not a
+     per-site identity; it is welded into the coverage arm's own assertion so
+     that arm cannot pass by measuring an empty set, and nothing more.
   3. WHETHER A GATE IS EXERCISED. It says nothing about any test driving a
      gate, and nothing about whether a mutation at a gate's own call site turns
      a suite red. No mutation runner exists in this tree; this census is the
@@ -280,6 +303,39 @@ def _problems(source: str, label: str, function_name: str = TARGET_FUNCTION) -> 
     return reported
 
 
+def _untagged_consult_sites(
+    source: str, label: str, function_name: str = TARGET_FUNCTION
+) -> list[str]:
+    """The OTHER direction of the comparison `_problems` makes.
+
+    `_problems` walks the tags and asks whether each one sits on a site. This
+    walks the SITES and asks whether each one carries a tag, which is the half
+    ceiling item 2 recorded as open. A new consult site added to
+    `_run_once` and never tagged is caught here and nowhere else.
+
+    Each report names the file, the line and the SOURCE LINE ITSELF, because a
+    bare count mismatch tells an author which arm went red and not which
+    statement they forgot.
+    """
+    lines = source.split("\n")
+    tree = ast.parse(source)
+    sites = {
+        node.lineno
+        for node in ast.walk(_function(tree, function_name))
+        if _is_a_consult_site(node)
+    }
+    tagged = {lineno + 1 for lineno, _ in _tags(source, label)}
+
+    reported: list[str] = []
+    for lineno in sorted(sites - tagged):
+        statement = lines[lineno - 1].strip() if lineno - 1 < len(lines) else ""
+        reported.append(
+            f"{label}:{lineno}: consult site inside {function_name}() carries no "
+            f"`# GATE:` tag on the line above it: {statement!r}"
+        )
+    return reported
+
+
 def _duplicates(names: list[str]) -> list[str]:
     """Names appearing more than once, compared for EQUALITY between captures."""
     return sorted({name for name in names if names.count(name) > 1})
@@ -304,6 +360,38 @@ def test_every_gate_tag_marks_an_accepted_shape_inside_run_once():
         "If a gate was DELIBERATELY retired, _FLOOR is expected to be updated in the same "
         "commit that removes the tag; a count that fell on its own is a gate that went "
         "untagged."
+    )
+
+
+def test_every_consult_site_inside_run_once_carries_a_tag():
+    """COVERAGE - the direction ceiling item 2 recorded as open.
+
+    `test_every_gate_tag_marks_an_accepted_shape_inside_run_once` asserts every
+    TAG sits on a real site. This asserts every real SITE carries a tag, and the
+    two together make the tagged set and the accepted-site set IDENTICAL. A new
+    gate added to `_run_once` in a shape `_is_a_consult_site` accepts and never
+    tagged goes red here, named by line.
+
+    THE FLOOR IS WELDED INTO THE SAME ASSERTION, never a separate arm, because
+    a set difference against an empty site set is empty for the wrong reason: a
+    rule that found NO sites would satisfy the judgement half perfectly. The
+    second conjunct pins the site count and the third pins the number of cases
+    `test_removing_one_tag_reports_exactly_that_site_as_untagged` generates, so
+    neither this arm nor that block can pass by measuring nothing.
+    """
+    source = RESPONDER.read_text(encoding="ascii")
+    untagged = _untagged_consult_sites(source, RELPATH)
+    sites = _consult_site_spots(source)
+
+    assert not untagged and len(sites) >= _FLOOR and len(_TAG_LINES) >= _FLOOR, (
+        f"gate census failed on {RELPATH}. Untagged consult sites: "
+        f"{untagged or 'none'}. Accepted sites {len(sites)} and tag lines "
+        f"{len(_TAG_LINES)} against a floor of {_FLOOR} (_FLOOR in "
+        "tests/test_responder_gate_census.py). Every statement "
+        f"`_is_a_consult_site` accepts inside {TARGET_FUNCTION}() must carry a "
+        "`# GATE:<name>` comment on its own line immediately above it. If a gate "
+        "was DELIBERATELY retired, _FLOOR is expected to be updated in the same "
+        "commit that removes the tag."
     )
 
 
@@ -597,6 +685,58 @@ def _tag_parked_above(source: str, lineno: int, name: str) -> str:
     target = lines[lineno - 1]
     indent = target[: len(target) - len(target.lstrip())]
     return "\n".join(lines[: lineno - 1] + [f"{indent}{_TAG}{name}"] + lines[lineno - 1 :])
+
+
+def _tag_line_removed(source: str, lineno: int) -> str:
+    """`source` with the whole line at `lineno` deleted.
+
+    The sibling of `_tag_parked_above`, running the opposite mutation: that one
+    ADDS a tag where no gate is, this one REMOVES a tag from where a gate is.
+    Every line below `lineno` shifts up by one, tags and statements alike, so
+    the surviving tags stay directly above their own statements and the only
+    site left uncovered is the one whose tag was deleted - which now sits AT
+    `lineno` itself.
+    """
+    lines = source.split("\n")
+    return "\n".join(lines[: lineno - 1] + lines[lineno:])
+
+
+#: The line of every `# GATE:` tag in the live responder, derived at import.
+#: Parametrizes the refutation below so a rule that happens to see only some
+#: tagged shapes is caught by the tags it cannot see.
+_TAG_LINES = [lineno for lineno, _ in _tags(_LIVE_SOURCE)]
+
+
+@pytest.mark.parametrize("lineno", _TAG_LINES, ids=[str(n) for n in _TAG_LINES])
+def test_removing_one_tag_reports_exactly_that_site_as_untagged(lineno):
+    """THE REFUTATION for the coverage arm, once per tag on the live file.
+
+    An arm asserting an already-empty set difference is vacuous - it would pass
+    just as cleanly against a rule that finds zero sites. So the detector is
+    driven against a source where the answer is KNOWN and NOT empty: the live
+    responder with exactly one tag line deleted. The site must come back, by its
+    own line number, and it must come back ALONE - a report of two would mean
+    the deletion disturbed a neighbouring tag rather than only its own.
+
+    `_problems` must stay silent on the same source, because deleting a tag
+    leaves no misplaced tag behind. That second assertion is what stops this
+    from passing against a detector that simply reports every line it sees.
+    """
+    mutated = _tag_line_removed(_LIVE_SOURCE, lineno)
+    untagged = _untagged_consult_sites(mutated, "synthetic")
+
+    assert len(untagged) == 1, untagged
+    assert untagged[0].startswith(f"synthetic:{lineno}: consult site inside "), untagged
+    assert _problems(mutated, "synthetic") == [], _problems(mutated, "synthetic")
+
+
+def test_removing_no_tag_at_all_reports_nothing():
+    """THE CONTROL for the block above. Without it a detector that reported a
+    site unconditionally would score a perfect 18 out of 18 on the refutation,
+    and this arm is also the live-file coverage claim restated on the exact
+    source the mutations are cut from."""
+    assert _untagged_consult_sites(_LIVE_SOURCE, RELPATH) == []
+    assert len(_TAG_LINES) >= _FLOOR, _TAG_LINES
 
 
 def test_the_two_rules_are_re_derived_here_and_the_tighter_one_loses_nothing():
