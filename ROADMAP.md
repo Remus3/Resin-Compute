@@ -28,15 +28,27 @@ version. What follows is everything the scaffold deliberately did not do.
   the exact ceiling its author disclosed: a layout outside the marker set reads
   as unidentifiable and skips rather than guessing.
 
-  WHAT REMAINS TRUE AND IS WORTH KEEPING: the git-install discovery control is
-  SILENT IN THE ONE ENVIRONMENT THAT GATES EVERY PUSH. It is graded on a
-  developer's shell and never by the pre-push hook. Nothing is broken; the
-  coverage simply is not where a reader would assume. Two candidate closures,
-  neither started: teach the oracle the `git-core` layout by measuring it, or
-  give the hook's invocation `-rs` so any future skip is nameable from its own
-  output instead of needing a scratch remote. Prefer the second first - a gate
-  that can see a skip and cannot say which one is this session's defect class
-  sitting in the instrument that grades pushes.
+  HALF-CLOSED 2026-09-09 by commit `e714b35`, the preferred half. The hook now
+  runs `-m pytest -rs` for BOTH suites, so a future skip is nameable from the
+  hook's own output without a scratch bare repository. Guarded by
+  `tests/test_prepush_skip_reporting.py`, whose matcher keys on whether each
+  invocation's `-r` spec REPORTS SKIPS rather than on the literal `-rs` - the
+  first attempt keyed on the literal and was REFUTED for going RED on `-rA`,
+  `-r s`, a line continuation and a plain reorder, all of which are correct
+  hooks. Widening the matcher was not the answer; asking what the mechanism can
+  claim was.
+
+  STILL OPEN, and it is the other half: nothing inspects hook OUTPUT. The arms
+  are a token scan of a shell script. No push was run and no scratch remote
+  created, so the 2-versus-1 skip figure is carried as prose rather than
+  re-measured. The remaining candidate closure - teach the oracle the `git-core`
+  layout by measuring it - is untouched.
+
+  ALSO OPEN, verified by a refuter against `e714b35`: a bare `-r` with no
+  attached spec is a FALSE GREEN, because the parser lets `-r` swallow the
+  target and `"tests"` contains an `s`. A token scan cannot disambiguate a
+  detached spec from a target path, so the honest repair is to report that shape
+  UNPARSEABLE and fail rather than to widen anything.
 
 - **CLOSED 2026-09-08 for 13 sites across four files, and OPEN for three more
   places.** The condition that cannot tell CHECKED-AND-FOUND-NOTHING from
@@ -86,6 +98,50 @@ version. What follows is everything the scaffold deliberately did not do.
   byte-identity CALLS the classifier it grades: both sides of its `==` are one
   code path. Closing it needs a HAND-COPIED expected-reason fixture that does
   not read its answer out of the file it audits.
+
+- **HALF-CLOSED 2026-09-09 by commit `e714b35`, and ONE CLAIMED CLOSURE IS
+  FALSE.** The adjudicated call that keeps `tests/conftest.py`'s non-128 SKIP
+  rests entirely on `tests/test_commit_trailers.py` reddening for any non-None
+  reason inside a checkout, and nothing pinned that. Twelve arms in
+  `tests/test_conftest_skip_path_pinned.py` now do, asserting on the REAL shipped
+  function with the exception MESSAGE matched, and clearing `GIT_DIR` and
+  `GIT_WORK_TREE` in every arm. Killed: the `else:` block deleted,
+  truthiness-only `not reason`, a message that drops the reason, the conftest 128
+  branch stubbed, welded-to-fail, and an arm that raises `Skipped`.
+
+  CLOSED 2026-09-09 in the same session that opened it. Inserting
+  `require_git_repository()` into the audited arm SURVIVED 12 of 12, because
+  every arm patched only the audited module's OWN re-import of
+  `git_unusable_reason` while the inserted call resolves conftest's binding, got
+  None in a real checkout, raised no `Skipped` and was invisible. BOTH bindings
+  are now patched, and both are load-bearing for DIFFERENT reasons, proven rather
+  than assumed: the audited re-import is what the cross-check's body reads, so
+  without it the arms grade the real tree instead of the forced input; the
+  definition site is what `require_git_repository()` resolves, so without it the
+  skip door is dead code. Independently re-probed at the merge by differential
+  measurement in an identical scratch environment - unmutated control 1 failed,
+  mutant 8 failed - rather than by trusting the builder's figure. The overstating
+  docstring is rewritten to name the hole it had.
+
+  A SECOND CEILING, honest but worth naming: every pin arm reaches the archive
+  `else:` half only by rewriting the audited module's `REPO_ROOT`. That half is
+  DEAD in both a worktree and the main checkout, so it is graded under forced
+  inputs rather than as shipped behaviour.
+
+- **CLOSED 2026-09-09, and it was ours, caught by a control probe rather than by
+  any refuter.** `tests/test_conftest_skip_path_pinned.py` shipped in `e714b35`
+  with an arm that ASSERTED a `.git` entry exists on disk, so it FALSE-RED in a
+  `git archive` extract - measured 1 failed, 13 passed, exit 1 outside any
+  repository. An extract has nothing to report, which is NOT-PRESENT-AT-ALL, the
+  third disposition, and the arm's own docstring anticipated the archive shape
+  and then asserted anyway. It now SKIPS with a reason naming the shape:
+  measured 13 passed, 1 skipped, exit 0 in the same extract.
+
+  WORTH KEEPING as method rather than as fact: no refuter was assigned an
+  archive-shape lens, and five were dispatched. The defect surfaced only because
+  a mutant kill was verified DIFFERENTIALLY against an unmutated control in the
+  same environment, and the control was not clean. A mutant kill measured without
+  a control cannot distinguish the mutant's failures from the environment's.
 
 - **OPEN. A FOURTH DISPOSITION, named 2026-09-09 and not in the standing list
   of three.** With `GIT_DIR` exported, `git rev-parse --git-dir` SUCCEEDS while

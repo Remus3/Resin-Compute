@@ -12,6 +12,126 @@ now.
 
 ---
 
+## 2026-09-09 - Three residuals closed, and a control probe caught what five refuters did not
+
+Files: `tests/test_prepush_skip_reporting.py`,
+`tests/test_conftest_skip_path_pinned.py`, `tests/test_conftest_git_gate.py`.
+Ten arms. Closes all three residuals `e714b35` recorded against itself, plus one
+defect that commit introduced and nobody had been asked to look for.
+
+**THE SURVIVING MUTANT IS KILLED, AND BOTH BINDINGS TURNED OUT TO MATTER.**
+Inserting `require_git_repository()` into the audited cross-check survived 12 of
+12 because the arms patched only `audited.git_unusable_reason` - the audited
+module's own re-import - while the inserted call resolves conftest's binding, got
+None in a real checkout and raised no `Skipped`. Patching both was not
+belt-and-braces: the re-import is what the cross-check's BODY reads, so dropping
+it makes the arms grade the real tree instead of the forced input, and the
+definition site is what `require_git_repository()` RESOLVES, so dropping it makes
+the skip door dead code. Proven by patching each alone.
+
+A second-order trap in the same fix: `monkeypatch` is set up BEFORE an autouse
+fixture and torn down AFTER it, so a post-yield `cache_clear()` on the patched
+name raises `AttributeError` in teardown. The genuine `lru_cache` wrapper is
+captured at import instead.
+
+**A BARE `-r` WAS A FALSE GREEN, AND THE FIX NARROWS RATHER THAN WIDENS.** The
+parser let `-r` swallow the target; `"tests"` contains an `s`, so the
+skip-reporting arm read green off the word `tests` and only an unrelated targets
+arm reddened. A token scan of a shell line CANNOT disambiguate a detached spec
+from a target path, so that shape is now classified UNPARSEABLE and FAILS - a
+gate that cannot read its own subject must not report green. The trust rule was
+checked against the installed pytest's own `--help` rather than from memory.
+`-r tests` and a trailing `-r` now fail FROM THE SKIP-REPORTING ARM, which was
+the point.
+
+**A ONE-BRACKET CONTROL IS GENERALISED, NOT DELETED**, because deleting the arm
+would have discarded two genuine non-vacuity checks alongside the decorative
+part. The control is now parametrised over five shapes - square, angle, brace,
+absent, doubled-round. On a net-zero-byte `(detail)` to `<detail>` drift the old
+version caught 1 failure and the control itself PASSED, blind to angle brackets;
+the new version catches 3, naming the angle case.
+
+**WHAT NO REFUTER WAS ASKED TO LOOK FOR.** `e714b35` shipped an arm asserting a
+`.git` entry exists on disk, which FALSE-RED in a `git archive` extract: 1
+failed, 13 passed, exit 1 outside any repository. That is NOT-PRESENT-AT-ALL
+conflated with ran-and-broke, in a module written specifically to reason about
+the Download-ZIP population, and its own docstring anticipated the archive shape
+before asserting anyway. It now skips with a reason naming the shape - 13 passed,
+1 skipped, exit 0 in the same extract.
+
+It surfaced because the merge verified the mutant kill DIFFERENTIALLY - an
+unmutated control in an identical scratch environment - instead of trusting the
+builder's figure. The control was not clean. A mutant kill measured without a
+control cannot separate the mutant's failures from the environment's, and five
+adversaries with five other lenses all missed this.
+
+The fork-point trap reproduced a third time: the builder's worktree materialised
+at an ancestor of its declared fork point and was reset before any edit.
+
+Measured 2026-09-09 at the seam with caches purged, as a reading: `pytest tests`
+1636 passed / 1 skipped exit 0; `pytest agents/pity_engine` 80 passed exit 0;
+licence, docs, qa, ruff, headless each exit 0 run separately; `node --test` 52
+pass 0 fail.
+
+---
+
+## 2026-09-09 - The pre-push gate can name a skip, and six of eight refutations close
+
+Commit `e714b35`. Files: `.githooks/pre-push`,
+`tests/test_prepush_skip_reporting.py`, `tests/test_conftest_skip_path_pinned.py`,
+`tests/test_conftest_git_gate.py`. Twenty arms. This entry records what did NOT
+close as carefully as what did.
+
+**TWO SLICES WERE REFUTED BEFORE THEY MERGED, and that is the point of the
+shape.** The first pre-push guard keyed on the literal `-rs` and went RED for
+`-rA`, `-r s`, a line continuation and a plain reorder of the two invocations -
+every one a CORRECT hook, which is the false-red class this tree treats as
+dominant. One of its seven arms was a naked substring search that PASSED with
+`-rs` deleted from both invocations, and two of seven passed with the hook file
+deleted entirely. The first cross-check pin left the audited arm's whole `else:`
+block deletable with both arms green, never inspected the reason TEXT, and had a
+live skip door - `Skipped` derives from BaseException and escaped its
+`pytest.raises(AssertionError)`, turning the arm into a green-looking non-result.
+
+**WIDENING THE MATCHER WAS NOT THE ANSWER.** The repaired guard keys on whether
+each invocation's `-r` spec REPORTS SKIPS, because `-rA`, `-ra`, `-r s`, `-rsx`
+and `-rfsE` all do and `-rf` does not. Twelve rows verified by mutant with
+`__pycache__` and `.pytest_cache` purged on BOTH sides of each: five FAIL rows,
+five PASS rows, an absent hook giving six SKIPs with a reason naming the missing
+path, and a ZERO-BYTE hook correctly treated as present-but-broken.
+
+**A FOURTH DISPOSITION IS NOW DEFENDED AGAINST.** Every pin arm clears `GIT_DIR`
+and `GIT_WORK_TREE`, because with `GIT_DIR` exported `git rev-parse --git-dir`
+succeeds while no `.git` sits on disk and the helper and the disk probe disagree,
+both halves misreporting.
+
+**THE BYTE-IDENTITY HOLE disclosed in `9e9f7e4` is closed** by a HAND-TYPED
+expected-reason fixture that reads nothing out of the file it audits. Bracket
+mutants that previously left all 14 arms green now redden.
+
+**THREE RESIDUALS, verified by an independent refuter that reproduced 9 of 9
+pre-push rows, 6 of 7 cross-check kills and both byte-identity kills.** First and
+worst: the `require_git_repository()` mutant SURVIVES 12 of 12, because every arm
+patches the audited module's own RE-IMPORT of `git_unusable_reason` rather than
+the definition site, so the inserted call gets None in a real checkout and raises
+no `Skipped` - and the module's docstring claims that hole closed. Second: a bare
+`-r` with no attached spec is a FALSE GREEN, the parser letting `-r` swallow the
+target while `"tests"` contains an `s`. Third: one of the two new byte-identity
+arms hardcodes a single wrong bracket spelling and catches nothing the other
+misses.
+
+Independently measured collection: 1607 before, 1627 after - delta exactly +20
+with no existing arm displaced. The fork-point trap reproduced again: the
+builder's worktree materialised two commits behind its declared fork point and
+had to be reset before any edit.
+
+Measured 2026-09-09 at the seam with caches purged, as a reading and not a claim
+about now: `pytest tests` 1626 passed / 1 skipped exit 0; `pytest
+agents/pity_engine` 80 passed exit 0; licence, docs, qa, ruff, headless each exit
+0 run separately; `node --test` 52 pass 0 fail; `sh -n .githooks/pre-push` exit 0.
+
+---
+
 ## 2026-09-09 - Two sweeps green over zero files, and the diagnosis handed over was wrong
 
 Commit `5f9e312`. Files: `tests/test_machine_identity.py`,

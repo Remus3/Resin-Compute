@@ -562,16 +562,39 @@ def test_the_three_unusable_reasons_match_reasons_typed_by_hand_in_this_file(
         )
 
 
-def test_the_hand_typed_reasons_are_not_trivially_equal_to_everything(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Non-vacuity for the arm above: the comparison can actually fail.
+#: Wrong DELIMITER SHAPES for the `(detail)` bytes in the exit-128 reason, used by
+#: `test_the_census_rejects_every_wrong_delimiter_shape`.
+#:
+#: WHY A SET AND NOT ONE SPELLING. The arm this replaces hardcoded exactly one
+#: wrong spelling - it built its counter-example by replacing `(detail)` with
+#: `[detail]` and nothing else - so it was insensitive to `<detail>` and to every
+#: other shape, and it caught nothing the census arm above did not already catch.
+#: A CONTROL THAT ONLY PLANTS THE CASE THE MATCHER HANDLES CANNOT DISCOVER THAT
+#: THE MATCHER IS NARROW. These vary the SHAPE rather than restating one
+#: substitution: square, angle, brace, no delimiter at all, and a doubled round
+#: pair that keeps the original characters and only changes their count.
+WRONG_DELIMITER_SHAPES = (
+    ("square", "[{detail}]"),
+    ("angle", "<{detail}>"),
+    ("brace", "{{{detail}}}"),
+    ("absent", "{detail}"),
+    ("doubled-round", "(({detail}))"),
+)
 
-    A `==` against a template that happened to format into the empty string, or a
-    helper welded to returning whatever it is compared with, would satisfy the
-    census silently. So the three hand-typed reasons are asserted pairwise
-    distinct and non-empty, and one deliberately WRONG bracket spelling is shown
-    to be rejected - the exact mutation that survived all 14 arms before this.
+
+def test_the_hand_typed_reasons_are_not_trivially_equal_to_everything() -> None:
+    """Non-vacuity for the census: its expectations are real, distinct strings.
+
+    A `==` against a template that happened to format into the empty string would
+    satisfy the census silently, and so would three templates that all rendered
+    to the same text - the census would then be pinning one string while claiming
+    to pin three.
+
+    THE BRACKET CONTROL THAT USED TO LIVE HERE HAS MOVED AND BEEN GENERALISED,
+    into `test_the_census_rejects_every_wrong_delimiter_shape`
+    below. It hardcoded a single wrong spelling, `[detail]`, which made it blind
+    to `<detail>` and to every other shape and left it catching nothing the census
+    arm did not already catch.
     """
     root = conftest.REPO_ROOT
     detail = "boom"
@@ -583,13 +606,71 @@ def test_the_hand_typed_reasons_are_not_trivially_equal_to_everything(
     assert all(text.strip() for text in rendered), "a hand-typed reason rendered empty"
     assert len(set(rendered)) == 3, f"the three hand-typed reasons must be pairwise distinct: {rendered}"
 
+
+@pytest.mark.parametrize(("shape", "template"), WRONG_DELIMITER_SHAPES)
+def test_the_census_rejects_every_wrong_delimiter_shape(
+    monkeypatch: pytest.MonkeyPatch, shape: str, template: str
+) -> None:
+    """The census's `==` is sensitive to the delimiter SHAPE, not to one spelling.
+
+    Each row rebuilds the exit-128 reason with the `(detail)` bytes replaced by a
+    differently-shaped delimiter and asserts the real helper's answer does NOT
+    equal it. Together the rows say the comparison discriminates on the delimiter
+    generally; the single `[detail]` row that used to stand alone here could only
+    say it discriminated against square brackets.
+
+    Paired with `test_the_census_accepts_the_delimiter_shape_actually_in_use`,
+    which is the survival half: an arm that rejected EVERYTHING would satisfy
+    every row here while making the census useless, and a sweep that scores 100
+    percent on the reject side by destroying the accept side has failed.
+    """
+    root = conftest.REPO_ROOT
+    detail = "boom"
     conftest.git_unusable_reason.cache_clear()
     _stub_git(monkeypatch, _FakeCompleted(128, stderr=detail))
     actual = conftest.git_unusable_reason()
-    square_bracketed = HAND_TYPED_NOT_A_REPOSITORY.format(root=root, detail=detail).replace(
-        f"({detail})", f"[{detail}]"
+
+    wrong = HAND_TYPED_NOT_A_REPOSITORY.format(root=root, detail=detail).replace(
+        f"({detail})", template.format(detail=detail)
     )
-    assert actual != square_bracketed, (
-        "the census cannot distinguish `(detail)` from `[detail]`, so it would not have "
-        "caught the bracket mutation that survived every other arm in this file"
+    assert wrong != HAND_TYPED_NOT_A_REPOSITORY.format(root=root, detail=detail), (
+        f"the {shape} row did not actually change the string, so it grades nothing. The "
+        f"template {template!r} must differ from the `(detail)` bytes it replaces"
+    )
+    assert actual != wrong, (
+        f"the census cannot distinguish `(detail)` from the {shape} shape "
+        f"{template.format(detail=detail)!r}, so a drift to that delimiter in "
+        "tests/conftest.py would pass every arm in this file"
+    )
+
+
+def test_the_census_accepts_the_delimiter_shape_actually_in_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The survival half of the sweep above: the RIGHT delimiter must still match.
+
+    Every row above is an inequality, and inequalities are satisfied by an arm
+    welded to rejecting everything - including by a hand-typed reason that had
+    drifted from `tests/conftest.py` entirely. This arm asserts the positive:
+    the reason the real helper produces EQUALS the hand-typed reason as written,
+    round brackets included.
+
+    It overlaps the census arm above deliberately. The census pins all three
+    reasons and is the arm to read a diff from; this one exists so the rejection
+    rows cannot be green while the thing they are relative to is wrong.
+    """
+    root = conftest.REPO_ROOT
+    detail = "boom"
+    conftest.git_unusable_reason.cache_clear()
+    _stub_git(monkeypatch, _FakeCompleted(128, stderr=detail))
+    actual = conftest.git_unusable_reason()
+
+    expected = HAND_TYPED_NOT_A_REPOSITORY.format(root=root, detail=detail)
+    assert f"({detail})" in expected, (
+        "the hand-typed exit-128 reason no longer contains round-bracketed detail, so the "
+        "rejection rows above are measuring against a shape that is not the contract"
+    )
+    assert actual == expected, (
+        "the rejection rows above are relative to this string, and it does not match what "
+        f"tests/conftest.py actually produces.\n  expected: {expected!r}\n  actual:   {actual!r}"
     )

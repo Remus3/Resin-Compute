@@ -28,12 +28,25 @@ replaces:
      asserted a SKIP is really raised. Here the failure message must CARRY the
      reason it was handed, and a separate arm drives the real classifier and
      asserts `Skipped` is raised with the 128 wording in it.
-  3. A REAL SKIP DOOR. Inserting `require_git_repository()` into the cross-check
-     turned the checkout arm into SKIPPED - a green-looking non-result - because
-     `Skipped` derives from `BaseException` and ESCAPES
-     `pytest.raises(AssertionError)`. Every expectation here goes through
-     `_expect_assertion_error`, which catches `BaseException` and rejects
-     `Skipped` by name.
+  3. A REAL SKIP DOOR, AND THE BINDING THAT DECIDES WHETHER IT OPENS. Inserting
+     `require_git_repository()` into the cross-check turns the checkout arm into
+     SKIPPED - a green-looking non-result - because `Skipped` derives from
+     `BaseException` and ESCAPES `pytest.raises(AssertionError)`. Every
+     expectation here goes through `_expect_assertion_error` or
+     `_expect_no_raise`, which catch `BaseException` and reject `Skipped` by
+     name.
+     THAT DEFENCE WAS PRESENT AND UNREACHABLE, and this module's docstring
+     asserted it was closed while it was not. Measured at e714b35: inserting
+     `require_git_repository()` into the cross-check left this file at 12 passed,
+     exit 0 - the mutant SURVIVED. Cause: every arm stubbed only
+     `audited.git_unusable_reason`, the re-imported binding in
+     `tests/test_commit_trailers.py`. `require_git_repository()` lives in
+     `tests/conftest.py` and resolves `git_unusable_reason` in CONFTEST's
+     globals, which answered None for this real checkout, so no `Skipped` was
+     ever raised and the defence never fired. `_stub_reason()` now patches BOTH
+     bindings - see its docstring for why each one is separately load-bearing -
+     and `test_the_two_binding_stub_is_load_bearing_for_the_skip_door` pins the
+     mechanism directly so dropping either patch reddens here immediately.
   4. A FOURTH DISPOSITION NOBODY HAD NAMED. With `GIT_DIR` exported,
      `git rev-parse --git-dir` SUCCEEDS while no `.git` sits on disk. The helper
      and the disk probe then DISAGREE: the checkout arm self-skips calling the
@@ -77,6 +90,15 @@ CROSS_CHECK_NAME = "test_the_missing_git_skip_path_is_not_taken_in_a_real_checko
 #: the message CARRIES the helper's answer rather than merely mentioning one.
 SENTINEL_REASON = "SENTINEL-1a2b3c: git is unusable and this text must reach the failure"
 
+#: The GENUINE `@lru_cache(maxsize=1)` wrapper, captured at import time - before
+#: any arm can stub it. Cache clearing must go through this object rather than
+#: through whatever is currently bound to `conftest.git_unusable_reason`: once
+#: `_stub_reason()` has installed a plain lambda there, the name no longer has a
+#: `cache_clear` attribute, and a teardown that reached for it by name would die
+#: with AttributeError instead of clearing anything. Module import happens at
+#: collection, before any test body runs, so this is the real one.
+_REAL_GIT_UNUSABLE_REASON = conftest.git_unusable_reason
+
 #: Hand-typed fragment of the exit-128 reason in `tests/conftest.py`. Typed here,
 #: not read from that file: an arm that reads its own expected answer out of the
 #: file it audits cannot see that answer be wrong.
@@ -97,12 +119,53 @@ def _neutralise_git_env_and_cache(monkeypatch: pytest.MonkeyPatch) -> Any:
     reads an answer cached by a real probe or an earlier arm, and AFTER so the
     rest of the suite never reads an answer cached from a stub - without the
     second clear a mutant survives vacuously.
+
+    Both clears go through `_REAL_GIT_UNUSABLE_REASON`, not through the current
+    value of `conftest.git_unusable_reason`. `monkeypatch` is set up BEFORE this
+    fixture and therefore torn down AFTER it, so at the post-yield line a stub
+    installed by `_stub_reason()` is STILL bound - and a lambda has no
+    `cache_clear`. Reaching for it by name would raise AttributeError in
+    teardown and leave the real cache uncleared for the rest of the suite.
     """
     monkeypatch.delenv("GIT_DIR", raising=False)
     monkeypatch.delenv("GIT_WORK_TREE", raising=False)
-    conftest.git_unusable_reason.cache_clear()
+    _REAL_GIT_UNUSABLE_REASON.cache_clear()
     yield
-    conftest.git_unusable_reason.cache_clear()
+    _REAL_GIT_UNUSABLE_REASON.cache_clear()
+
+
+def _stub_reason(monkeypatch: pytest.MonkeyPatch, reason: str | None) -> None:
+    """Make `git_unusable_reason()` answer `reason` at BOTH of its bindings.
+
+    TWO PATCH TARGETS, EACH LOAD-BEARING FOR A DIFFERENT REASON, which is why
+    this patches both rather than picking one:
+
+      - `audited.git_unusable_reason` is the re-imported binding that the
+        cross-check's OWN body calls. `tests/test_commit_trailers.py` does
+        `from tests.conftest import git_unusable_reason` at import time, so the
+        name is bound into that module's namespace. Without this patch the arms
+        below grade the REAL tree instead of the forced input, and every
+        expectation about a reason evaporates.
+      - `conftest.git_unusable_reason` is the DEFINITION site, and it is what
+        `require_git_repository()` and `skip_module_without_git()` resolve when
+        they look the name up in their own module globals. Without this patch a
+        `require_git_repository()` call inserted anywhere in the cross-check
+        reads the real checkout's answer - None - raises no `Skipped`, and the
+        skip-door defence in `_expect_assertion_error` never fires. That was the
+        measured survivor at e714b35.
+
+    Patching only one is a split brain: the cross-check's own arithmetic and the
+    helpers it may call would disagree about whether git works, and an arm can
+    then pass while grading a world that does not exist. Both bindings therefore
+    get the SAME value, so the stubbed world is internally coherent.
+
+    The real cache is cleared here too - `lru_cache` is on the object being
+    shadowed, and an answer cached by an earlier arm would otherwise be handed
+    to code that bypasses the stub.
+    """
+    _REAL_GIT_UNUSABLE_REASON.cache_clear()
+    monkeypatch.setattr(conftest, "git_unusable_reason", lambda: reason)
+    monkeypatch.setattr(audited, "git_unusable_reason", lambda: reason)
 
 
 def _cross_check() -> Callable[[], None]:
@@ -213,7 +276,7 @@ def test_a_reason_inside_a_checkout_reddens_and_the_message_carries_that_reason(
     was a measured survivor.
     """
     root = _force_checkout_shape(monkeypatch, tmp_path)
-    monkeypatch.setattr(audited, "git_unusable_reason", lambda: SENTINEL_REASON)
+    _stub_reason(monkeypatch, SENTINEL_REASON)
     message = _expect_assertion_error(_cross_check(), SENTINEL_REASON)
     assert str(root) in message, (
         f"the failure must name WHERE the .git entry was found so the reader can act on it; "
@@ -233,7 +296,7 @@ def test_any_non_none_reason_inside_a_checkout_reddens_even_a_falsy_one(
     must redden for all of them.
     """
     _force_checkout_shape(monkeypatch, tmp_path)
-    monkeypatch.setattr(audited, "git_unusable_reason", lambda: reason)
+    _stub_reason(monkeypatch, reason)
     _expect_assertion_error(_cross_check(), "so this IS a checkout")
 
 
@@ -246,7 +309,7 @@ def test_no_reason_inside_a_checkout_is_a_pass_and_not_a_false_red(
     in this module while destroying the suite.
     """
     _force_checkout_shape(monkeypatch, tmp_path)
-    monkeypatch.setattr(audited, "git_unusable_reason", lambda: None)
+    _stub_reason(monkeypatch, None)
     _expect_no_raise(_cross_check(), "a checkout whose git answers cleanly")
 
 
@@ -265,7 +328,7 @@ def test_a_usable_git_with_no_disk_dot_git_reddens_the_archive_branch(
     AssertionError arrives, so the deletion reddens.
     """
     _force_archive_shape(monkeypatch, tmp_path)
-    monkeypatch.setattr(audited, "git_unusable_reason", lambda: None)
+    _stub_reason(monkeypatch, None)
     _expect_assertion_error(_cross_check(), "the detector is not detecting")
 
 
@@ -278,7 +341,7 @@ def test_a_reason_with_no_disk_dot_git_is_a_pass_and_not_a_false_red(
     would be the false red that trains a reader to ignore red.
     """
     _force_archive_shape(monkeypatch, tmp_path)
-    monkeypatch.setattr(audited, "git_unusable_reason", lambda: SENTINEL_REASON)
+    _stub_reason(monkeypatch, SENTINEL_REASON)
     _expect_no_raise(_cross_check(), "an archive extract with an honest reason")
 
 
@@ -306,7 +369,7 @@ def test_the_128_reason_text_actually_reaches_a_raised_skip(monkeypatch: pytest.
             return _Fake()
 
     monkeypatch.setattr(conftest, "subprocess", _FakeSubprocess())
-    conftest.git_unusable_reason.cache_clear()
+    _REAL_GIT_UNUSABLE_REASON.cache_clear()
 
     with pytest.raises(Skipped) as caught:
         conftest.require_git_repository()
@@ -338,7 +401,7 @@ def test_a_none_reason_raises_nothing_at_all_from_require_git_repository(
             return _Fake()
 
     monkeypatch.setattr(conftest, "subprocess", _FakeSubprocess())
-    conftest.git_unusable_reason.cache_clear()
+    _REAL_GIT_UNUSABLE_REASON.cache_clear()
     conftest.require_git_repository()
 
 
@@ -352,15 +415,83 @@ def test_this_copy_takes_the_checkout_branch_and_says_which_dot_git_shape_it_has
 
     A linked worktree has a `.git` FILE and the main checkout has a DIRECTORY;
     `Path.exists()` is true for both, so both take the CHECKOUT branch and the
-    archive branch is dead in either. If this arm ever reports the archive branch
-    live, the suite is running from an extract and the arms above are the only
-    thing still grading that half.
+    archive branch is dead in either.
+
+    IT SKIPS RATHER THAN FAILING WHEN NO `.git` IS ON DISK, and the first version
+    of this arm got that wrong. An extract has nothing to report, which is
+    NOT-PRESENT-AT-ALL - the third disposition - and asserting there turns the
+    Download-ZIP population red for a fact about this machine. Measured
+    2026-09-09 against a `git archive` extract outside any repository: the
+    asserting version gave `1 failed, 13 passed`, a FALSE RED in the exact
+    population this module reasons about. The skip below names that shape, and
+    the arms above remain the only thing grading the archive half.
     """
     on_disk = [p for p in (audited.REPO_ROOT, *audited.REPO_ROOT.parents) if (p / ".git").exists()]
-    assert on_disk, (
-        "no .git entry at or above the audited module's REPO_ROOT - this copy takes the "
-        "ARCHIVE branch of the cross-check, which is not the shape the arms above assume "
-        "is live"
-    )
+    if not on_disk:
+        pytest.skip(
+            "no .git entry at or above the audited module's REPO_ROOT, so this copy takes "
+            "the ARCHIVE branch of the cross-check and there is no on-disk shape to record: "
+            "that is the normal state of a Download-ZIP, sdist or `git archive` copy and it "
+            "is SKIPPED rather than failed"
+        )
     entry = on_disk[0] / ".git"
     assert entry.is_file() or entry.is_dir(), f"{entry} is neither a file nor a directory"
+
+
+# ---------------------------------------------------------------------------
+# The stub mechanism itself, pinned - hole 3's real closure.
+# ---------------------------------------------------------------------------
+
+
+def test_the_two_binding_stub_is_load_bearing_for_the_skip_door(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_stub_reason()` must actually arm `require_git_repository()` to skip.
+
+    This is the arm whose absence let the false green stand. The skip-door
+    defence in `_expect_assertion_error` can only fire if a
+    `require_git_repository()` call reached from the cross-check really raises
+    `Skipped` under a stub - and that depends entirely on the DEFINITION-site
+    patch, because the helper resolves `git_unusable_reason` in
+    `tests/conftest.py`'s globals and never in the audited module's.
+
+    Dropping the `conftest` patch from `_stub_reason()` reddens HERE, with a
+    message naming the cause, rather than silently reopening hole 3 and leaving
+    this module reporting 13 passed while grading nothing.
+
+    The paired non-vacuity arm is
+    `test_a_none_reason_stub_leaves_require_git_repository_silent`: without it a
+    `require_git_repository()` welded to always skipping would satisfy this one.
+    """
+    _stub_reason(monkeypatch, SENTINEL_REASON)
+
+    assert conftest.git_unusable_reason() == SENTINEL_REASON, (
+        "the definition-site binding is not stubbed, so require_git_repository() will read "
+        "the real checkout's answer and the skip door in _expect_assertion_error is dead code"
+    )
+    assert audited.git_unusable_reason() == SENTINEL_REASON, (
+        "the audited module's re-imported binding is not stubbed, so the cross-check's own "
+        "body would grade the real tree instead of the forced input"
+    )
+
+    with pytest.raises(Skipped) as caught:
+        conftest.require_git_repository()
+
+    assert SENTINEL_REASON in str(caught.value.msg), (
+        f"require_git_repository() skipped, but not with the stubbed reason: "
+        f"{caught.value.msg!r}"
+    )
+
+
+def test_a_none_reason_stub_leaves_require_git_repository_silent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-vacuity for the arm above: a None stub must raise NOTHING.
+
+    Proves the arm above detects a real difference rather than passing because
+    `require_git_repository()` skips unconditionally.
+    """
+    _stub_reason(monkeypatch, None)
+
+    assert conftest.git_unusable_reason() is None
+    conftest.require_git_repository()
