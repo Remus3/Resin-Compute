@@ -597,13 +597,26 @@ def test_both_workflows_cross_check_the_count_they_sweep():
 # invocations; tests/test_prepush_skip_reporting.py grades that. ci.yml was
 # never taught the same thing. These arms are that guard's twin for CI.
 #
-# SCOPE, STATED RATHER THAN IMPLIED. These arms read ci.yml ONLY.
+# SCOPE, STATED RATHER THAN IMPLIED. These arms read BOTH workflows.
 # docs-guards.yml also invokes pytest twice, on a DERIVED list of md-reading
-# modules expanded from a shell array (`"${app[@]}"`), and as of this commit
-# neither of those invocations carries an `-r` spec. That is a real instance of
-# the same blind spot and it is NOT closed here, because docs-guards.yml was
-# outside the write-list of the slice that added this. It is
-# applicable-and-not-done, not not-applicable.
+# modules expanded from a shell array (`"${app[@]}"`), and until 2026-09-09
+# neither of those invocations carried an `-r` spec. That was a real instance
+# of the same blind spot, left open because docs-guards.yml sat outside the
+# write-list of the slice that added the ci.yml arms - applicable-and-not-done
+# rather than not-applicable. It is closed below, and this paragraph no longer
+# describes the tree as it was.
+#
+# THE TWO FLOORS ARE NOT THE SAME SHAPE, and that is forced rather than
+# chosen. ci.yml names its suites literally, so CI_SUITE_TARGETS can be typed
+# by hand and compared against what the scan reads. docs-guards.yml cannot be
+# graded that way: its guard list is derived at CI time from `git ls-files`
+# and reaches pytest as a shell array expansion, so the operand on each
+# command line is the literal text `${app[@]}` and no hand-typed path could
+# ever match it. The floor there claims only what the mechanism can actually
+# claim - exactly two invocations, each targeting the expansion it is meant to
+# be - and claims NOTHING about which modules the runner finally collects.
+# A path-shaped floor there would not be a stronger guard; it would be a
+# permanent red dressed as one.
 # ---------------------------------------------------------------------------
 
 # THE PARSER IS SHARED, NOT REIMPLEMENTED, and that is deliberate rather than
@@ -639,6 +652,12 @@ from tests.test_prepush_skip_reporting import (  # noqa: E402
 #: rather than read out of ci.yml: a census that reads its own answer from the
 #: file it audits is not a census.
 CI_SUITE_TARGETS = ("tests", "agents/pity_engine")
+
+#: docs-guards.yml's two pytest operands, as the shared token scan reads them.
+#: NOT paths, and not a typo - see the scope paragraph above. MEASURED by
+#: running `parse_pytest_invocations` over the shipped workflow on 2026-09-09
+#: rather than assumed; the scan strips the quotes and keeps the expansion.
+DOCS_GUARDS_SUITE_TARGETS = ("${app[@]}", "${engine[@]}")
 
 
 def _skip_reporting_problems(text: str, source: str) -> list[str]:
@@ -754,6 +773,74 @@ def test_every_ci_pytest_invocation_names_its_skips_and_both_suites_are_present(
         "`1 failed, 1636 passed, 19 skipped in 24.30s` with none of the nineteen named, "
         "against 1 skip for the same tree on Windows. A skip whose reason is absent is "
         "indistinguishable from a test that was never written.\n  - "
+        + "\n  - ".join(problems)
+    )
+
+
+def test_the_shared_parser_reads_the_real_docs_guards_workflow():
+    """NON-VACUITY for the import against the SECOND subject, not a duplicate.
+
+    The ci.yml arm above proves the scan can see THAT file. It says nothing
+    about this one, and this one has the harder shape: two `if` blocks nested
+    inside a single `run: |`, each expanding a shell array that an earlier step
+    built. If a future edit moved that into a composite action, a matrix, a
+    `uses:` or a helper script, the scan would find zero invocations and the
+    guard below would pass over an empty list forever - the exact vacuous pass
+    this module exists to catch elsewhere.
+    """
+    invocations = parse_pytest_invocations(DOCS_GUARDS.read_text(encoding="utf-8"))
+    assert invocations, (
+        f"the shared token scan found no `-m pytest` invocation in {DOCS_GUARDS.name} at "
+        f"all. Either the md-reading guards stopped being run, or they are now invoked in "
+        f"a shape a shell token scan cannot read; either way the guard below is grading "
+        f"nothing."
+    )
+
+
+def test_every_docs_guards_pytest_invocation_names_its_skips():
+    """THE GUARD for docs-guards.yml, with its floor INSIDE the same assertion.
+
+    Same reasoning as the ci.yml arm: a floor kept in a separate arm leaves
+    this one vacuous in the window where the floor is red, because "every
+    invocation reports skips" is trivially true of zero invocations. So the
+    census and the judgement are ONE assert.
+
+    THE FLOOR IS DIFFERENT IN KIND, and deliberately weaker than ci.yml's.
+    There the targets are literal suite paths. Here they are shell array
+    expansions of a list derived at CI time, so the strongest TRUE statement
+    available is that the workflow still runs pytest exactly twice and that
+    each invocation still targets the expansion it is meant to be - one per
+    bucket, never merged. Whether those arrays are non-empty, and what they
+    contain, is a runtime property this scan cannot reach; that is graded
+    instead by `test_the_suite_split_is_load_bearing_and_not_decoration`, and
+    the workflow itself prints a `::notice::` rather than a silent green when
+    both come back empty.
+
+    ORDER IS NOT ASSERTED. Running the engine bucket first would be a correct
+    workflow, so the comparison is over the multiset.
+    """
+    text = DOCS_GUARDS.read_text(encoding="utf-8")
+    invocations = parse_pytest_invocations(text)
+    targets = sorted(inv.target for inv in invocations)
+
+    problems: list[str] = []
+    if targets != sorted(DOCS_GUARDS_SUITE_TARGETS):
+        problems.append(
+            f"{DOCS_GUARDS.name} should invoke pytest exactly "
+            f"{len(DOCS_GUARDS_SUITE_TARGETS)} times, once per derived bucket, targeting "
+            f"{sorted(DOCS_GUARDS_SUITE_TARGETS)}; the token scan found {targets}. If the "
+            f"buckets were renamed, update DOCS_GUARDS_SUITE_TARGETS in the same commit - "
+            f"do not delete this floor, or the rule below becomes a rule about zero "
+            f"invocations"
+        )
+    problems.extend(_skip_reporting_problems(text, DOCS_GUARDS.name))
+
+    assert not problems, (
+        "the guard step is the ONLY step in the docs-guards job that runs assertions, and "
+        "with no `-r` spec its skips reach the log as bare `s` characters - a count with "
+        "no reasons, in the one job a docs-only commit triggers at all. "
+        "ran-and-found-nothing and not-present-at-all are both skips, separated only by "
+        "the text this flag prints.\n  - "
         + "\n  - ".join(problems)
     )
 

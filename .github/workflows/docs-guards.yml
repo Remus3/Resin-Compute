@@ -197,6 +197,20 @@ jobs:
           # one doubles it to -qq, which SUPPRESSES the summary line - the one
           # step in this job that runs assertions would log a wall of dots and
           # no count.
+          #
+          # -rs, and it is the other half of the same complaint. With no `-r`
+          # spec a skip reaches the log as a bare `s` and nothing else, so
+          # ran-and-found-nothing and not-present-at-all - two different
+          # outcomes - become one indistinguishable character. .githooks/pre-push
+          # and ci.yml both pass -rs to both of their invocations already; this
+          # job was the last place in the tree that did not.
+          #
+          # ATTACHED TO THE FLAG on purpose. A detached `-r s` is correct
+          # pytest, but a token scan cannot tell it from an `-r` followed by a
+          # target, so tests/test_ci_workflow_complement.py reports that shape
+          # UNPARSEABLE and FAILS rather than guessing. Keep the spec welded to
+          # the flag and the guard can read it.
+          #
           # Same path the selection step computed. RUNNER_TEMP is stable for
           # the whole job, so the two steps agree without leaving anything in
           # the checkout for a later `git add -A` to pick up.
@@ -218,9 +232,9 @@ jobs:
           # tree and reports a green this job did not earn.
           if [ "${#app[@]}" -gt 0 ]; then
             echo "--- application suite: ${#app[@]} md-reading module(s) ---"
-            python -m pytest --tb=short "${app[@]}"
+            python -m pytest -rs --tb=short "${app[@]}"
           fi
           if [ "${#engine[@]}" -gt 0 ]; then
             echo "--- engine suite: ${#engine[@]} md-reading module(s) ---"
-            python -m pytest --tb=short "${engine[@]}"
+            python -m pytest -rs --tb=short "${engine[@]}"
           fi

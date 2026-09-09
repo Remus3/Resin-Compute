@@ -105,13 +105,94 @@ version. What follows is everything the scaffold deliberately did not do.
   a literal-flag matcher was defeated twice and widening it was the wrong answer
   both times.
 
-  STILL OPEN, AND SMALLER THAN THE ITEM ABOVE. Two of those 19 say that
-  `tests/test_commit_trailers.py` skips under a shallow clone because a
-  full-history sweep would pass by construction. The trailer rule is a HARD
-  RULE in the charter and CI enforces NONE of it. The fix is a fetch-depth
-  change, and the skip already names it. Separately the docs workflow runs
-  pytest twice with no short-summary spec at all, so its skips are still
-  unnamed - the same blind spot, measured and unfixed.
+  BOTH RESIDUALS ABOVE ARE CLOSED 2026-09-09, each by its own slice, each
+  graded by an agent that did not write it.
+
+  THE TRAILER RULE IS ENFORCED IN CI FOR THE FIRST TIME. Two of those 19 skips
+  said `tests/test_commit_trailers.py` declines a full-history sweep under a
+  shallow clone, which left the Co-Authored-By HARD RULE resting entirely on a
+  hook that a fresh clone does not run. The cost of a full fetch was MEASURED
+  before the change rather than assumed: 113 commits, about 7 MB of git
+  objects, noise beside the pip install in the same job. The sweep also runs
+  GREEN over this tree's real history, so the change could not arrive red.
+  `.github/workflows/ci.yml` now checks out at depth 0 and
+  `tests/test_ci_history_depth.py` reddens if it returns to a shallow value
+  while that sweep still ships, with its census and its judgement in ONE
+  assertion so a workflow carrying no checkout step at all cannot pass
+  vacuously.
+
+  AND THE SKIP BRANCHES WERE NOT DELETED, because a verifier refuted the claim
+  that they had become dead code. `.github/workflows/docs-guards.yml`
+  deliberately stays at depth 1, and its selection is DERIVED at CI time from
+  every test module mentioning a markdown path - which is that module. So it is
+  still collected and run SHALLOW on every docs-only push, both branches fire
+  there, and both reasons are true there. The follow-up was a comment fix, not
+  a deletion, and the first reading of it would have broken a lane.
+
+  THE DOCS WORKFLOW NOW NAMES ITS SKIPS TOO. It invoked pytest twice with no
+  short-summary spec, the same blind spot ci.yml carried until 6c6ab9d. Both
+  invocations now pass `-rs`. The guard REUSES the spec parser hardened at
+  e714b35 rather than adding a third private matcher; a literal-flag matcher
+  was written and defeated twice in this tree, and widening it was the wrong
+  answer both times. Its floor and its judgement are one assertion.
+
+  THE NEW GUARD'S CEILING, stated rather than discovered later. That workflow's
+  pytest targets are SHELL ARRAY EXPANSIONS and not literal paths, so the floor
+  pins the operand TEXT. Renaming the arrays is therefore a FALSE RED needing a
+  same-commit constant update, and the failure message says so. Measured: the
+  guard does NOT degrade to a silent green when the invocations are moved into
+  a script, and does not pass with the parser welded to an empty list.
+
+  STILL UNGRADED, and it is the third reason a local green says nothing about
+  CI. Every pinned dev tool is OLDER on this box than what CI installs - ruff
+  0.15.12 against a 0.16.6 pin, pytest 9.0.3 against 9.1.1, mypy 2.1.0 against
+  2.3.1, re-measured 2026-09-09. Nothing compares installed against declared. A
+  test asserting equality would be GREEN on CI and RED here, which is backwards
+  from useful, so the shape of that guard is an open question rather than an
+  unwritten test.
+
+- **RULED 2026-09-09, AND THIS IS AN ADJUDICATED CALL - NOT AN OPERATOR
+  DECISION.** It is overturnable by reading this entry. A sibling offered a
+  shape: `mkdir(parents=True)` under a parent that is a FILE. Measured here on
+  Python 3.14.4 it raises FileExistsError, errno 17, winerror 183, where POSIX
+  raises NotADirectoryError, errno 20 - but every handler in this tree catches
+  no narrower than OSError, so that half is NOT-APPLICABLE-HERE.
+
+  THE SWEEP FOUND A DIFFERENT AND REAL FACT. `mkdir` can raise ValueError,
+  which is NOT an OSError, when the path carries a NUL byte. Reproduced on both
+  3.14.4 and the 3.11 on this box, CI's minor.
+
+  THE FIRST FRAMING OF THIS ITEM WAS WRONG AND IS RECORDED AS WRONG. It claimed
+  the tree had fixed one site and never swept the siblings, resting on an AST
+  walk for a try block directly containing a mkdir call. That method is
+  STRUCTURALLY BLIND to a guard placed at the caller, and the caller is where
+  this tree put it: twelve sites catch `(OSError, ValueError)`, and
+  `scripts/watch_inbox.py` names the OSError-only catch in `core/atomic_io.py`
+  explicitly as known and absorbed one layer up. Two agents agreed on the
+  nine-site census because they shared that one sweep as their input.
+
+  RULING: POSITION B, DO NOT WIDEN, all eight OSError-only sites. The
+  discriminator is the stated CONTRACT and not the call: the widened sites are
+  exactly the functions whose docstrings promise never to raise. A False return
+  from `atomic_write_text` currently means the OS refused; widening would make
+  it also mean the caller passed garbage, and a silent False is the quieter
+  failure. Reachability was measured rather than argued and is zero of eight -
+  environment variables and argv both REJECT a NUL at the boundary and cannot
+  carry one, no filesystem permits it in a name, and Path.parent strips a
+  NUL-bearing final component. JSON is the only external carrier and the one
+  Path built from parsed JSON is unguarded anyway.
+
+  THE ADJUDICATOR'S OWN STRONGEST OBJECTION STANDS. `tools/moon_sync_responder.py`
+  wraps an `atomic_write_text` call at line 928 without the caller-side absorb,
+  so a ValueError there aborts a broadcast mid-loop with some inboxes written
+  and no record - the ordering that function's own docstring names as the worst
+  available. Widening cannot fix it, because line 915 already uses ValueError
+  as the refusal signal, so absorbing it would make a refused draft and a
+  malformed path indistinguishable. Closing it needs a private exception type
+  for the refusal first. WHAT WOULD OVERTURN THE RULING: a Path built from
+  parsed JSON or an upstream response body reaching one of the eight, or a
+  decision that `atomic_write_text` should promise never to raise - which is an
+  ADR, not an except clause.
 
   A THIRD REASON A LOCAL GREEN SAYS NOTHING ABOUT CI, and it is new. Every
   pinned dev tool is OLDER on this box than the version CI installs: pytest

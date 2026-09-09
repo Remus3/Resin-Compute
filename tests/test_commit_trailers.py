@@ -21,12 +21,25 @@ So the policy now has two enforcement points instead of one:
 
 A guard that only exists inside the thing it guards is not a guard.
 
-THE SHALLOW-CLONE HOLE, and it is a real one. `.github/workflows/ci.yml` checks
-out with `fetch-depth: 1`, so on the runner `git log` sees exactly one commit
-and a full-history sweep there would pass by construction while proving nothing.
-A vacuous green is worse than a missing test, because it reads as coverage. The
-history arm therefore DETECTS a shallow clone and skips with the reason stated,
-rather than quietly sweeping a single commit and calling it clean.
+THE SHALLOW-CLONE HOLE, and it was a real one. `.github/workflows/ci.yml` USED
+TO check out at depth 1, so on that runner `git log` saw exactly one commit and
+a full-history sweep there would have passed by construction while proving
+nothing. A vacuous green is worse than a missing test, because it reads as
+coverage. The history arm therefore DETECTS a shallow clone and skips with the
+reason stated, rather than quietly sweeping a single commit and calling it
+clean.
+
+CI NOW CHECKS OUT AT DEPTH 0 on that lane, so the sweep runs there and the
+Co-Authored-By hard rule is enforced by something other than a hook for the
+first time. `tests/test_ci_history_depth.py` goes red if that depth returns to
+a shallow value while this sweep still ships.
+
+THE SKIP BRANCHES BELOW ARE NOT DEAD, and deleting them would break a lane.
+`.github/workflows/docs-guards.yml` deliberately keeps depth 1, and its
+selection is DERIVED at CI time from every test module mentioning a markdown
+path - which is this module, twice. So it is collected and run SHALLOW on every
+docs-only push, both branches fire there, and both are correct there. A `git
+archive` extract and a fork's shallow clone are the same population.
 """
 from __future__ import annotations
 
