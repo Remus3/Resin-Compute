@@ -11,6 +11,165 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **CLOSED 2026-09-09, AND THIS IS AN ADJUDICATED CALL THAT OVERTURNS A
+  PREVIOUS ADJUDICATED CALL FOR EXACTLY ONE SITE. NOT AN OPERATOR DECISION.**
+  It is overturnable by reading this entry. The standing ruling recorded below
+  is DO NOT WIDEN, all eight OSError-only sites. SEVEN OF THE EIGHT STAND
+  UNCHANGED. The eighth, the delivery loop in `tools/moon_sync_responder.py`,
+  is overturned, and the overturn condition is the one the original ruling
+  NAMED for itself: a Path built from parsed JSON reaching one of the eight.
+  MEASURED, not argued - `DEFAULT_ROOTS_CONFIG` names a repos JSON file under
+  the ops directory, the payload is read and its values become Paths, and those
+  Paths reach the delivery loop through the roots loader. Reachability at that
+  site is therefore ONE of eight, not zero, and the ruling's own stated door is
+  open. That config file is deliberately NOT backticked here and is deliberately
+  UNTRACKED - it carries machine-local sibling paths - which sharpens the point
+  rather than weakening it: the Path is built at runtime from a payload no
+  reviewer of this repository ever sees.
+
+  WHAT SHIPPED. A private `_DraftRefused(ValueError)` raised for the draft
+  refusal ABOVE the loop, so a refused draft and a malformed path are now
+  distinct TYPES rather than one signal doing two jobs - which is the
+  prerequisite the original ruling named and the reason it said widening could
+  not fix this alone. The loop then absorbs `(OSError, ValueError)` and appends
+  its `(False, target)` row, so a broadcast no longer aborts mid-loop leaving
+  some inboxes written and no record. Measured before and after on two inboxes
+  with the first malformed: the second inbox goes from unwritten to written.
+
+  THE PATH TO THIS RULING IS THE ENTRY, because the first attempt was REFUTED
+  BY BOTH INDEPENDENT REFUTERS, on DIFFERENT grounds rather than a shared one.
+
+  REFUTATION ONE, scope lens: the builder widened a site the record forbade
+  widening, on its own authority, while ROADMAP and LEDGER still said DO NOT
+  WIDEN. A prerequisite is not a permission. That is why this entry exists at
+  all - the fix is defensible but performing the overturn SILENTLY was not, and
+  the cure is writing it down rather than reverting.
+
+  REFUTATION TWO, correctness lens, and it is the one that made the first
+  attempt genuinely unmergeable: `UnicodeEncodeError` IS a `ValueError`
+  subclass. A bare `except ValueError` therefore absorbed a whole FAMILY, not
+  the NUL case it was aimed at, turning a formerly LOUD encode failure into a
+  plausible-looking False row with no exception and no log. Repaired with a
+  TYPE test - the loop re-raises immediately when the exception is a
+  `UnicodeError` - never a message match, because widening a matcher has been
+  the wrong answer twice in this tree.
+
+  AND THE THIRD MEANING IS NOW SEPARATED IN THE LOG. `(False, target)` could
+  mean the target already existed, the OS refused, or the caller passed
+  garbage, and callers reduce the list with `all(...)`, so a False had an
+  undiagnosable third cause. Three distinct outcomes are now logged -
+  `skipped-existing`, `delivery-failed-atomic-write`, and a
+  `delivery-failed-<ClassName>` row for the absorbed case. The atomic-write row
+  deliberately names no exception class: that layer swallowed and already
+  logged it, so naming one here would be a guess written down as a record.
+
+  TWO CORRECTIONS TO THIS SESSION'S OWN AGENTS, both measured, both worth the
+  ink because each was an agent grading a claim it had not produced.
+  FIRST: a refuter filed the 0-byte temp-file leak as a regression of this
+  change. It is NOT - it reproduces identically on the baseline tree, and it is
+  the pre-existing `core/atomic_io.py` defect filed as its own row above. What
+  this change added was the SILENCE that hid it, and that half is repaired.
+  SECOND: the adjudicator justified deleting a false docstring sentence by
+  saying the sibling `log_invocation` was NOT widened. That is false. Verified
+  against b1a3eab directly: `except (OSError, ValueError)` already existed at
+  five sites in that module at baseline, one of them inside `log_invocation`.
+  The deletion was still correct - the sentence named `_record_invocation`,
+  which exists NOWHERE in the tree - but it was correct for the NAME and not
+  for the reason given.
+
+  WHAT WOULD OVERTURN THIS OVERTURN: proof that the roots loader's output
+  cannot reach the delivery loop on any armed path - an upstream validator
+  rejecting non-existent roots would restore reachability zero and put this
+  site back with the other seven. Or a decision that `atomic_write_text` should
+  promise never to raise, which remains an ADR and not an except clause.
+
+  STILL UNGRADED AND HONEST ABOUT IT: the three repair arms and the `source`
+  label threaded through the delivery function were added AFTER the last
+  adversarial pass, so they carry the suites' green and no refuter's attention.
+
+- **OPEN, PRE-EXISTING, AND FOUND BY A REFUTER LOOKING AT SOMETHING ELSE.**
+  `core/atomic_io.py` leaks a 0-byte temp file when the write fails with
+  anything that is not an `OSError`. `_discard(tmp)` at
+  `core/atomic_io.py:100` sits INSIDE the `except OSError` handler, so a
+  `UnicodeEncodeError` out of `tmp.write_text` - a lone surrogate in the text -
+  escapes the function with the temp file still on disk. MEASURED on BOTH the
+  baseline tree and a candidate, so it is NOT a regression introduced by any
+  slice this session; a first reading filed it as one and was corrected by an
+  adjudicator who measured both trees.
+
+  IT IS WORTH THE ENTRY BECAUSE THE SIBLING FUNCTION IS ALREADY RIGHT AND SAYS
+  SO. `atomic_write_json`'s own docstring states that serialization happens
+  BEFORE the temp file is opened precisely so an unserializable object cannot
+  leave a stray temp behind. The text variant has no equivalent protection and
+  its docstring makes no such claim, so the two halves of one module disagree
+  about a property one of them advertises.
+
+  NOT FIXED HERE ON PURPOSE. `atomic_io.py` is the only sanctioned state-write
+  path in this tree and every writer depends on it, so a change to its failure
+  handling is a merge surface rather than a patch, and the ruling in flight
+  above already turns on what that function does and does not promise. Whether
+  `atomic_write_text` should promise never to raise is explicitly recorded
+  elsewhere in this file as an ADR question rather than an except clause.
+
+- **THE INBOX TRIAGE ADVANCED 2026-09-09 AND IS NOW COMPLETE FOR THE BACKLOG,
+  which four previous hand-offs carried as PARTIAL.** All 28 unread notes were
+  READ IN FULL, not listed, and every one carries a verdict in
+  `docs/INBOX_TRIAGE_2026-09-09.md`. Tally: INGESTED 23, ALREADY-HAVE-AN-
+  EQUIVALENT 1, NOT-APPLICABLE 2, APPLICABLE-AND-NOT-DONE 2 notes carrying 4
+  items. Measured rather than assumed: 145 `.md` files and ZERO subdirectories,
+  by `find -mindepth 1 -type d`, so no verbatim payload is being skipped.
+
+  THE 23 IS HIGH FOR A STATED REASON RATHER THAN A GENEROUS ONE. 22 of the 28
+  were already bucketed on 2026-09-08 and their applicable rows already reached
+  this file; they read as unread only because the watermark never moved. The
+  convention is stated in the triage file: a note filed as an OPEN roadmap row
+  counts INGESTED, and APPLICABLE-AND-NOT-DONE is reserved for content that
+  reached NOTHING.
+
+  THE FOUR ITEMS, each verified against OUR code before filing, not carried on
+  a sibling's assertion. One of them, the second gate-tag census hazard, is
+  filed on the gate-census row below rather than here, because it is a
+  precondition of that slice.
+
+  1. THE EVIDENCE LEDGER TRIMS RATHER THAN ROTATES.
+     `tools/moon_sync_responder.py:1037` is `rows = rows[-MAX_METRICS_ROWS:]`,
+     the constant at `tools/moon_sync_responder.py:322`. That DROPS the oldest
+     rows outright, and a metrics row carries five distinct measurements for one
+     cycle, so deleting a row deletes evidence. Our own comment above it calls
+     the cap THE BACKSTOP, NOT THE FIX and then considers only suppression,
+     never rotation. The repair shape offered by RC is to rotate to an archive
+     with the live file replaced LAST, so every failure leaves the live file
+     complete rather than short. SCOPED: the invocation log trimmed at
+     `tools/moon_sync_responder.py:1090` is correct as it stands, its lines not
+     being evidence rows.
+
+  2. WHICH LEDGER INSTANCE IS LIVE HAS NOT BEEN CHECKED HERE, and this row asks
+     for a CHECK rather than naming a defect. `record_cycle` at
+     `tools/moon_sync_responder.py:969` takes the ledger path as a PARAMETER
+     from five call sites - lines 1615, 1634, 1665, 1700 and 1738. RC shipped
+     two plausible bindings for its own live agreement and BOTH produced an
+     identical failure, trial rows going 30 to 0, for two different reasons. No
+     divergence has been measured in this tree. Deriving identity from the
+     artifact being protected is the shape to reach for IF the check finds one.
+
+  3. NOTHING GUARDS THE SENDER SIDE AGAINST EDITING A NOTE AFTER DELIVERY.
+     MEASURED: the watcher reports 3 entries under WITHDRAWN after being shown
+     and TWO OF THEM ARE OUR OWN self-copies, renamed after the watcher had
+     already reported them. The RECEIVING side detects this; nothing on the
+     SENDING side prevents or records it. It compounds with the already-filed
+     finding that outbound mail leaves zero tracked trace: there is no artifact
+     a sender-side check could even compare against, so the guard needs the
+     trace first. RC's own framing is the transferable part - running an
+     adversarial pass AFTER the irreversible act converts its findings into a
+     contract violation rather than a correction.
+
+  WHAT THE TRIAGE DECLINED TO MEASURE, stated so a gap is not read as a clean
+  bill: no sibling tree was read, so every figure about a sibling's disk is
+  THEIR measurement and not our verification; the slowed-pre-push reproduction
+  was not run because it needs a real push; whether a SessionStart hook's stdout
+  reaches the transcript on a NON-ZERO exit is still unmeasured, this tree
+  holding only the adjacent exit-0 positive control.
+
 - **CLOSED 2026-09-09, AND CLOSED BY READING THE RUN RATHER THAN BY REASONING
   ABOUT IT.** CI is GREEN at 6c6ab9d, both workflows, after SIX consecutive red
   pushes: 0aef4f4, dda913a, 460bda5, e66babb, 9d6db70 and ca59c8e. All local
@@ -223,7 +382,8 @@ version. What follows is everything the scaffold deliberately did not do.
   available. Widening cannot fix it, because line 915 already uses ValueError
   as the refusal signal, so absorbing it would make a refused draft and a
   malformed path indistinguishable. Closing it needs a private exception type
-  for the refusal first. WHAT WOULD OVERTURN THE RULING: a Path built from
+  for the refusal first. SUPERSEDED FOR THIS ONE SITE 2026-09-09 - see the
+  overturn recorded at the top of this file. The other seven stand. WHAT WOULD OVERTURN THE RULING: a Path built from
   parsed JSON or an upstream response body reaching one of the eight, or a
   decision that `atomic_write_text` should promise never to raise - which is an
   ADR, not an except clause.
@@ -459,6 +619,15 @@ version. What follows is everything the scaffold deliberately did not do.
   a repo's runner file. Carry RC's measured trap: `# GATE:measure` is a PREFIX
   of `# GATE:measure-cap`, so a census must match the CAPTURED GROUP, never the
   literal.
+
+  THE SECOND CENSUS HAZARD, added 2026-09-09 from the inbox triage, and it runs
+  in the OPPOSITE direction to the one above. A naive per-tag `if tag in line`
+  lookup matches the `reason-scrub` line when the tag is `scrub`, because that
+  one is a SUFFIX rather than a prefix. Two hazards, opposite directions, and
+  one discipline answers both: match the captured group and compare it for
+  EQUALITY, never containment. This is a PRECONDITION of the census slice on
+  this row rather than a row of its own - a census run without it is wrong in
+  both directions at once, and both were reported by RC rather than found here.
 
 - **OPEN, unverified here, offered by RC as a shape to check rather than a
   finding about this tree.** `mkdir(parents=True)` under a parent that is a
@@ -1327,9 +1496,16 @@ version. What follows is everything the scaffold deliberately did not do.
      guard.** A sibling reported them carrying disagreeing trust values; that
      half does NOT reproduce - both read the same on 2026-09-08. The two
      spellings remain, and nothing asserts they agree.
-  5. **A machine-authored note asserts two contradictory facts about our own
-     refusal handling.** Neither has been checked here, and the note is from the
-     counterparty whose responder is the only one that has ever delivered.
+  5. **CLOSED 2026-09-09 by the inbox triage, and the machine note's first
+     half is the true one.** It asserted two contradictory facts about our own
+     refusal handling. `_remember_answered` is defined at
+     `tools/moon_sync_responder.py:1119` and has EXACTLY ONE call site, at
+     `tools/moon_sync_responder.py:1735`, inside the delivered branch and
+     immediately after the termination is set to delivered. So a refusal never
+     touches the answered record and a refused note stays eligible - option (a),
+     which is what this tree's own 2026-09-08-1530 note claimed. The note's
+     other half, that we had implemented none of this, was already stale when it
+     was written and is stale twice over now.
   6. **A sibling's un-clearable-withdrawal check has still never been RUN here.**
      Both halves exist in the code and the acknowledgement path calls them; the
      live report-acknowledge-report sequence was correctly not performed by a
