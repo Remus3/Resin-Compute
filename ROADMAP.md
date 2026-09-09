@@ -19,6 +19,17 @@ version. What follows is everything the scaffold deliberately did not do.
   of the session; `tests/test_gate_mutation_runner.py` is new at 47.
   1793 plus 47 is 1840 and the arithmetic closes.
 
+  THE SAME SUITE REPORTS A DIFFERENT SKIP COUNT UNDER THE PRE-PUSH HOOK, and
+  it is NOT a regression. Measured at `9be52cc`: 1840 passed 1 skipped from an
+  ordinary shell, 1839 passed 2 SKIPPED under pre-push, same commit, seconds
+  apart. The extra skip is `tests/test_hook_interpreter.py:1802` - under the
+  hook, git is invoked as the git-core shim at
+  `Git\mingw64\libexec\git-core\git.exe`, which sits at no layout that oracle
+  recognises as an install, so it SKIPS rather than guessing. That is the arm
+  behaving correctly on a lane its author anticipated. Do not reconcile the two
+  counts by editing either one; they are two environments and the skip reason
+  says which.
+
   **STEP TWO OF THREE OF THE GATE CENSUS IS DONE.** `tools/gate_mutation_runner.py`
   consumes the 18 tags, neutralises each tagged consult site in `_run_once`, and
   runs the application suite per mutant. STANDING RESULT, reproduced on the

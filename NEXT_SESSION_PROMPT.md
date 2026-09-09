@@ -52,6 +52,14 @@ STATE AS OBSERVED 2026-09-09 at 1c596e3, a reading not a promise. RE-MEASURE.
   mypy 34 source files. Census 77 arms, up from 43 at session start.
   tests/test_gate_mutation_runner.py new at 47. 1793 + 47 = 1840, closes.
   CHECK EVERY SESSION: gh run list --limit 5
+  THE SAME SUITE REPORTS A DIFFERENT SKIP COUNT UNDER THE PRE-PUSH HOOK, and
+  it is not a regression. Measured at 9be52cc: 1840 passed 1 skipped from an
+  ordinary shell, 1839 passed 2 SKIPPED under pre-push. The extra skip is
+  tests/test_hook_interpreter.py:1802 - under the hook, git is invoked as the
+  git-core shim at Git\mingw64\libexec\git-core\git.exe, which sits at no
+  layout that oracle recognises as an install, so it skips rather than
+  guessing. DO NOT reconcile the two counts by editing either one; they are
+  two environments and the skip reason says so.
 
 1. THE HIGHEST-VALUE ROW IN ROADMAP.md: EIGHT GATES ARE EXERCISED BY NOTHING.
    Measured at 1c596e3 by python -m tools.gate_mutation_runner - 35 mutants,
