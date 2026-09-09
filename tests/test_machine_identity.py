@@ -54,6 +54,7 @@ from __future__ import annotations
 import functools
 import re
 import subprocess
+import typing
 from pathlib import Path
 
 import pytest
@@ -227,15 +228,108 @@ def leaked_accounts(text: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-@functools.cache
-def _tracked_files() -> tuple[str, ...]:
-    """Tracked paths only.
+class _Enumeration(typing.NamedTuple):
+    """What `git ls-files` said, with FAILURE and EMPTINESS held apart.
 
-    Scoped to `git ls-files` on purpose. Untracked scratch files, the
-    gitignored worktrees under `.claude/`, virtualenvs and build output are
-    none of this guard's business, they are not going public with the repo,
-    and sweeping them would make this test depend on whatever happens to be
-    lying around.
+    A bare `tuple[str, ...]` cannot carry the difference between "git
+    enumerated the tree and it holds no such file" and "git never answered",
+    and the version this replaces returned exactly that bare tuple.
+    """
+
+    status: str  # "OK" | "FAILED"
+    files: tuple[str, ...]
+    reason: str
+
+
+# THE ONE FLOOR LITERAL, shared with
+# test_the_sweep_reads_a_realistic_number_of_files below rather than duplicated
+# beside it. Sound because the raw enumeration is a SUPERSET of the swept list -
+# `_sweep()` drops staged deletions and undecodable bytes and nothing else - so
+# a bound that is honest for the smaller corpus is honest for the larger one.
+#
+# A LITERAL, and it must stay one. Sizing it from `len(_tracked_files())` - the
+# obvious-looking "the tree has at least as many files as the tree has" - would
+# make the floor agree with whatever the enumeration returned, including
+# nothing. A bound sized from the value under test is an amplifier, not a check.
+# 100 is far below the 195 paths measured 2026-09-08 and far above the zero a
+# broken enumeration returns;
+# test_the_floor_is_reachable_and_keeps_clearance_below_the_real_tree pins the
+# interval it has to sit in rather than trusting the value.
+_MIN_TRACKED_PATHS = 100
+
+# THE FLOOR ALONE CANNOT SEE A PARTIAL ENUMERATION. A `git ls-files` narrowed by
+# a pathspec, a sparse checkout, or a cwd that landed in a subdirectory can
+# return 120 plausible paths, clear the floor, and still be missing the one file
+# the leak actually lived in.
+#
+# So completeness is anchored on five paths this repository cannot lose without
+# a deliberate act. `.claude/commands/done.md` is here for the reason the arm
+# below gives: it is where the leak lived, and it sits outside every top-level
+# source directory, so any corpus organised by tree root misses it exactly the
+# way the last one did. Each was confirmed present in `git ls-files` on
+# 2026-09-08. Renaming one is meant to redden this guard - that is the tripwire
+# working, not a false alarm.
+_ENUMERATION_ANCHORS = (
+    "CLAUDE.md",
+    "README.md",
+    "ROADMAP.md",
+    "core/types.py",
+    ".claude/commands/done.md",
+)
+
+
+def _classify_enumeration(returncode: int, stdout: str, stderr: str) -> _Enumeration:
+    """The PURE half of the enumeration, so every failure branch is testable.
+
+    Split out precisely because the alternative - proving these branches by
+    breaking git for real - is a thing no test may do to a shared tree, and a
+    branch nobody can reach is a branch nobody has checked.
+    """
+    if returncode != 0:
+        return _Enumeration(
+            "FAILED",
+            (),
+            f"`git ls-files` exited {returncode} and said {stderr.strip()[:200]!r}, "
+            "so nothing here is entitled to a verdict about this tree",
+        )
+    files = tuple(line for line in stdout.splitlines() if line)
+    if not files:
+        return _Enumeration(
+            "FAILED", (), "`git ls-files` exited 0 but printed no paths"
+        )
+    if len(files) < _MIN_TRACKED_PATHS:
+        return _Enumeration(
+            "FAILED",
+            (),
+            f"`git ls-files` printed only {len(files)} paths, under the floor of "
+            f"{_MIN_TRACKED_PATHS}, so the enumeration is not the whole tree",
+        )
+    missing = [anchor for anchor in _ENUMERATION_ANCHORS if anchor not in files]
+    if missing:
+        return _Enumeration(
+            "FAILED",
+            (),
+            f"`git ls-files` printed {len(files)} paths but not {missing}, so it "
+            "enumerated some other corpus and not this repository",
+        )
+    return _Enumeration("OK", files, f"{len(files)} tracked paths")
+
+
+@functools.cache
+def _tracked_enumeration() -> _Enumeration:
+    """Ask git what the tree tracks, and never launder a failure into silence.
+
+    `check=False`, deliberately. The version this replaces used `check=True`,
+    which does surface a non-zero exit - measured, an injected exit 3 reached
+    the arms as a `CalledProcessError` - but it names an exit status and DROPS
+    STDERR, and it says nothing at all about exit 0 with empty output, which is
+    the hole. Classifying every outcome in one place is what makes the two cases
+    answerable side by side.
+
+    `require_git_repository()` is asked FIRST and stays a skip: no repository at
+    all - a Download-ZIP or `git archive` copy - is a third disposition, not a
+    failure, and conflating it with a broken tool is how a correct repair
+    installs a false red.
     """
     require_git_repository()
     completed = subprocess.run(
@@ -243,9 +337,31 @@ def _tracked_files() -> tuple[str, ...]:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
-    return tuple(line for line in completed.stdout.splitlines() if line)
+    return _classify_enumeration(
+        completed.returncode, completed.stdout, completed.stderr
+    )
+
+
+@functools.cache
+def _tracked_files() -> tuple[str, ...]:
+    """Tracked paths only, and NEVER an empty tuple that reads as a clean tree.
+
+    Scoped to `git ls-files` on purpose. Untracked scratch files, the
+    gitignored worktrees under `.claude/`, virtualenvs and build output are
+    none of this guard's business, they are not going public with the repo,
+    and sweeping them would make this test depend on whatever happens to be
+    lying around.
+
+    Fails the CALLER on an unusable answer rather than handing back the empty
+    tuple that made every sweep above pass vacuously. This is the point of use,
+    so the failure lands on the arm whose claim just evaporated.
+    """
+    enumeration = _tracked_enumeration()
+    if enumeration.status != "OK":
+        pytest.fail(enumeration.reason)
+    return enumeration.files
 
 
 @functools.cache
@@ -501,13 +617,12 @@ def test_every_allowlist_entry_carries_a_stated_reason():
 def test_the_sweep_reads_a_realistic_number_of_files():
     """A broken file walk finds no offenders and passes forever."""
     _, scanned = _sweep()
-    assert len(scanned) >= 100, f"only {len(scanned)} tracked files were read"
+    assert len(scanned) >= _MIN_TRACKED_PATHS, (
+        f"only {len(scanned)} tracked files were read"
+    )
 
 
-@pytest.mark.parametrize(
-    "anchor",
-    ["CLAUDE.md", "README.md", "ROADMAP.md", "core/types.py", ".claude/commands/done.md"],
-)
+@pytest.mark.parametrize("anchor", _ENUMERATION_ANCHORS)
 def test_the_sweep_reaches_the_files_that_actually_carry_paths(anchor: str):
     """Named individually because a root-prefix filter is how the leak survived.
 
@@ -526,3 +641,226 @@ def test_this_file_does_not_trip_its_own_guard():
     one time it matters most.
     """
     assert leaked_accounts(_read(SELF)) == []
+
+
+# ---------------------------------------------------------------------------
+# THE ENUMERATION ITSELF - CHECKED-AND-FOUND-NOTHING HELD APART FROM
+# COULD-NOT-CHECK
+# ---------------------------------------------------------------------------
+#
+# WHAT WAS ALREADY HERE, and it is not nothing. The floor of 100 in
+# test_the_sweep_reads_a_realistic_number_of_files and the five anchors in
+# test_the_sweep_reaches_the_files_that_actually_carry_paths are a REAL floor
+# and REAL anchors, both sized from literals rather than from the value under
+# test, so an empty `git ls-files` has always reddened this FILE. The claim
+# that this site had neither was wrong, and it is recorded here so the next
+# reader does not re-derive a floor that already exists.
+#
+# WHAT WAS NOT HERE. Both of those live in arms of their own, so the PRIMARY
+# arm - test_no_tracked_file_carries_an_absolute_path_naming_a_real_account -
+# went on passing GREEN over zero files, and a non-zero exit surfaced as a raw
+# `CalledProcessError` that names an exit status and DROPS STDERR. The two
+# dispositions a reader must tell apart therefore arrived wearing one face: an
+# enumeration that answered honestly and an enumeration that never answered.
+#
+# The third disposition - no repository here at all, as in a Download-ZIP or
+# `git archive` copy - stays a SKIP with a TRUE reason, and
+# `require_git_repository()` in `tests/conftest.py` is what provides it. The
+# classifier below may only fire where git ANSWERED and answered wrongly.
+
+_SKIPPED = pytest.skip.Exception
+
+
+def _stub_ls_files(returncode: int, stdout: str):
+    """A subprocess.run that breaks ONLY `git ls-files`, honouring `check`."""
+    real = subprocess.run
+
+    def fake(cmd, *args, **kwargs):
+        if isinstance(cmd, (list, tuple)) and list(cmd[:2]) == ["git", "ls-files"]:
+            if kwargs.get("check") and returncode != 0:
+                raise subprocess.CalledProcessError(
+                    returncode, cmd, output=stdout, stderr=""
+                )
+            return subprocess.CompletedProcess(cmd, returncode, stdout, "")
+        return real(cmd, *args, **kwargs)
+
+    return fake
+
+
+def _reset_enumeration_caches() -> None:
+    """All three helpers are `@functools.cache`, so a stub can be cache-answered.
+
+    `_tracked_enumeration` is the one that matters and the one easiest to miss:
+    it caches the CLASSIFIED result, so a single stubbed FAILED verdict would
+    otherwise be served to every later arm in the file.
+    """
+    _tracked_enumeration.cache_clear()
+    _tracked_files.cache_clear()
+    _sweep.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _drop_enumeration_caches():
+    """Cleared on BOTH SIDES of every arm in this module.
+
+    Before, so a cached real answer cannot serve a stubbed arm and quietly make
+    the stub unobservable. After, so a cached STUBBED answer cannot serve the
+    next arm - the direction that turns one deliberate red into a file-wide
+    false red, which is the more expensive of the two mistakes.
+    """
+    _reset_enumeration_caches()
+    yield
+    _reset_enumeration_caches()
+
+
+@pytest.mark.parametrize("returncode,stdout", [(0, ""), (3, ""), (0, "\n\n")])
+def test_an_unusable_enumeration_fails_the_primary_arm_rather_than_passing_it(
+    monkeypatch, returncode: int, stdout: str
+):
+    """GRADES THE CALLER, not a predicate.
+
+    Measured 2026-09-08 before the repair, all three parametrisations: the
+    primary arm PASSED. `_sweep()` iterated zero paths, collected zero
+    offenders, and `assert not offenders` held trivially against a tree
+    carrying 195 tracked files.
+    """
+    require_git_repository()
+    monkeypatch.setattr(subprocess, "run", _stub_ls_files(returncode, stdout))
+    # BaseException and not Exception, and the difference is measured
+    # elsewhere in this tree: pytest's Skipped derives from BaseException, so
+    # `pytest.raises(Exception)` lets a skip fly straight past and THIS ARM
+    # reports as skipped - a guard against silent skipping that silently skips.
+    with pytest.raises(BaseException) as caught:
+        test_no_tracked_file_carries_an_absolute_path_naming_a_real_account()
+    assert not isinstance(caught.value, _SKIPPED), (
+        "an enumeration that answered wrongly was reported as a SKIP, which is "
+        f"indistinguishable from git not being installed at all: {caught.value}"
+    )
+    said = str(caught.value)
+    assert str(returncode) in said or "printed no paths" in said, (
+        "the failure names neither the exit code nor the emptiness, so a reader "
+        f"cannot tell which of the two happened: {said}"
+    )
+
+
+def _real_corpus() -> tuple[str, ...]:
+    """This tree's real `git ls-files` output, or a TRUE skip.
+
+    The arms below size the floor and the anchors against the actual tree, so
+    without an actual tree they have no input to grade and must say so rather
+    than converting somebody else's correct skip into a failure.
+    """
+    require_git_repository()
+    enumeration = _tracked_enumeration()
+    if enumeration.status != "OK":
+        pytest.skip(
+            "these arms need THIS tree's real `git ls-files` output as their "
+            f"corpus, and the enumeration is unusable: {enumeration.reason}"
+        )
+    return enumeration.files
+
+
+def test_the_enumeration_classifier_separates_every_disposition():
+    """A CLASSIFIER NOBODY CAN TRIP CLASSIFIES NOTHING.
+
+    Table-driven over the four ways an answer can be unusable plus the one way
+    it can be fine. Pure, so each branch is reachable without breaking git for
+    a shared tree - which is the whole reason the classifier was split out.
+    """
+    corpus = _real_corpus()
+    healthy = "\n".join(corpus) + "\n"
+
+    cases = (
+        (3, "", "fatal: not a git repository", "FAILED", "exited 3"),
+        (0, "", "", "FAILED", "printed no paths"),
+        (0, "\n\n", "", "FAILED", "printed no paths"),
+        (0, "CLAUDE.md\nREADME.md\n", "", "FAILED", "under the floor"),
+        (0, healthy, "", "OK", "tracked paths"),
+    )
+    for returncode, stdout, stderr, status, fragment in cases:
+        got = _classify_enumeration(returncode, stdout, stderr)
+        assert got.status == status, (
+            f"exit {returncode} with {stdout[:20]!r} classified {got.status}, "
+            f"expected {status}: {got.reason}"
+        )
+        assert fragment in got.reason, (
+            f"the reason does not name why: expected {fragment!r}, got {got.reason!r}"
+        )
+
+    # The stderr text is load-bearing and is what `check=True` threw away.
+    broke = _classify_enumeration(128, "", "fatal: not a git repository")
+    assert "not a git repository" in broke.reason, (
+        "the failure drops git's own stderr, which is the half that says what "
+        f"went wrong: {broke.reason}"
+    )
+
+
+def test_the_floor_is_reachable_and_keeps_clearance_below_the_real_tree():
+    """THE FLOOR'S EDGE, and where that edge is allowed to sit.
+
+    Two claims, and neither alone is enough. Truncating the real corpus to one
+    path under the floor must FAIL for the floor's own reason, so the set of
+    inputs where it fires is demonstrably non-empty. And the value must sit in
+    an interval: high enough that a badly narrowed enumeration cannot clear it,
+    low enough that an ordinary deletion or a doc split cannot make it fire on a
+    healthy tree.
+    """
+    corpus = _real_corpus()
+    assert len(corpus) > _MIN_TRACKED_PATHS, (
+        f"this tree tracks {len(corpus)} paths, at or under the floor of "
+        f"{_MIN_TRACKED_PATHS}, so the floor is no longer known to be reachable "
+        "and must be re-derived"
+    )
+
+    under = _classify_enumeration(
+        0, "\n".join(corpus[: _MIN_TRACKED_PATHS - 1]) + "\n", ""
+    )
+    assert under.status == "FAILED", "one path under the floor did not fire it"
+    assert "floor" in under.reason, under.reason
+
+    # One more path and the floor specifically has nothing left to say. This is
+    # what pins the edge to the literal rather than to somewhere below it.
+    at_floor = _classify_enumeration(
+        0, "\n".join(corpus[:_MIN_TRACKED_PATHS]) + "\n", ""
+    )
+    assert "floor" not in at_floor.reason, at_floor.reason
+
+    assert _MIN_TRACKED_PATHS >= 10, (
+        f"a floor of {_MIN_TRACKED_PATHS} is low enough for a badly broken "
+        "enumeration to clear it"
+    )
+    assert len(corpus) - _MIN_TRACKED_PATHS >= 30, (
+        f"the floor of {_MIN_TRACKED_PATHS} leaves only "
+        f"{len(corpus) - _MIN_TRACKED_PATHS} paths of slack under the "
+        f"{len(corpus)} this tree tracks, so an ordinary deletion could redden "
+        "a healthy tree"
+    )
+
+
+def test_the_anchor_check_catches_a_partial_enumeration_the_floor_cannot():
+    """The floor and the anchors catch DIFFERENT partials, so both must exist.
+
+    This input clears the floor comfortably - it is the whole tree bar one
+    anchor - and only the anchor check has anything to say about it.
+    """
+    corpus = _real_corpus()
+    assert _ENUMERATION_ANCHORS, (
+        "the anchor tuple is empty, so the loop below iterates zero times and "
+        "this arm passes without checking anything"
+    )
+    for anchor in _ENUMERATION_ANCHORS:
+        assert anchor in corpus, (
+            f"{anchor} is no longer tracked, so it cannot anchor anything and "
+            "the anchor list must be re-derived"
+        )
+        narrowed = tuple(name for name in corpus if name != anchor)
+        assert len(narrowed) > _MIN_TRACKED_PATHS, (
+            "the corpus must clear the floor for this arm to mean anything"
+        )
+        got = _classify_enumeration(0, "\n".join(narrowed) + "\n", "")
+        assert got.status == "FAILED", (
+            f"an enumeration missing {anchor} cleared the floor and was accepted"
+        )
+        assert anchor in got.reason, (
+            f"the failure does not name the missing anchor: {got.reason}"
+        )
