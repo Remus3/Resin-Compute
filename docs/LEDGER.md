@@ -2858,3 +2858,42 @@ Merged files and their guards: `.claude/settings.json` and `tools/caveman_defaul
 (`tests/test_ci_workflow_complement.py`); `tools/publish_next_session.py`
 (`tests/test_publish_next_session.py`); the credential sweep
 (`tests/test_no_secret_literals.py`).
+
+## 2026-09-09 - the two CI residuals close, and a refuted framing is recorded
+
+Both residuals the CI outage exposed are closed, each as its own slice on a
+disjoint write-list, each graded by an agent that did not write it.
+
+`.github/workflows/ci.yml` checks out at depth 0, so the Co-Authored-By hard
+rule is enforced by something other than a hook for the first time. The cost
+was measured before the change, not assumed: 113 commits, about 7 MB of git
+objects, and the sweep already ran green over this tree's real history.
+Guarded by `tests/test_ci_history_depth.py`, whose floor and judgement sit in
+one assertion and whose control varies seven flagged shapes against eight
+cleared ones.
+
+`.github/workflows/docs-guards.yml` passes `-rs` on both of its pytest
+invocations, so the last CI lane that could report an unexplained skip count no
+longer can. Guarded in `tests/test_ci_workflow_complement.py`, reusing the spec
+parser rather than adding a third private matcher.
+
+A VERIFIER REFUTED A CLAIMED CONSEQUENCE, and that refutation saved a lane. The
+two shallow-clone skips in `tests/test_commit_trailers.py` were reported as
+dead code once ci.yml went to depth 0. They are not: the docs workflow keeps
+depth 1 and derives its selection from every test module mentioning a markdown
+path, so that module still runs shallow there and both branches still fire with
+true reasons. Deleting them would have removed live coverage.
+
+AND A FINDING OF OUR OWN WAS REFUTED BEFORE IT REACHED CODE. A sibling's
+`mkdir` shape led to a real fact - `mkdir` raises ValueError, not OSError, on a
+NUL-bearing path - and to a false story about it, that this tree had fixed one
+site and never swept the siblings. The census behind that story came from an
+AST walk for a try block directly containing a mkdir call, which is
+structurally blind to a guard placed at the CALLER, and the caller is exactly
+where this tree put it. The adjudicated ruling is do-not-widen, on contract
+grounds, with reachability measured at zero of eight. Recorded in `ROADMAP.md`
+with the objection that still stands.
+
+Merged files and their guards: `.github/workflows/ci.yml`
+(`tests/test_ci_history_depth.py`); `.github/workflows/docs-guards.yml`
+(`tests/test_ci_workflow_complement.py`).

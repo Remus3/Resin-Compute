@@ -71,12 +71,37 @@ jobs:
       # workflows are ported from and the one where they are proven green.
       - uses: actions/checkout@v6
         with:
-          # Shallow is fine TODAY: nothing in this tree asks git about history.
-          # If a guard is ever added that runs `git log` over the past (was
-          # this path once tracked, and when did it stop), raise this to 0 -
-          # on a depth-1 clone git answers "never" rather than erroring, so
-          # such a guard does not fail, it asserts the wrong thing.
-          fetch-depth: 1
+          # FULL HISTORY, and it is now load-bearing. That guard the previous
+          # comment here anticipated has arrived: tests/test_commit_trailers.py
+          # sweeps `git log` over every commit and fails if one carries a
+          # banned agent trailer - the `Co-Authored-By: Claude` ban CLAUDE.md
+          # states as a hard rule and that .githooks/commit-msg enforces only
+          # on a clone which ran scripts/install_hooks.py. A fork has not.
+          #
+          # On a depth-1 clone git answers "one commit" rather than erroring,
+          # so that sweep would pass by construction. The module knows it and
+          # SKIPS instead - honest, and it left CI enforcing NONE of the rule.
+          # Two arms were skipping here for exactly this reason. Depth 0 is
+          # what makes them run.
+          #
+          # THE COST, measured on the author's box 2026-09-09 so a future
+          # reader can weigh a revert rather than guess: 113 commits, ~7 MB of
+          # .git. That is noise beside the pip install below. If the history
+          # ever grows enough to show in this step's timing, move the sweep
+          # somewhere it still runs - do not drop this back to 1 and leave two
+          # arms skipping green.
+          #
+          # tests/test_ci_history_depth.py goes red if this returns to a
+          # shallow depth while that sweep still ships.
+          #
+          # docs-guards.yml stays at depth 1 on purpose, and saying it only
+          # runs `git ls-files` would be incomplete: it ALSO invokes pytest,
+          # over a list derived from every test module that mentions a
+          # markdown path, which includes tests/test_commit_trailers.py. So
+          # that module still runs shallow on the docs lane and its two
+          # shallow-clone skips still fire there. They are live code with a
+          # true reason, not residue of this change.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v6
         with:
