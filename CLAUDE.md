@@ -197,10 +197,85 @@ Independence is a PROMPT-LEVEL property, not a vendor-level one: it comes from
 the producer not grading its own work. Do not add a second vendor for
 "independent review".
 
+**AMENDED 2026-09-09 - standing operator directive: SUBAGENT-FIRST, ALWAYS.**
+The operator's words were "next session I want this work to be done sub-agent
+first to keep main session quiet and clear, always." The orchestrated,
+multi-agent shape above was ALREADY the default, so what this directive adds is
+the REASON and the word "always". The main session is the OPERATOR'S SURFACE and
+must stay quiet and clear. The work therefore happens in subagents, and the main
+thread holds only the plan, the seams, the merge and the report. Nothing above is
+repealed by this: disjoint slices, freezing a candidate before dispatch, distinct
+refuter lenses, and "agreement is not evidence" all still stand. The trivial-work
+exception in the opening paragraph is unchanged, but it is now to be read
+NARROWLY - a one-line cosmetic edit, a doc typo, a conversational answer, and
+nothing that has to be verified.
+
 The roster lives in `.claude/agents/`, the dispatch protocol in
 `.claude/commands/orchestrated-run.md`, and the reasoning in ADR-007. Every
 agent definition repeats this section inline, because subagent context does NOT
 inherit the main thread's.
+
+## The responder loop runs headless, and halts at an adjudicated boundary
+
+**Standing operator directive, 2026-09-09.** The operator's words were "for the
+work on the 5 way responders and its tests and fixes, i want it to be done
+headlessly looping, pinging the operator to include the other projects when it
+is time." The loop runs UNATTENDED. It does not ask permission per cycle - a
+cycle that stops to ask is a cycle that has defeated the directive. Its one
+obligation is to HALT AND PING at a defined boundary.
+
+**The boundary is an ADJUDICATED CALL.** An adjudicator ruled MIXED between two
+candidates on 2026-09-09. Neither won outright, so the ruling below is the
+operative rule and neither candidate is.
+
+- **Candidate ARM**, proposed by the counterparty repo RC: halt only at ARMING a
+  scheduled task. It won on FIDELITY - "include the other projects" is an active
+  verb, and a chattier boundary defeats "keep main session quiet and clear" - but
+  the outbound REFUTED note of 2026-09-09 enumerates SEVEN lettered seams, (a)
+  through (g), each one a way an unattended loop here reaches another repository
+  with nothing armed anywhere, and candidate ARM covers none of them. Seven is
+  this run's count of that note's lettered headings, and it is a count of THAT
+  note's enumeration and of no other list. Two other counts are in circulation
+  and both are wrong against the list itself: the note's own prose says the
+  adversarial pass "found six" while the enumeration below it runs to (g), and a
+  later reader repeated the six. Re-derive the count from the headings before
+  citing it, and say which population you counted.
+- **Candidate BYTE**, proposed by an adversary in this tree: halt before any byte
+  leaves the working tree. It won on COMPLETENESS and REVERSIBILITY, but AS
+  LITERALLY WORDED it halts on EVERY push including a docs-only one. That is
+  fatal to the wording and not to the principle. The adjudicator's report never
+  reached disk, so nothing here can be checked against it: the criteria, the
+  per-criterion calls and the MIXED verdict are written down in `ROADMAP.md`, in
+  the entry recording this adjudicated call. Find that entry by its heading. Do
+  not cite it by line number - a line number in `ROADMAP.md` decays on the next
+  append.
+- **THE RULING**, and this is the text a loop must actually encode. Halt and ping
+  before: (a) any write, delete, unlink or named-kernel-object acquisition whose
+  target path or namespace is outside this repo root - explicitly the
+  machine-wide slot bucket under `C:\ProgramData` and the `Global\` mutex
+  namespace; (b) any commit or push whose diff touches `ops/loop/slots.py` or
+  `ops/loop/winmutex.py`, or that trips `tests/test_no_sibling_names.py`; (c) any
+  arming, agreement, or behaviour change in another party's tree. Explicitly NOT
+  before an ordinary push that passes both suites and the sibling-name sweep with
+  `RESIN_SKIP_PREPUSH` unset.
+
+**Why the boundary exists at all** - the mechanism, which is the reusable part
+and is measured rather than feared. `ops/loop/slots.py:39` puts `DEFAULT_ROOT` in
+a MACHINE-WIDE bucket under `C:\ProgramData` that two sibling repos hold against
+live, while this repo has no executor loop at all; `reap()` in that same file
+unlinks a stale lock without ever consulting the repo field it logs, so it will
+reclaim a lock a SIBLING owns; `ops/loop/winmutex.py:37-38` are `Global\`
+kernel-namespace mutexes; and `tests/test_loop_concurrency.py:141-142` pin both
+files by SHA256 as byte-identical across three repos, so "hardening" either one
+desynchronises every carrier that has not moved.
+
+**OPEN, not settled - the NO-ANSWER RULE.** Three of the five participants are on
+ORDERED STANDBY and cannot reply, so a bilateral arming agreement is unreachable.
+Neither candidate stated what the loop does when a required counterparty cannot
+answer. The adjudicator's proposed shape is recorded here as UNRULED rather than
+as policy: timeout plus default-deny - park the item, record standby and NOT
+dissent, and continue the unblocked work. The operator has not ruled on this, and
+until they do it stays open.
 
 ## Output constraints
 
@@ -269,6 +344,19 @@ and RESPONDS. Reading the filename list is not reviewing it.
   `--mark` acknowledges, and it is a separate deliberate act. Never mark a
   batch that was listed but not triaged - an inflated watermark is worse than
   none.
+- **The whole inbox is GITIGNORED, and NOTHING IN IT IS GIT-TRACKED.**
+  Measured 2026-09-09: `git check-ignore -v moon_sync_inbox` answers
+  `.gitignore:115:moon_sync_inbox/`, and `git ls-files moon_sync_inbox | wc -l`
+  returns 0. State the MECHANISM rather than an outcome, because the mechanism
+  is what can be checked: the guards that would police such a note derive what
+  they look at from `git ls-files`, so an untracked path is outside their reach
+  by construction. The glyph gate builds its corpus at
+  `tools/precommit_gate.py:398`, the sibling-name sweep builds its corpus at
+  `tests/test_no_sibling_names.py:86`, and the docs pointer guard resolves
+  tracked-ness from the same command at `tests/test_docs_consistency.py:171`. Do
+  not write the universal "no guard reads it" - that is a claim about guards
+  nobody enumerated. Do not assume a note in that directory is a guarded
+  artifact. A claim that must be guarded has to live in a TRACKED file.
 
 ## Session workflow
 
