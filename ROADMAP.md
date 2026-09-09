@@ -11,34 +11,82 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **OPEN, HIGHEST PRIORITY, AND IT IS OLDER THAN THIS SESSION. CI IS RED AND HAS
-  BEEN FOR AT LEAST FOUR CONSECUTIVE PUSHES.** Measured 2026-09-09 with
-  `gh run list`: both workflows FAIL on `dda913a`, on `460bda5`, on `e66babb` and
-  on `9d6db70`. Nothing in this session caused it and nothing in this session
-  fixed it. THE PREVIOUS HAND-OFF DECLARED EVERY GATE GREEN, and that was true of
-  the LOCAL gates only - CI was never looked at, which is exactly how a red
-  remains invisible for four pushes.
+- **THREE STACKED CI DEFECTS FIXED LOCALLY 2026-09-09. NOT CLOSED - the next
+  run is the only thing that can close it.** CI had been red for FIVE
+  consecutive pushes: 0aef4f4, dda913a, 460bda5, e66babb, 9d6db70. All local
+  gates were green throughout, which is exactly how it stayed invisible.
+  Check every session with a `gh run list` call.
 
-  ROOT CAUSE, as far as it is measured. In the `docs-guards` job's step
-  "Run the md-reading guards - the two suites SEPARATELY", pytest reaches
-  `INTERNALERROR: NotImplementedError: cannot instantiate 'WindowsPath' on your
-  system`, raised from `_pytest/reports.py` inside `_format_failed_longrepr`.
-  That is TWO stacked defects and they must not be conflated: FIRST some guard
-  FAILS on Linux - 42 tests pass before it - and SECOND pytest cannot even RENDER
-  that failure, because building the longrepr instantiates a `WindowsPath`, which
-  is impossible off Windows. The second defect HIDES the first: the log never
-  names the failing test.
+  DEFECT ONE, the renderer. pytest builds a phase report while a test's
+  monkeypatch is STILL LIVE. Several arms force os.name to nt to reach a
+  Windows-only branch, and under Python 3.11 pathlib dispatches Path on that
+  flag, so on Linux the report builder's own Path of the cwd raised
+  NotImplementedError and pytest died with INTERNALERROR instead of naming the
+  failing test. Fixed by a makereport wrapper in the repo-root conftest, which
+  holds os.name at its import-time real value while the report is built and
+  puts the test's value back for teardown. Only that one hook is wrapped, and
+  the reasoning for not wrapping the neighbours is in the file.
 
-  NOT YET DETERMINED, and re-derive rather than trusting this: which guard fails,
-  and where the Windows path enters. A repo-wide grep for `WindowsPath` and for
-  `PureWindowsPath` across the test, tool, script and core trees returns NOTHING,
-  so it is not a literal - it arrives through a repr, a pickle, or a parametrize
-  id. Attack the SECOND defect
-  first: make the longrepr renderable, or run that step with `--tb=line` or
-  `-p no:cacheprovider` to get the failing test NAMED. A failure you cannot name
-  cannot be fixed, and this one has been unnameable for four pushes.
+  DEFECT TWO, the test that was failing behind it. The 42 dots in the log are
+  the FOURTH progress line, not the first - three full lines of 72 precede it,
+  so the failing item is the 259th and not the 43rd. That is the oracle arm in
+  `tests/test_hook_interpreter.py`, which constructs a Path inside the forced
+  window. A first reading that put it in the roster module was arithmetic, not
+  measurement, and was refuted the same hour.
 
-  This is a DIFFERENT item from the `git archive` extract red already recorded
+  DEFECT THREE, and it was in no previous hand-off: mypy exits 1 on Linux. Four
+  errors, in `tools/screen_capture.py` and in `tools/first_run_capture.py`.
+  typeshed marks the two ctypes Windows surfaces win32-only, so Linux mypy
+  prunes the platform guard and the binding disappears. The 2026-09-07 fix
+  recorded in the second file converted attr-defined into name-defined rather
+  than closing it. Both now put the import below a platform early-return so
+  mypy prunes the USE as well.
+
+  MEASURED, not reasoned: mypy takes a platform flag. Against a git archive
+  extract of HEAD it reproduces CI's red exactly - the same four errors, the
+  same line numbers, the same 33 files - and the fixed tree passes. Two
+  builders had both filed this as unverifiable locally. It was not.
+
+  ALSO MEASURED: a Python 3.11 interpreter is installed on this box and is
+  reachable through the py launcher. The dispatch is demonstrable locally in
+  mirror polarity, forcing posix on a Windows host. Earlier sessions assumed no
+  3.11 was available.
+
+  THIS IS AN ADJUDICATED CALL AND NOT AN OPERATOR DECISION. It can be
+  overturned by reading this paragraph. The question was how to repair the arms
+  that force os.name. Position A was to skip them off Windows; position B was
+  to make them pathlib-safe and keep them running everywhere. The criteria, in
+  priority order, were truthfulness of the disposition, what the mechanism can
+  still claim, feasibility as MEASURED rather than argued, blast radius, and
+  whether a future regression is loud. RULING: MIXED. The four nt-forcing sites
+  in `tests/test_hook_gate.py` change NOT AT ALL - they patch the subprocess
+  call to a non-zero return or an OSError, so the classifier returns before it
+  builds a Path, and CI corroborates it by passing all 25 of that module's
+  items. The three sites in the interpreter module take position A, because B
+  was measured IMPOSSIBLE there: the test-local oracle helpers construct a Path
+  at four points inside the forced window. The skip reason must LEAD with the
+  Windows-only branch and name pathlib second, because a reason blaming only
+  pathlib is false-implying, and a skip whose stated reason names the wrong
+  cause is worse than a failure. The adjudicator's own strongest objection is
+  recorded and stands: a skip is exactly how this red hid for five pushes. The
+  mitigation is `tests/test_nt_forcing_arms_are_guarded.py`, an AST scan with a
+  seven-site non-vacuity floor in the same assertion as its judgement, so a
+  future bare nt-forcing arm fails loudly.
+
+  STILL OPEN UNDER THIS ITEM. Nothing here is verified on Linux by running it
+  on Linux. The three arms are DERIVED to skip there, not observed skipping.
+  Other modules may fail on Linux for unrelated reasons and would have been
+  hidden behind the INTERNALERROR. Read the next run and re-open on what it
+  says.
+
+  A THIRD REASON A LOCAL GREEN SAYS NOTHING ABOUT CI, and it is new. Every
+  pinned dev tool is OLDER on this box than the version CI installs: pytest
+  9.0.3 against a 9.1.1 pin, mypy 2.1.0 against 2.3.1, ruff 0.15.12 against
+  0.16.6. CI installs the dev requirements on every run. Nothing in the suite
+  grades installed against declared. That is alongside the OS difference and
+  the interpreter difference, 3.14.4 here against 3.11.16 there.
+
+  This is a DIFFERENT item from the git archive extract red already recorded
   below - that one is about a no-git copy, this one is about Linux.
 
 - **DIAGNOSED AND CLOSED THE SAME EVENING, and the answer is not a defect.**

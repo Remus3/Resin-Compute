@@ -1397,6 +1397,31 @@ _ORACLE_GIT_EXE_RELATIVE = frozenset({
 # an ancestor without the marker is rejected, never searched.
 _ORACLE_ANCESTOR_SEARCH = 4
 
+# WHY THE THREE ORACLE-WRAPPER ARMS BELOW SKIP OFF WINDOWS.
+#
+# The order of the two clauses is the point. The PRIMARY reason is that the arm
+# grades a branch production reaches only on Windows, so off Windows it was
+# never exercising real behaviour - it was grading a path nothing takes, with
+# install markers that are measured Git-for-Windows layouts. The pathlib
+# dispatch is the SECOND reason and would be a false-implying reason on its
+# own: it makes the arm ERROR rather than makes the arm meaningful, and a skip
+# whose stated reason names the wrong cause is worse than a failure.
+#
+# The pathlib half, measured: in Python 3.11 `pathlib.Path.__new__` selects
+# `WindowsPath` when `os.name == "nt"` and raises
+# `NotImplementedError: cannot instantiate 'WindowsPath' on your system` on a
+# POSIX host. `_oracle_sh_under_git_install` constructs a bare `Path` at
+# `Path(git_exe).resolve()` and again inside `_find_under`, both INSIDE the
+# forced window, so on the Linux CI runner these three arms exploded rather
+# than failed.
+_ORACLE_WINDOWS_ONLY_SKIP = (
+    "this arm grades a Windows-only branch - _sh() passes search_git_install=None, "
+    "which resolves to os.name == 'nt', and the install markers planted here are "
+    "measured Git-for-Windows layouts - so off Windows it never exercised real "
+    "behaviour, and forcing os.name to 'nt' on a POSIX host would additionally make "
+    "pathlib.Path dispatch to WindowsPath and raise NotImplementedError."
+)
+
 
 def _find_under(root: Path, filename: str, *, max_depth: int = _ORACLE_MAX_DEPTH) -> str | None:
     """Depth-bounded, case-insensitive walk. The oracle's search, not the matcher's."""
@@ -1488,6 +1513,7 @@ def _oracle_sh_under_git_install() -> _ToolPick:
     )
 
 
+@pytest.mark.skipif(os.name != "nt", reason=_ORACLE_WINDOWS_ONLY_SKIP)
 def test_the_oracle_that_grades_the_discovery_is_wider_on_names_and_bounded_on_ancestors(
     monkeypatch, tmp_path: Path,
 ):
@@ -1601,6 +1627,7 @@ def test_the_oracle_that_grades_the_discovery_is_wider_on_names_and_bounded_on_a
     assert _oracle_sh_under_git_install().status == "NONE", "no git is not gradeable"
 
 
+@pytest.mark.skipif(os.name != "nt", reason=_ORACLE_WINDOWS_ONLY_SKIP)
 def test_the_oracle_does_not_wander_into_a_package_beside_the_git_install(
     monkeypatch, tmp_path: Path,
 ):
@@ -1649,6 +1676,7 @@ def test_the_oracle_does_not_wander_into_a_package_beside_the_git_install(
     )
 
 
+@pytest.mark.skipif(os.name != "nt", reason=_ORACLE_WINDOWS_ONLY_SKIP)
 def test_the_oracle_admits_it_cannot_identify_the_install_behind_a_shim(
     monkeypatch, tmp_path: Path,
 ):
