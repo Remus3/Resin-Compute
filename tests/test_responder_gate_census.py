@@ -308,11 +308,32 @@ name-grammar class above.
      fires that path. ACROSS MODULES the previous wording was FALSE. No second
      file is ever opened, so a `# GATE:` tag in any other module is never read,
      never counted and never reported - SILENTLY IGNORED, the exact words that
-     wording denied. The hole is LATENT rather than live: sweeping every
-     tracked `.py` for a whole-line `# GATE:` comment on 2026-09-09 found 18
-     tags, all 18 of them in the responder and 0 anywhere else. That sweep was
-     run by hand and is NOT guarded by an arm here, so it is a measurement with
-     a date on it and not a standing claim.
+     wording denied. The hole is LATENT rather than live, and THAT IS NOW
+     DERIVED RATHER THAN TYPED. The earlier wording here said the sweep found
+     18 tags, all of them in the responder and none anywhere else. The first
+     half still holds; THE SECOND HALF WAS FALSE, and it was false by decay
+     rather than by error - it was true when it was written, and commit 06f8557
+     then shipped `tests/test_responder_delivery_gates.py` carrying a
+     section-banner tag at its line 272, with no instrument watching. What is
+     true, re-derived over the git-tracked `.py` corpus with `tokenize`:
+       - 18 tags in `tools/moon_sync_responder.py`, the number `_FLOOR` pins;
+       - ONE more, `delivery-write-all` in
+         `tests/test_responder_delivery_gates.py`, a banner cross-referencing
+         the responder gate that file's arms exercise. It is documentation, not
+         a gate on a consult site: that module is a test file with no
+         `_run_once`, and nothing here ever opens it;
+       - tag-shaped text in `tests/test_gate_mutation_runner.py` that is NOT a
+         tag at all. It sits inside STRING LITERALS - synthetic fixture sources
+         the runner's own self-test feeds to its matcher - and a comment token
+         is what tells it apart from the two real cases above. A text sweep
+         cannot make that distinction, which is why this one does not use one.
+     That population is no longer a measurement with a date on it. It is
+     guarded by
+     `tests/test_responder_gate_census.py::test_the_gate_tag_population_across_the_tracked_corpus_is_derived_not_asserted`,
+     which enumerates from `git ls-files`, reads `tokenize.COMMENT` tokens, and
+     asserts the whole population by EQUALITY against a structure whose
+     responder half is derived rather than typed - so a tag appearing in any new
+     file reddens it by name and line.
   5. SHAPE. The accepted shapes are exactly what `_is_a_consult_site` returns
      True for: `ast.If` (which covers `elif`), `ast.Try` (which covers
      `try/except/finally`), and an `ast.Assign` into a subscript whose value
@@ -340,6 +361,8 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
+import tokenize
 from pathlib import Path
 
 import pytest
@@ -1823,3 +1846,179 @@ def test_removing_every_tag_reports_every_site_and_bounds_no_truncation():
     assert len(untagged) == len(ordered), untagged
     assert _tags(mutated, "synthetic") == []
     assert _problems(mutated, "synthetic") == [], _problems(mutated, "synthetic")
+
+
+# ---------------------------------------------------------------------------
+# THE CORPUS CENSUS. Every arm above reads ONE file. This block reads the whole
+# git-tracked `.py` corpus, because the cross-module half of the scope
+# paragraph was a HAND-TYPED COUNT NOBODY RE-DERIVED, and it decayed: true on
+# the day it was typed, false three commits later, with no instrument watching.
+# Where the gate tags live is a fact about the tree, so it is DERIVED here
+# rather than asserted in prose with a date on it.
+# ---------------------------------------------------------------------------
+
+
+#: Files OTHER THAN the responder allowed to carry a strict-grammar gate tag,
+#: mapped to the tag NAMES they may carry, in line order.
+#:
+#: Spelled by NAME and not by a count on purpose. A count of one is satisfied by
+#: any one tag, so a second banner replacing the first would slide through.
+#:
+#: The responder's own entry is deliberately NOT here. It is derived from
+#: `_tags` at run time, because a hand-typed responder count is the precise
+#: defect this block exists to retire.
+#: THE ONE ENTRY IS DOCUMENTATION AND NOT A GATE. `tests/test_responder_delivery_gates.py`
+#: opens a section with a banner comment naming the responder gate the arms
+#: below it exercise. It is a cross-reference, not a tag on a consult site: the
+#: file is a test module, it has no `_run_once`, and nothing in this module ever
+#: opens it looking for one. It is allowed because it is real and harmless, and
+#: it is LISTED because an unlisted real tag is indistinguishable from a stray
+#: one - which is exactly how the previous prose claim died.
+_ALLOWED_NON_RESPONDER_TAGS: dict[str, tuple[str, ...]] = {
+    "tests/test_responder_delivery_gates.py": ("delivery-write-all",),
+}
+
+
+def _tracked_python_files() -> list[str]:
+    """Every git-tracked `.py` path, repo-relative with forward slashes.
+
+    ENUMERATED FROM GIT, NOT FROM A DIRECTORY WALK. A walk down `REPO_ROOT`
+    picks up `.claude/worktrees/`, `__pycache__` and untracked scratch, and a
+    census whose corpus contains stale copies of the tree is a measurement of
+    the copies rather than of the tree.
+    """
+    completed = subprocess.run(
+        ["git", "ls-files", "-z", "--", "*.py"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return sorted(path for path in completed.stdout.split("\0") if path)
+
+
+def _comment_gate_tags(path: Path) -> list[tuple[int, str]]:
+    """Strict-grammar gate tags carried by a REAL COMMENT in `path`.
+
+    `tokenize` and not a text sweep. A regex over lines cannot tell a comment
+    from the same characters sitting inside a string literal, and the synthetic
+    fixture sources in `tests/test_gate_mutation_runner.py` hold tag-shaped text
+    inside string literals on purpose. A text sweep either counts those - wrong,
+    they are test DATA describing a tag rather than tags - or gets widened until
+    it stops catching real ones, which is the defeat this tree has already taken
+    three times. A `tokenize.COMMENT` token draws the line, and the tokenizer
+    draws it rather than this module approximating it.
+
+    The whole-line rule from `_tags` is kept: a comment trailing code on the
+    same line is not a tag, and the prefix before the token on its own physical
+    line is what decides.
+    """
+    found: list[tuple[int, str]] = []
+    with open(path, "rb") as handle:
+        for token in tokenize.tokenize(handle.readline):
+            if token.type != tokenize.COMMENT:
+                continue
+            if token.line[: token.start[1]].strip():
+                continue
+            match = _GATE_STRICT.match(token.string)
+            if match is not None:
+                found.append((token.start[0], match.group(1)))
+    return found
+
+
+def test_the_gate_tag_population_across_the_tracked_corpus_is_derived_not_asserted():
+    """WHERE THE GATE TAGS LIVE, DERIVED FROM THE TRACKED CORPUS.
+
+    The scope paragraph in this module's own docstring used to end in a
+    hand-typed cross-module count. Nothing was wrong when it was written and
+    nothing re-derived it afterwards, so when a section banner shipped in
+    another test module the sentence became false in place. This arm is the
+    instrument that sentence never had.
+
+    NOT VACUOUS, and not by asserting only a negative. Three positive floors
+    ride in the same arm as the judgement:
+
+      1. the corpus is non-empty, and every file the expectation names is
+         actually IN it - a sweep over nothing satisfies any negative claim;
+      2. the responder's tag count is non-zero and equals `_FLOOR`, derived
+         from the sweep rather than typed;
+      3. the token-level census of the responder must EQUAL the line-level
+         census `_tags` already computes - two instruments of different kinds
+         agreeing on a non-empty answer, so a tokenizer walk that silently
+         found nothing cannot pass.
+
+    A tokenize failure on any tracked file is a FAILURE and not a skip. A
+    corpus with holes in it supports a claim about the corpus minus the holes,
+    which is not the claim being made.
+    """
+    tracked = _tracked_python_files()
+    assert tracked, "git ls-files returned no .py paths - this sweep saw nothing"
+
+    census: dict[str, list[tuple[int, str]]] = {}
+    unreadable: list[str] = []
+    for relpath in tracked:
+        full = REPO_ROOT / relpath
+        if not full.is_file():
+            unreadable.append(f"{relpath}: tracked by git and not on disk")
+            continue
+        try:
+            hits = _comment_gate_tags(full)
+        except (SyntaxError, tokenize.TokenError, UnicodeDecodeError) as exc:
+            unreadable.append(f"{relpath}: {type(exc).__name__}: {exc}")
+            continue
+        if hits:
+            census[relpath] = hits
+
+    assert unreadable == [], (
+        "the sweep could not tokenize these tracked files, so its result is a "
+        "statement about a corpus with holes in it and not about this tree:\n"
+        + "\n".join("  " + line for line in unreadable)
+    )
+
+    for named in [RELPATH, *sorted(_ALLOWED_NON_RESPONDER_TAGS)]:
+        assert named in tracked, (
+            f"{named} is named by this arm's expectation and is not in the "
+            "tracked corpus, so the expectation is about a file the sweep "
+            "never opened"
+        )
+
+    live = _tags(_LIVE_SOURCE)
+    assert live, "the responder census is empty - the anti-vacuity floor is gone"
+    assert len(live) == _FLOOR, (len(live), _FLOOR)
+    assert census.get(RELPATH) == live, (
+        "the token-level census and the line-level census disagree about the "
+        "responder, so one of the two instruments is not reading what it "
+        f"claims to read:\n  tokens: {census.get(RELPATH)}\n  lines:  {live}"
+    )
+
+    expected: dict[str, tuple[str, ...]] = {RELPATH: tuple(name for _, name in live)}
+    expected.update(_ALLOWED_NON_RESPONDER_TAGS)
+    actual = {
+        relpath: tuple(name for _, name in hits) for relpath, hits in census.items()
+    }
+
+    offenders: list[str] = []
+    for relpath in sorted(set(actual) | set(expected)):
+        if actual.get(relpath, ()) == expected.get(relpath, ()):
+            continue
+        if relpath not in expected:
+            offenders.extend(
+                f"{relpath}:{lineno}: gate tag {name!r} in a file this module "
+                "does not allow to carry one"
+                for lineno, name in census[relpath]
+            )
+            continue
+        sited = ", ".join(
+            f"{name!r} at line {lineno}" for lineno, name in census.get(relpath, [])
+        )
+        offenders.append(
+            f"{relpath}: expected {list(expected[relpath])} and found "
+            + (sited or "nothing")
+        )
+
+    assert actual == expected, (
+        "the gate-tag population across the tracked corpus is not what this "
+        "module says it is. Either the new tag belongs in "
+        "`_ALLOWED_NON_RESPONDER_TAGS` with a reason, or it should not be "
+        "there at all:\n" + "\n".join("  " + line for line in offenders)
+    )
