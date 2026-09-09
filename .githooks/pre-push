@@ -80,9 +80,30 @@ fi
 # self-validating and is mirrored as a standalone unit, so collecting it under
 # a root-wide run is how a sibling project earned an import-file-mismatch
 # incident.
+#
+# WHY -rs, AND IT IS NOT COSMETIC. A GATE THAT CAN SEE A SKIP AND CANNOT SAY
+# WHICH ONE is the defect. Measured: under a REAL `git push` this hook's `tests`
+# run reports 2 skips where the SAME command in an interactive shell reports 1.
+# Naming the second one required pushing to a scratch bare repository under a
+# scratch core.hooksPath, and it is tests/test_hook_interpreter.py:1774 - which
+# is CORRECT to skip there. Git prepends mingw64/libexec/git-core to PATH for
+# its own hooks, so shutil.which("git") resolves to the git.exe under git-core,
+# which is not an install root, and that arm has nothing to measure.
+#
+# GENERALISES, and this is the part worth carrying: THE PRE-PUSH HOOK RUNS WITH
+# A PATH THAT IS NOT YOUR SHELL'S. Any arm keyed on RESOLVING a tool answers a
+# different question here than it does when you run it by hand, so a skip count
+# that differs between the two is the expected shape and not a red flag. Without
+# -rs the operator sees a number and cannot tell a legitimate environment skip
+# from a guard that quietly stopped guarding.
+#
+# pytest.ini already carries -q, which suppresses the per-test skip lines but
+# NOT the -rs short summary. Any -r spec containing s, a or A satisfies this;
+# tests/test_prepush_skip_reporting.py grades the spec and not the literal flag,
+# so -rA is a pass there.
 if TEST_PY="$(resin_pick_python pytest)"; then
-    "$TEST_PY" -m pytest tests || exit 1
-    "$TEST_PY" -m pytest agents/pity_engine || exit 1
+    "$TEST_PY" -m pytest -rs tests || exit 1
+    "$TEST_PY" -m pytest -rs agents/pity_engine || exit 1
 else
     echo "pre-push WARNING: pytest not importable - the suites did NOT run." >&2
     echo "  tried: $(resin_python_candidates)" >&2
