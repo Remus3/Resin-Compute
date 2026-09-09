@@ -17,8 +17,17 @@ defect ADR-006's sibling commit fixed, where two surfaces held one port and the
 older one silently answered everything.
 
 Exit codes, so this can gate a script:
-    0  every check passed, or passed with skips
+    0  every check passed, or passed with skips or notes
     1  at least one check FAILED
+
+FOUR STATUS WORDS, NOT THREE. PASS, FAIL and SKIP are the original three. NOTE
+is a fourth, and it exists because SKIP already means something specific and
+incompatible: a SKIP is a DECLINED-TO-MEASURE disposition, printed when the
+probe could not run at all - no Electron binary, nothing listening, no user
+profile. A row that DID measure, got an answer, and simply has no business
+changing an exit code is not a skip, and filing it as one would inflate the
+skipped count with measurements that succeeded. `check_dev_pin_drift` is the
+first such row. Neither SKIP nor NOTE can make this script exit 1.
 """
 from __future__ import annotations
 
@@ -35,6 +44,9 @@ if str(REPO_ROOT) not in sys.path:
 OK = "PASS"
 FAIL = "FAIL"
 SKIP = "SKIP"
+#: Measured, reported, and deliberately not graded. See the module docstring for
+#: why this is not spelled SKIP.
+NOTE = "NOTE"
 
 #: Panels the dashboard is expected to declare. A panel silently disappearing is
 #: a regression an operator would not otherwise notice, because a missing card
@@ -61,7 +73,16 @@ class Report:
         failed = sum(1 for status, _, _ in self.rows if status == FAIL)
         passed = sum(1 for status, _, _ in self.rows if status == OK)
         skipped = sum(1 for status, _, _ in self.rows if status == SKIP)
-        print(f"\n  {passed} passed, {failed} failed, {skipped} skipped")
+        # THE FOUR COUNTS PARTITION THE ROWS BY CONSTRUCTION. `noted` is the
+        # remainder rather than a fourth `sum(... == NOTE)` so that a status
+        # word added later cannot silently vanish from the tally, which is
+        # exactly how a tally starts lying about what it counted.
+        noted = len(self.rows) - passed - failed - skipped
+        # Still not a pytest terminal summary: counts with no `in <float>s`.
+        # `tools/stop_claim_gate.py` refuses this line on that basis, and
+        # `tests/test_stop_claim_gate.py` pins the refusal. Adding a duration
+        # here would launder a number no pytest run produced.
+        print(f"\n  {passed} passed, {failed} failed, {skipped} skipped, {noted} noted")
         return 1 if failed else 0
 
 
@@ -186,6 +207,105 @@ def check_surface(report: Report) -> None:
         server.stop()
 
 
+def _version_tuple(text: str) -> tuple[int, ...] | None:
+    """`"0.16.6"` to `(0, 16, 6)`, or None when any segment is not a plain integer.
+
+    NO THIRD-PARTY IMPORT. `packaging` is present on this box only because
+    pytest happens to depend on it, and this file is a SCRIPT an operator runs
+    outside pytest. Leaning on it would work here and vanish elsewhere.
+
+    The cost of that choice is stated rather than hidden: this understands
+    dotted integers and nothing else, so `1.0.0rc1`, `2.3.1+local` and a git sha
+    all return None and are reported as not comparable. That is the right
+    failure - a wrong ordering asserted confidently is worse than declining.
+    """
+    parts: list[int] = []
+    for chunk in text.strip().split("."):
+        if not chunk.isdigit():
+            return None
+        parts.append(int(chunk))
+    return tuple(parts) if parts else None
+
+
+def _compare_versions(installed: str, pinned: str) -> int | None:
+    """-1 installed is older, 0 equal, 1 installed is newer, None not comparable.
+
+    Zero-padded to a common length so `1.2` and `1.2.0` compare equal rather
+    than the shorter one sorting first.
+    """
+    left = _version_tuple(installed)
+    right = _version_tuple(pinned)
+    if left is None or right is None:
+        return None
+    width = max(len(left), len(right))
+    left += (0,) * (width - len(left))
+    right += (0,) * (width - len(right))
+    return (left > right) - (left < right)
+
+
+def check_dev_pin_drift(report: Report) -> None:
+    """Report - never enforce - the gap between what is installed and what is pinned.
+
+    WHY THIS IS A REPORTER AND NOT A GUARD. CI pip-installs requirements-dev.txt
+    on a clean ubuntu-latest runner before it runs a single gate, so the runner
+    is AT the pin by construction whatever the pin says. An equality assertion
+    would therefore be green on the lane that decides whether a commit ships and
+    red on every developer box that has not just reinstalled - backwards from
+    useful, and a guard that only ever reddens locally is a guard the operator
+    turns off. `tests/test_dev_pin_declaration.py` carries the half of this that
+    IS host-independent: that the gates' tools are pinned at all.
+
+    WHY THE DIRECTION IS PRINTED AND NOT JUST "differs". The direction is the
+    whole actionable content. If the local tool is OLDER than the pin, CI runs a
+    NEWER one whose new rules this box never applied, so a local green is
+    OPTIMISTIC - it can still go red on the runner. If the local tool is NEWER,
+    the local run is the stricter of the two and a local green is PESSIMISTIC.
+    A bare "differs" leaves the reader unable to tell which way to worry.
+    """
+    import re
+    from importlib.metadata import PackageNotFoundError, version
+
+    pin_file = REPO_ROOT / "requirements-dev.txt"
+    try:
+        text = pin_file.read_text(encoding="utf-8")
+    except OSError as exc:
+        report.add(NOTE, "dev pin drift", f"requirements-dev.txt unreadable ({exc.__class__.__name__})")
+        return
+
+    pinned_rows = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s;]+)$", line)
+        if match:
+            pinned_rows.append((match.group(1), match.group(2)))
+
+    if not pinned_rows:
+        report.add(NOTE, "dev pin drift", "requirements-dev.txt declares no == pins, so there is nothing to compare")
+        return
+
+    for name, pinned in pinned_rows:
+        try:
+            installed = version(name)
+        except PackageNotFoundError:
+            report.add(NOTE, f"dev pin {name}", f"pinned {pinned}, not installed here - CI installs it on the runner")
+            continue
+        except Exception as exc:  # noqa: BLE001 - a friendly row, never a raw error string
+            report.add(NOTE, f"dev pin {name}", f"pinned {pinned}, installed version unreadable ({exc.__class__.__name__})")
+            continue
+        order = _compare_versions(installed, pinned)
+        if order is None:
+            direction = "not comparable - a version segment is not a plain integer"
+        elif order == 0:
+            direction = "AT THE PIN"
+        elif order < 0:
+            direction = "OLDER here than CI - a local green is OPTIMISTIC"
+        else:
+            direction = "NEWER here than CI - a local green is PESSIMISTIC"
+        report.add(NOTE, f"dev pin {name}", f"{installed} installed / {pinned} pinned - {direction}")
+
+
 def check_snapshot(report: Report) -> None:
     """Is there a cold-start source, and how old is it?"""
     from core.config import load_config
@@ -272,6 +392,7 @@ def main() -> int:
         check_ports,
         check_shell_contract,
         check_surface,
+        check_dev_pin_drift,
         check_snapshot,
         check_runtime,
         check_live_dashboard,
