@@ -86,28 +86,163 @@ name-grammar class above.
      `test_the_two_rules_are_re_derived_here_and_the_tighter_one_loses_nothing`.
      That every real SITE carries a tag is `not tight - tagged`, asserted by
      `test_every_consult_site_inside_run_once_carries_a_tag`, whose message
-     names each untagged line and prints the statement itself rather than a
-     count. Together they make the tagged set and the accepted-site set
-     IDENTICAL.
+     names each untagged line and prints the offending statements themselves
+     ALONGSIDE three counts, not instead of them.
+     THOSE TWO DIRECTIONS MAKE THE TWO SETS IDENTICAL AS SETS OF LINE NUMBERS,
+     AND NO MORE THAN THAT. `_tags` yields one entry per tag LINE and
+     `_consult_site_spots` yields a SET of site lines, so TWO accepted sites
+     written on ONE line share a single tag and both directions stay green.
+     Measured 2026-09-09 by inserting a hand-typed `# GATE:oneliner` above
+     `if agreed: result['z'] = agreed or why` in a copy of the responder: 20
+     site nodes, 19 distinct site lines, 19 tags, nothing untagged and nothing
+     reported. Both halves of that line are shapes item 5 lists as ACCEPTED, so
+     the open-shapes paragraph below does not cover it. `ruff` flags E701 there,
+     and that is a DIFFERENT TOOL whose coverage this item may not claim as its
+     own. So a FOURTH conjunct in the coverage arm requires the accepted-site
+     NODES to sit on DISTINCT LINES - 18 nodes on 18 distinct lines here, so it
+     passes today - and it is that requirement PLUS the two directions that
+     gives identity per SITE rather than per line. FOURTH, not third: the arm's
+     single assertion is a four-term `and`, counted by AST on 2026-09-09 and
+     stated the same way in the arm's own docstring; the earlier "third" here
+     was stale by one.
+     `test_two_accepted_sites_on_one_line_defeat_line_identity` drives the
+     conjunct's own predicate to False, with a control pinning it True on the
+     live file.
+     THE WELD IS GRADED FOR WHICH CONJUNCT FIRED, and until 2026-09-09 it was
+     not. `test_the_coverage_arm_itself_goes_red_on_two_sites_sharing_one_line`
+     proves the arm reddens on a one-liner and CANNOT prove the distinct-line
+     conjunct is what reddened it - measured, substituting the coincidental
+     proxy `len(sites) == len(_TAG_LINES)`, true today at 18/18 and not the
+     distinct-line property, left the whole file GREEN at 69 passed. No payload
+     on that arm can fix it, because the proxy reddens on that same source too;
+     what fixes it is a DIFFERENT SOURCE.
+     `test_the_coverage_arm_reddens_on_the_collision_and_not_on_a_count_identity`
+     is that source: a second accepted site appended onto an EXISTING tagged
+     site's line with a `;`, giving 19 site NODES on 18 distinct LINES against
+     18 tags, so the proxy is TRUE, the other two conjuncts are TRUE, and only
+     the distinct-line conjunct is False. The proxy leaves it GREEN and the real
+     conjunct reddens it. Measured 2026-09-09: with the proxy substituted that
+     arm is the ONLY failure in the file.
      WHAT IS NOW GUARDED: a new gate added to `_run_once` in a shape
      `_is_a_consult_site` accepts, and never tagged, turns that arm RED and is
      reported by line. The detector is PROVED to fire rather than assumed to:
      `test_removing_one_tag_reports_exactly_that_site_as_untagged` runs it
      against the live source with exactly one tag line deleted, once for every
-     tag in the file, and requires that site back alone and by line number,
-     with `test_removing_no_tag_at_all_reports_nothing` as the control that
-     stops an unconditional reporter from scoring full marks. Because the two
+     tag in the file, and requires that site back alone and BY LINE NUMBER.
+     BY LINE NUMBER AND NOT BY STATEMENT TEXT, corrected 2026-09-09: those 18
+     cases assert only
+     `startswith(f"synthetic:{lineno}: consult site inside ")`, and replacing
+     the reported statement everywhere with the literal `'advF-garbage'` leaves
+     all 18 of them PASSING. Three OTHER arms redden on that mutant and they are
+     what pin the statement text -
+     `test_the_report_names_the_statement_and_not_only_its_line`,
+     `test_a_new_untagged_gate_added_to_run_once_is_reported_by_line` and
+     `test_the_coverage_arm_itself_goes_red_on_a_newly_added_untagged_gate`.
+     MULTIPLICITY IS GRADED, and until 2026-09-09 it was graded by nothing.
+     Every arm in that block pins `len(untagged) == 1`, so a helper returning
+     `reported[:1]` - a census naming only the FIRST forgotten gate - passed the
+     entire file at 69 passed.
+     `test_removing_two_tags_reports_both_sites_and_not_only_the_first`
+     deletes the first and the last tag in one pass and requires BOTH sites back
+     by line and by statement; with `reported[:1]` substituted it is the ONLY
+     failure in the file.
+     WHAT KILLS AN UNCONDITIONAL REPORTER, STATED OVER THE WHOLE FILE, because
+     the two earlier readings of this sentence were each measured over part of
+     it and each reversed the other. Substituting a detector that reports EVERY
+     accepted site and running THE WHOLE FILE on 2026-09-09 turns 27 of the 71
+     cases RED, across 10 arms. The `len(untagged) == 1` conjunct in
+     `test_removing_one_tag_reports_exactly_that_site_as_untagged` scores 0 of
+     18 against it, which is the original claim's half. AND SO DOES THE CONTROL:
+     `test_removing_no_tag_at_all_reports_nothing` goes red too, because its own
+     `_untagged_consult_sites(_LIVE_SOURCE, RELPATH) == []` comes back with 18
+     entries. So the answer to "is it the block or the control" is BOTH, and the
+     other eight red arms are the coverage arm itself,
+     `test_removing_two_tags_reports_both_sites_and_not_only_the_first`,
+     `test_two_accepted_sites_on_one_line_defeat_line_identity`,
+     `test_the_report_names_the_statement_and_not_only_its_line`,
+     `test_a_new_untagged_gate_added_to_run_once_is_reported_by_line` and all
+     three coverage-arm wiring arms. The earlier wording said the control is NOT
+     what stops it; that was measured over the parametrized block alone and is
+     false of the file.
+     THE ARM'S OWN WIRING IS GRADED, NOT ONLY THE HELPER IT CALLS. Measured
+     2026-09-09: deleting the judgement conjunct from BOTH the coverage arm and
+     that control left the suite green, because every refutation here drove
+     `_untagged_consult_sites` directly and none ever drove the arm.
+     `test_the_coverage_arm_itself_goes_red_on_a_newly_added_untagged_gate`
+     now points the arm at a synthetic responder carrying one hand-typed
+     untagged gate and requires the ARM to raise, with the unmutated copy as its
+     control. Because the two
      sets are identical, the old reading of this item - retire one gate, tag an
      unrelated statement elsewhere, pass - no longer holds: the stray tag is
      reported by `_problems` and the vanished site is reported here.
      WHAT IS STILL OPEN: the coverage arm sees only the shapes item 5 lists. A
-     consult site written as a `while`, as a `match`, or one whose chosen value
-     lands in a plain local name rather than in a subscript is not a site to
-     `_is_a_consult_site`, so leaving it untagged stays INVISIBLE exactly as
-     before. The two directions are equal ON THE ACCEPTED SHAPES and say
-     nothing whatever outside them. `_FLOOR` is still a count and not a
-     per-site identity; it is welded into the coverage arm's own assertion so
-     that arm cannot pass by measuring an empty set, and nothing more.
+     consult site written as a `while`, as a `match`, one whose chosen value
+     lands in a plain local name rather than in a subscript, one carried by a
+     `return` expression, or one assigned to an ATTRIBUTE target is not a site
+     to `_is_a_consult_site`, so leaving it untagged stays INVISIBLE exactly as
+     before.
+     ARGUMENT POSITION IS NOT ON THAT LIST, and the earlier wording that put it
+     there had the discriminator wrong. `_writes_a_chosen_value_into_the_result`
+     walks the WHOLE of `node.value`, so a choosing expression nested in a call
+     ARGUMENT is seen; what decides is the ASSIGNMENT TARGET. Measured
+     2026-09-09 against `_is_a_consult_site` with four hand-typed `_run_once`
+     statements:
+         return result if written else result                          SILENT
+         _hold(DEFAULT_STAGING, note.name or "x", "", [], started)     SILENT
+         bounds.probe = written or True                                SILENT
+         result["advF"] = _hold(DEFAULT_STAGING, note.name or "x",
+                                "", [], started)                       CAUGHT
+     The fourth differs from the second ONLY in being assigned into a subscript,
+     and it is the one that is seen. So the open shapes are the three targets
+     above - no target at all, a plain local name, an attribute - plus `while`,
+     `match` and `return`; a choosing expression buried at any depth inside a
+     subscript assignment's value is NOT open. The two directions are equal ON
+     THE ACCEPTED SHAPES and say nothing whatever outside them.
+     THE OMITTED SHAPES HAVE ZERO CURRENT INSTANCES, measured by hand over
+     `_run_once` - lines 1622 to 1876 - on 2026-09-09: 12 `ast.Return` nodes, of
+     which 0 carry a choosing expression; 0 calls taking a choosing expression
+     as an argument; and 0 assignments to an attribute target.
+     TWO DIFFERENT QUANTITIES WERE BOTH CALLED FOUR HERE, and only one of them
+     is. Re-measured 2026-09-09 by walking `_run_once`:
+       - choosing expressions sitting OUTSIDE the subtree of any accepted site:
+         THREE, at 1643, 1644 and 1645, the dependency-injection defaults
+         `inbox = inbox or DEFAULT_INBOX`, `bounds = bounds or Bounds()` and
+         `roots = load_roots() if roots is None else roots`.
+       - `_FALSE_SPOTS`, the line-set difference `bare - tight` that the
+         four-false-sites paragraph at the top of this module is about: FOUR, at
+         1643, 1644, 1645 and 1737.
+     1737 belongs to the second list and not the first.
+     `draft = (spawn or _spawn_headless)(prompt, bounds)` sits INSIDE the `try:`
+     at 1736, which IS an accepted site and carries `# GATE:spawn-failure` at
+     1735; it is a false spot because the bare rule saw its `BoolOp` as a tag
+     site of its own, not because it is an orphan. That sweep was run by hand
+     and is NOT guarded by an arm here, so it is a measurement with a date on it
+     and not a standing claim.
+     `_FLOOR` is still a count and not a per-site identity, and it is asserted
+     in MANY arms rather than one. NO NUMBER IS PINNED HERE ON PURPOSE. The
+     previous two wordings said "one" and then "five"; an AST count of the
+     `ast.Assert` nodes whose test names `_FLOOR` gave SIX at the time "five"
+     was written and gives SEVEN now, so the figure is a fact about an edit
+     rather than about the design, and nothing in this tree guards it. What the
+     occurrences are FOR is the part worth stating, and there are two kinds.
+     WELDED: in `test_every_gate_tag_marks_an_accepted_shape_inside_run_once`,
+     in the coverage arm and in `test_gate_tag_names_are_unique` it shares one
+     assertion with that arm's own judgement, because a floor in a separate arm
+     leaves the primary arm vacuous. STANDALONE: elsewhere it pins the SCALE a
+     block runs at - that `_TAG_LINES` is long enough to parametrize 18 cases,
+     that the re-derivation block is comparing real sets, that a synthetic
+     mutant is still responder-sized - and there a separate line is right,
+     because the scale is not the arm's judgement. Inside the coverage arm
+     the two floor conjuncts buy two DIFFERENT things and neither of them is the
+     judgement. `len(sites) >= _FLOOR` catches a gutted `_is_a_consult_site`,
+     which finds zero sites and so makes the set difference empty for the wrong
+     reason - measured 2026-09-09, forcing that predicate to False gives 0 sites
+     and 0 untagged reports. `len(_TAG_LINES) >= _FLOOR` catches an empty
+     `_TAG_LINES`, which would parametrize the 18-case refutation below over
+     nothing and report `1 skipped` at exit 0 rather than a failure. Neither
+     conjunct is what reddens an untagged site: stripping every tag from the
+     responder gives 18 untagged reports and turns the FIRST conjunct alone
+     False while both floors stay True.
   3. WHETHER A GATE IS EXERCISED. It says nothing about any test driving a
      gate, and nothing about whether a mutation at a gate's own call site turns
      a suite red. No mutation runner exists in this tree; this census is the
@@ -315,7 +450,11 @@ def _untagged_consult_sites(
 
     Each report names the file, the line and the SOURCE LINE ITSELF, because a
     bare count mismatch tells an author which arm went red and not which
-    statement they forgot.
+    statement they forgot. THAT SENTENCE IS AN ASSERTED CLAIM AND NOT PROSE:
+    until 2026-09-09 every arm pinned only the report's `file:line:` prefix, so
+    replacing the statement with the literal `"advA-garbage"` left the suite
+    green. `test_the_report_names_the_statement_and_not_only_its_line` now pins
+    the whole message against a hand-typed expectation.
     """
     lines = source.split("\n")
     tree = ast.parse(source)
@@ -334,6 +473,54 @@ def _untagged_consult_sites(
             f"`# GATE:` tag on the line above it: {statement!r}"
         )
     return reported
+
+
+def _consult_site_node_lines(
+    source: str, function_name: str = TARGET_FUNCTION
+) -> list[int]:
+    """Every accepted site's line WITH REPEATS, unlike `_consult_site_spots`.
+
+    This exists because the coverage comparison is made between two sets of
+    LINE NUMBERS and not between sites and tags: `_tags` yields one entry per
+    tag LINE, `_consult_site_spots` yields a SET of site lines, and a tag is
+    matched to a site by `lineno + 1`. Two accepted sites written on ONE line
+    therefore share a single tag and both directions stay green. This list is
+    what `_sites_sit_on_distinct_lines` is derived from.
+    """
+    tree = ast.parse(source)
+    return [
+        node.lineno
+        for node in ast.walk(_function(tree, function_name))
+        if _is_a_consult_site(node)
+    ]
+
+
+def _colliding_site_lines(
+    source: str, function_name: str = TARGET_FUNCTION
+) -> list[int]:
+    """Every line carrying MORE THAN ONE accepted site node, sorted.
+
+    The evidence behind `_sites_sit_on_distinct_lines`, split out so the
+    coverage arm's failure message can NAME the colliding line rather than only
+    say that a collision exists. Empty on a source with one site per line, so a
+    message built from it says nothing when there is nothing to say.
+    """
+    lines = _consult_site_node_lines(source, function_name)
+    return sorted({lineno for lineno in lines if lines.count(lineno) > 1})
+
+
+def _sites_sit_on_distinct_lines(
+    source: str, function_name: str = TARGET_FUNCTION
+) -> bool:
+    """One accepted site per line - what turns LINE identity into SITE identity.
+
+    Welded into the coverage arm's single assertion rather than asserted in an
+    arm of its own, for the same reason the floor is: a separate arm leaves the
+    primary one able to pass while the property it depends on is false. It does
+    NOT widen or narrow `_is_a_consult_site`; it sits alongside the predicate
+    and says nothing about what the predicate accepts.
+    """
+    return not _colliding_site_lines(source, function_name)
 
 
 def _duplicates(names: list[str]) -> list[str]:
@@ -367,31 +554,47 @@ def test_every_consult_site_inside_run_once_carries_a_tag():
     """COVERAGE - the direction ceiling item 2 recorded as open.
 
     `test_every_gate_tag_marks_an_accepted_shape_inside_run_once` asserts every
-    TAG sits on a real site. This asserts every real SITE carries a tag, and the
-    two together make the tagged set and the accepted-site set IDENTICAL. A new
-    gate added to `_run_once` in a shape `_is_a_consult_site` accepts and never
-    tagged goes red here, named by line.
+    TAG sits on a real site. This asserts every real SITE carries a tag. Those
+    two directions make the two sets identical AS SETS OF LINE NUMBERS; the
+    FOURTH conjunct here is what makes that per-SITE identity, by requiring the
+    accepted-site nodes to sit on distinct lines. Without it, two accepted sites
+    on one line share a tag and both directions stay green - measured, and
+    driven by `test_two_accepted_sites_on_one_line_defeat_line_identity`.
 
-    THE FLOOR IS WELDED INTO THE SAME ASSERTION, never a separate arm, because
-    a set difference against an empty site set is empty for the wrong reason: a
-    rule that found NO sites would satisfy the judgement half perfectly. The
-    second conjunct pins the site count and the third pins the number of cases
-    `test_removing_one_tag_reports_exactly_that_site_as_untagged` generates, so
-    neither this arm nor that block can pass by measuring nothing.
+    FOUR CONJUNCTS, ONE ASSERTION, because a property asserted in a separate arm
+    leaves this one able to pass while what it rests on is false. The first is
+    the judgement. The second pins the site count, so a gutted
+    `_is_a_consult_site` that finds NO sites cannot satisfy the judgement by
+    measuring an empty difference. The third pins the number of cases
+    `test_removing_one_tag_reports_exactly_that_site_as_untagged` generates,
+    because an empty `parametrize` list is `1 skipped` at exit 0 and not a
+    failure. The fourth is the distinct-line requirement.
     """
     source = RESPONDER.read_text(encoding="ascii")
     untagged = _untagged_consult_sites(source, RELPATH)
     sites = _consult_site_spots(source)
+    site_lines = _consult_site_node_lines(source)
+    collisions = _colliding_site_lines(source)
 
-    assert not untagged and len(sites) >= _FLOOR and len(_TAG_LINES) >= _FLOOR, (
+    assert (
+        not untagged
+        and len(sites) >= _FLOOR
+        and len(_TAG_LINES) >= _FLOOR
+        and _sites_sit_on_distinct_lines(source)
+    ), (
         f"gate census failed on {RELPATH}. Untagged consult sites: "
         f"{untagged or 'none'}. Accepted sites {len(sites)} and tag lines "
         f"{len(_TAG_LINES)} against a floor of {_FLOOR} (_FLOOR in "
-        "tests/test_responder_gate_census.py). Every statement "
+        f"tests/test_responder_gate_census.py). Colliding lines: "
+        f"{collisions or 'none'}. Accepted site NODES "
+        f"{len(site_lines)} on {len(set(site_lines))} distinct lines - these "
+        "must be equal, because a tag is matched to a site by line and two "
+        "accepted sites sharing one line would share one tag. Every statement "
         f"`_is_a_consult_site` accepts inside {TARGET_FUNCTION}() must carry a "
-        "`# GATE:<name>` comment on its own line immediately above it. If a gate "
-        "was DELIBERATELY retired, _FLOOR is expected to be updated in the same "
-        "commit that removes the tag."
+        "`# GATE:<name>` comment on its own line immediately above it, and must "
+        "be the only accepted site on its line. If a gate was DELIBERATELY "
+        "retired, _FLOOR is expected to be updated in the same commit that "
+        "removes the tag."
     )
 
 
@@ -701,6 +904,23 @@ def _tag_line_removed(source: str, lineno: int) -> str:
     return "\n".join(lines[: lineno - 1] + lines[lineno:])
 
 
+def _tag_lines_removed(source: str, linenos: list[int]) -> str:
+    """`source` with EVERY line in `linenos` deleted, in one pass.
+
+    The multi-line sibling of `_tag_line_removed`, and it exists because
+    MULTIPLICITY was graded by nothing: every arm above pins `len(...) == 1`,
+    so a census reporting only the FIRST forgotten gate passed the whole file.
+    Deleting in one pass rather than by repeated single deletions keeps the
+    arithmetic stated in the arm's own expectation - a surviving line's new
+    number is its old number minus the count of deleted lines above it.
+    """
+    doomed = set(linenos)
+    return "\n".join(
+        line for number, line in enumerate(source.split("\n"), start=1)
+        if number not in doomed
+    )
+
+
 #: The line of every `# GATE:` tag in the live responder, derived at import.
 #: Parametrizes the refutation below so a rule that happens to see only some
 #: tagged shapes is caught by the tags it cannot see.
@@ -730,11 +950,80 @@ def test_removing_one_tag_reports_exactly_that_site_as_untagged(lineno):
     assert _problems(mutated, "synthetic") == [], _problems(mutated, "synthetic")
 
 
+def test_removing_two_tags_reports_both_sites_and_not_only_the_first():
+    """MULTIPLICITY, which until 2026-09-09 was graded by NOTHING here.
+
+    Every arm above pins `len(untagged) == 1`, so a detector that stops after
+    the first forgotten gate satisfies all of them: measured 2026-09-09 by
+    changing `_untagged_consult_sites` to `return reported[:1]`, the whole file
+    stayed GREEN at 69 passed. Yet "names WHICH statement you forgot" is the
+    property that helper's own docstring makes central, and an author who
+    forgets two gates in one edit is told about one of them.
+
+    Two tags are deleted in ONE pass, the first and the last in the file, so
+    the two reports cannot be neighbours and a detector that merely widened its
+    window by one cannot satisfy this either. The expected line numbers are
+    ARITHMETIC stated here rather than read back out of the detector: the lower
+    site loses the one deleted line above it, the upper site loses two.
+    """
+    lower_tag = _line_of_tag_named("counterparty-agreement")
+    upper_tag = _line_of_tag_named("delivery-write-all")
+    assert lower_tag < upper_tag, (lower_tag, upper_tag)
+
+    mutated = _tag_lines_removed(_LIVE_SOURCE, [lower_tag, upper_tag])
+    untagged = _untagged_consult_sites(mutated, "synthetic")
+
+    assert len(untagged) == 2, untagged
+    assert untagged[0] == (
+        f"synthetic:{lower_tag}: consult site inside _run_once() carries no "
+        "`# GATE:` tag on the line above it: "
+        "'if bounds.armed and not agreed:'"
+    ), untagged
+    assert untagged[1] == (
+        f"synthetic:{upper_tag - 1}: consult site inside _run_once() carries no "
+        "`# GATE:` tag on the line above it: "
+        "'result[\"delivered\"] = all(ok for ok, _ in written) and bool(written)'"
+    ), untagged
+    assert _problems(mutated, "synthetic") == [], _problems(mutated, "synthetic")
+
+
 def test_removing_no_tag_at_all_reports_nothing():
-    """THE CONTROL for the block above. Without it a detector that reported a
-    site unconditionally would score a perfect 18 out of 18 on the refutation,
-    and this arm is also the live-file coverage claim restated on the exact
-    source the mutations are cut from."""
+    """THE BASELINE GUARD on `_LIVE_SOURCE`, which nothing else asserts.
+
+    THIS DOCSTRING HAS NOW BEEN WRONG TWICE IN OPPOSITE DIRECTIONS, so the
+    history is written down rather than overwritten a third time. It first said
+    an unconditional reporter would score 18 of 18 without this arm; a
+    refutation that scored only the parametrized block falsified that, and the
+    replacement said the unconditional reporter is killed "not by anything
+    here". Running THE WHOLE FILE on 2026-09-09 falsified the replacement:
+    substituting a detector that reports EVERY accepted site turns 27 of the 71
+    cases red across 10 arms, and THIS ARM IS ONE OF THEM, because
+    `_untagged_consult_sites(_LIVE_SOURCE, RELPATH)` then comes back with 18
+    entries instead of none. Both halves are true at once - the
+    `len(untagged) == 1` conjunct in the parametrized block scores that reporter
+    0 of 18, AND this arm goes red as well.
+
+    IT DOES NOT BUY NOTHING, which is what the previous wording claimed. Its
+    SUBJECT is different from the coverage arm's. The coverage arm reads
+    `RESPONDER.read_text()` at call time, and three arms in this file
+    MONKEYPATCH `RESPONDER` at a synthetic file. This arm grades `_LIVE_SOURCE`,
+    the import-time snapshot that `_TAG_LINES`, `_FALSE_SPOTS` and all 18
+    mutation cases are cut from. Its own first assertion is the ONLY call to
+    `_untagged_consult_sites` on `_LIVE_SOURCE` in this file, so no other arm
+    asserts that the snapshot itself is covered; every other arm asserts about a
+    MUTATED derivative of it, or about `_problems`, or about line distinctness.
+
+    WHAT IS NOT CLAIMED, because the coverage arm does read one thing cut from
+    the snapshot: its third conjunct is `len(_TAG_LINES) >= _FLOOR`, and
+    `_TAG_LINES` comes from `_LIVE_SOURCE`. So this arm is not the sole arm that
+    can NOTICE a dirty snapshot. Measured 2026-09-09 by making `_LIVE_SOURCE`
+    diverge from the file on disk by one deleted tag line while `RESPONDER`
+    still pointed at the real file: 26 cases go red across 10 arms, this one
+    among them. Its job is DIAGNOSTIC rather than exclusive - it is the only one
+    whose failure names the baseline rather than its own mutation. A claim that
+    it is the SOLE detector of anything would be the third reversal of this
+    docstring and is not made.
+    """
     assert _untagged_consult_sites(_LIVE_SOURCE, RELPATH) == []
     assert len(_TAG_LINES) >= _FLOOR, _TAG_LINES
 
@@ -808,3 +1097,327 @@ def test_the_choosing_sites_that_do_bind_the_cycle_are_still_accepted():
         f"rejects every choosing expression: {via_choice}"
     )
     assert _problems(_LIVE_SOURCE, RELPATH) == []
+
+
+# ---------------------------------------------------------------------------
+# LINE IDENTITY IS NOT SITE IDENTITY. The two directions of the coverage
+# comparison are made between sets of LINE NUMBERS, so one tag can cover two
+# accepted sites that share a line and both directions stay green. The source
+# below is HAND-TYPED rather than generated from the rule it refutes.
+# ---------------------------------------------------------------------------
+
+
+_SYNTHETIC_TWO_SITES_ON_ONE_LINE = (
+    "def _run_once():\n"
+    "    result = {}\n"
+    "    agreed = True\n"
+    "    why = None\n"
+    f"    {_TAG}oneliner\n"
+    "    if agreed: result['z'] = agreed or why\n"
+    "    return result\n"
+)
+
+
+def test_two_accepted_sites_on_one_line_defeat_line_identity():
+    """THE REFUTATION that drives the coverage arm's distinct-line conjunct.
+
+    The `if` and the subscript write on that one line are BOTH shapes ceiling
+    item 5 lists as ACCEPTED, so this is not an instance of the open-shapes
+    paragraph - it is a hole inside the shapes the census does see. Two nodes,
+    one line, one tag: the tag half and the site half agree and the census
+    reports nothing, which is why `_sites_sit_on_distinct_lines` is asserted
+    rather than assumed. `ruff` flags E701 on that line, and delegating a claim
+    of this module's to a different tool is not something ceiling item 2 may do.
+    """
+    source = _SYNTHETIC_TWO_SITES_ON_ONE_LINE
+
+    assert _untagged_consult_sites(source, "synthetic") == []
+    assert _problems(source, "synthetic") == []
+    assert len(_consult_site_node_lines(source)) == 2, _consult_site_node_lines(source)
+    assert len(_consult_site_spots(source)) == 1, _consult_site_spots(source)
+    assert len(_tags(source, "synthetic")) == 1
+    assert _sites_sit_on_distinct_lines(source) is False
+
+
+def test_one_accepted_site_per_line_is_true_on_the_live_responder():
+    """THE CONTROL. Without it a predicate returning False unconditionally
+    would score a perfect one out of one on the refutation above."""
+    assert _sites_sit_on_distinct_lines(_LIVE_SOURCE) is True
+    assert len(_consult_site_node_lines(_LIVE_SOURCE)) == len(
+        _consult_site_spots(_LIVE_SOURCE)
+    )
+    assert len(_consult_site_node_lines(_LIVE_SOURCE)) >= _FLOOR
+
+
+# ---------------------------------------------------------------------------
+# THE REPORT'S TEXT, AND THE ARM THAT CONSUMES IT. Everything above pins the
+# `file:line:` prefix of a report and nothing about what it says, and every
+# refutation above calls a helper rather than an arm. Both gaps are measured,
+# and both are closed here.
+# ---------------------------------------------------------------------------
+
+
+def _line_of_tag_named(name: str) -> int:
+    """The live line of the one tag with this name.
+
+    The arms below name a GATE rather than a line number, because a hardcoded
+    line rots the moment the responder is edited while a gate name does not.
+    """
+    found = [lineno for lineno, tag in _tags(_LIVE_SOURCE) if tag == name]
+    assert len(found) == 1, f"expected exactly one GATE:{name} tag, found {found}"
+    return found[0]
+
+
+def test_the_report_names_the_statement_and_not_only_its_line():
+    """The reported STATEMENT TEXT, asserted rather than described.
+
+    Measured 2026-09-09: replacing the statement in `_untagged_consult_sites`'s
+    message with the literal `"advA-garbage"` left the whole file green, because
+    every arm pinned only `startswith(f"synthetic:{lineno}: consult site inside ")`.
+    The expectation below is HAND-TYPED from reading the responder and is never
+    sliced out of the same source line the detector reads, so a detector echoing
+    the wrong line cannot agree with it by construction.
+    """
+    lineno = _line_of_tag_named("hop-budget")
+    mutated = _tag_line_removed(_LIVE_SOURCE, lineno)
+    untagged = _untagged_consult_sites(mutated, "synthetic")
+
+    assert len(untagged) == 1, untagged
+    assert untagged[0] == (
+        f"synthetic:{lineno}: consult site inside _run_once() carries no "
+        "`# GATE:` tag on the line above it: "
+        "'if not within_budget(inbox, bounds):'"
+    ), untagged
+
+
+#: The one statement in `_run_once` the probe below is inserted beneath, and the
+#: probe itself. The ANCHOR is matched against the live file so the insertion
+#: point cannot rot; the STATEMENT is hand-typed so the expectation is not
+#: derived from the thing it grades.
+_PROBE_ANCHOR = 'result["actions"] = ["A5"]'
+_PROBE_STATEMENT = 'result["advA_probe"] = bool(written) and True'
+
+
+def _lines_inserted_after_anchor(
+    source: str, anchor: str, inserted: list[str]
+) -> tuple[str, int]:
+    """`source` with `inserted` written directly below the unique `anchor`.
+
+    Returns the mutated source and the 1-based line the FIRST inserted line
+    lands on, each line taking the anchor's own indentation. The anchor is
+    compared against the STRIPPED line and required to be unique, so a responder
+    edit that moves or duplicates it fails loudly here rather than silently
+    relocating the probe.
+    """
+    lines = source.split("\n")
+    hits = [index for index, line in enumerate(lines) if line.strip() == anchor]
+    assert len(hits) == 1, f"anchor {anchor!r} is not unique in the source: {hits}"
+    at = hits[0]
+    indent = lines[at][: len(lines[at]) - len(lines[at].lstrip())]
+    body = [f"{indent}{line}" for line in inserted]
+    return "\n".join(lines[: at + 1] + body + lines[at + 1 :]), at + 2
+
+
+def _statement_inserted_after_anchor(
+    source: str, anchor: str, statement: str
+) -> tuple[str, int]:
+    """One statement below the anchor - the single-line case of the above."""
+    return _lines_inserted_after_anchor(source, anchor, [statement])
+
+
+def _appended_to_anchor_line(source: str, anchor: str, appended: str) -> tuple[str, int]:
+    """`source` with `appended` written onto the END of the unique `anchor` line.
+
+    The sibling of `_lines_inserted_after_anchor`, running the mutation that
+    arm cannot: this one adds a site WITHOUT adding a line, so the number of
+    accepted-site NODES rises while the number of distinct site LINES does not.
+    That is the shape a count-identity proxy cannot tell from a clean file.
+    Returns the mutated source and the 1-based line the anchor sits on.
+    """
+    lines = source.split("\n")
+    hits = [index for index, line in enumerate(lines) if line.strip() == anchor]
+    assert len(hits) == 1, f"anchor {anchor!r} is not unique in the source: {hits}"
+    at = hits[0]
+    lines[at] = lines[at] + appended
+    return "\n".join(lines), at + 1
+
+
+def test_a_new_untagged_gate_added_to_run_once_is_reported_by_line():
+    """THE SCENARIO ceiling item 2 claims to guard, DRIVEN rather than assumed.
+
+    Every other refutation here DELETES a tag from a site that already exists.
+    This one ADDS a gate: a hand-typed accepted-shape statement written into a
+    synthetic copy of the responder and never tagged, which is the case an author
+    actually hits. `_problems` must stay silent, because no misplaced tag was
+    added - and that is what stops this passing against a detector that reports
+    every line it is shown.
+    """
+    mutated, lineno = _statement_inserted_after_anchor(
+        _LIVE_SOURCE, _PROBE_ANCHOR, _PROBE_STATEMENT
+    )
+    untagged = _untagged_consult_sites(mutated, "synthetic")
+
+    assert len(untagged) == 1, untagged
+    assert untagged[0] == (
+        f"synthetic:{lineno}: consult site inside _run_once() carries no "
+        f"`# GATE:` tag on the line above it: {_PROBE_STATEMENT!r}"
+    ), untagged
+    assert _problems(mutated, "synthetic") == [], _problems(mutated, "synthetic")
+
+
+def test_the_coverage_arm_itself_goes_red_on_a_newly_added_untagged_gate(
+    tmp_path, monkeypatch
+):
+    """THE ARM'S WIRING, which every refutation above leaves ungraded.
+
+    Measured 2026-09-09: deleting the judgement conjunct from BOTH
+    `test_every_consult_site_inside_run_once_carries_a_tag` and its control left
+    the suite GREEN, because the parametrized block drives
+    `_untagged_consult_sites` directly and nothing ever calls the arm. So this
+    arm points the arm at a synthetic responder and requires it to RAISE, then
+    points it at an unmutated copy as the control - without that second half a
+    redirection that reddened everything would score a perfect one out of one.
+
+    The bytes go out through `write_bytes`. `Path.write_text` emits CRLF on this
+    platform, and a `\\r` surviving `source.split("\\n")` sits past the `$`
+    anchor in `_GATE_STRICT`, so every real tag would raise `GateTagError` and
+    this arm would go red for a reason about the harness rather than about the
+    census.
+    """
+    mutated, lineno = _statement_inserted_after_anchor(
+        _LIVE_SOURCE, _PROBE_ANCHOR, _PROBE_STATEMENT
+    )
+    mutated_file = tmp_path / "mutated_responder.py"
+    mutated_file.write_bytes(mutated.encode("ascii"))
+    monkeypatch.setitem(globals(), "RESPONDER", mutated_file)
+
+    with pytest.raises(AssertionError) as caught:
+        test_every_consult_site_inside_run_once_carries_a_tag()
+
+    message = str(caught.value)
+    assert f"{RELPATH}:{lineno}:" in message, message
+    assert _PROBE_STATEMENT in message, message
+
+    clean_file = tmp_path / "clean_responder.py"
+    clean_file.write_bytes(_LIVE_SOURCE.encode("ascii"))
+    monkeypatch.setitem(globals(), "RESPONDER", clean_file)
+
+    test_every_consult_site_inside_run_once_carries_a_tag()
+
+
+def test_the_coverage_arm_itself_goes_red_on_two_sites_sharing_one_line(
+    tmp_path, monkeypatch
+):
+    """SOMETHING in the arm reddens on a one-liner. WHICH conjunct is next door.
+
+    `test_two_accepted_sites_on_one_line_defeat_line_identity` drives the
+    predicate. This drives the ARM, and it is a different claim: a conjunct can
+    be correct and simply not wired into the assertion that matters. Both
+    inserted lines are hand-typed.
+
+    WHAT THIS ARM CANNOT DO, stated because it was once claimed to. It cannot
+    show that the DISTINCT-LINE conjunct is what reddened the arm. Measured
+    2026-09-09: substituting the coincidental proxy
+    `len(sites) == len(_TAG_LINES)` for `_sites_sit_on_distinct_lines(source)`
+    left this arm GREEN, because the inserted line raises the distinct site
+    lines to 19 against a `_TAG_LINES` frozen at 18 and the proxy reddens too.
+    No payload here fixes that - the phrase "distinct lines" and the colliding
+    line number are both in the message whichever conjunct fired. The
+    discrimination needs a DIFFERENT SOURCE and lives in
+    `test_the_coverage_arm_reddens_on_the_collision_and_not_on_a_count_identity`
+    below. The docstring's earlier claim that "the arm can only go red on the
+    fourth" was about the other three conjuncts and did not cover a substituted
+    fourth; it is dropped rather than repaired.
+    """
+    mutated, first = _lines_inserted_after_anchor(
+        _LIVE_SOURCE,
+        _PROBE_ANCHOR,
+        [f"{_TAG}oneliner", "if agreed: result['z'] = agreed or why"],
+    )
+    collision = first + 1
+    assert _untagged_consult_sites(mutated, "synthetic") == []
+    assert _problems(mutated, "synthetic") == []
+    assert len(_consult_site_node_lines(mutated)) == len(_consult_site_spots(mutated)) + 1
+
+    mutated_file = tmp_path / "oneliner_responder.py"
+    mutated_file.write_bytes(mutated.encode("ascii"))
+    monkeypatch.setitem(globals(), "RESPONDER", mutated_file)
+
+    with pytest.raises(AssertionError) as caught:
+        test_every_consult_site_inside_run_once_carries_a_tag()
+
+    message = str(caught.value)
+    assert "distinct lines" in message, message
+    assert f"Colliding lines: [{collision}]" in message, message
+
+
+#: The one accepted site the arm below EXTENDS rather than follows, and the
+#: second accepted site appended onto its line. The ANCHOR is a tagged site in
+#: the live responder and is matched against it, so the mutation cannot land on
+#: a line that has moved; the APPENDED half is hand-typed. `;` is what puts a
+#: second `ast.Assign` on the SAME `lineno`, which is the whole point.
+_COLLISION_ANCHOR = 'result["termination"] = "exhausted" if empty_only else "refused"'
+_COLLISION_APPENDED = '; result["advG_probe"] = written or True'
+
+
+def test_the_coverage_arm_reddens_on_the_collision_and_not_on_a_count_identity(
+    tmp_path, monkeypatch
+):
+    """THE WELD IS GRADED FOR WHICH CONJUNCT FIRED, not merely THAT one did.
+
+    `test_the_coverage_arm_itself_goes_red_on_two_sites_sharing_one_line`
+    proves the arm reddens on a one-liner. It does NOT prove the DISTINCT-LINE
+    conjunct is what reddened it, and measured 2026-09-09 that gap is real:
+    substituting the COINCIDENTAL PROXY `len(sites) == len(_TAG_LINES)` for
+    `_sites_sit_on_distinct_lines(source)` - true today at 18/18 and not the
+    distinct-line property at all - left the whole file GREEN at 69 passed,
+    because the proxy happens to redden on that one-liner too (19 distinct site
+    lines against 18 frozen tag lines) and the message says "distinct lines"
+    whichever conjunct fired.
+
+    So this arm DEFEATS THE PROXY BY CONSTRUCTION. A second accepted site is
+    appended onto an EXISTING tagged site's line with a `;`, so:
+
+        accepted site NODES         19        (was 18)
+        distinct site LINES         18        (unchanged - this is the trick)
+        tags                        18
+        untagged reports             0
+
+    Under that source `len(sites) == len(_TAG_LINES)` is 18 == 18 and TRUE, the
+    other two conjuncts are TRUE, and ONLY the distinct-line conjunct is False.
+    A proxy therefore leaves the arm GREEN here and the real conjunct reddens
+    it, which is the discrimination the sibling arm cannot make. The three
+    non-judgement conjuncts are asserted below before the arm is driven, so a
+    failure cannot be blamed on one of them.
+
+    The bytes go out through `write_bytes` for the reason the sibling arm
+    records: `Path.write_text` emits CRLF on this platform and a surviving
+    `\\r` sits past the `$` anchor in `_GATE_STRICT`.
+    """
+    mutated, collision = _appended_to_anchor_line(
+        _LIVE_SOURCE, _COLLISION_ANCHOR, _COLLISION_APPENDED
+    )
+    assert _untagged_consult_sites(mutated, "synthetic") == []
+    assert len(_consult_site_node_lines(mutated)) == 19
+    assert len(_consult_site_spots(mutated)) == 18
+    assert len(_consult_site_spots(mutated)) == len(_TAG_LINES)
+    assert len(_consult_site_spots(mutated)) >= _FLOOR
+    assert _colliding_site_lines(mutated) == [collision]
+    assert _sites_sit_on_distinct_lines(mutated) is False
+
+    mutated_file = tmp_path / "collision_responder.py"
+    mutated_file.write_bytes(mutated.encode("ascii"))
+    monkeypatch.setitem(globals(), "RESPONDER", mutated_file)
+
+    with pytest.raises(AssertionError) as caught:
+        test_every_consult_site_inside_run_once_carries_a_tag()
+
+    message = str(caught.value)
+    assert f"Colliding lines: [{collision}]" in message, message
+    assert "Untagged consult sites: none" in message, message
+
+    clean_file = tmp_path / "clean_responder.py"
+    clean_file.write_bytes(_LIVE_SOURCE.encode("ascii"))
+    monkeypatch.setitem(globals(), "RESPONDER", clean_file)
+
+    test_every_consult_site_inside_run_once_carries_a_tag()
