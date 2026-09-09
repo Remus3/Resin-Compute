@@ -12,6 +12,114 @@ now.
 
 ---
 
+## 2026-09-08 - A read-only guard defeated five times, and the sixth version says what it cannot do
+
+Files: `tests/test_task_liveness.py`, `tests/test_responder_task_argv.py`.
+Commit `9fe8b0b`. `ops/check_task_liveness.py` UNCHANGED - no violation was found
+in it under any of the new nets, which is worth stating because six holes were
+found in the thing GRADING it.
+
+**Two of the five defeats were destructive, not rhetorical.** A canary file was
+deleted from disk while the suite printed a green exit 0. That is the standard
+this guard is now held to, and it is why "the arms all pass" was never evidence.
+
+The six holes, each watched red on its own mutant before its fix:
+
+1. **A PowerShell alias carries no hyphen.** `ri` is `Remove-Item`. The scan
+   matched a hyphenated Verb-Noun shape, so `ri`, `del`, `rm`, `sc`, `kill`, `ni`,
+   a verb built by string concatenation, a `cmd /c` shell-out and a `.Delete()`
+   all walked past it.
+2. **The whole-file scan carried no `re.IGNORECASE`** while the comment directly
+   above it asserted case-insensitivity. Lowercase `stop-process` and uppercase
+   `TASKKILL` both passed. The code and its own comment disagreed.
+3. **A type accelerator calls through `::`, not `.`,** and `[` is not a letter, so
+   `[System.IO.File]::Delete` produced no bareword to scan and matched no method
+   pattern. Same clean pass for `::WriteAllText`, `::Move`,
+   `[Diagnostics.Process]::Start` and `[Microsoft.Win32.Registry]::SetValue`. And
+   plain `>` REDIRECTION overwrites a file while carrying NO COMMAND TOKEN AT ALL.
+4. **The scan was bound to the identifier `_PS_TEMPLATE`.** A second module-level
+   PowerShell string concatenated onto it was never graded. A guard bound to a
+   name is defeated by adding a name.
+5. **The harness shimmed `subprocess` with a stand-in defining three attributes
+   and no `Popen`.** A mutation branching on `hasattr(subprocess, 'Popen')` built
+   pristine text under the shim and a deleting probe in production, with a
+   trailing `exit 0` so the JSON still parsed and the real-probe arms still passed.
+6. **Grading ran at import of the TEST file, which is after the SUBJECT's own
+   module-level code has already run.** A module-level `os.remove` in the subject
+   killed a canary with the suite green. Prevention was a claim about the wrong
+   instant.
+
+**THE CEILING, now in the file's docstring rather than implied.** A test suite
+cannot prevent arbitrary runtime behaviour in a module it imports. It can grade
+that module's SOURCE, and refuse to import a source that fails the grade. It
+cannot prove that a source which passes will behave the same way at runtime,
+because the imported module can always branch on something the harness did not
+think to make identical. Two arms were renamed to claim only that. Operator
+ruling, asked and answered during the session: narrow the claim, that is the
+honest outcome.
+
+**The method finding, and it generalises past this file.** Rounds two through
+five each widened a matcher, and each widened matcher was defeated. The last two
+kills did not touch a matcher at all - they went around the grading. When a guard
+falls twice to the same class of attack, widening is the wrong response and the
+question is what kind of claim is achievable.
+
+**The controls were the reason the holes survived so long.** Every non-vacuity
+control planted a capitalised, hyphenated, ASCII injection - the exact case the
+matcher handled. A CONTROL THAT ONLY PLANTS THE CASE THE MATCHER HANDLES CANNOT
+DISCOVER THAT THE MATCHER IS NARROW. The replacements vary SHAPE: alias,
+lowercase, uppercase, concatenated, `cmd /c`, `.Delete()`, `::`, redirection.
+
+**The ambiguity arm no longer reads zero out of zero as a pass.** It skipped
+whenever discovery returned nothing, collapsing a non-zero return and empty
+stdout into the same branch as a machine that legitimately holds no duplicated
+task name. The first replacement introduced a plausibility floor that was
+measured DECORATIVE - over totals 0..39 the set where its own assertion could
+fail was EMPTY, so deleting the line was an equivalent mutant - and it over-fired
+on a genuinely sparse box. Discovery now returns records and draws no conclusion.
+
+**A new gate on the scheduled task's argv, and its own first two versions were
+the defect they exist to catch.** `tests/test_responder_task_argv.py` grades
+`ops/ResinCompute-Responder.xml`'s `<Exec>` argv against the code that argv
+calls. Version one was a SHAPE arm: the script path swapped to a real-but-wrong
+file, a dropped `--arm`, swapped window boundaries and non-dash positional junk
+all passed green, because the responder path was hardcoded so the parser
+interrogated was always the responder's whatever argv named, and the script check
+tested EXISTENCE rather than IDENTITY. Version two keyed its refusal token on
+exit code 2, which argparse also returns - four unrelated causes minting one
+fingerprint, the same defect class as an interpolated reason string. Version two
+also disclosed `--latency-only` as ungradeable "because the code marks it
+optional"; that was refuted from the call the test already intercepted, where the
+`grammar` kwarg differs, and the consequence is real - dropping the flag would
+publish integer hops with `m1_status='lower-bound'` for a run whose far end is a
+human, which is what `e1a101d` fixed.
+
+**One property here is worth reusing rather than re-deriving.** A content-hash
+recursive walk over 1137 entries - the worktree, this tree's runtime directory
+and inbox, four sibling inbox directories, the profile config - showed the new
+arms write NOTHING outside pytest's own cache, with planted controls proving the
+walk sees both additions and modifications. The one log write in the full run was
+attributed to a different test by re-running with the new file ignored. That is
+what the responder isolation arm was supposed to be and is not, and the method is
+the point: NOT existence-plus-size, because NTFS reports a directory `st_size` as
+0 whatever it contains.
+
+**Measured at the merge, 2026-09-08, each gate its own command, because a chained
+run reports only its last link.** Licence, docs, `qa_companion`, ruff, both
+suites, `node --test` and the headless smoke test each exited 0 separately. The
+pre-push hook then graded the pushed commit independently: 1511 passed, 1 skipped,
+and 80 passed. Collected in `tests/` went 1470 to 1512 across the session. These
+are readings on that date, not claims about now.
+
+**An incidental measurement worth keeping.** This tree's pytest configuration
+prints PER-FILE counts and NO summary line, so a `-q` run ends in dots and a
+count must be summed from `--collect-only` rather than read off a total. A
+previous builder measured with `-o addopts=`, which disables the repo's
+configured options; the numbers happened to agree, but a count taken under
+different options is a count about a different run.
+
+---
+
 ## 2026-09-08 - The cold boot answered the hook question, and four adversaries refuted more than they confirmed
 
 Files: `tools/moon_sync_responder.py`, `ops/ResinCompute-Responder.xml`,

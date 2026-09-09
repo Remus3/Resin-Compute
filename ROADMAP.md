@@ -70,46 +70,100 @@ version. What follows is everything the scaffold deliberately did not do.
   an arm whose name claims more than it checks is worse than no arm, because the
   next reader stops looking.
 
-- **OPEN. Nothing grades the scheduled task's argv against the code it calls.**
-  The flag was added to `ops/ResinCompute-Responder.xml` by hand at the merge and
-  no test asserts it is there, so the same drift that produced the one-label
-  record can silently return by an edit to that file alone. This is the identical
-  defect class as the doc-versus-settings gate: a tracked artifact quoting an
-  invocation that has moved on. Deliberately not written by the merger, who would
-  then have been grading their own arm.
+- **CLOSED 2026-09-08 by `tests/test_responder_task_argv.py`, and it took three
+  rounds because the first two were shape arms.** The task XML's `<Exec>` argv is
+  now graded against the code that argv calls. Nothing is written down: the
+  script's identity comes from a byte scan for the file declaring
+  `SOURCE_SCHEDULED_TASK`, flag spellings from that script's own `parser._actions`,
+  and MEANING from running `main` with `run_once` intercepted and grading the
+  `Bounds` it builds.
 
-- **OPEN, HIGHEST OF THE TESTING ITEMS, AND IT IS THE THIRD TIME THIS EXACT
-  SHAPE HAS BEEN CAUGHT.** The read-only guard over `ops/check_task_liveness.py`
-  was rewritten on 2026-09-08 from a seven-token denylist to an inverted
-  allowlist plus a whole-file mutating-verb scan. It is a real improvement and it
-  still does not do what its name says. An adversary defeated it DESTRUCTIVELY,
-  not rhetorically: **PowerShell aliases carry no hyphen, and the scan matches a
-  hyphenated Verb-Noun shape.** `ri` is `Remove-Item`. Planted in the probe
-  template, it ran, a canary file was deleted from disk, and the file's own suite
-  reported every arm passing with exit 0. Also surviving both nets: `del`, `rm`,
-  `sc`, `kill` which is `Stop-Process`, `ni`, a verb assembled by string
-  concatenation, a shell-out through `cmd /c`, and a `.Delete()` method call.
+  Recorded because the failures are the instructive part. Version one graded
+  SHAPE and let four meaning-changing mutants through green: the script path
+  swapped to a real-but-different file, `--arm` dropped so the task never spawns,
+  the window boundaries swapped so it closes before it opens, and non-dash
+  positional junk that `parse_known_args` binned unasserted. Version two keyed its
+  refusal token on the EXIT CODE 2, which argparse also returns - four unrelated
+  causes minting one fingerprint, the same defect as an interpolated reason
+  string. Version two also disclosed `--latency-only` as ungradeable "because the
+  code marks it optional"; an adversary refuted that from the call the test was
+  already intercepting, where the `grammar` kwarg differs. Dropping the flag would
+  publish integer hops with `m1_status='lower-bound'` for a run whose far end is a
+  human - exactly what `e1a101d` fixed.
 
-  Second defect in the same arm, and it is self-contradicting: the whole-file
-  regex carries NO `re.IGNORECASE`, while the comment directly above it asserts
-  that a lowercase spelling runs exactly as well as a capitalised one. Lowercase
-  `stop-process`, lowercase `unregister-scheduledtask` and uppercase `TASKKILL`
-  all passed. The three non-vacuity controls are genuine value assertions rather
-  than shape arms, and they still could not see either hole, because every
-  injection they exercise is capitalised ASCII. A control that only ever plants
-  the case the regex handles cannot discover that the regex is case-sensitive.
+  One property here is worth reusing rather than re-deriving: a content-hash
+  recursive walk over 1137 entries - this worktree, this tree's runtime directory
+  and inbox, four sibling inbox directories, the profile config - showed these
+  arms write NOTHING outside pytest's own cache, with planted controls proving the
+  walk sees additions and modifications. That is what the responder isolation arm
+  below was supposed to be and is not. Note the method: NOT existence-plus-size.
 
-  Third, separate, and about portability rather than about verbs: the ambiguity
-  arm skips when it cannot discover a duplicated task name, and a discovery that
-  FAILS - non-zero return, empty stdout - is indistinguishable from a machine
-  that legitimately has no duplicate. Proved by neutering discovery: the mutant
-  survived and the run reported a pass with one skip. On CI or a fresh clone that
-  arm asserts nothing at all, which is the zero-out-of-zero reading this tree has
-  a standing rule against.
+- **OPEN, and narrower than it looks. `--latency-only` presence is still
+  ungraded in the argv gate.** The grammar the intercepted call receives IS now
+  asserted, which covers the consequence; what remains unasserted is the flag
+  itself. Left deliberately rather than pinned as a literal.
 
-  Not fixed in the session that found it, deliberately: the merger had already
-  taken the arms into the tree, and an author does not grade the replacement for
-  their own merge.
+- **CLOSED 2026-09-08 AS TO ITS SIX MEASURED HOLES, AND THE CLAIM IT COULD NEVER
+  KEEP IS NOW WRITTEN DOWN INSTEAD.** The read-only guard over
+  `ops/check_task_liveness.py` was defeated FIVE times in one session, twice
+  destructively - a canary file deleted from disk while the suite printed a green
+  exit 0. Commit `9fe8b0b`. `ops/check_task_liveness.py` itself needed no change:
+  no violation was found in it under any of the new nets.
+
+  The six, each watched red on its own mutant before the fix:
+  a PowerShell ALIAS CARRIES NO HYPHEN, so `ri`, `del`, `rm`, `sc`, `kill`, `ni`
+  and a concatenated verb all walked past a hyphenated Verb-Noun scan;
+  the whole-file scan carried no `re.IGNORECASE` while the comment above it
+  asserted case-insensitivity;
+  a TYPE ACCELERATOR CALLS THROUGH `::`, NOT `.`, and `[` is not a letter, so
+  `[System.IO.File]::Delete` reached neither scan - nor did plain `>` REDIRECTION,
+  which overwrites a file while carrying no command token at all;
+  the scan was BOUND TO THE IDENTIFIER `_PS_TEMPLATE`, so a second module-level
+  PowerShell string concatenated onto it was ungraded;
+  the harness SHIMMED `subprocess` WITH A STAND-IN THAT HAD NO `Popen`, so a
+  mutation branching on `hasattr(subprocess, 'Popen')` built pristine text under
+  the shim and a deleting probe in production;
+  and grading ran at import of the TEST file, which is AFTER the SUBJECT's own
+  module-level code has already run.
+
+  **THE CEILING, and it is the durable finding rather than the fixes.** A test
+  suite CANNOT prevent arbitrary runtime behaviour in a module it imports. It can
+  grade that module's SOURCE, and it can refuse to import a source that fails the
+  grade. It cannot prove that a source which passes will behave the same way at
+  runtime, because the imported module can always branch on something the harness
+  did not think to make identical. That paragraph is now in the file's docstring,
+  and two arms were renamed to claim only it. Rounds two through five each
+  widened a matcher; the last two kills did not touch a matcher at all. If a
+  sixth attack lands, widening is the wrong response.
+
+  Also closed: the ambiguity arm no longer collapses "checked and found nothing"
+  into "could not check". Discovery returns records and draws no conclusion,
+  FAILED is an error rather than a skip, and only the genuinely-empty case skips,
+  saying which case it is. The plausibility floor that replaced it was measured
+  DECORATIVE first - over totals 0..39 the set where its own assertion could fail
+  was empty - and rebuilt.
+
+- **OPEN, AND IT IS WHAT THE ITEM ABOVE BOUGHT CI: NOTHING.** `_WINDOWS_ONLY` is
+  a `skipif`, so on a Linux runner every real-probe arm in
+  `tests/test_task_liveness.py` never executes. The import-time source gate, the
+  static arms and the discovery classifier do run there; the arms that talk to a
+  scheduler do not. Measured, not assumed: the same file gives different
+  pass/skip splits under simulated machines, so a zero-skip reading is a property
+  of THIS BOX and not of the arm.
+
+- **OPEN, AND IT IS THE SAME ROOT CAUSE IN SEVEN MORE PLACES.** A condition that
+  cannot distinguish CHECKED-AND-FOUND-NOTHING from COULD-NOT-CHECK. An AST sweep
+  over `tests/` - 51 files, 21 `pytest.skip` call sites, positive control planted
+  and caught - ranked these, and the two worst are in the file just repaired:
+  `_real_task_names` collapses a non-zero return and empty stdout into one return;
+  and `_a_task_carrying_an_end_boundary`, which is THE ONLY ARM PINNING THE
+  EndBoundary VALUE, the tool's whole purpose. Then
+  `tests/test_hook_interpreter.py` twice, `tests/test_watch_inbox.py` three
+  times, `tests/test_line_endings.py` once, and lower-ranked sites in
+  `tests/test_commit_trailers.py`, `tests/conftest.py`, `tests/test_readme_tree.py`,
+  `tests/test_ingest_client.py`. Proved by making the discoveries exit 3: the run
+  reported a pass with skip texts falsely blaming the machine. Re-derive the list
+  rather than trusting this one - a corpus is a snapshot.
 
 - **OPEN, AND IT IS A LIMIT OF THE GATE SHIPPED THE SAME DAY.** The
   hook-command gate in `tests/test_docs_hook_commands.py` grades a quoted command
