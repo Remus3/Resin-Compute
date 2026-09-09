@@ -11,6 +11,32 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **STATE AS MEASURED 2026-09-09 AT `800db8f`, a reading and not a promise.**
+  `python -m pytest tests` 1695 passed 1 skipped. `agents/pity_engine` 80
+  passed. `node --test` 52 pass 0 fail. ruff, mypy, qa_companion, licence
+  posture 47, docs consistency 29 and the headless dry run all exit 0.
+  CI GREEN on BOTH workflows at `800db8f`, and the green runs were READ rather
+  than trusted: the ci lane names 17 skips and the docs lane names 11, every
+  reason true on the lane it fires on, and NONE of the ci lane's 17 mentions a
+  shallow clone, so the trailer sweep genuinely runs there. The two
+  shallow-clone skips on the docs lane now carry the per-population wording
+  repaired at `b1a3eab`, and it reads correctly on the only lane where it
+  fires. This session introduced no new skip on either lane.
+
+  READING THE GREEN RUN FOUND NOTHING THIS TIME, and that is worth recording
+  rather than omitting. It is the third session running that the method was
+  applied; twice it found a defect no local reasoning had, and once it did not.
+  A clean read is a result.
+
+  WHAT THIS SESSION DID NOT TOUCH, so the next one does not re-derive it: the
+  responder gate-tag census and its runner are still unstarted, nothing
+  inspects the pre-push hook's OUTPUT, `git_unusable_reason()`'s byte-identical
+  reason strings are still graded by an arm that calls the classifier it
+  grades, the sweep floor's VALUE is still ungraded, and
+  `ops/ResinCompute-Supervisor.xml` has still never been registered. The
+  responder task was re-confirmed DORMANT by the checker, exit 1, and NOTHING
+  WAS ARMED.
+
 - **CLOSED 2026-09-09, AND THE DISPOSITION IS AN ADJUDICATED CALL - NOT AN
   OPERATOR DECISION.** It is overturnable by reading this entry. The question
   carried by four hand-offs was that NOTHING compared INSTALLED dev tools
@@ -248,6 +274,15 @@ version. What follows is everything the scaffold deliberately did not do.
   EQUIVALENT 1, NOT-APPLICABLE 2, APPLICABLE-AND-NOT-DONE 2 notes carrying 4
   items. Measured rather than assumed: 145 `.md` files and ZERO subdirectories,
   by `find -mindepth 1 -type d`, so no verbatim payload is being skipped.
+
+  THE WATERMARK MOVED, and that is the part four hand-offs could not do. The
+  watcher now reports `unread: none`. It was moved ONLY after every note had a
+  verdict in a committed file and every applicable item had reached this one,
+  because an inflated watermark is worse than none and reading is not
+  acknowledging. The 3 withdrawn-after-being-shown entries are carried away
+  with it and are accounted for in the triage file: two are this tree's OWN
+  self-copies renamed after the watcher had reported them, which is the
+  sender-side gap filed as item 3 below.
 
   THE 23 IS HIGH FOR A STATED REASON RATHER THAN A GENEROUS ONE. 22 of the 28
   were already bucketed on 2026-09-08 and their applicable rows already reached
