@@ -88,17 +88,30 @@ GAME_PROCESS_NAMES = {"GenshinImpact.exe", "YuanShen.exe", "launcher.exe"}
 # Reading a file the game currently holds open
 # ---------------------------------------------------------------------------
 
-# WINDOWS-ONLY BELOW, AND THE GUARD IS FOR THE TYPE CHECKER AS MUCH AS
-# FOR THE INTERPRETER. `ctypes.wintypes` and `ctypes.WinDLL` are marked
-# `sys.platform == "win32"` in typeshed, so a bare import of either is
-# an ERROR when mypy runs on Linux - which is what CI runs. That error
-# stops mypy before it checks anything else, so the whole gate reads as
-# one unrelated failure. Measured 2026-09-07: the local Windows run was
-# green and CI was red on exactly this, which is the same shape as the
-# numpy stub already recorded in mypy.ini. mypy narrows on
-# `sys.platform`, so the guard is the fix rather than an ignore comment.
-if sys.platform == "win32":
-    import ctypes.wintypes as wintypes
+# WINDOWS-ONLY BELOW. THE 2026-09-07 GUARD HERE WAS A MODULE-LEVEL
+# `if sys.platform == "win32": import ctypes.wintypes as wintypes`, AND IT
+# CONVERTED ONE CI ERROR SHAPE INTO ANOTHER RATHER THAN REMOVING IT. The note
+# it carried said mypy narrows on `sys.platform` so the guard is the fix; that
+# is true of the IMPORT and false of the USES, which stayed below at module
+# scope while the binding they needed was exactly what the guard deleted on
+# Linux. Measured on CI run 34316023763, after that guard was in place:
+#
+#     tools/first_run_capture.py:134: error: Name "wintypes" is not defined
+#     tools/first_run_capture.py:136: error: Name "wintypes" is not defined
+#     tools/first_run_capture.py:137: error: Name "wintypes" is not defined
+#
+# The same run is also the evidence for why the import moved INTO the function
+# instead of the guard simply widening. `ctypes.WinDLL(...)` sat one line above
+# the first of those, in the same function, behind the same
+# `if sys.platform != "win32": return None`, and CI said nothing about it. So
+# narrowing does suppress an unresolvable ATTRIBUTE, and does not invent a
+# missing NAME - a name needs a binding mypy can still see on Linux, and a
+# function-local import after the early return is one. `tests/
+# test_windows_typeshed_guard.py` grades that property with an ast walk.
+#
+# An ignore comment is not available either way: `mypy.ini` sets
+# `warn_unused_ignores = True`, so an ignore that Linux needs is reported as
+# unused on Windows and only moves the red to the local run.
 
 _GENERIC_READ = 0x80000000
 _FILE_SHARE_ALL = 0x00000001 | 0x00000002 | 0x00000004  # read | write | delete
@@ -126,9 +139,15 @@ def read_bytes_shared(path: Path) -> bytes | None:
     if sys.platform != "win32":
         # There is no shared-read fallback to offer off Windows, and the caller
         # already treats None as "record it as unreadable" rather than as
-        # "absent". This branch exists so the Windows-only calls below are
-        # narrowed for the type checker, not because the tool runs elsewhere.
+        # "absent". This branch exists so the Windows-only names below are
+        # pruned for the type checker, not because the tool runs elsewhere.
         return None
+
+    # Function-local and deliberately below the early return - see the block
+    # comment above `_GENERIC_READ`. At module scope this import is either a
+    # runtime ValueError off Windows (unguarded) or an absent binding under
+    # Linux mypy (guarded); here it is neither.
+    import ctypes.wintypes as wintypes
 
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateFileW.restype = wintypes.HANDLE

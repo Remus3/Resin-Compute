@@ -66,7 +66,6 @@ from __future__ import annotations
 
 import argparse
 import ctypes
-import ctypes.wintypes as wintypes
 import hashlib
 import io
 import json
@@ -124,15 +123,6 @@ DEFAULT_MAX_BYTES_TOTAL = 40 * 1024 * 1024 * 1024  # 40 GB
 # not create a coupling to a sibling tool's internals for one constant.
 GAME_PROCESS_NAMES = {"GenshinImpact.exe", "YuanShen.exe", "launcher.exe"}
 
-_user32 = ctypes.windll.user32 if sys.platform == "win32" else None
-if _user32 is not None:
-    _user32.GetForegroundWindow.restype = wintypes.HWND
-    _user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-    _user32.GetWindowTextLengthW.restype = ctypes.c_int
-    _user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-    _user32.GetWindowTextW.restype = ctypes.c_int
-
-
 # ---------------------------------------------------------------------------
 # Small pure helpers
 # ---------------------------------------------------------------------------
@@ -163,17 +153,53 @@ def get_foreground_window_title() -> str:
     HWND (nothing is foreground, e.g. the desktop is locked) or on a zero
     length title, rather than raising - a title is cosmetic context for the
     index line, never something worth crashing the daemon over.
+
+    WHY THE PLATFORM CHECK AND THE IMPORT MOVED IN HERE, AND WHY IT IS NOT A
+    `type: ignore`. `ctypes.windll` and the whole `ctypes.wintypes` module are
+    marked `sys.platform == "win32"` in typeshed. mypy resolves `sys.platform`
+    against ITS OWN host, so CI - which runs mypy on Linux - had neither name.
+    Measured on CI run 34316023763:
+
+        tools/screen_capture.py:127: error: Module has no attribute "windll"
+
+    The old module-level form was `ctypes.windll.user32 if sys.platform ==
+    "win32" else None`. A ternary is NOT a guard: mypy prunes unreachable
+    STATEMENTS, and both arms of a conditional EXPRESSION are checked, so the
+    attribute access stayed visible on Linux. An early `return` is a statement,
+    so everything below it here is unreachable off Windows and is never
+    checked. An ignore comment was rejected instead of chosen: `mypy.ini` sets
+    `warn_unused_ignores = True`, so an ignore needed on Linux is flagged as
+    unused on Windows and simply moves the red from CI to the local run.
+
+    The bare module-level `import ctypes.wintypes as wintypes` went with it for
+    a separate and older reason - that import raises ValueError on Linux at
+    RUNTIME, so it made a Windows-only helper unimportable rather than merely
+    useless off Windows.
+
+    The restype/argtypes assignments now run per call rather than once at
+    import. `ctypes.windll.user32` is cached by the loader and the function
+    pointers are cached on that object, so this rebinds the same attributes on
+    the same objects; at a multi-second tick cadence the cost is not
+    measurable and the behaviour is unchanged.
     """
-    if _user32 is None:
+    if sys.platform != "win32":
         return ""
-    hwnd = _user32.GetForegroundWindow()
+    import ctypes.wintypes as wintypes
+
+    user32 = ctypes.windll.user32
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+    hwnd = user32.GetForegroundWindow()
     if not hwnd:
         return ""
-    length = _user32.GetWindowTextLengthW(hwnd)
+    length = user32.GetWindowTextLengthW(hwnd)
     if length <= 0:
         return ""
     buf = ctypes.create_unicode_buffer(length + 1)
-    _user32.GetWindowTextW(hwnd, buf, length + 1)
+    user32.GetWindowTextW(hwnd, buf, length + 1)
     return buf.value
 
 
