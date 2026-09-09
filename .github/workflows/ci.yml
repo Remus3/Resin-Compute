@@ -254,7 +254,14 @@ jobs:
           fi
           echo "armed: ${actual} (all mode 100755)"
 
-          RSC_REQUIRE_HOOK_GATE=1 python -m pytest tests/test_hook_gate.py
+          # -rs SO THIS STEP'S SKIPS ARE NAMED, and be precise about what that
+          # buys here rather than claiming more. RSC_REQUIRE_HOOK_GATE=1
+          # already converts the unmeasurable-machine skips into ERRORS, so
+          # for those this flag is defence in depth and not the load-bearing
+          # part. What it does cover is every skip the flag does NOT govern:
+          # an arm that opts out for its own reason still renders as a bare
+          # `s` at exit 0, which is a green tick over a gate nobody exercised.
+          RSC_REQUIRE_HOOK_GATE=1 python -m pytest -rs tests/test_hook_gate.py
 
       - name: mypy
         # ADVISORY, deliberately, and this is the one line to change when that
@@ -276,13 +283,46 @@ jobs:
       # sibling project earned its import-file-mismatch incident. Two steps
       # rather than one command with two arguments, so the summary names which
       # half failed.
+      #
+      # AND BOTH ASK PYTEST TO NAME THEIR SKIPS. Measured on run 34343895319
+      # (ubuntu-latest, Python 3.11.16): `1 failed, 1636 passed, 19 skipped in
+      # 24.30s`, and NOT ONE of the nineteen was named. The same tree on the
+      # author's Windows box reports 1 skip, so eighteen arms silently do not
+      # run on the machine that actually decides red, and the log says nothing
+      # about which ones or why.
+      #
+      # A SKIP THAT NAMES NO REASON IS INDISTINGUISHABLE FROM A TEST THAT WAS
+      # NEVER WRITTEN. This tree already holds the three-disposition doctrine:
+      # ran-and-found-nothing, ran-and-broke, and not-present-at-all. The first
+      # and the third are BOTH skips, separated only by their reason text, so a
+      # reason-less skip collapses two dispositions into one unreadable `s`.
+      # tests/test_hook_gate.py records the sharpest instance in its own
+      # docstring - with RSC_REQUIRE_HOOK_GATE unset and a genuine absence, six
+      # of its arms skip, the run exits 0, and the six reasons, each of which
+      # NAMES the flag, are never printed. That docstring ends "Closing that
+      # means changing CI, which is outside this file." This is that change.
+      #
+      # WHY -rs AND NOT A SECOND -q OR A -v. pytest.ini already carries
+      # `addopts = -q`, which suppresses the per-test skip LINES but not the
+      # `-r` short summary, so the two compose. A second -q would double to
+      # -qq and suppress the summary COUNT as well, which is the opposite of
+      # this fix and is separately guarded in
+      # tests/test_ci_workflow_complement.py. -v would re-expand every one of
+      # the 1600-odd passing lines to buy the same nineteen reasons.
+      #
+      # THE FLAG IS GRADED BY ITS SPEC, NOT BY ITS SPELLING. `-rA` and `-r s`
+      # report strictly more and are correct here; an earlier guard in this
+      # tree keyed on the literal string `-rs` and went RED on both, on a line
+      # continuation, and on a reordering - four false reds on correct code.
+      # The guard reads the `-r` SPEC and asks whether its characters report
+      # skips, and it FAILS rather than guesses on a shape it cannot read.
       - name: Application suite (tests/)
         timeout-minutes: 10
-        run: python -m pytest tests
+        run: python -m pytest -rs tests
 
       - name: Engine suite (agents/pity_engine)
         timeout-minutes: 10
-        run: python -m pytest agents/pity_engine
+        run: python -m pytest -rs agents/pity_engine
 
       - name: Headless lane smoke test
         timeout-minutes: 5

@@ -567,3 +567,290 @@ def test_both_workflows_cross_check_the_count_they_sweep():
             f"{workflow.name} sweeps without an --expect-count cross-check, so a "
             f"mangled or truncated path list would pass as clean"
         )
+
+
+# ---------------------------------------------------------------------------
+# THE FIFTH DEFECT CLASS: A SUITE THAT RUNS IN CI AND WILL NOT SAY WHAT IT
+# DECLINED TO RUN.
+#
+# Everything above guards the TRIGGER complement and the SELECTION each
+# workflow makes once it fires. Neither says anything about what the log READS
+# LIKE afterwards, and on 2026-09-09 that blind spot was measured on GitHub run
+# 34343895319 (ubuntu-latest, Python 3.11.16):
+#
+#     1 failed, 1636 passed, 19 skipped in 24.30s
+#
+# NINETEEN SKIPS AND NOT ONE OF THEM NAMED. The same tree on the author's
+# Windows box reports 1, so eighteen arms silently do not run on the machine
+# that actually decides red, and nothing in the log says which or why.
+#
+# THIS IS THE SAME SHAPE AS THE FOUR DEFECTS ABOVE: nothing goes red, the tree
+# just quietly stops being checked. A skip that names no reason is
+# indistinguishable from a test that was never written, and this tree's
+# three-disposition doctrine turns on exactly that text - ran-and-found-nothing
+# and not-present-at-all are BOTH skips, separated only by their reason.
+# tests/test_hook_gate.py records the sharpest instance in its own docstring -
+# six arms skipping to a green exit 0 with the six reasons never printed - and
+# ends "Closing that means changing CI, which is outside this file."
+#
+# .githooks/pre-push was taught this already and passes -rs to both of its
+# invocations; tests/test_prepush_skip_reporting.py grades that. ci.yml was
+# never taught the same thing. These arms are that guard's twin for CI.
+#
+# SCOPE, STATED RATHER THAN IMPLIED. These arms read ci.yml ONLY.
+# docs-guards.yml also invokes pytest twice, on a DERIVED list of md-reading
+# modules expanded from a shell array (`"${app[@]}"`), and as of this commit
+# neither of those invocations carries an `-r` spec. That is a real instance of
+# the same blind spot and it is NOT closed here, because docs-guards.yml was
+# outside the write-list of the slice that added this. It is
+# applicable-and-not-done, not not-applicable.
+# ---------------------------------------------------------------------------
+
+# THE PARSER IS SHARED, NOT REIMPLEMENTED, and that is deliberate rather than
+# lazy.
+#
+# tests/test_prepush_skip_reporting.py already carries a token scan hardened
+# against the exact trap this arm walks into. Its predecessor keyed on the
+# literal string `-rs` and went RED on `-rA`, on `-r s`, on a line continuation
+# and on a reordering - four CORRECT invocations. Widening the matcher was the
+# wrong response, and it was still wrong the second time. The widened version
+# was then measured going GREEN on `-m pytest -r tests`, having read the
+# letters of a directory name as an `-r` spec because the word contains an `s`.
+# The fix was to stop guessing: an attached spec, or a detached token drawn
+# entirely from pytest's own `-r` alphabet, is read; ANYTHING ELSE is reported
+# UNPARSEABLE and FAILS.
+#
+# A private second copy here would be a second chance to reintroduce every one
+# of those. .githooks/pre-push states the rule in as many words about its own
+# interpreter selector: three private copies of one selector is how a defect
+# gets fixed in one place and left live in two.
+#
+# The cost is a premise shared between two guards, and CLAUDE.md is explicit
+# that agreement between two things sharing an input is not evidence. So the
+# shared input is TESTED HERE TOO, against ci.yml-shaped text rather than
+# hook-shaped text, by the positive control at the bottom of this file.
+from tests.test_prepush_skip_reporting import (  # noqa: E402
+    PytestInvocation,
+    parse_pytest_invocations,
+    spec_reports_skips,
+)
+
+#: The two targets pytest.ini mandates be invoked SEPARATELY. Typed by hand
+#: rather than read out of ci.yml: a census that reads its own answer from the
+#: file it audits is not a census.
+CI_SUITE_TARGETS = ("tests", "agents/pity_engine")
+
+
+def _skip_reporting_problems(text: str, source: str) -> list[str]:
+    """Every pytest invocation in `text` that will not name its skips.
+
+    Two ways to land on this list, and the second is the important one:
+
+      - the `-r` spec carries none of s, a or A, so pytest prints a bare `s`
+        and no reason. `-rfE` is the sting: it HAS an `-r`, so any check that
+        merely looks for the flag waves it through.
+      - the invocation is UNPARSEABLE. A token scan cannot tell `-r <spec>`
+        from `-r` followed by a target, and no regex resolves that, so the
+        shared parser refuses to guess and this function refuses to grade a
+        subject it cannot read. An unreadable invocation is a FAILURE - never a
+        pass, and never a skip.
+    """
+    problems: list[str] = []
+    for inv in parse_pytest_invocations(text):
+        if inv.unparseable:
+            problems.append(
+                f"{source}: the invocation targeting {inv.target!r} carries an `-r` this "
+                f"scan cannot read ({inv.unparseable}), so it reports FAILURE rather than a "
+                f"green it cannot justify - attach the spec to the flag, as in `-rs`"
+            )
+            continue
+        if not spec_reports_skips(inv.r_spec):
+            problems.append(
+                f"{source}: the invocation targeting {inv.target!r} has `-r` spec "
+                f"{inv.r_spec!r}, none of whose characters lists skips, so its skips reach "
+                f"the log as bare `s` characters with no reason - add s, a or A"
+            )
+    return problems
+
+
+def test_pytest_ini_does_not_itself_supply_the_skip_reporting_the_workflow_adds():
+    """PREMISE, as its own arm, the same shape as the doubled-q premise above.
+
+    The guard below is only meaningful while pytest.ini leaves `-r` unset. If a
+    skip-reporting spec were ever added to `addopts`, every invocation in the
+    tree would report skips whatever the workflow passed, and this guard would
+    silently become a rule about nothing while still looking like protection.
+    """
+    addopts = [
+        ln for ln in PYTEST_INI.read_text(encoding="utf-8").splitlines()
+        if ln.strip().startswith("addopts")
+    ]
+    assert addopts, "pytest.ini has no addopts line"
+    specs = [tok for ln in addopts for tok in ln.split("#")[0].split() if tok.startswith("-r")]
+    assert not specs, (
+        f"pytest.ini's addopts now carries {specs}. If that spec reports skips, the guard "
+        f"below is guarding nothing and should be deleted rather than left looking like "
+        f"protection; re-read both files before changing either."
+    )
+
+
+def test_the_shared_parser_reads_the_real_ci_workflow():
+    """NON-VACUITY for the import itself, before anything is graded with it.
+
+    The parser is a token scan of shell lines and ci.yml is YAML. If a future
+    edit moved these steps into a shape the scan cannot see - a composite
+    action, a `uses:`, a matrix - it would find zero invocations and the guard
+    below would pass over an empty list forever. That is precisely the vacuous
+    pass this module exists to catch elsewhere.
+    """
+    invocations = parse_pytest_invocations(CI.read_text(encoding="utf-8"))
+    assert invocations, (
+        f"the shared token scan found no `-m pytest` invocation in {CI.name} at all. Either "
+        f"the suites left this workflow, or they are now invoked in a shape a shell token "
+        f"scan cannot read; either way the guard below is grading nothing."
+    )
+
+
+def test_every_ci_pytest_invocation_names_its_skips_and_both_suites_are_present():
+    """THE GUARD, with its own anti-vacuity floor INSIDE the same assertion.
+
+    A floor kept in a separate arm leaves this one vacuous in the window where
+    the floor is red - "every invocation reports skips" is trivially true of
+    zero invocations, and of two invocations that are no longer the suites. So
+    the census and the judgement are ONE assert: both mandated suite targets
+    must be present, AND no invocation anywhere in the workflow may be silent
+    or unreadable.
+
+    WHAT THIS CAN CLAIM, narrow on purpose. It claims that each `-m pytest`
+    line the scan can see requests a short summary whose spec includes skips.
+    It does NOT claim the flag survives to the runner - a variable, an `eval`,
+    a composite action or a sourced fragment would all be invisible - it does
+    not model YAML, and it does not assert step ORDER, because reordering two
+    independent suites is a correct workflow.
+    """
+    text = CI.read_text(encoding="utf-8")
+    invocations = parse_pytest_invocations(text)
+    targets = {inv.target for inv in invocations}
+
+    problems: list[str] = []
+    missing = [t for t in CI_SUITE_TARGETS if t not in targets]
+    if missing:
+        problems.append(
+            f"{CI.name} no longer invokes {missing} as its own pytest command, so a rule "
+            f"about 'every invocation' would be a rule about the wrong set. Found targets: "
+            f"{sorted(targets)}"
+        )
+    suite_invocations = [inv for inv in invocations if inv.target in CI_SUITE_TARGETS]
+    if len(suite_invocations) < len(CI_SUITE_TARGETS):
+        problems.append(
+            f"{CI.name} carries {len(suite_invocations)} suite invocation(s); pytest.ini "
+            f"mandates {len(CI_SUITE_TARGETS)}, run SEPARATELY and never merged into one "
+            f"root-level collection"
+        )
+    problems.extend(_skip_reporting_problems(text, CI.name))
+
+    assert not problems, (
+        "CI will report a skip COUNT it cannot explain. Measured on run 34343895319: "
+        "`1 failed, 1636 passed, 19 skipped in 24.30s` with none of the nineteen named, "
+        "against 1 skip for the same tree on Windows. A skip whose reason is absent is "
+        "indistinguishable from a test that was never written.\n  - "
+        + "\n  - ".join(problems)
+    )
+
+
+def test_the_skip_detector_flags_shapes_a_narrower_matcher_would_wave_through():
+    """POSITIVE CONTROL over hand-typed workflow text, in BOTH directions.
+
+    A control that plants only the case the matcher handles cannot discover
+    that the matcher is narrow, so the FLAGGED side varies the shape across the
+    ways an invocation can fail to name its skips, and the SURVIVING side
+    varies it across the spellings that are CORRECT and were measured false
+    reds in the guard this idiom replaces. An accept-only control passes for a
+    detector welded to False; a reject-only control passes for one welded to
+    True.
+
+    Written as YAML `run:` fragments rather than bare shell lines, because that
+    is the shape the real subject has - a parser that only worked on
+    hook-style lines would be a shared premise nobody had tested here.
+    """
+    flagged = {
+        "no -r at all - the form ci.yml shipped before this commit": (
+            "      - name: Application suite (tests/)\n"
+            "        run: python -m pytest tests\n"
+        ),
+        "an -r that does NOT list skips - defeats any check for the flag alone": (
+            "      - name: Engine suite\n"
+            "        run: python -m pytest -rfE agents/pity_engine\n"
+        ),
+        "a detached -r whose next token is a target and not a spec": (
+            "      - name: Application suite\n"
+            "        run: python -m pytest -r tests\n"
+        ),
+        "a bare -r at end of line, with the target ahead of it": (
+            "      - name: Engine suite\n"
+            "        run: python -m pytest agents/pity_engine -r\n"
+        ),
+        "a skip-reporting spec sitting in a COMMENT while the command has none": (
+            "      # the suites pass -rs so the log names every skip\n"
+            "        run: python -m pytest tests\n"
+        ),
+    }
+    for shape, snippet in flagged.items():
+        found = _skip_reporting_problems(snippet, "control.yml")
+        assert found, f"the detector waved through {shape}:\n{snippet}"
+
+    surviving = {
+        "-rs attached, the form ci.yml now ships": (
+            "        run: python -m pytest -rs tests\n"
+        ),
+        "-rA, which reports strictly MORE and was a measured false red": (
+            "        run: python -m pytest -rA agents/pity_engine\n"
+        ),
+        "-r s detached but drawn from pytest's own -r alphabet": (
+            "        run: python -m pytest -r s tests\n"
+        ),
+        "a continuation line, which a windowed regex splits in half": (
+            "        run: |\n"
+            "          python -m pytest -rsx \\\n"
+            "            agents/pity_engine\n"
+        ),
+        "a reordering, with the target ahead of the flag": (
+            "        run: python -m pytest tests -ra\n"
+        ),
+        "an env prefix, as the hook-gate step carries": (
+            "        run: RSC_REQUIRE_HOOK_GATE=1 python -m pytest -rs tests/test_hook_gate.py\n"
+        ),
+    }
+    for shape, snippet in surviving.items():
+        found = _skip_reporting_problems(snippet, "control.yml")
+        assert not found, f"the detector went RED on a CORRECT invocation - {shape}: {found}"
+
+
+def test_the_control_snippets_are_actually_parsed_and_not_silently_empty():
+    """NON-VACUITY FOR THE CONTROL ITSELF, and it is not a formality.
+
+    `_skip_reporting_problems` returns an empty list both for text whose
+    invocations are all correct AND for text in which it found no invocation at
+    all. The surviving side of the control above cannot tell those apart, so a
+    typo that made a snippet unparseable would read there as a pass. This arm
+    pins that each surviving snippet yields exactly one invocation, with the
+    target and the spec it was written to carry.
+    """
+    cases = (
+        ("        run: python -m pytest -rs tests\n", "tests", "s"),
+        ("        run: python -m pytest -rA agents/pity_engine\n", "agents/pity_engine", "A"),
+        ("        run: python -m pytest -r s tests\n", "tests", "s"),
+        ("        run: python -m pytest tests -ra\n", "tests", "a"),
+        (
+            "        run: |\n          python -m pytest -rsx \\\n            agents/pity_engine\n",
+            "agents/pity_engine",
+            "sx",
+        ),
+    )
+    for snippet, target, spec in cases:
+        parsed = parse_pytest_invocations(snippet)
+        assert parsed == [PytestInvocation(target, spec, "")], (
+            f"the control snippet {snippet!r} parsed as {parsed!r}, so its empty problem "
+            f"list said nothing at all about skip reporting"
+        )
+        assert spec_reports_skips(spec), f"{spec!r} must report skips or the case is wrong"
