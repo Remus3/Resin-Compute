@@ -50,10 +50,14 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from _pytest.outcomes import Skipped
 
+from tests import conftest
 from tests.conftest import git_unusable_reason, require_git_repository
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -276,3 +280,210 @@ def test_the_missing_git_skip_path_is_not_taken_in_a_real_checkout():
             "reports git as usable - the detector is not detecting, and the guards "
             "that depend on it will fail with a confusing error instead of skipping"
         )
+
+
+# ---------------------------------------------------------------------------
+# The archive branch of that cross-check, driven from THIS file
+# ---------------------------------------------------------------------------
+#
+# MEASURED, and the whole reason this section exists. A line-level trace over
+# `python -m pytest tests/test_commit_trailers.py` at b5dc138 recorded lines
+# 263, 264, 266 and 267 of this module as HIT and nothing at all between 268
+# and 278 - the `else:` arm of the cross-check above never executed. The same
+# trace over the whole `tests` suite DID reach it, at 274, 275 and 278, because
+# `tests/test_conftest_skip_path_pinned.py` forces the shape from outside.
+#
+# So the branch is NOT structurally dead, and an earlier hand-off saying so was
+# wrong. It is dead under ISOLATED SELECTION - and one real lane selects this
+# module in isolation. `.github/workflows/docs-guards.yml` derives its selection
+# from tracked test modules that mention a markdown path; this module matches
+# that pattern twice and the pinning module matches it zero times, so on every
+# docs-only push the `else:` arm ships collected and unexercised. Those line
+# numbers are a record of one measurement at one commit and will decay - the
+# branch is named by its function above, not by its line.
+#
+# The technique below is the pinning module's, RE-IMPLEMENTED rather than
+# imported. Importing it would make this file depend on the file whose job is
+# to audit this file, and the two are supposed to be separately derived.
+
+#: The GENUINE `@lru_cache(maxsize=1)` wrapper, captured at import time before
+#: any arm can stub the name. Cache clearing has to go through this object:
+#: once a stub lambda is bound in its place the name has no `cache_clear` at
+#: all, and reaching for it by name in teardown would die with AttributeError
+#: while leaving the real cache holding a stubbed answer.
+_REAL_GIT_UNUSABLE_REASON = git_unusable_reason
+
+#: A reason distinctive enough that its presence proves the arm was handed THIS
+#: value rather than having found some reason of its own.
+_ARCHIVE_SENTINEL_REASON = "SENTINEL-4d5e6f: git is unusable and this is the reason handed in"
+
+
+@pytest.fixture
+def real_reason_cache_cleared() -> Iterator[None]:
+    """Clear the real helper's cache on both sides of an arm that stubs it.
+
+    Cleared BEFORE so no arm here inherits an answer another test cached from a
+    real probe, and AFTER so nothing later in the suite reads an answer cached
+    while a stub was installed. Not autouse: the eight arms above this section
+    are meant to run against the real tree.
+    """
+    _REAL_GIT_UNUSABLE_REASON.cache_clear()
+    yield
+    _REAL_GIT_UNUSABLE_REASON.cache_clear()
+
+
+def _force_archive_shape(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Repoint THIS module's `REPO_ROOT` at a directory with no `.git` above it.
+
+    The absence is ASSERTED, never assumed. If a `.git` entry existed anywhere
+    up the temporary path the cross-check would take its CHECKOUT branch, and
+    the arm would grade the other half while reporting green.
+    """
+    root = tmp_path / "archive_shape"
+    root.mkdir()
+    monkeypatch.setattr(sys.modules[__name__], "REPO_ROOT", root)
+    found = [p for p in (root, *root.parents) if (p / ".git").exists()]
+    assert not found, (
+        f"precondition failed: a .git entry exists at {found[0] if found else None}, at or "
+        f"above {root}, so the archive branch is not reachable from here and this arm would "
+        "grade the checkout branch instead"
+    )
+    return root
+
+
+def _stub_reason(monkeypatch: pytest.MonkeyPatch, reason: str | None) -> None:
+    """Make `git_unusable_reason()` answer `reason` at BOTH of its bindings.
+
+    THIS module's global is what the cross-check's own body calls, because the
+    name was imported into this namespace at import time. `tests.conftest`'s
+    global is the DEFINITION site, and it is what `require_git_repository()`
+    resolves when it looks the name up in its own module globals. Patch only
+    the first and the world is split-brained: the cross-check's arithmetic and
+    any helper it may later call disagree about whether git works, and an arm
+    can then pass while grading a world that does not exist. Both get the SAME
+    value so the forced world is internally coherent.
+
+    GIT_DIR and GIT_WORK_TREE are deleted here as well. Exported, they are the
+    disposition in which git answers successfully for a tree that has no `.git`
+    on disk, which would let the ambient environment decide an arm. Nothing
+    below shells out to git once both bindings are stubbed, so they cannot
+    decide these arms today - deleting them means they cannot decide them after
+    a later edit either.
+    """
+    monkeypatch.delenv("GIT_DIR", raising=False)
+    monkeypatch.delenv("GIT_WORK_TREE", raising=False)
+    _REAL_GIT_UNUSABLE_REASON.cache_clear()
+    monkeypatch.setattr(conftest, "git_unusable_reason", lambda: reason)
+    monkeypatch.setattr(sys.modules[__name__], "git_unusable_reason", lambda: reason)
+
+
+def _expect_assertion_error(fragment: str) -> str:
+    """Run the cross-check, demanding an AssertionError that carries `fragment`.
+
+    Catches `BaseException` and rejects `Skipped` BY NAME. `Skipped` derives
+    from `BaseException`, so `pytest.raises(AssertionError)` - and even
+    `pytest.raises(Exception)` - lets a skip straight through, and a skip
+    escaping here would read as a green non-result rather than as the arm
+    having stopped guarding.
+    """
+    try:
+        test_the_missing_git_skip_path_is_not_taken_in_a_real_checkout()
+    except Skipped as skipped:
+        raise AssertionError(
+            f"the cross-check SKIPPED instead of failing: {skipped!r}. A skip is a "
+            "green-looking non-result, so the arm that guards every git-dependent guard "
+            "under tests/ would silently stop guarding"
+        ) from skipped
+    except AssertionError as failure:
+        message = str(failure)
+        assert fragment in message, (
+            f"the cross-check failed, but not for the reason under test. Expected the "
+            f"message to contain {fragment!r}; got {message!r}"
+        )
+        return message
+    except BaseException as other:  # pragma: no cover - defensive
+        raise AssertionError(
+            f"the cross-check raised {type(other).__name__} rather than AssertionError: {other!r}"
+        ) from other
+    raise AssertionError(
+        "the cross-check PASSED where it must fail. Its archive branch is the half that "
+        "reports a detector welded to 'usable', and a pass here means that half is gone"
+    )
+
+
+def _expect_no_raise(what: str) -> None:
+    """Run the cross-check, demanding it complete - it must not be a false red."""
+    try:
+        test_the_missing_git_skip_path_is_not_taken_in_a_real_checkout()
+    except Skipped as skipped:
+        raise AssertionError(f"{what}: the cross-check skipped rather than passing: {skipped!r}") from skipped
+    except BaseException as failure:
+        raise AssertionError(
+            f"{what}: the cross-check raised {type(failure).__name__} on a shape it must "
+            f"accept - that is a false red: {failure!r}"
+        ) from failure
+
+
+def test_the_dot_git_probe_cannot_tell_a_worktree_file_from_a_checkout_directory(tmp_path: Path) -> None:
+    """The MECHANISM that makes the archive branch need forcing, asserted.
+
+    `(p / ".git").exists()` answers True for a DIRECTORY, which is an ordinary
+    checkout, and equally True for a FILE, which is the shape a linked worktree
+    has - and this repository is worked in linked worktrees. There is therefore
+    no shape of a real checkout in which the cross-check's list comprehension
+    comes back empty, which is why the two arms below have to force the shape
+    rather than wait for a `git archive` extract to turn up. If that ever stops
+    holding, this arm reddens and the reasoning above has to be rewritten.
+    """
+    as_directory = tmp_path / "ordinary_checkout"
+    (as_directory / ".git").mkdir(parents=True)
+    as_file = tmp_path / "linked_worktree"
+    as_file.mkdir()
+    (as_file / ".git").write_bytes(b"gitdir: ../elsewhere/.git/worktrees/x\n")
+    absent = tmp_path / "archive_extract"
+    absent.mkdir()
+
+    assert (as_directory / ".git").is_dir(), "precondition: the checkout shape must be a directory"
+    assert (as_file / ".git").is_file(), "precondition: the worktree shape must be a file"
+
+    assert (as_directory / ".git").exists()
+    assert (as_file / ".git").exists(), (
+        "a linked worktree's .git is a FILE. If exists() stopped answering True for it, the "
+        "cross-check would take its ARCHIVE branch inside a real checkout and demand a reason "
+        "from a tree whose git works perfectly"
+    )
+    assert not (absent / ".git").exists(), (
+        "control, and without it the three assertions above are satisfied by a probe welded "
+        "to True: the same call must answer False where no .git entry exists"
+    )
+
+
+def test_a_usable_git_with_no_disk_dot_git_reddens_the_archive_branch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, real_reason_cache_cleared: None
+) -> None:
+    """Drive the `else:` arm above and require it to FIRE.
+
+    This is the proposition that branch exists to carry: in a tree with no
+    `.git` anywhere at or above the root, a helper still answering "git is
+    usable" is a detector welded to one answer, and every guard depending on it
+    would fail with a confusing error rather than skipping. Delete the `else:`
+    block, or flip its `is not None` to `is None`, and this arm reddens.
+    """
+    _force_archive_shape(monkeypatch, tmp_path)
+    _stub_reason(monkeypatch, None)
+    _expect_assertion_error("the detector is not detecting")
+
+
+def test_a_reason_with_no_disk_dot_git_is_a_pass_and_not_a_false_red(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, real_reason_cache_cleared: None
+) -> None:
+    """The control for the arm above, and the second of the two guards.
+
+    An honest archive extract - no `.git` on disk, and a helper that says so -
+    is the exact shape the whole SKIP mechanism exists to serve. Reddening here
+    would be the false red that trains a reader to ignore red, and without this
+    arm an `else:` welded to `assert False` would satisfy the arm above.
+    """
+    _force_archive_shape(monkeypatch, tmp_path)
+    _stub_reason(monkeypatch, _ARCHIVE_SENTINEL_REASON)
+    _expect_no_raise("an archive extract whose helper reports an honest reason")

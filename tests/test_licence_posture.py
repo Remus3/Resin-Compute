@@ -146,6 +146,17 @@ class _Enumeration(typing.NamedTuple):
 # and far above the zero a broken enumeration returns;
 # test_the_floor_is_reachable_and_keeps_clearance_below_the_real_tree pins the
 # interval it has to sit in rather than trusting the value.
+#
+# WHAT WOULD LEGITIMATELY CHANGE 100, because a floor whose value nobody can
+# argue is a floor somebody trims on the day it goes red. The lower end is not
+# taste: the floor has to sit ABOVE the widest answer a single-directory
+# `git ls-files` can return, because that is the partial enumeration it exists
+# to refuse. Measured on this tree 2026-09-10 - 212 tracked paths over 16
+# top-level directories, widest subtree `tests/` at 69 - so 100 carries 31
+# paths of clearance above the widest slip and 112 below the whole tree. If
+# `tests/` ever grows past 100 the floor stops discriminating and must be
+# RAISED; the arm goes red saying exactly that rather than leaving the value
+# unexamined.
 _MIN_TRACKED_PATHS = 100
 
 # THE FLOOR ALONE CANNOT SEE A PARTIAL ENUMERATION. A `git ls-files` narrowed by
@@ -1173,14 +1184,40 @@ def test_the_enumeration_classifier_separates_every_disposition():
     )
 
 
+def _cwd_slip_enumerations(corpus: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
+    """Every partial answer a cwd that landed in a subdirectory would return.
+
+    `git ls-files` is limited to cwd and below and prints paths RELATIVE to cwd,
+    so a run from `tests/` returns that subtree with the `tests/` prefix gone.
+    This derives those answers from the real corpus rather than re-shelling git
+    once per directory. Checked against the real thing on 2026-09-10: running
+    `git ls-files` from each of the 16 top-level tracked directories agreed with
+    this derivation on all 16 counts, tests/ at 69 down to .githooks/ at 3.
+
+    Top-level directories only. A slip one level deeper returns a strict subset
+    of its parent's answer, so a floor that refuses the parent refuses the child
+    a fortiori and enumerating the deeper ones would add subjects but no claim.
+    """
+    slips: dict[str, list[str]] = {}
+    for name in corpus:
+        head, sep, rest = name.partition("/")
+        if sep:
+            slips.setdefault(head, []).append(rest)
+    return {head: tuple(paths) for head, paths in slips.items()}
+
+
 def test_the_floor_is_reachable_and_keeps_clearance_below_the_real_tree():
     """THE FLOOR'S EDGE, and where that edge is allowed to sit.
 
-    Two claims, and neither alone is enough. Truncating the real corpus to one
-    path under the floor must FAIL for the floor's own reason, so the set of
+    Three claims, and no one of them is enough. Truncating the real corpus to
+    one path under the floor must FAIL for the floor's own reason, so the set of
     inputs where it fires is demonstrably non-empty. And the value must sit in an
     interval: high enough that a badly narrowed enumeration cannot clear it, low
     enough that an ordinary deletion cannot make it fire on a healthy tree.
+
+    The high-enough end is the one that used to be a wish. It is now graded
+    against the narrowings this tree can actually produce - see the comment on
+    the loop below.
     """
     corpus = _real_corpus()
     assert len(corpus) > _MIN_TRACKED_PATHS, (
@@ -1202,9 +1239,42 @@ def test_the_floor_is_reachable_and_keeps_clearance_below_the_real_tree():
     )
     assert "floor" not in at_floor.reason, at_floor.reason
 
-    assert _MIN_TRACKED_PATHS >= 10, (
-        f"a floor of {_MIN_TRACKED_PATHS} is low enough for a badly broken "
-        "enumeration to clear it"
+    # THE LOWER BOUND, GRADED AGAINST MEASURED INPUTS RATHER THAN AGAINST
+    # ITSELF. `assert _MIN_TRACKED_PATHS >= 10` stood here and was the entire
+    # lower bound, while every other use of the constant in this file is stated
+    # relative to the constant. Measured at b5dc138 on 2026-09-10: setting the
+    # literal to 10 left this file at 47 passed and the whole tests suite at
+    # 1882 passed, 1 skipped, both exit 0. The floor's VALUE was ungraded.
+    #
+    # The docstring already names what the lower bound is FOR - "a badly
+    # narrowed enumeration cannot clear it" - and the narrowing this guard was
+    # written against is a cwd that landed in a subdirectory. That population is
+    # enumerable, so it gets graded instead of guessed at.
+    #
+    # Every one of those partial answers must trip the FLOOR's own branch, not
+    # merely be refused somewhere downstream. Asserting only `status ==
+    # "FAILED"` would be satisfied by the anchor check, which catches a
+    # DIFFERENT partial and would mask the floor going slack: at a floor of 10
+    # these inputs fall through to the anchors and are still refused, so a
+    # status-only arm stays green on the mutation it exists to catch.
+    slips = _cwd_slip_enumerations(corpus)
+    assert len(slips) >= 5, (
+        f"only {len(slips)} top-level directories are tracked, so the loop "
+        "below has next to nothing to grade the floor against and this arm is "
+        "close to vacuous"
+    )
+    escaped = [
+        f"{head}/ at {len(paths)} paths"
+        for head, paths in sorted(slips.items())
+        if "floor" not in _classify_enumeration(0, "\n".join(paths) + "\n", "").reason
+    ]
+    widest = max(len(paths) for paths in slips.values())
+    assert not escaped, (
+        f"a floor of {_MIN_TRACKED_PATHS} does not fire on a cwd that landed in "
+        f"{', '.join(escaped)}, so it no longer refuses the partial enumeration "
+        f"it exists to refuse. The widest single-directory answer this tree can "
+        f"return is {widest} paths against {len(corpus)} tracked, so the floor "
+        f"has to sit above {widest}. Raise it - do not lower this arm."
     )
     assert len(corpus) - _MIN_TRACKED_PATHS >= 30, (
         f"the floor of {_MIN_TRACKED_PATHS} leaves only "
