@@ -49,6 +49,20 @@ version. What follows is everything the scaffold deliberately did not do.
   plus indentation, and it pre-replaces the two common comment markers. Six
   other split shapes that NEITHER side can see are now recorded at the site.
 
+- **OPERATOR RULING 2026-09-10 - THE SESSION SCRATCHPAD IS IN SCOPE, AND
+  CLAUSE (a) DOES NOT REACH IT. NOT AN ADJUDICATED CALL - THE OPERATOR RULED
+  DIRECTLY, SO THE TEN STAND AT TEN.** The halt boundary's clause (a) covers
+  any write, delete or unlink whose target is outside this repo root, and the
+  session scratchpad under `%LOCALAPPDATA%\Temp\claude\` is outside it as
+  literally worded. The operator's words were "yes, session scratchpad is in
+  scope - delete those worktrees freely". So a `git worktree remove` of a
+  scratchpad worktree needs NO halt and NO ping. Clause (a) protects the
+  MACHINE-WIDE slot bucket under `C:\ProgramData`, the `Global\` mutex
+  namespace, and another party's tree - it is not a general prohibition on
+  every path outside the repo root. THE ASYMMETRY THAT REMAINS IS REAL AND IS
+  NOT COVERED BY THIS RULING: the worktree registered at `C:/rsc-wt-atomic` is
+  outside the repo root and is NOT a scratchpad path, so it stays untouched.
+
 - **NO NEW ADJUDICATED CALL WAS NEEDED ON 2026-09-10 EITHER, AND THE SECOND
   SESSION OF THAT DAY IS WHY THE RULE IS WORTH RESTATING. TEN STAND.** Three
   disagreements arose and every one was settled by a COMMAND. A carried row
