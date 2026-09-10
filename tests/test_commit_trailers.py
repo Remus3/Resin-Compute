@@ -48,6 +48,8 @@ and 4 skipped with trackedness as the stated reason.
 """
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -324,8 +326,36 @@ def real_reason_cache_cleared() -> Iterator[None]:
 
     Cleared BEFORE so no arm here inherits an answer another test cached from a
     real probe, and AFTER so nothing later in the suite reads an answer cached
-    while a stub was installed. Not autouse: the eight arms above this section
-    are meant to run against the real tree.
+    while a stub was installed.
+
+    OPT-IN, AND DELIBERATELY NOT AUTOUSE. The reason recorded here previously -
+    that the arms above must run against the real tree - was not the operative
+    one, and it does not survive reading the body: this fixture only clears a
+    cache and stubs nothing, so autouse would not have taken any arm off the
+    real tree.
+
+    THE OPERATIVE REASON IS FALSE SYMMETRY. `tests/test_conftest_skip_path_pinned.py`
+    carries a neutraliser that IS autouse and does strictly MORE than this one:
+    it deletes `GIT_DIR` and `GIT_WORK_TREE` for every arm in that file as well
+    as clearing the cache. Here the environment deletion lives in
+    `_stub_reason()` instead. Two fixtures that were autouse alike, named alike
+    and neutralised DIFFERENT things would read as one mechanism to the next
+    person who diffs them, and a silent divergence between two hand
+    transcriptions of one claim is a failure this tree has already been bitten
+    by. Opt-in keeps the difference visible at every call site.
+
+    MEASURED, NOT REASONED. Flipping this decorator to `autouse=True` was run
+    and reverted on 2026-09-10: this module alone and the whole `tests` suite
+    reported IDENTICAL pass and skip counts either way, and both held with
+    `GIT_DIR` exported to a different git directory. The counts themselves are
+    not restated here - they decay on the next arm added, and the EQUALITY is
+    the finding. Autouse is behaviour-neutral here, so it buys nothing that
+    would pay for the false symmetry above.
+
+    THE HONEST REPAIR IS NOT IN THIS FILE. One shared neutraliser in
+    `tests/conftest.py`, consumed by both modules, is what removes the second
+    transcription altogether rather than making the two copies look more alike.
+    That lands in files this one cannot reach.
     """
     _REAL_GIT_UNUSABLE_REASON.cache_clear()
     yield
@@ -487,3 +517,203 @@ def test_a_reason_with_no_disk_dot_git_is_a_pass_and_not_a_false_red(
     _force_archive_shape(monkeypatch, tmp_path)
     _stub_reason(monkeypatch, _ARCHIVE_SENTINEL_REASON)
     _expect_no_raise("an archive extract whose helper reports an honest reason")
+
+
+# ---------------------------------------------------------------------------
+# The selector of the docs-only lane, reproduced and asserted
+# ---------------------------------------------------------------------------
+#
+# THE RATIONALE FOR THE SECTION ABOVE RESTS ON AN INCIDENTAL STRING, and until
+# these two arms landed nothing anywhere guarded it.
+#
+# `.github/workflows/docs-guards.yml` builds its test selection in two moves: at
+# its `git ls-files -z` line, and at the `grep -qE` line inside the loop that
+# reads the result. A tracked module under a `tests/` directory is a CANDIDATE,
+# and a candidate is SELECTED if and only if some LINE of it matches the
+# workflow's markdown-path pattern. That is a filter on TEXT and on nothing
+# else.
+#
+# This module matches that pattern exactly twice, and BOTH matches are
+# incidental prose naming the operator-policy document - one in the docstring at
+# the top of this file, one inside a fixture's commit-message string further
+# down. NEITHER of them opens that document, or any document. Reword either
+# mention and this module silently leaves the lane; the two arms above then
+# guard a lane they no longer ship on, and the section header above becomes a
+# false statement with nothing anywhere to say so.
+#
+# The proposition worth pinning is therefore the CONDITIONAL one, and it has two
+# halves. This module IS in that lane, AND the module that drives the `else:`
+# arm cross-module IS NOT - which is exactly why the two forced-shape arms above
+# have to exist at all. The second half is MEASURED below, by running the same
+# selector over that module, rather than taken on the word of the comment above.
+#
+# THE WORKFLOW IS THE SOURCE. Everything here is a transcription of it. If the
+# two ever disagree, the workflow wins and this section is what changes.
+
+#: The lane's content filter, transcribed from the workflow's `grep -qE` line.
+#:
+#: BUILT BY CONCATENATION, AND THAT IS NOT A STYLE CHOICE. Written as a single
+#: literal, this pattern's own source text contains a match for it: a dot, the
+#: two letters, then an open parenthesis, which is not alphanumeric. The module
+#: would then be selected by the lane BECAUSE THIS SECTION IS IN IT, the first
+#: arm below would pass no matter what the rest of the file said, and the
+#: fragility it exists to report would be concealed by the report. Splitting the
+#: literal keeps that adjacency out of these bytes, and the second arm below
+#: MEASURES that it stayed out rather than trusting this comment.
+_LANE_CONTENT_PATTERN = re.compile(r"\." + "md" + r"([^a-zA-Z0-9]|$)")
+
+#: The two pathspecs the lane hands `git ls-files`, from the same workflow step.
+#: The `-z` is preserved for the workflow's own reason: without it a path
+#: carrying a space or a quote does not survive the split.
+_LANE_PATHSPECS = ("*/tests/*.py", "tests/*.py")
+
+#: The module whose arms drive this module's archive branch cross-module. The
+#: entire justification for the two forced-shape arms above is that this module
+#: is NOT selected by the lane, so on a docs-only push that branch ships
+#: collected and unexercised.
+_CROSS_MODULE_DRIVER = "tests/test_conftest_skip_path_pinned.py"
+
+#: Its FIRST occurrence in this file is the section header a few lines up, so
+#: partitioning the source on it splits the file into everything written before
+#: this section and everything written as part of it. The self-reference arm
+#: asserts the marker was found, so rewording the header reddens that arm rather
+#: than silently splitting at nothing.
+_LANE_SECTION_MARKER = "The selector of the docs-only lane, reproduced and asserted"
+
+
+def _lane_candidates() -> list[str]:
+    """The lane's candidate list, re-derived from the tracked index.
+
+    GIT_DIR AND GIT_WORK_TREE ARE SCRUBBED FROM THE CHILD ENVIRONMENT. Exported,
+    either one points `git ls-files` at a different index entirely - the
+    disposition in which git answers successfully about a tree that is not this
+    one - and these arms would grade some other file list while reporting on
+    this module. The lane runs on a fresh checkout with neither variable set, so
+    scrubbing is what makes the reproduction FAITHFUL rather than what makes it
+    differ.
+    """
+    require_git_repository()
+    env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE")}
+    completed = subprocess.run(
+        ["git", "ls-files", "-z", *_LANE_PATHSPECS],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    assert completed.returncode == 0, (
+        f"`git ls-files` exited {completed.returncode} once GIT_DIR and GIT_WORK_TREE "
+        f"were scrubbed, though the shared helper reports git as usable here. That "
+        f"combination means the ambient environment was deciding what this tree's index "
+        f"contains: {completed.stderr.strip()!r}"
+    )
+    return [path for path in completed.stdout.split(chr(0)) if path]
+
+
+def _lane_selects(text: str) -> bool:
+    """Apply the lane's content filter to `text` the way `grep -qE` does.
+
+    LINE BY LINE, and the split is load-bearing. The pattern's `$` alternative
+    anchors at the end of a LINE for grep, while one `re.search` over an entire
+    file body would anchor it only at the end of the FILE. Splitting first is
+    what makes the two agree.
+    """
+    return any(_LANE_CONTENT_PATTERN.search(line) for line in text.splitlines())
+
+
+def _module_relative_path() -> str:
+    """This module's path, spelled the way the tracked index spells it."""
+    return Path(__file__).resolve().relative_to(REPO_ROOT).as_posix()
+
+
+def test_this_module_is_in_the_docs_lane_and_its_cross_module_driver_is_not() -> None:
+    """Both halves of the conditional the section above depends on, measured.
+
+    Reword either incidental mention in this file and the third assertion below
+    goes red - which is the entire point, because that reword is silent
+    everywhere else in the tree.
+    """
+    candidates = _lane_candidates()
+    here = _module_relative_path()
+
+    assert here in candidates, (
+        f"{here} is not in the lane's candidate list. Either it is untracked, or the "
+        f"workflow's pathspecs stopped covering it - and either way the arms above are "
+        f"guarding a lane this module never reaches"
+    )
+    assert _CROSS_MODULE_DRIVER in candidates, (
+        f"{_CROSS_MODULE_DRIVER} is not a candidate at all, so the interesting half "
+        f"below - that the CONTENT filter is what excludes it - would be satisfied for "
+        f"the wrong reason. Measured rather than assumed, precisely so that cannot pass "
+        f"quietly"
+    )
+
+    selected = []
+    for path in candidates:
+        candidate = REPO_ROOT / path
+        if not candidate.is_file():
+            # `grep -qE` against an unreadable path exits non-zero, and the
+            # workflow's `|| continue` treats that as "not selected". Mirrored
+            # here so a tracked-but-absent path cannot make this list disagree
+            # with the lane's.
+            continue
+        if _lane_selects(candidate.read_text(encoding="utf-8", errors="replace")):
+            selected.append(path)
+
+    assert here in selected, (
+        f"{here} no longer matches the lane's content filter, so the docs-only lane has "
+        f"stopped collecting it. The two forced-shape arms above exist ONLY because that "
+        f"lane runs this module in ISOLATION, without the module that drives the branch "
+        f"cross-module, and that rationale is now false"
+    )
+    assert _CROSS_MODULE_DRIVER not in selected, (
+        f"{_CROSS_MODULE_DRIVER} is now selected by the lane as well, so it runs "
+        f"alongside this module there and drives the archive branch itself. The "
+        f"forced-shape arms above are not wrong, but the reason recorded for them is"
+    )
+    assert len(selected) < len(candidates), (
+        f"control: all {len(candidates)} candidates came back selected, so the content "
+        f"filter transcribed here is filtering nothing and the assertions above say "
+        f"nothing about the lane"
+    )
+
+
+def test_the_lane_membership_of_this_module_is_not_manufactured_by_this_section() -> None:
+    """The self-reference control, and it is not optional.
+
+    An arm asserting something about its OWN source file can make its assertion
+    true merely by containing the text it looks for. Here that failure would be
+    total: the lane's filter reads TEXT, this section is text inside the file
+    the filter reads, and one unsplit copy of the pattern anywhere below would
+    select the module by itself. The arm above would then stay green through any
+    reword of the two prose mentions it was written to protect.
+
+    So the source is split at this section's header and the halves are graded
+    separately. Everything written BEFORE the section must carry the membership;
+    everything written AS PART OF the section must carry none of it.
+    """
+    text = Path(__file__).resolve().read_text(encoding="utf-8")
+    head, marker, tail = text.partition(_LANE_SECTION_MARKER)
+
+    assert marker, (
+        f"the section header {_LANE_SECTION_MARKER!r} is not in this file, so the split "
+        f"would put the whole source in one half and grade nothing"
+    )
+    assert _lane_selects(head), (
+        "the incidental mentions that put this module in the lane are gone from "
+        "everything above this section, so whatever keeps it in the lane now is this "
+        "section itself"
+    )
+    assert not _lane_selects(tail), (
+        "this section's own text matches the lane's content filter. The arm above is "
+        "then true because it exists rather than because of the two incidental mentions "
+        "it was written to protect, and a reword of either would no longer redden "
+        "anything"
+    )
+
+    poisoned = tail + "\n# a mention of README" + "." + "md" + " and nothing else\n"
+    assert _lane_selects(poisoned), (
+        "control, and without it the assertion above is satisfied by a filter welded to "
+        "False: the same call must answer True once a matching line is present"
+    )

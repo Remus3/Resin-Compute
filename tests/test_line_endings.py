@@ -134,7 +134,7 @@ class _Enumeration(typing.NamedTuple):
 # the obvious-looking "the tree has at least as many files as the tree has" -
 # would make the floor agree with whatever the enumeration returned, including
 # nothing. A fixture sized from the value under test is an amplifier, not a
-# check. 50 is far below the 195 paths measured 2026-09-08 and far above the
+# check. 90 is far below the 213 paths measured 2026-09-10 and far above the
 # zero a broken enumeration returns, so the interval where it fires is wide and
 # non-empty; test_the_floor_is_not_decorative_and_can_actually_fail proves that
 # rather than asserting it.
@@ -145,11 +145,19 @@ class _Enumeration(typing.NamedTuple):
 # 2026-09-08, raising it to 150 and to 190 both left this file green;
 # test_the_floor_keeps_wide_clearance_below_the_real_tree closes that by
 # asserting the interval this value has to sit in rather than the value.
-_MIN_TRACKED_FILES = 50
+#
+# 90 AND NOT 50, and the change came out of grading rather than taste. 50 stood
+# here until 2026-09-10, when the lower bound stopped being asserted against
+# itself and started being asserted against the partial enumerations this tree
+# can actually return: `git ls-files` run from `tests/` answers 70 paths, and
+# 70 clears 50. The value has to sit above the widest such answer and at or
+# under half the corpus - 70 < 90 <= 106 against the 213 tracked on 2026-09-10 -
+# and that arm derives both ends from the tree rather than restating 90.
+_MIN_TRACKED_FILES = 90
 
 # THE FLOOR ALONE CANNOT SEE A PARTIAL ENUMERATION. A `git ls-files` narrowed by
 # a pathspec, a sparse checkout, or a cwd that landed in a subdirectory can
-# return 60 plausible paths, clear the floor, and still be missing every `.toml`
+# return 70 plausible paths, clear a slack floor, and still be missing every `.toml`
 # in the tree - at which point the suffix arm skips saying "no tracked .toml
 # files" and is once again describing the enumeration rather than the tree.
 #
@@ -802,6 +810,28 @@ def test_the_floor_is_not_decorative_and_can_actually_fail():
     assert "floor" not in at_floor.reason, at_floor.reason
 
 
+def _cwd_slip_enumerations(corpus: list[str]) -> dict[str, tuple[str, ...]]:
+    """Every partial answer a cwd that landed in a subdirectory would return.
+
+    `git ls-files` is limited to cwd and below and prints paths RELATIVE to cwd,
+    so a run from `tests/` returns that subtree with the `tests/` prefix gone.
+    This derives those answers from the real corpus rather than re-shelling git
+    once per directory. Checked against the real thing on 2026-09-10: running
+    `git ls-files` from each of the 16 top-level tracked directories agreed with
+    this derivation on all 16 counts, tests/ at 70 down to .githooks/ at 3.
+
+    Top-level directories only. A slip one level deeper returns a strict subset
+    of its parent's answer, so a floor that refuses the parent refuses the child
+    a fortiori and enumerating the deeper ones would add subjects but no claim.
+    """
+    slips: dict[str, list[str]] = {}
+    for name in corpus:
+        head, sep, rest = name.partition("/")
+        if sep:
+            slips.setdefault(head, []).append(rest)
+    return {head: tuple(paths) for head, paths in slips.items()}
+
+
 def test_the_floor_keeps_wide_clearance_below_the_real_tree():
     """THE ARM ABOVE PINS THE FLOOR'S EDGE; THIS ONE PINS WHERE THE EDGE SITS.
 
@@ -822,7 +852,7 @@ def test_the_floor_keeps_wide_clearance_below_the_real_tree():
       - at least 10, so it cannot be lowered to a value a hung `ls-files`
         printing two lines would clear.
 
-    Deliberately NOT an equality against 50. Pinning the literal to itself
+    Deliberately NOT an equality against 90. Pinning the literal to itself
     would be a tautology that reddens on any legitimate re-derivation, which is
     a worse guard than none. The interval is the claim.
     """
@@ -832,9 +862,45 @@ def test_the_floor_keeps_wide_clearance_below_the_real_tree():
         "tree tracks, so it has stopped being a broken-enumeration detector and become an "
         "assertion about the tree's size, which will fire on a legitimate shrinkage"
     )
-    assert _MIN_TRACKED_FILES >= 10, (
-        f"a floor of {_MIN_TRACKED_FILES} is low enough for a badly broken enumeration to "
-        "clear it, so it would no longer separate the cases it exists to separate"
+    # THE LOWER BOUND, GRADED AGAINST MEASURED INPUTS RATHER THAN AGAINST
+    # ITSELF. `assert _MIN_TRACKED_FILES >= 10` stood here and was the entire
+    # lower bound, while every other use of the constant in this file is stated
+    # relative to the constant. Measured at b3bef1a on 2026-09-10: setting the
+    # literal to 10 left this file at 49 passed and the whole tests suite at
+    # 1915 passed, 1 skipped, both exit 0. The floor's VALUE was ungraded.
+    #
+    # The narrowing this guard was written against is named in the comment on
+    # `_ENUMERATION_ANCHORS` above: a cwd that landed in a subdirectory. That
+    # population is enumerable, so it gets graded instead of guessed at - and
+    # grading it is what showed the value was not merely ungraded but WRONG. At
+    # 50 this arm fails: `git ls-files` run from `tests/` returns 70 paths,
+    # which cleared the floor. The literal was raised to 90 as the direct
+    # consequence, above the 70 that partial can reach and inside the half-tree
+    # ceiling the arm above pins.
+    #
+    # Every one of those partial answers must trip the FLOOR's own branch, not
+    # merely be refused somewhere downstream. Asserting only `status ==
+    # "FAILED"` would be satisfied by the anchor check, which catches a
+    # DIFFERENT partial and would mask the floor going slack: at a floor of 10
+    # these inputs fall through to the anchors and are still refused, so a
+    # status-only arm stays green on the mutation it exists to catch.
+    slips = _cwd_slip_enumerations(corpus)
+    assert len(slips) >= 5, (
+        f"only {len(slips)} top-level directories are tracked, so the loop below has next to "
+        "nothing to grade the floor against and this arm is close to vacuous"
+    )
+    escaped = [
+        f"{head}/ at {len(paths)} paths"
+        for head, paths in sorted(slips.items())
+        if "floor" not in _classify_enumeration(0, "\n".join(paths) + "\n").reason
+    ]
+    widest = max(len(paths) for paths in slips.values())
+    assert not escaped, (
+        f"a floor of {_MIN_TRACKED_FILES} does not fire on a cwd that landed in "
+        f"{', '.join(escaped)}, so it no longer refuses the partial enumeration it exists to "
+        f"refuse. The widest single-directory answer this tree can return is {widest} paths "
+        f"against {len(corpus)} tracked, so the floor has to sit above {widest}. Raise it - do "
+        "not lower this arm."
     )
 
 
@@ -1084,10 +1150,17 @@ def test_a_non_zero_check_attr_exit_fails_even_when_the_answer_looks_complete(mo
 def test_a_short_check_attr_answer_fails_even_though_it_clears_every_old_check(monkeypatch):
     """THE FLOOR'S SIBLING, and the exact hole the old `len(fields) < 3` left.
 
-    This stream is well-formed, exits 0, and carries 60 real triples - more
-    than `_MIN_TRACKED_FILES`, so no plausible non-emptiness or size heuristic
-    catches it. It is still an answer about 60 of 195 files. Only counting it
-    against the question asked sees this.
+    This stream is well-formed, exits 0, and carries 60 real triples, so no
+    plausible non-emptiness heuristic catches it. It is still an answer about 60
+    of the 213 files tracked on 2026-09-10. Only counting it against the
+    question asked sees this.
+
+    `_MIN_TRACKED_FILES` is NOT the thing that would catch it and never was.
+    That floor sits on the `git ls-files` enumeration, and this stream is a
+    `check-attr` answer, which never reaches it - so a reader must not read the
+    60 here as a number chosen to sit above or below that constant. It was 60
+    against a floor of 50 when this arm was written and it is 60 against a floor
+    of 90 now, and the arm grades the same thing either way.
     """
     _require_a_repository_to_break()
     tracked = _tracked_files()

@@ -151,9 +151,14 @@ class _Enumeration(typing.NamedTuple):
 # argue is a floor somebody trims on the day it goes red. The lower end is not
 # taste: the floor has to sit ABOVE the widest answer a single-directory
 # `git ls-files` can return, because that is the partial enumeration it exists
-# to refuse. Measured on this tree 2026-09-10 - 212 tracked paths over 16
-# top-level directories, widest subtree `tests/` at 69 - so 100 carries 31
-# paths of clearance above the widest slip and 112 below the whole tree. If
+# to refuse. Measured on this tree 2026-09-10 - 213 tracked paths over 16
+# top-level directories, widest subtree `tests/` at 70 - so 100 carries 30
+# paths of clearance above the widest slip and 113 below the whole tree. THESE
+# THREE NUMBERS DECAY ON EVERY ADDED FILE and they decayed within one session:
+# the comment first read 212/69/31/112, measured before a new test module
+# landed in `tests/`. The ASSERTION derives all of them at runtime and never
+# reads this comment, so a stale figure here is prose decay and not a false
+# green - but re-measure before citing these rather than quoting them. If
 # `tests/` ever grows past 100 the floor stops discriminating and must be
 # RAISED; the arm goes red saying exactly that rather than leaving the value
 # unexamined.
