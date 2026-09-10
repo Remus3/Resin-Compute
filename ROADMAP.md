@@ -11,6 +11,201 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **CLOSED 2026-09-10. FIVE CARRIED OPEN ROWS WERE RE-PROBED BEFORE ANY SLICE
+  WAS SPENT, AND FOUR OF THEM CITED THE WRONG FILE OR THE WRONG LINE.** This
+  is the row-decay lesson arriving one level up again, and it is now cheap
+  enough to state as a rule: A ROW IS A CLAIM WITH A DATE, AND THE CITATION
+  DECAYS BEFORE THE CLAIM DOES. Re-probe every row before dispatching against
+  it. Measured at `b5dc138`:
+
+    - `nothing inspects the pre-push hook's OUTPUT` is **CLOSED, and was
+      already closed when it was carried**. `tests/test_hook_interpreter.py`
+      execs the real `.githooks/pre-push` under `sh` and four arms grade
+      OBSERVED BEHAVIOUR, not tokens. Token-scanning arms exist beside them in
+      `tests/test_prepush_skip_reporting.py`, but they were never the only
+      arms. The row was a claim about the token scan mistaken for a claim
+      about the coverage.
+    - `the sweep floor's VALUE is ungraded` named the sibling-name sweep. The
+      constant is not in `tests/test_no_sibling_names.py` at all - that file
+      has no floor. It is `_MIN_TRACKED_PATHS` in `tests/test_licence_posture.py`.
+    - `half of tests/test_conftest_skip_path_pinned.py is DEAD as shipped`
+      named the wrong module and the wrong fraction. That module is 14 arms,
+      all passing; only 2 of the 14 force the archive shape. The dead branch
+      was in `tests/test_commit_trailers.py`.
+    - `the evidence ledger TRIMS rather than rotates` cited a line inside
+      `build_prompt`. The trim is `_trim_invocations` further down
+      `tools/moon_sync_responder.py`. AND THE LIVE-INSTANCE QUESTION IS NOW
+      ANSWERED: the responder's own log is a few kilobytes against a 256 KiB
+      cap, so ITS TRIM HAS NEVER FIRED HERE. The log that actually grows is
+      written by `scripts/watch_inbox.py`, which caps on every write. The row
+      was worrying about the wrong writer.
+    - `the 11 tests/ modules the detector cannot see` is TWO POPULATIONS AND
+      ONE NUMBER, the same shape as the `53 def test_` correction recorded
+      below. 11 is the `tests/`-only population; the figure declared in the
+      detector's own docstring is 12, the all-repo-files population. Neither
+      is wrong and neither is 11 as declared anywhere in code.
+
+- **CLOSED 2026-09-10, IN TWO WAVES, AND THE SECOND WAVE EXISTS BECAUSE AN
+  ADVERSARY REFUTED THE FIRST ON SCOPE.** Landed at `b3bef1a` and `fe6c004`.
+  Seam re-measured at each: 1915 passed 1 skipped, then 1935 passed 1 skipped,
+  collect-only 1936. Both arithmetics closed at BOTH ENDS rather than
+  asserted, and the per-file counts at the second seam were re-derived from
+  that run's own collect-only listing rather than trusted from the four slice
+  reports.
+
+  **THE HEADLINE IS NOT THE COVERAGE, IT IS THAT GRADING A FLOOR FOUND A FLOOR
+  THAT WAS WRONG.** `_MIN_TRACKED_FILES` in `tests/test_line_endings.py`
+  shipped at 50. The tracked corpus is 213 paths over 16 top-level
+  directories, and the widest answer a single-directory `git ls-files` can
+  return is `tests/` at 70. So 70 sailed over 50 and the floor could not
+  refuse the partial enumeration it exists to refuse. Raised to 90 as the
+  CONSEQUENCE of grading, bounded above by the pre-existing half-corpus arm at
+  106. An independent adversary corroborated it by a DIFFERENT ROUTE - real
+  `git ls-files` with the cwd inside each directory - so this is not two
+  agents sharing one premise. THE RAISE IS A BUG FIX AND NOT A PREFERENCE.
+
+  **THE VACUOUS-FLOOR DEFECT HAD THREE INSTANCES AND WAVE ONE CLOSED ONE.** A
+  floor guarded only by `assert CONST >= 10` is an assertion about the
+  constant, not about what the constant does. `tests/test_machine_identity.py`
+  carried a NEAR-VERBATIM COPY of the very function wave one rewrote, down to
+  the function name; `tests/test_line_endings.py` carried the third. All three
+  now grade by discrimination, each replacing its vacuous assertion IN PLACE
+  because a floor in a separate arm leaves the primary arm vacuous. The
+  too-high mirror is answered rather than assumed: a floor ABOVE the corpus
+  routes the enumeration into `pytest.skip` and RETIRES its own grader instead
+  of reddening. Closed in machine identity; measured never to have existed in
+  line endings. An AST sweep for a fourth instance over 130 tracked `.py`
+  files returns 0 hits, with a non-vacuity control that finds exactly the two
+  pre-repair cases, and its blind spots are written at the site.
+
+  **THE LOAD-BEARING ASSERTION CHOICE, because it would not have been guessed.**
+  In the licence-posture arm, asserting `status == "FAILED"` would NOT have
+  caught the slack floor: the path anchors still refuse the partial
+  enumeration, so the status stays FAILED while the floor contributes nothing.
+  The arm had to assert on THE FLOOR'S OWN REASON. A grader that watches the
+  verdict instead of the mechanism passes the mutant.
+
+  **A SELF-REFERENTIAL ARM CAN SATISFY ITS OWN CONDITION.** Wave one's archive
+  arms in `tests/test_commit_trailers.py` were justified entirely by
+  `.github/workflows/docs-guards.yml` selecting that module in isolation - and
+  that selection rested on two INCIDENTAL prose mentions of a markdown
+  filename, neither of which reads a markdown file. Two arms now pin the
+  CONDITIONAL claim: this module is in the lane AND its cross-module driver is
+  not, measured by reproducing the selector over 73 candidates and getting 34.
+  The pattern had to be built as `r"\." + "md" + r"([^a-zA-Z0-9]|$)"` BECAUSE
+  THE UNSPLIT LITERAL MATCHES ITSELF. Driven as a mutant, the first arm stayed
+  GREEN with its protected mentions gone and only the second fired - so the
+  arm that looked like the point was the vacuous one.
+
+  **THE ARGV GRADERS, AND THE ASYMMETRY THE FIRST ONE EXPOSED.**
+  `tests/test_supervisor_task_argv.py` is new and grades
+  `ops/ResinCompute-Supervisor.xml`. Building it made visible that
+  `tests/test_responder_task_argv.py` graded Arguments and trigger boundaries
+  ONLY - `Command` and `WorkingDirectory` appeared nowhere in it, and
+  `ops/install_responder_task.ps1` was read by NO test at all. So the exact
+  defect the new grader's docstring describes was still true of the RESPONDER
+  task, WHICH UNLIKE THE SUPERVISOR IS THE ONE THIS TREE ACTUALLY ARMS. Both
+  are now graded. Wave two also found `SUPERVISOR_CONTRACT` pinned by neither
+  length nor set identity, with FOUR of five symbols droppable at zero red;
+  one arm now pins `(len, set)` together, since an arm here was already caught
+  arity-blind with four assertions that all held when a second entry landed.
+
+  **NOTHING WAS ARMED.** Both argv graders import no `subprocess`, no `os` and
+  no `shutil`, so neither can spawn `schtasks` even by accident; both grade
+  static declared XML and neither asserts its task is registered. The
+  responder task was re-confirmed DORMANT by the checker, exit 1, trigger
+  expired 2026-09-07T21:00. `git diff --stat -- ops/loop/` empty at both
+  commits.
+
+- **A DONE-CLAIM'S DIRECTION SURVIVED WHILE ITS NUMBER DID NOT, 2026-09-10, and
+  the number had been INHERITED rather than measured.** Twelve claimed reds
+  from four builders were re-driven under a does-it-reproduce lens in a
+  worktree seeded by copying the merged bytes and verifying each by sha256.
+  ELEVEN REPRODUCED with the claimed summary line, exit code and reason. One
+  figure did not: a builder reported a mutant scoring `24/24 pass` at
+  `b3bef1a`, and the module collects 30 there, mutated and unmutated alike.
+  The direction held, so the repair was needed - but 24 was the size of an
+  in-memory arm SUBSET an earlier adversary had driven, carried forward as
+  though it described the module. AN INHERITED COUNT SURVIVES A HANDOFF THAT
+  THE MEASUREMENT BEHIND IT DOES NOT. The figure is deliberately absent from
+  `fe6c004`'s message.
+
+- **FOUR AGENTS CORRECTED THEIR OWN BRIEFS ON 2026-09-10 AND EVERY CORRECTION
+  HELD.** The standing lesson keeps paying: WHEN A REFUTER SAYS A BUILDER WAS
+  WRONG, CHECK WHO WROTE THE INSTRUCTION FIRST.
+    - The brief for the dead branch asserted it was "structurally unreachable
+      in every shape this suite runs in". A line trace REFUTED that: under a
+      full `pytest tests` run the branch is HIT, driven cross-module. It is
+      dead only under ISOLATED SELECTION - which is a sharper finding than the
+      brief's, because it names a live CI lane that selects exactly that way.
+    - The brief said `SUPERVISOR_CONTRACT` had three droppable symbols. It has
+      four.
+    - The brief predicted `tests/test_commit_trailers.py` at "around 600"
+      lines. It is 489.
+    - The comment above `_MIN_TRACKED_PATHS` cited 212 tracked paths and a
+      widest subtree of 69. Both were measured before a new test module landed
+      in `tests/` EARLIER IN THE SAME SESSION. The assertion derives every
+      figure at runtime and never reads the comment, so this was prose decay
+      and not a false green - but it decayed within hours of being written,
+      and the site now says so.
+
+- **OPEN, opened 2026-09-10 by the two adversarial passes, each with its
+  measurement. RE-PROBE BEFORE SPENDING A SLICE - and note that four of the
+  five rows carried into this session cited the wrong file or line, so treat
+  these the same way.**
+    - **The docs-only CI lane runs 34 modules and only ONE of them was checked
+      for cross-module drive.** Counted from the list, not a summary: 34
+      selected of 73 tracked candidates, 33 under `tests/` plus one under
+      `agents/pity_engine/tests/`. The sweep that produced that was STATIC - a
+      grep for `from tests` / `import tests` - and it CANNOT SEE drive via
+      conftest fixtures, autouse fixtures, module-level side effects,
+      on-disk artifacts written by one module and read by another, or
+      `lru_cache` warmth. THE SHAPE OF THE SWEEP DECIDES THE SHAPE OF THE
+      FINDING. The only sound enumeration is a COVERAGE DIFF of the 34-module
+      lane selection against the full `tests` run. It was not run. Treat this
+      as UNPROVEN, not as clean.
+    - **8 of the 10 arms in `tests/test_conftest_skip_path_pinned.py` still do
+      not run on a docs-only push.** Two were driven in isolation by
+      `fe6c004`; the three checkout-branch arms, the exit-128 reason-text arm,
+      the two-binding skip-door arm with its non-vacuity control, and the
+      disposition-recording arm were not.
+    - **The neutraliser asymmetry is left standing DELIBERATELY, and the
+      honest repair is out of both slices' write-lists.** The driving module
+      neutralises env and caches with an `autouse=True` fixture; the arms added
+      to `tests/test_commit_trailers.py` use an opt-in one. Measured
+      behaviour-neutral either way, and left opt-in with the reason written at
+      the site: the two fixtures neutralise DIFFERENT things, and making both
+      autouse would buy false symmetry. The real fix is a single shared
+      neutraliser in `tests/conftest.py` consumed by both.
+    - **A pathspec-narrowed enumeration sails over the licence floor and no
+      arm says so at that site.** `git ls-files -- '*.py'` returns 130 against
+      a floor of 100 and a tree of 213. It IS caught - by
+      `_ENUMERATION_ANCHORS`, not by the floor - so this is a documentation
+      gap rather than a hole, but the new arm's failure message says only
+      that the floor must sit above the widest cwd-slip, and a reader
+      satisfying that message alone could set it to 71 and believe the guard
+      is fully graded.
+    - **`ops/install_scheduled_task.ps1`'s OTHER declared command is graded by
+      nothing** - the liveness invocation near the end of that file, distinct
+      from the Exec banner the supervisor grader now reads.
+    - **The corrected docstring in `tests/test_supervisor_task_argv.py` is
+      guarded by no arm.** It enumerates which side of which comparison is
+      read and which is hand-typed. Nothing reddens if that enumeration drifts
+      out of date, and prose that over-reaches its own list has now been
+      repaired here twice.
+    - **12 of one slice's 15 claimed reds were never re-driven.** Three were,
+      independently, and all three reproduced. The residual is unattacked
+      evidence, not a known defect.
+
+- **NO NEW ADJUDICATED CALL WAS NEEDED ON 2026-09-10, AND THAT IS THE
+  REPORTABLE PART.** The operator was away with instructions to adjudicate
+  rather than block. Every disagreement this session - four briefs against
+  their builders, two adversaries against four slices - was settled by
+  MEASUREMENT rather than by a ruling, so no adjudicator was dispatched and
+  nothing was escalated. THE TEN STANDING ADJUDICATED CALLS ARE UNCHANGED at
+  ten. An adjudicator is for a question measurement cannot close; reaching for
+  one where a command would do is how a ruling gets made about nothing.
+
 - **CLOSED 2026-09-09. STEP THREE OF THE GATE CENSUS SHIPPED AS A NAME-TO-SITE
   BINDING TABLE, AND THE BRIEF THAT ASKED FOR A REGISTRY WAS REFUTED BEFORE ANY
   CODE EXISTED.** `tests/test_gate_name_bindings.py`, landed at `f571234` and

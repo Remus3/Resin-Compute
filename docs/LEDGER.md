@@ -12,6 +12,69 @@ now.
 
 ---
 
+## 2026-09-10 - Grading three floors found one that was wrong, and a lane arm that looked like the point was the vacuous one
+
+Files: `tests/test_licence_posture.py`, `tests/test_machine_identity.py`,
+`tests/test_line_endings.py`, `tests/test_commit_trailers.py`,
+`tests/test_responder_task_argv.py`, `tests/test_supervisor_task_argv.py` (new),
+`ROADMAP.md`, `docs/LEDGER.md`. Landed in two waves at `b3bef1a` and `fe6c004`.
+
+**MEASURED AT EACH SEAM, STAMPED AS A READING AND NOT AS A CLAIM ABOUT NOW.**
+Fork point `b5dc138` re-measured first at 1882 passed 1 skipped, collect-only
+1883. Wave one seam: 1915 passed 1 skipped, collect-only 1916, from 1882 plus
+30 plus 3 plus 0. Wave two seam: 1935 passed 1 skipped, collect-only 1936, from
+1915 plus 0 plus 2 plus 2 plus 16. BOTH ARITHMETICS CLOSED AT BOTH ENDS, and at
+the second seam the per-file counts were re-derived from that run's own
+collect-only listing rather than trusted from the four slice reports - the
+supervisor grader at 32, the trailers module at 13, the responder grader at 43.
+`agents/pity_engine` 80 passed. `node --test` in `shell/` 52 pass 0 fail.
+`ruff` and `headless.runner --once --dry-run` exit 0. `qa_companion` 16 passed
+0 failed 2 skipped 3 noted, and its three NOTEs say the local `ruff`, `pytest`
+and `mypy` are all OLDER than the CI pins, so every local green here is
+OPTIMISTIC against CI. `mypy` exit 0 at 34 source files, which says NOTHING
+about any file in this entry: all six live under `tests/`, and `mypy.ini` does
+not carry that root.
+
+**THE FLOOR THAT WAS WRONG, NOT MERELY UNGRADED.** A floor guarded only by
+`assert CONST >= 10` asserts something about the constant and nothing about
+what the constant does. Three instances existed in the tracked test corpus.
+Grading the second one exposed a live defect: the tracked corpus is 213 paths
+over 16 top-level directories, the widest answer a single-directory
+`git ls-files` can return is `tests/` at 70, and `_MIN_TRACKED_FILES` shipped
+at 50 - so 70 sailed over it and the floor could not refuse the partial
+enumeration it exists to refuse. Raised to 90 as the CONSEQUENCE of grading,
+bounded above by the pre-existing half-corpus arm at 106. Corroborated by an
+independent adversary through a DIFFERENT ROUTE, real `git ls-files` with the
+cwd inside each directory, so this is not two agents sharing one premise.
+
+**THE ASSERTION CHOICE WAS LOAD-BEARING AND WOULD NOT HAVE BEEN GUESSED.**
+Asserting `status == "FAILED"` does NOT catch a slack floor: the path anchors
+still refuse the partial enumeration, so the status stays FAILED while the
+floor contributes nothing. The arm had to assert on the floor's OWN REASON. A
+grader that watches the verdict instead of the mechanism passes the mutant.
+
+**A SELF-REFERENTIAL ARM CAN SATISFY ITS OWN CONDITION.** The arm pinning this
+tree's docs-only CI lane needed its pattern built as `r"\." + "md" +
+r"([^a-zA-Z0-9]|$)"`, because the unsplit literal MATCHES ITSELF and an arm
+whose own text satisfies the condition it tests passes vacuously forever.
+Driven as a mutant, the arm that looked like the point stayed GREEN with its
+protected mentions removed, and only the self-reference control fired.
+
+**A COUNT SURVIVED A HANDOFF THAT ITS MEASUREMENT DID NOT.** Twelve claimed
+reds were re-driven independently, in a worktree seeded by copying the merged
+bytes and verifying each by sha256. Eleven reproduced with the claimed summary
+line, exit code and reason. One figure did not: a mutant reported as scoring
+`24/24 pass` at `b3bef1a`, where the module collects 30 mutated and unmutated
+alike. The DIRECTION held, so the repair was needed, but 24 was the size of an
+in-memory arm subset an earlier adversary had driven, carried forward as though
+it described the module.
+
+**NOTHING WAS ARMED.** Both argv graders import no `subprocess`, no `os` and no
+`shutil`, so neither can spawn `schtasks` even by accident; both grade static
+declared XML and neither asserts its task is registered. The responder task was
+re-confirmed DORMANT by `ops/check_task_liveness.py`, exit 1, trigger expired
+`2026-09-07T21:00`. `git diff --stat -- ops/loop/` empty at both commits.
+
 ## 2026-09-09 - A runtime probe found the detector's blind spot inside its own declared shape, and a newest-first ledger made a closed row look open
 
 Files: `tools/gate_mutation_runner.py`, `tests/test_gate_mutation_runner.py`,
