@@ -12,6 +12,117 @@ now.
 
 ---
 
+## 2026-09-09 - A runtime probe found the detector's blind spot inside its own declared shape, and a newest-first ledger made a closed row look open
+
+Files: `tools/gate_mutation_runner.py`, `tests/test_gate_mutation_runner.py`,
+`ROADMAP.md`, `docs/LEDGER.md`. Docstrings and arms only - no mechanism changed
+and `_READ_ATTRS` was NOT widened, which is a claim about the diff and not about
+intent.
+
+**MEASURED ON THE SLICE'S OWN BYTES, FORKED FROM `6be6961`, STAMPED AS A
+READING AND NOT AS A CLAIM ABOUT NOW.** `python -m pytest tests` exit 0, 1882
+passed 1 skipped. `python -m pytest agents/pity_engine` exit 0, 80 passed.
+`python -m ruff check .` exit 0. `python -m mypy` exit 0 at 34 source files,
+which is real evidence about `tools/gate_mutation_runner.py` and says nothing
+whatever about the arms under `tests/`, since `mypy.ini` does not carry that
+root. `tests/test_gate_mutation_runner.py` goes 51 to 53, and the fork point
+itself was measured at 1880 passed 1 skipped in this same worktree before any
+edit landed, so 1880 plus 2 is 1882 and the arithmetic closes at both ends
+rather than at one end with the other assumed.
+
+**AN AST DETECTOR WAS REFUTED BY A RUNTIME MEASUREMENT, AND THE METHOD IS THE
+REUSABLE PART.** The adversary did not sweep the AST - it patched `io.open` and
+`builtins.open` from a `sitecustomize.py` and ran one full application suite.
+Re-derived here independently at `6be6961` by the same method: 197 open events
+on `tools/moon_sync_responder.py`, of which 195 attribute to a repo file and 2
+to a frozen pseudo-file frame that is no repo file at all, and those 195 come
+from 15 DISTINCT REPO FILES - 14 under `tests/` plus
+`tools/gate_mutation_runner.py`. `responder_reading_modules` names 3. The two
+figures in circulation, 195 and 197, count DIFFERENT POPULATIONS and both are
+right about their own; say which before citing either.
+
+**THE GAP OF 12 IS MOSTLY OUTSIDE THE DECLARED SHAPE, AND FOUR MODULES ARE
+INSIDE IT.** `tests/test_moon_sync_responder.py`,
+`tests/test_responder_broadcast_refusal.py`,
+`tests/test_responder_delivery_gates.py` and
+`tests/test_responder_refusal_gates.py` each bind the responder path at module
+level to a plain `Name`, so criterion 1 of `_binds_and_reads_responder` passes,
+then read it through `importlib.util.spec_from_file_location`, where the bound
+name is an ARGUMENT and never an attribute receiver, so criterion 2 fails. The
+docstring's blind-spot list named a local variable, a fixture, a helper and
+another module's constant, and did NOT name importlib. THE HOLE WAS IN THE
+WRITTEN CEILING, NOT IN THE MECHANISM.
+
+**`_READ_ATTRS` WAS NOT WIDENED, AND THE REASON IS A DECISION AND NOT AN
+OMISSION.** Those four IMPORT the responder to exercise its BEHAVIOUR. They are
+the tests a campaign exists to consult, not graders of the target's shape, so a
+detector that flagged them would be wrong on every run and would train a reader
+to ignore it - the argument already recorded for why `undeclared_shape_graders`
+subtracts all of `EXCLUDED_MODULES` and not only `SHAPE_GRADER_MODULES`.
+Widening a matcher is additionally the repair this tree has been defeated by
+three times, and the standing lesson is that after the second defeat you ask
+what claim the mechanism CAN support. The repair was HONEST SCOPE: the ceiling
+now names the importlib route, states the measured population, and says the 15
+is a LOWER BOUND because `importlib` binds `io.open_code` inside
+`_bootstrap_external` before any such patch lands, so the four modules' own
+import-time reads are not among the 195 - which is exactly why none of the four
+appears in the 15 despite provably reading the file. Subprocess reads and the
+whole `agents/pity_engine` suite were outside the sample too.
+
+**`MutantResult.false_kill` IS STRUCTURALLY UNREACHABLE IN A REAL CAMPAIGN, AND
+IS NOW DOCUMENTED AS A DIAGNOSTIC RATHER THAN MADE REACHABLE.** `suite_argv`
+emits `--ignore` for every name in `EXCLUDED_MODULES`, and
+`SHAPE_GRADER_MODULES` is a subset of it, so pytest never collects a shape
+grader, `parse_first_failure` can never return a node id naming one, and the
+property is False for every mutant a campaign produces. THE OTHER OPTION WAS
+CONSIDERED AND REJECTED ON A MEASURED PRICE: making it reachable means dropping
+the shape graders out of `--ignore`, which restores the confound at 34 of 35
+mutants reddening over syntax alone. A reachable diagnostic bought at that
+price is the defect wearing the detector's clothes. So
+`undeclared_shape_graders` is THE ONLY LIVE PROTECTION against a hole in the
+exclusion list, and it is the one with the blind spot above - both facts are
+now written in the same docstring, because an unreachable property that LOOKS
+like protection is worse than none.
+
+**TWO ARMS, EACH WELDING ITS PROSE PIN TO A DERIVED FACT.**
+`test_the_detector_states_the_importlib_route_it_cannot_see` pins the ceiling
+sentence AND re-derives the blind spot from the four modules with criterion 1
+RE-TYPED rather than imported, plus a control that
+`responder_reading_modules` still names the three declared readers - without
+which a detector that had silently stopped finding anything would satisfy every
+other clause. `test_the_false_kill_property_cannot_fire_under_the_campaign_argv`
+derives the unreachability from `suite_argv` and welds in the pair that keeps it
+non-vacuous, since the arm would otherwise pass against a property hard-wired to
+False. Both were written red and observed red first, in a THROWAWAY DETACHED
+WORKTREE at `6be6961` carrying only the new arms: 2 failed 51 passed, the first
+on `assert 'importlib' in doc` and the second on
+`assert 'DIAGNOSTIC AND NOT A LIVE PROTECTION' in doc`. That worktree was
+restored to a clean porcelain and removed.
+
+**A NEWEST-FIRST LEDGER MAKES AN OLDER ENUMERATION LOOK CURRENT, and this is
+the general lesson, one level up from a class already recorded here.** The
+adjudicated-call row in `ROADMAP.md` cited an EIGHT-NAME survivor list from the
+entry headed "The mutation runner ships, four of its own kills were false, and
+the census arms pinned literals where they claimed classes" - 35 mutants, 27
+KILLED, 8 SURVIVED at `1c596e3`. A NEWER entry above it, "The eight gates
+exercised by nothing get arms, the campaign reaches 35 of 35, and six prose
+claims were false", records 35 KILLED, 0 SURVIVED, 0 false kills, exit 0 at
+`06f8557`. THE STANDING SURVIVOR SET IS 0, NOT 8; an adversary re-measured 3 of
+the 8 and found all 3 killed. CITING A LIST BY ITS CONTENT RATHER THAN BY
+WHETHER A LATER ENTRY SUPERSEDES IT is how a closed row gets re-cited as open. A
+prior session recorded that a RESIDUAL ROW decays; this is the same class one
+level up - the ENUMERATION decayed while the sentence citing it stayed put. The
+mechanical form of the check is cheap: before citing any list in this file, scan
+UPWARD from its heading for a later entry naming the same measurement.
+
+**THE ADJUDICATED CALL ON GATE `spawn-failure` IS UNAFFECTED, AND SAYING SO IS
+PART OF THE REPAIR.** That ruling turned on `spawn-failure/except-reraise` not
+being a standing survivor. It is ABSENT from the superseded eight-name list AND
+the standing set is empty, so the conclusion holds under BOTH readings and the
+five-criteria-to-nil verdict does not reopen. WHAT WAS WRONG WAS THE CITATION
+AND NOT THE FINDING. A correction that silently rewrote the citation would have
+left a later reader unable to tell which of the two it was.
+
 ## 2026-09-09 - The gate names are bound to their sites by equality, and the method findings cost more than the table did
 
 Files: `tests/test_gate_name_bindings.py` (new), `tools/gate_mutation_runner.py`,

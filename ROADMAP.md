@@ -104,19 +104,38 @@ version. What follows is everything the scaffold deliberately did not do.
 
   THE RULING DID NOT TURN ON THE ANCHOR. It turned on THE MOTIVATING FACT BEING
   FALSE. A second anchor was wanted so that the bindings module would see the
-  mutant `spawn-failure/except-reraise`, on the belief that that mutant is in
-  the standing 8-survivor set. IT IS NOT IN IT. The survivor set is enumerated
-  in `docs/LEDGER.md`, in the entry headed "The mutation runner ships, four of
-  its own kills were false, and the census arms pinned literals where they
-  claimed classes", in the paragraph opening "THE STANDING RESULT":
-  `no-destination/if-false`, `workspace-trust/if-false`,
-  `refusal-recorded/if-false`, `bounce-mark/if-true`,
-  `bounce-write-all/operand-1` and `operand-2`, `delivery-write-all/operand-1`
-  and `operand-2`. VERIFIED HERE by opening that list and reading all eight -
-  `spawn-failure/except-reraise` is ABSENT from it. It is killed instead by
+  mutant `spawn-failure/except-reraise`, on the belief that that mutant is a
+  standing campaign survivor. IT IS NOT ONE, AND UNDER TWO SEPARATE READINGS.
+
+  THE CITATION THIS ROW FIRST CARRIED WAS ITSELF SUPERSEDED, and it is
+  corrected here rather than quietly dropped. It cited an EIGHT-NAME survivor
+  enumeration in `docs/LEDGER.md`, in the entry headed "The mutation runner
+  ships, four of its own kills were false, and the census arms pinned literals
+  where they claimed classes", in the paragraph opening "THE STANDING RESULT":
+  35 mutants, 27 KILLED, 8 SURVIVED, 0 false kills, exit 1, measured on the
+  bytes at `1c596e3`. `docs/LEDGER.md` IS NEWEST-FIRST, and a NEWER entry
+  supersedes that one - "The eight gates exercised by nothing get arms, the
+  campaign reaches 35 of 35, and six prose claims were false", which records 35
+  mutants, 35 KILLED, 0 SURVIVED, 0 false kills, exit 0 at `06f8557` and notes
+  in the same sentence that `1c596e3` had 8. THE STANDING SURVIVOR SET IS 0,
+  NOT 8. An adversary re-measured 3 of the 8 named mutants independently and
+  found all 3 KILLED.
+
+  THE VERDICT DOES NOT REOPEN, AND THAT IS STATED HERE RATHER THAN LEFT TO BE
+  INFERRED FROM THE CORRECTION. The ruling turned on
+  `spawn-failure/except-reraise` NOT being a standing survivor. It is ABSENT
+  from the superseded eight-name list, and the standing set is EMPTY, so the
+  conclusion holds under BOTH readings and the five-criteria-to-nil call stands
+  unchanged. WHAT WAS WRONG WAS THE CITATION AND NOT THE FINDING.
+  `spawn-failure/except-reraise` is killed by
   `tests/test_moon_sync_responder.py:868`,
   `test_a_spawn_that_raises_is_a_held_cycle_and_not_a_crash`, whose presence at
   that line was confirmed by opening the file.
+
+  THE GENERAL CLASS, recorded in `docs/LEDGER.md` as well because it is not
+  about this row: A NEWEST-FIRST LEDGER MAKES AN OLDER ENUMERATION LOOK
+  CURRENT. Citing a list by its CONTENT rather than by whether a LATER entry
+  supersedes it is how a closed row gets re-cited as open.
 
   AN INDEPENDENT SECOND REASON, and it does not share the first one's premise.
   The bindings module is EXCLUDED FROM THE CAMPAIGN as a shape grader, so a

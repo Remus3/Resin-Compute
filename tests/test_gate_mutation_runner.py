@@ -961,3 +961,124 @@ def test_importing_the_runner_touches_no_file(tmp_path: Path) -> None:
     ]
     assert toplevel_calls == []
     assert _digest(RESPONDER) == before
+
+
+#: The four modules that bind the responder at module level to a plain `Name`
+#: and then read it through `importlib.util.spec_from_file_location`. They pass
+#: criterion 1 of `_binds_and_reads_responder` and fail criterion 2, so the
+#: detector misses all four - and they are NOT declared, deliberately, because
+#: they import the responder to exercise its BEHAVIOUR rather than to grade its
+#: shape. Hand-typed, in sorted order, and NOT derived by re-running the
+#: detector: a list computed from the predicate under grading can only ever
+#: agree with itself.
+IMPORTLIB_READERS = (
+    "tests/test_moon_sync_responder.py",
+    "tests/test_responder_broadcast_refusal.py",
+    "tests/test_responder_delivery_gates.py",
+    "tests/test_responder_refusal_gates.py",
+)
+
+
+def _module_level_responder_names(source: str) -> set[str]:
+    """Plain `Name` targets of a module-level assignment mentioning the responder.
+
+    This is criterion 1 of `_binds_and_reads_responder`, RE-TYPED rather than
+    imported, so that the arm below is a statement about the shape of those four
+    modules and not a statement about the detector agreeing with itself.
+    """
+    names: set[str] = set()
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.Assign) or node.value is None:
+            continue
+        if "moon_sync_responder" not in ast.unparse(node.value):
+            continue
+        names.update(target.id for target in node.targets if isinstance(target, ast.Name))
+    return names
+
+
+def test_the_detector_states_the_importlib_route_it_cannot_see() -> None:
+    """ONE WELDED ASSERTION: the written ceiling, and the four real modules under it.
+
+    A written limit with no instrument watching it is the prose-decay class this
+    tree keeps recording, so the ceiling sentence is pinned. Pinning prose alone
+    would be the OTHER failure, though - a docstring can describe a blind spot
+    that does not exist - so the same arm re-derives the blind spot from the four
+    modules themselves: each really does bind the responder at module level to a
+    plain `Name`, really does read it through
+    `importlib.util.spec_from_file_location`, and really is missed.
+
+    THE CONTROL IS WELDED IN TOO. `responder_reading_modules` must still name
+    the three declared readers on the live corpus, otherwise a detector that had
+    silently stopped finding ANYTHING would satisfy every clause above by
+    returning False for the whole tree.
+    """
+    doc = gmr._binds_and_reads_responder.__doc__ or ""
+    for phrase in ("importlib", "spec_from_file_location", "15 IS A LOWER BOUND", "15 DISTINCT REPO FILES"):
+        assert phrase in doc, phrase
+    for name in IMPORTLIB_READERS:
+        assert name in doc, name
+
+    for name in IMPORTLIB_READERS:
+        path = REPO_ROOT / name
+        source = path.read_text(encoding="utf-8")
+        assert _module_level_responder_names(source), name
+        assert "spec_from_file_location" in source, name
+        assert gmr._binds_and_reads_responder(source) is False, name
+        assert name not in gmr.EXCLUDED_MODULES, name
+
+    assert set(gmr.responder_reading_modules(REPO_ROOT)) == {
+        "tests/test_gate_mutation_runner.py",
+        "tests/test_gate_name_bindings.py",
+        "tests/test_responder_gate_census.py",
+    }
+
+
+def test_the_false_kill_property_cannot_fire_under_the_campaign_argv() -> None:
+    """`false_kill` is a DIAGNOSTIC, and the unreachability is derived here, not asserted.
+
+    Derived: every name in `SHAPE_GRADER_MODULES` is `--ignore`d by
+    `suite_argv`, so a real campaign never collects one, so no node id it parses
+    can name one, so the property is structurally False for every mutant of a
+    real campaign.
+
+    THE NON-VACUITY PARTNER IS IN THE SAME ARM. The property must still return
+    True for a hand-built result naming a shape grader - that is the bypassed
+    path it exists to serve - and False for one naming a behavioural module.
+    Without that pair this arm would pass equally well against a property that
+    was hard-wired to False, which is the thing it is trying to distinguish
+    itself from.
+
+    The ceiling sentence is pinned with it, including the pointer to
+    `undeclared_shape_graders` as the only LIVE protection, because that pointer
+    is the part a reader needs and the part prose decay would take first.
+    """
+    argv = gmr.suite_argv("tests")
+    assert [name for name in gmr.SHAPE_GRADER_MODULES if f"--ignore={name}" in argv] == list(
+        gmr.SHAPE_GRADER_MODULES
+    ), argv
+    assert set(gmr.SHAPE_GRADER_MODULES) <= set(gmr.EXCLUDED_MODULES)
+    assert gmr.SHAPE_GRADER_MODULES, gmr.SHAPE_GRADER_MODULES
+
+    mutant = gmr.Mutant(gate="alpha-one", label="if-true", source=SYN_IF_TRUE, first_line=4, last_line=5)
+    bypassed = gmr.MutantResult(
+        mutant=mutant,
+        exit_code=1,
+        killed=True,
+        node_id=f"{gmr.SHAPE_GRADER_MODULES[0]}::test_anything",
+    )
+    behavioural = gmr.MutantResult(
+        mutant=mutant,
+        exit_code=1,
+        killed=True,
+        node_id="tests/test_moon_sync_responder.py::test_an_armed_run_marks_the_hop",
+    )
+    assert bypassed.false_kill is True and behavioural.false_kill is False
+
+    doc = gmr.MutantResult.false_kill.__doc__ or ""
+    for phrase in (
+        "DIAGNOSTIC AND NOT A LIVE PROTECTION",
+        "BYPASSED",
+        "undeclared_shape_graders",
+        "spec_from_file_location",
+    ):
+        assert phrase in doc, phrase
