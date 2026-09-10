@@ -58,6 +58,50 @@ it agrees with itself the day it is written and with nothing afterwards:
     uses, plus the `SOURCE_*` constants the module declares, collected by
     attribute name.
 
+THE THIRD REFUTATION, and it was an ASYMMETRY rather than a wrong answer.
+`tests/test_supervisor_task_argv.py` arrived at b3bef1a to grade the supervisor
+task's whole `<Exec>` block, and its docstring describes an edit that points a
+task at the wrong interpreter with every suite staying green. That description
+was STILL TRUE OF THIS TASK. Measured: `Command` and `WorkingDirectory` appeared
+nowhere in this file, and `ops/ResinCompute-Responder.xml:92,94` carry
+`__PYTHONW_EXE__` and `__INSTALL_ROOT__` whose only mention anywhere under
+`tests/` was that new file - a file about the OTHER task. The responder is the
+task this tree actually arms, so the ungraded half was the half that matters.
+Closed here, and the two graders now make the same class of claim about their
+own subjects:
+
+  - WHICH INTERPRETER: `ops/install_responder_task.ps1:186` prints the
+    interpreter it believes it is registering, from the same `$PythonwExe` it
+    substitutes into the XML. Mapping that variable back through the installer's
+    substitution table yields the placeholder `<Command>` must carry, by
+    IDENTITY rather than by "some placeholder is there". `pythonw` and not
+    `python` is load bearing and that installer says so at its lines 33-34 and
+    62-64.
+  - WHICH WORKING DIRECTORY: `ops/install_responder_task.ps1:151` builds the
+    path it reads THIS XML from as `Join-Path $InstallRoot '...'`, and the
+    relative path in that expression is asserted to be this grader's own
+    `TASK_XML`. Not decoration: the argv names its script RELATIVELY.
+  - WHICH SCRIPT, FROM THE INSTALLER'S SIDE TOO: that installer refuses at its
+    line 102 to register unless `tools/moon_sync_responder.py` exists under the
+    install root, so the argv must name the same file or the refusal guards a
+    file the task never runs.
+  - HOW MANY ACTIONS, AND WHICH ELEMENTS: the `<Exec>` count and the block's
+    child element names, pinned by tuple equality so ORDER and LENGTH are one
+    claim in one arm. A membership test would hold at any length.
+  - WHICH PLACEHOLDERS: the file's `__NAME__` token set against the token half
+    of the installer's `$xml.Replace` table, by SET EQUALITY with both
+    cardinalities pinned in the same arm. A subset test passes on an XML that
+    dropped one; a superset test passes on an installer filling tokens nobody
+    uses.
+
+THE INSTALLER IS `ops/install_responder_task.ps1`, NOT `ops/install_scheduled_task.ps1`.
+Two installers live in `ops/` and they register two different tasks. Nothing
+under `tests/` read the responder's one at all before this, and its six-entry
+`$xml.Replace` table was checked back against nothing. `_installer_install_root_placeholder`
+asserts the XML that installer reads IS the XML this grader grades, so aiming
+this at the other one goes red rather than quietly grading one task against
+another task's script.
+
 ENCODING, MEASURED RATHER THAN ASSUMED. Commit fbe5c23 is about the XML
 declaration, and it is easy to read it as "the file is UTF-16". It is not.
 Measured at this HEAD: `ops/ResinCompute-Responder.xml` is 7-bit ASCII on disk,
@@ -102,6 +146,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import re
 import shlex
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
@@ -112,7 +157,76 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TASK_XML = REPO_ROOT / "ops" / "ResinCompute-Responder.xml"
+#: The responder's OWN installer, and not `ops/install_scheduled_task.ps1`.
+#: Two installers exist here and they register two different tasks; the one
+#: that reads THIS XML is the one whose expectations may be read back into it,
+#: and `_installer_install_root_placeholder` asserts that pairing rather than
+#: assuming it.
+INSTALLER_PS1 = REPO_ROOT / "ops" / "install_responder_task.ps1"
 TASK_NS = "{http://schemas.microsoft.com/windows/2004/02/mit/task}"
+
+#: Every complaint bucket this grader can mint. `_complaint` refuses a bucket
+#: that is not listed, so the declared set cannot drift away from the code that
+#: mints the tokens, and `test_every_detector_has_a_control` pins it to the
+#: mutant table by SET EQUALITY - a detector added without a control goes red on
+#: its own, and so does a control added for a bucket the grader cannot mint.
+GRADED_TOKENS = (
+    "exec-count",
+    "command-absent",
+    "arguments-empty",
+    "working-directory-absent",
+    "unsubstituted-placeholder",
+    "command-is-not-the-installer-interpreter",
+    "working-directory-is-not-the-install-root",
+    "script-is-not-the-path-the-installer-requires",
+    "script-missing",
+    "script-does-not-declare-the-task-label",
+    "script-will-not-import",
+    "script-not-the-responder",
+    "flag-not-a-declared-spelling",
+    "parser-rejects-argv",
+    "unknown-flag",
+    "unexpected-positional",
+    "window-opens-is-not-the-trigger-start",
+    "window-closes-is-not-the-trigger-end",
+    "main-refused-argv",
+    "task-argv-does-not-arm",
+    "grammar-is-not-the-latency-only-grammar",
+    "source-flag-absent",
+    "source-label-unusable",
+    "source-not-a-declared-label",
+    "source-not-the-task-label",
+)
+
+#: Detectors with no in-memory control, and the measured reason for each. Held
+#: as an explicit tuple so the coverage arm can compare by SET EQUALITY: a new
+#: uncontrolled detector goes red, and so does controlling one of these later
+#: without removing it from here.
+#:
+#: Both are blocked by the same measured fact, and it is a fact this file
+#: ASSERTS rather than assumes - `test_exactly_one_file_declares_the_task_label`.
+#: Reaching either detector needs a file that DECLARES `SOURCE_SCHEDULED_TASK`
+#: and then either fails to import or lacks a `RESPONDER_CONTRACT` member.
+#: Exactly one file in the tree declares it and it does neither, so the only way
+#: to plant these controls is to write a second such file to disk, which this
+#: file does not do.
+UNCONTROLLED_TOKENS = ("script-will-not-import", "script-not-the-responder")
+
+#: The installer's own placeholder shape, at `ops/install_responder_task.ps1:181`,
+#: where it throws on any survivor. Same pattern, so a token this grader calls a
+#: placeholder is a token that installer would refuse to leave behind.
+_PLACEHOLDER_RE = re.compile(r"__[A-Z_]+__")
+
+_REPLACE_RE = re.compile(
+    r"\$xml\s*=\s*\$xml\.Replace\(\s*'(__[A-Z_]+__)'\s*,\s*(\$[A-Za-z_]\w*)\s*\)"
+)
+_INTERPRETER_BANNER_RE = re.compile(
+    r"Write-Step\s*\(\s*'interpreter\s*:\s*'\s*\+\s*(\$[A-Za-z_]\w*)\s*\)"
+)
+_XML_PATH_RE = re.compile(r"\$xmlPath\s*=\s*Join-Path\s+(\$[A-Za-z_]\w*)\s+'([^']*)'")
+_SCRIPT_GUARD_RE = re.compile(
+    r"Test-Path\s+-LiteralPath\s+\(\s*Join-Path\s+(\$[A-Za-z_]\w*)\s+'([^']*\.py)'\s*\)"
+)
 
 #: The attribute name whose declaration IDENTIFIES the responder. Not a path -
 #: a path is the thing that went stale. The scan below finds whichever file
@@ -157,6 +271,140 @@ _IMPORT_FAILURES = (
     TypeError,
     ValueError,
 )
+
+
+def _complaint(bucket: str, detail: str = "") -> str:
+    """One stable complaint token, `bucket` or `bucket:detail`.
+
+    The bucket is checked against `GRADED_TOKENS` on the way out, so the
+    declared detector set is enforced by the code that mints the tokens rather
+    than maintained alongside it.
+    """
+    if bucket not in GRADED_TOKENS:
+        raise AssertionError(f"{bucket} is not a declared complaint bucket")
+    return f"{bucket}:{detail}" if detail else bucket
+
+
+def _installer_text() -> str:
+    """The responder's installer, decoded, with a non-vacuity floor on its size."""
+    raw = INSTALLER_PS1.read_bytes()
+    if not raw:
+        raise AssertionError(f"{INSTALLER_PS1} is empty - every derivation below reads it")
+    return raw.decode("ascii", errors="replace")
+
+
+def _installer_substitutions() -> dict[str, str]:
+    """Placeholder token -> the PowerShell variable the installer fills it from.
+
+    Read from the `$xml.Replace(...)` calls at `ops/install_responder_task.ps1:174-179`.
+    This is the authoritative answer to "which tokens in this XML are placeholders
+    the installer will actually substitute", and the installer itself throws at
+    its line 181 on any `__NAME__` survivor.
+    """
+    found = dict(_REPLACE_RE.findall(_installer_text()))
+    if not found:
+        raise AssertionError(
+            "no placeholder substitutions found in the installer - the scan is measuring nothing"
+        )
+    return found
+
+
+def _by_variable() -> dict[str, str]:
+    """The substitution table read backwards: variable -> the token it fills."""
+    return {value: key for key, value in _installer_substitutions().items()}
+
+
+def _installer_interpreter_placeholder() -> str:
+    """The placeholder the `<Command>` must carry, derived from the installer's banner.
+
+    `ops/install_responder_task.ps1:186` prints the interpreter it believes it is
+    registering, from the same `$PythonwExe` variable it substitutes into the
+    XML. Mapping that variable back through the substitution table yields the
+    token by IDENTITY rather than by "some placeholder is there".
+
+    THE RESPONDER INSTALLER PRINTS NO COMMAND BANNER, which is where it differs
+    from the supervisor's. There is no line announcing interpreter-plus-argv, so
+    the argv half of that grade is unavailable here and is read from the
+    installer's responder guard instead - see `_installer_required_script`.
+
+    `pythonw` rather than `python` is load bearing and the installer says so at
+    its lines 33-34 and 62-64: a scheduled task started with `python.exe` flashes
+    a console window on every fire, and this XML pairs the choice with
+    `<Hidden>true</Hidden>` at its line 69.
+    """
+    match = _INTERPRETER_BANNER_RE.search(_installer_text())
+    if match is None:
+        raise AssertionError(
+            "the installer prints no interpreter banner - the interpreter derivation is measuring nothing"
+        )
+    variable = match.group(1)
+    by_variable = _by_variable()
+    if variable not in by_variable:
+        raise AssertionError(
+            f"the installer banner names {variable}, which it substitutes into no placeholder"
+        )
+    return by_variable[variable]
+
+
+def _installer_install_root_placeholder() -> str:
+    """The placeholder standing for the checkout root, and the XML it reads.
+
+    `ops/install_responder_task.ps1:151` builds the path to THIS task definition
+    as `Join-Path $InstallRoot 'ops/ResinCompute-Responder.xml'`. The variable in
+    that expression is the install root by construction, and the relative path
+    beside it is asserted to be this grader's own `TASK_XML` - so the installer
+    that supplies the expectation is the installer that reads the graded file,
+    and pointing this at the OTHER installer in `ops/` goes red here rather than
+    quietly grading one task against another task's script.
+
+    Not decoration: the argv names its script by a RELATIVE path, which resolves
+    only from the checkout root.
+    """
+    match = _XML_PATH_RE.search(_installer_text())
+    if match is None:
+        raise AssertionError(
+            "the installer builds no task-XML path - the install-root derivation is measuring nothing"
+        )
+    variable, relative = match.group(1), match.group(2).replace("\\", "/")
+    if relative != TASK_XML.relative_to(REPO_ROOT).as_posix():
+        raise AssertionError(
+            f"the installer reads {relative}, but this grader grades "
+            f"{TASK_XML.relative_to(REPO_ROOT).as_posix()}"
+        )
+    by_variable = _by_variable()
+    if variable not in by_variable:
+        raise AssertionError(
+            f"the installer locates the XML with {variable}, which it substitutes into no placeholder"
+        )
+    return by_variable[variable]
+
+
+def _installer_required_script() -> str:
+    """The repo-relative script the installer REFUSES to register without.
+
+    `ops/install_responder_task.ps1:102-104` throws unless
+    `Join-Path $InstallRoot 'tools/moon_sync_responder.py'` exists, so that path
+    is the installer's own statement of what it believes it is arming. The argv
+    in the `<Exec>` block must name the same file or the installer's precondition
+    guards a file the task never runs - a check that passes while proving nothing.
+
+    THE MATCH IS ASSERTED UNIQUE. `ops/install_responder_task.ps1:231` also joins
+    the install root to a `.py` path, so a pattern that merely found A `.py` join
+    could silently start reading the liveness checker instead. The anchor is the
+    `Test-Path -LiteralPath (Join-Path ...)` form, and exactly one of those
+    exists in the file.
+    """
+    matches = _SCRIPT_GUARD_RE.findall(_installer_text())
+    if len(matches) != 1:
+        raise AssertionError(
+            f"the installer has {len(matches)} Test-Path script guards - the derivation is ambiguous"
+        )
+    variable, relative = matches[0][0], matches[0][1].replace("\\", "/")
+    if variable not in _by_variable():
+        raise AssertionError(
+            f"the installer guards the script with {variable}, which it substitutes into no placeholder"
+        )
+    return relative
 
 
 def _repo_python_files() -> list[Path]:
@@ -390,13 +638,46 @@ def _bounds_from_main(module: ModuleType, flags: list[str]) -> _MainRun:
     return _MainRun(code, captured.get("bounds"), captured.get("grammar"), raised)
 
 
-def _exec_argv(xml_text: str) -> list[str]:
-    """The `<Exec>` argv from a task XML, script path first."""
+def _exec_fields(xml_text: str) -> tuple[int, str | None, str | None, str | None]:
+    """`(exec count, Command, Arguments, WorkingDirectory)` from a task XML.
+
+    The COUNT is returned rather than asserted so a second `<Exec>` arrives as a
+    graded complaint instead of an exception. Two Exec blocks means the argv this
+    file grades is only one of the things the task runs, which is a drift and not
+    a crash.
+    """
+    root = ElementTree.fromstring(xml_text)
+    exec_nodes = root.findall(f".//{TASK_NS}Exec")
+    if len(exec_nodes) != 1:
+        return len(exec_nodes), None, None, None
+    node = exec_nodes[0]
+    return (
+        1,
+        node.findtext(f"{TASK_NS}Command"),
+        node.findtext(f"{TASK_NS}Arguments"),
+        node.findtext(f"{TASK_NS}WorkingDirectory"),
+    )
+
+
+def _exec_child_tags(xml_text: str) -> tuple[str, ...]:
+    """The `<Exec>` block's child element names, in document order, namespace stripped.
+
+    Order and length both matter and both are pinned by the arm that reads this:
+    an `<Exec>` is not a bag of optional fields here, it is the three elements
+    `ops/install_responder_task.ps1` fills.
+    """
     root = ElementTree.fromstring(xml_text)
     exec_nodes = root.findall(f".//{TASK_NS}Exec")
     if len(exec_nodes) != 1:
         raise AssertionError(f"expected exactly one Exec element, found {len(exec_nodes)}")
-    arguments = exec_nodes[0].findtext(f"{TASK_NS}Arguments")
+    return tuple(child.tag.removeprefix(TASK_NS) for child in exec_nodes[0])
+
+
+def _exec_argv(xml_text: str) -> list[str]:
+    """The `<Exec>` argv from a task XML, script path first."""
+    count, _, arguments, _ = _exec_fields(xml_text)
+    if count != 1:
+        raise AssertionError(f"expected exactly one Exec element, found {count}")
     if not arguments:
         raise AssertionError("Exec carries no Arguments element")
     return shlex.split(arguments)
@@ -430,23 +711,73 @@ def grade_task_argv(xml_text: str) -> list[str]:
     than merely that something did.
     """
     complaints: list[str] = []
-    argv = _exec_argv(xml_text)
+    count, command, arguments, working_directory = _exec_fields(xml_text)
+    if count != 1:
+        return [_complaint("exec-count", str(count))]
+
+    interpreter_placeholder = _installer_interpreter_placeholder()
+    install_root_placeholder = _installer_install_root_placeholder()
+    required_script = _installer_required_script()
+    substituted = _installer_substitutions()
+
+    # PLACEHOLDER SURVIVORS, the installer's own failure mode at its line 181.
+    # A token shaped like a placeholder that the installer does not substitute
+    # reaches `Register-ScheduledTask` verbatim, so the task runs an interpreter
+    # literally named `__PYTHON_EXE__`.
+    block = " ".join(part or "" for part in (command, arguments, working_directory))
+    for token in sorted(set(_PLACEHOLDER_RE.findall(block))):
+        if token not in substituted:
+            complaints.append(_complaint("unsubstituted-placeholder", token))
+
+    # WHICH INTERPRETER. `python.exe` here is a task that flashes a console on
+    # every fire, which is the case the installer's own comment calls out and
+    # which `<Hidden>true</Hidden>` cannot undo.
+    if command is None:
+        complaints.append(_complaint("command-absent"))
+    elif command != interpreter_placeholder:
+        complaints.append(_complaint("command-is-not-the-installer-interpreter", command))
+
+    # WHICH WORKING DIRECTORY. The argv names its script RELATIVELY, so this is
+    # what makes the path in `<Arguments>` resolve at all.
+    if working_directory is None:
+        complaints.append(_complaint("working-directory-absent"))
+    elif working_directory != install_root_placeholder:
+        complaints.append(
+            _complaint("working-directory-is-not-the-install-root", working_directory)
+        )
+
+    if not arguments:
+        return [*complaints, _complaint("arguments-empty")]
+    argv = shlex.split(arguments)
+    if not argv:
+        return [*complaints, _complaint("arguments-empty")]
+
     script, flags = argv[0], argv[1:]
+
+    # WHAT THE INSTALLER BELIEVES IT IS ARMING. Its line 102 refuses to register
+    # unless this exact relative path exists under the install root; an argv
+    # naming anything else makes that precondition a check on a file the task
+    # never runs.
+    if script != required_script:
+        complaints.append(_complaint("script-is-not-the-path-the-installer-requires", script))
 
     # IDENTITY BEFORE ANYTHING ELSE. Everything below reads the named script's
     # own parser and constants, so grading has no meaning until the argv is
     # known to name the responder rather than merely to name a file.
     if not (REPO_ROOT / script).is_file():
-        return [*complaints, f"script-missing:{script}"]
+        return [*complaints, _complaint("script-missing", script)]
     if script not in _scripts_declaring_the_task_label():
-        return [*complaints, f"script-does-not-declare-the-task-label:{script}"]
+        return [*complaints, _complaint("script-does-not-declare-the-task-label", script)]
     try:
         module = _load_script(script)
     except _IMPORT_FAILURES:
-        return [*complaints, f"script-will-not-import:{script}"]
+        return [*complaints, _complaint("script-will-not-import", script)]
     missing = [name for name in RESPONDER_CONTRACT if not hasattr(module, name)]
     if missing:
-        return [*complaints, f"script-not-the-responder:{script}:{','.join(missing)}"]
+        return [
+            *complaints,
+            _complaint("script-not-the-responder", f"{script}:{','.join(missing)}"),
+        ]
 
     parser = _live_parser(module)
     declared = _declared_option_strings(parser)
@@ -459,35 +790,39 @@ def grade_task_argv(xml_text: str) -> list[str]:
             continue
         spelling = token.split("=", 1)[0]
         if spelling not in declared:
-            complaints.append(f"flag-not-a-declared-spelling:{spelling}")
+            complaints.append(_complaint("flag-not-a-declared-spelling", spelling))
 
     parsed: argparse.Namespace | None = None
     try:
         parsed, extras = parser.parse_known_args(flags)
     except SystemExit:
-        complaints.append("parser-rejects-argv")
+        complaints.append(_complaint("parser-rejects-argv"))
     else:
         for extra in extras:
             if extra.startswith("-"):
-                complaints.append(f"unknown-flag:{extra}")
+                complaints.append(_complaint("unknown-flag", extra))
             elif not _parser_takes_positionals(parser):
-                complaints.append(f"unexpected-positional:{extra}")
+                complaints.append(_complaint("unexpected-positional", extra))
 
     # WHICH WINDOW IS WHICH, against the trigger in the same file.
     if parsed is not None:
         start_boundary, end_boundary = _trigger_boundaries(xml_text)
         if parsed.window_opens != start_boundary:
-            complaints.append(f"window-opens-is-not-the-trigger-start:{parsed.window_opens}")
+            complaints.append(
+                _complaint("window-opens-is-not-the-trigger-start", str(parsed.window_opens))
+            )
         if parsed.window_closes != end_boundary:
-            complaints.append(f"window-closes-is-not-the-trigger-end:{parsed.window_closes}")
+            complaints.append(
+                _complaint("window-closes-is-not-the-trigger-end", str(parsed.window_closes))
+            )
 
     # WHAT THE ARGV MEANS, from the code's own construction.
     run = _bounds_from_main(module, flags)
     if run.bounds is None:
-        complaints.append(f"main-refused-argv:{_refusal_category(parser, flags, run)}")
+        complaints.append(_complaint("main-refused-argv", _refusal_category(parser, flags, run)))
     else:
         if not getattr(run.bounds, "armed", False):
-            complaints.append("task-argv-does-not-arm")
+            complaints.append(_complaint("task-argv-does-not-arm"))
         # WHICH GRAMMAR THE CALL ACTUALLY CARRIES. Compared by IDENTITY against
         # the module's own constant, so an equal literal cannot stand in for it
         # and a reworded grammar needs no edit here. The far end of this task is
@@ -496,7 +831,7 @@ def grade_task_argv(xml_text: str) -> list[str]:
         # a lower-bound M1 for a run that has no machine at the other end. That
         # is the row the latency-only grammar exists to make impossible.
         if run.grammar is not module.GRAMMAR_LATENCY_ONLY:
-            complaints.append("grammar-is-not-the-latency-only-grammar")
+            complaints.append(_complaint("grammar-is-not-the-latency-only-grammar"))
 
     # THE LABEL. Membership and identity are reported INDEPENDENTLY rather than
     # chained: under an `elif` the membership check could never speak on a real
@@ -507,14 +842,14 @@ def grade_task_argv(xml_text: str) -> list[str]:
     inline = module.SOURCE_FLAG + "="
     named = module.SOURCE_FLAG in flags or any(item.startswith(inline) for item in flags)
     if not named:
-        complaints.append("source-flag-absent")
+        complaints.append(_complaint("source-flag-absent"))
     elif routed is None:
-        complaints.append("source-label-unusable")
+        complaints.append(_complaint("source-label-unusable"))
     else:
         if routed not in _declared_source_labels(module):
-            complaints.append(f"source-not-a-declared-label:{routed}")
+            complaints.append(_complaint("source-not-a-declared-label", routed))
         if routed != getattr(module, TASK_LABEL_CONSTANT):
-            complaints.append(f"source-not-the-task-label:{routed}")
+            complaints.append(_complaint("source-not-the-task-label", routed))
 
     return complaints
 
@@ -653,6 +988,106 @@ def test_real_task_argv_window_matches_its_own_trigger() -> None:
     assert start_boundary != end_boundary, "the trigger opens and closes on the same value"
 
 
+def test_the_tracked_exec_block_declares_exactly_the_elements_the_installer_fills() -> None:
+    """One action, three elements, in order - and the count is pinned in the SAME arm.
+
+    A separate length arm leaves the primary one vacuous, and a membership test
+    would hold at any length: `("Command", *rest)` is true of an Exec block that
+    also carries a second action. Tuple equality pins ORDER and LENGTH together,
+    and the Exec count is compared inside the same tuple so a second `<Exec>`
+    cannot slip past a passing element check.
+    """
+    count, _, _, _ = _exec_fields(_real_xml_text())
+    assert (count, _exec_child_tags(_real_xml_text())) == (
+        1,
+        ("Command", "Arguments", "WorkingDirectory"),
+    )
+
+
+def test_the_tracked_command_is_the_interpreter_the_installer_resolves() -> None:
+    """WHICH interpreter, by identity against the placeholder the installer fills.
+
+    THE DEFECT THIS CLOSES. `Command` and `WorkingDirectory` appeared nowhere in
+    this file until now, so `ops/ResinCompute-Responder.xml:92,94` were graded by
+    nothing under `tests/` - the supervisor grader names those two tokens, and it
+    is a file about the other task. An edit pointing THIS task at `python.exe`,
+    at a placeholder nobody substitutes, or at nothing at all left every suite
+    green, and this is the task the tree actually arms.
+
+    The expectation is READ, not retyped: `ops/install_responder_task.ps1:186`
+    prints the interpreter it believes it is registering, and the variable in
+    that banner is mapped back through the installer's own substitution table.
+    The size of that table is pinned in this same arm, because a banner or a
+    table that stopped parsing would raise rather than pass - and a derivation
+    that silently narrowed would not.
+    """
+    substituted = _installer_substitutions()
+    assert len(substituted) == 6, f"the installer substitutes {sorted(substituted)}"
+
+    _, command, _, _ = _exec_fields(_real_xml_text())
+    assert command == _installer_interpreter_placeholder()
+
+
+def test_the_tracked_working_directory_is_the_root_the_installer_reads_from() -> None:
+    """The argv names its script RELATIVELY, so this element is what resolves it.
+
+    The expectation comes from the installer expression that locates THIS file -
+    `ops/install_responder_task.ps1:151` - and `_installer_install_root_placeholder`
+    asserts the relative path in that expression is this grader's own `TASK_XML`.
+    So the installer supplying the answer is the installer reading the graded
+    artifact, and aiming this at `ops/install_scheduled_task.ps1` goes red here
+    instead of grading one task against another task's script.
+    """
+    _, _, _, working_directory = _exec_fields(_real_xml_text())
+    assert working_directory == _installer_install_root_placeholder()
+
+
+def test_the_tracked_script_is_the_file_the_installer_refuses_to_register_without() -> None:
+    """The installer's precondition and the task's argv name the SAME file.
+
+    `ops/install_responder_task.ps1:102-104` throws unless that relative path
+    exists under the install root. If the argv named something else, the throw
+    would be guarding a file the task never runs - a check that passes while
+    proving nothing about what was armed.
+    """
+    script = _exec_argv(_real_xml_text())[0]
+    assert script == _installer_required_script()
+
+
+def test_the_tracked_placeholders_are_exactly_the_ones_the_installer_substitutes() -> None:
+    """SET EQUALITY over the whole file, with both cardinalities pinned in one arm.
+
+    A subset test would pass on an XML that dropped a placeholder, and a
+    superset test would pass on an installer that filled tokens nobody uses.
+    Equality is the only relation that catches both directions, and the count
+    rides in the same tuple so an arm comparing two empty sets cannot read as a
+    pass. Populations, named: the left set is every `__NAME__` token appearing
+    anywhere in `ops/ResinCompute-Responder.xml`, comment block included; the
+    right set is the token half of the `$xml.Replace` calls in
+    `ops/install_responder_task.ps1`.
+
+    The Exec block's own four are then pinned separately, and the literals are
+    welded to the installer by the PROPER-subset assertion beside them: a rename
+    on either side goes red rather than quietly agreeing with itself.
+    """
+    substituted = set(_installer_substitutions())
+    xml_tokens = set(_PLACEHOLDER_RE.findall(_real_xml_text()))
+    assert (xml_tokens, len(xml_tokens)) == (substituted, 6)
+
+    _, command, arguments, working_directory = _exec_fields(_real_xml_text())
+    block = " ".join(part or "" for part in (command, arguments, working_directory))
+    exec_tokens = set(_PLACEHOLDER_RE.findall(block))
+    assert exec_tokens == {
+        "__PYTHONW_EXE__",
+        "__INSTALL_ROOT__",
+        "__START_BOUNDARY__",
+        "__END_BOUNDARY__",
+    }
+    assert exec_tokens < substituted, (
+        "the Exec block carries every placeholder in the file - the split is measuring nothing"
+    )
+
+
 def test_the_label_membership_check_can_speak_on_its_own() -> None:
     """The two label complaints are independent, not one shadowing the other.
 
@@ -679,127 +1114,207 @@ def test_the_label_membership_check_can_speak_on_its_own() -> None:
     assert not [item for item in complaints if item.startswith("source-not-a-declared-label")]
 
 
-@pytest.mark.parametrize(
-    ("old", "new", "expected"),
-    [
-        # --- the four detector families the first version already had ---
-        pytest.param(
-            "--source scheduledtask ",
-            "",
-            "source-flag-absent",
-            id="the-hand-added-flag-silently-disappears",
-        ),
-        pytest.param(
-            "--source scheduledtask",
-            "--source notalabelthiscodeknows",
-            "source-not-a-declared-label:notalabelthiscodeknows",
-            id="a-label-no-constant-declares",
-        ),
-        pytest.param(
-            "--source scheduledtask",
-            "--source SCHEDULEDTASK",
-            "source-label-unusable",
-            id="a-label-the-scanner-refuses",
-        ),
-        pytest.param(
-            "--arm",
-            "--arm --not-a-flag-this-parser-has",
-            "unknown-flag:--not-a-flag-this-parser-has",
-            id="a-flag-the-parser-does-not-accept",
-        ),
-        pytest.param(
-            "tools/moon_sync_responder.py",
-            "tools/moon_sync_responder_that_is_not_there.py",
-            "script-missing:tools/moon_sync_responder_that_is_not_there.py",
-            id="an-argv-naming-a-script-that-is-not-on-disk",
-        ),
-        pytest.param(
-            "--arm",
-            "--arm --max-hops notaninteger",
-            "parser-rejects-argv",
-            id="a-declared-flag-handed-a-value-of-the-wrong-type",
-        ),
-        # --- the shapes the first version's controls never varied ---
-        # A REAL FILE, WRONG FILE. `tools/caveman_default.py` exists, is 7-bit
-        # ASCII, and guards its own `main`, so it is safe to name and it is not
-        # the responder. Existence passed the old grader outright.
-        pytest.param(
-            "tools/moon_sync_responder.py",
-            "tools/caveman_default.py",
-            "script-does-not-declare-the-task-label:tools/caveman_default.py",
-            id="an-argv-naming-a-real-script-that-is-the-wrong-one",
-        ),
-        # VALID SHAPE, WRONG MEANING: parses clean, spawns nothing, delivers
-        # nothing, and the trial goes silent with a green suite.
-        pytest.param(
-            "--arm ",
-            "",
-            "task-argv-does-not-arm",
-            id="a-valid-argv-that-quietly-does-nothing",
-        ),
-        # VALID SHAPE, WRONG MEANING: a window that closes before it opens,
-        # while both values stay the placeholders the installer substitutes.
-        pytest.param(
-            "--window-opens __START_BOUNDARY__ --window-closes __END_BOUNDARY__",
-            "--window-opens __END_BOUNDARY__ --window-closes __START_BOUNDARY__",
-            "window-opens-is-not-the-trigger-start:__END_BOUNDARY__",
-            id="the-window-opens-where-it-should-close",
-        ),
-        pytest.param(
-            "--window-opens __START_BOUNDARY__ --window-closes __END_BOUNDARY__",
-            "--window-opens __END_BOUNDARY__ --window-closes __START_BOUNDARY__",
-            "window-closes-is-not-the-trigger-end:__START_BOUNDARY__",
-            id="the-window-closes-where-it-should-open",
-        ),
-        # `main`'s OWN precondition, reused rather than reimplemented: armed
-        # with no window is a refusal before anything is spawned. The token
-        # names the CATEGORY, because the exit code is shared with argparse.
-        pytest.param(
-            "--window-opens __START_BOUNDARY__ ",
-            "",
-            "main-refused-argv:own-precondition",
-            id="armed-with-half-a-window",
-        ),
-        # THE GRAMMAR, WHICH IS A MEANING AND NOT A SPELLING. Dropping this flag
-        # leaves an argv that parses, arms, and grades clean everywhere else,
-        # while every `record_cycle` row it produces publishes `hops` as an
-        # integer under `m1_status='lower-bound'` for a run whose far end is a
-        # HUMAN. That is the defect the latency-only grammar exists to prevent.
-        pytest.param(
-            "--latency-only ",
-            "",
-            "grammar-is-not-the-latency-only-grammar",
-            id="the-flag-that-makes-M1-inapplicable-quietly-disappears",
-        ),
-        # A NON-DASH EXTRA, which the old loop discarded in silence.
-        pytest.param(
-            "--arm",
-            "--arm garbagepositional",
-            "unexpected-positional:garbagepositional",
-            id="positional-junk-the-parser-hands-back-and-nobody-read",
-        ),
-        # ABBREVIATIONS, which argparse resolves and a tracked artifact must not
-        # rely on. All three reached their flag and graded clean before.
-        pytest.param(
-            "--latency-only",
-            "--latency-onl",
-            "flag-not-a-declared-spelling:--latency-onl",
-            id="an-abbreviated-flag-argparse-is-happy-to-resolve",
-        ),
-        pytest.param(
-            "--arm ",
-            "--ar ",
-            "flag-not-a-declared-spelling:--ar",
-            id="a-two-letter-abbreviation-of-the-flag-that-arms-it",
-        ),
-        pytest.param(
-            "--source scheduledtask",
-            "--sourc scheduledtask",
-            "flag-not-a-declared-spelling:--sourc",
-            id="an-abbreviated-source-flag-caught-by-the-parser-not-by-a-substring",
-        ),
-    ],
+#: One in-memory mutant per detector, as `pytest.param(old, new, expected)`.
+#: Held at module level so `test_every_detector_has_a_control` can pin the
+#: declared detector set to it by SET EQUALITY. Shapes vary as well as values:
+#: a valid placeholder in the wrong slot, a real file that is the wrong file,
+#: an abbreviation argparse resolves, and a valid-shape wrong-meaning argv.
+#: The real file is never written - every mutant is a string in memory.
+ARGV_MUTANTS = (
+    # --- the four detector families the first version already had ---
+    pytest.param(
+        "--source scheduledtask ",
+        "",
+        "source-flag-absent",
+        id="the-hand-added-flag-silently-disappears",
+    ),
+    pytest.param(
+        "--source scheduledtask",
+        "--source notalabelthiscodeknows",
+        "source-not-a-declared-label:notalabelthiscodeknows",
+        id="a-label-no-constant-declares",
+    ),
+    pytest.param(
+        "--source scheduledtask",
+        "--source SCHEDULEDTASK",
+        "source-label-unusable",
+        id="a-label-the-scanner-refuses",
+    ),
+    pytest.param(
+        "--arm",
+        "--arm --not-a-flag-this-parser-has",
+        "unknown-flag:--not-a-flag-this-parser-has",
+        id="a-flag-the-parser-does-not-accept",
+    ),
+    pytest.param(
+        "tools/moon_sync_responder.py",
+        "tools/moon_sync_responder_that_is_not_there.py",
+        "script-missing:tools/moon_sync_responder_that_is_not_there.py",
+        id="an-argv-naming-a-script-that-is-not-on-disk",
+    ),
+    pytest.param(
+        "--arm",
+        "--arm --max-hops notaninteger",
+        "parser-rejects-argv",
+        id="a-declared-flag-handed-a-value-of-the-wrong-type",
+    ),
+    # --- the shapes the first version's controls never varied ---
+    # A REAL FILE, WRONG FILE. `tools/caveman_default.py` exists, is 7-bit
+    # ASCII, and guards its own `main`, so it is safe to name and it is not
+    # the responder. Existence passed the old grader outright.
+    pytest.param(
+        "tools/moon_sync_responder.py",
+        "tools/caveman_default.py",
+        "script-does-not-declare-the-task-label:tools/caveman_default.py",
+        id="an-argv-naming-a-real-script-that-is-the-wrong-one",
+    ),
+    # VALID SHAPE, WRONG MEANING: parses clean, spawns nothing, delivers
+    # nothing, and the trial goes silent with a green suite.
+    pytest.param(
+        "--arm ",
+        "",
+        "task-argv-does-not-arm",
+        id="a-valid-argv-that-quietly-does-nothing",
+    ),
+    # VALID SHAPE, WRONG MEANING: a window that closes before it opens,
+    # while both values stay the placeholders the installer substitutes.
+    pytest.param(
+        "--window-opens __START_BOUNDARY__ --window-closes __END_BOUNDARY__",
+        "--window-opens __END_BOUNDARY__ --window-closes __START_BOUNDARY__",
+        "window-opens-is-not-the-trigger-start:__END_BOUNDARY__",
+        id="the-window-opens-where-it-should-close",
+    ),
+    pytest.param(
+        "--window-opens __START_BOUNDARY__ --window-closes __END_BOUNDARY__",
+        "--window-opens __END_BOUNDARY__ --window-closes __START_BOUNDARY__",
+        "window-closes-is-not-the-trigger-end:__START_BOUNDARY__",
+        id="the-window-closes-where-it-should-open",
+    ),
+    # `main`'s OWN precondition, reused rather than reimplemented: armed
+    # with no window is a refusal before anything is spawned. The token
+    # names the CATEGORY, because the exit code is shared with argparse.
+    pytest.param(
+        "--window-opens __START_BOUNDARY__ ",
+        "",
+        "main-refused-argv:own-precondition",
+        id="armed-with-half-a-window",
+    ),
+    # THE GRAMMAR, WHICH IS A MEANING AND NOT A SPELLING. Dropping this flag
+    # leaves an argv that parses, arms, and grades clean everywhere else,
+    # while every `record_cycle` row it produces publishes `hops` as an
+    # integer under `m1_status='lower-bound'` for a run whose far end is a
+    # HUMAN. That is the defect the latency-only grammar exists to prevent.
+    pytest.param(
+        "--latency-only ",
+        "",
+        "grammar-is-not-the-latency-only-grammar",
+        id="the-flag-that-makes-M1-inapplicable-quietly-disappears",
+    ),
+    # A NON-DASH EXTRA, which the old loop discarded in silence.
+    pytest.param(
+        "--arm",
+        "--arm garbagepositional",
+        "unexpected-positional:garbagepositional",
+        id="positional-junk-the-parser-hands-back-and-nobody-read",
+    ),
+    # ABBREVIATIONS, which argparse resolves and a tracked artifact must not
+    # rely on. All three reached their flag and graded clean before.
+    pytest.param(
+        "--latency-only",
+        "--latency-onl",
+        "flag-not-a-declared-spelling:--latency-onl",
+        id="an-abbreviated-flag-argparse-is-happy-to-resolve",
+    ),
+    pytest.param(
+        "--arm ",
+        "--ar ",
+        "flag-not-a-declared-spelling:--ar",
+        id="a-two-letter-abbreviation-of-the-flag-that-arms-it",
+    ),
+    pytest.param(
+        "--source scheduledtask",
+        "--sourc scheduledtask",
+        "flag-not-a-declared-spelling:--sourc",
+        id="an-abbreviated-source-flag-caught-by-the-parser-not-by-a-substring",
+    ),
+    # --- the Exec block itself, which nothing under tests/ read before ---
+    # A SECOND ACTION. The argv this file grades is then only one of the things
+    # the task runs, and the other one is graded by nothing at all.
+    pytest.param(
+        "    <Exec>",
+        "    <Exec/>\n    <Exec>",
+        "exec-count:2",
+        id="two-exec-blocks-so-the-graded-argv-is-only-half-the-task",
+    ),
+    # THE INTERPRETER, which is the case the supervisor grader's docstring
+    # describes and which was still true of THIS task. `python.exe` flashes a
+    # console on every fire, and `<Hidden>true</Hidden>` does not undo it.
+    pytest.param(
+        "<Command>__PYTHONW_EXE__</Command>",
+        "<Command>python.exe</Command>",
+        "command-is-not-the-installer-interpreter:python.exe",
+        id="the-interpreter-becomes-the-one-that-flashes-a-console",
+    ),
+    pytest.param(
+        "      <Command>__PYTHONW_EXE__</Command>\n",
+        "",
+        "command-absent",
+        id="the-command-element-disappears-entirely",
+    ),
+    # A TOKEN SHAPED LIKE A PLACEHOLDER THAT NOBODY FILLS. The installer throws
+    # on a survivor, so this is the drift that turns registration into a crash
+    # nobody sees until the trial is supposed to start.
+    pytest.param(
+        "<Command>__PYTHONW_EXE__</Command>",
+        "<Command>__PYTHON_EXE__</Command>",
+        "unsubstituted-placeholder:__PYTHON_EXE__",
+        id="a-placeholder-the-installer-would-never-substitute",
+    ),
+    # A REAL PLACEHOLDER IN THE WRONG SLOT. Shape-valid, substituted happily,
+    # and the task's working directory becomes the path to pythonw.exe.
+    pytest.param(
+        "<WorkingDirectory>__INSTALL_ROOT__</WorkingDirectory>",
+        "<WorkingDirectory>__PYTHONW_EXE__</WorkingDirectory>",
+        "working-directory-is-not-the-install-root:__PYTHONW_EXE__",
+        id="a-real-placeholder-in-the-wrong-slot",
+    ),
+    pytest.param(
+        "      <WorkingDirectory>__INSTALL_ROOT__</WorkingDirectory>\n",
+        "",
+        "working-directory-absent",
+        id="the-working-directory-disappears-so-a-relative-script-resolves-from-anywhere",
+    ),
+    pytest.param(
+        "<Arguments>tools/moon_sync_responder.py --arm --latency-only --source"
+        " scheduledtask --window-opens __START_BOUNDARY__ --window-closes"
+        " __END_BOUNDARY__</Arguments>",
+        "<Arguments></Arguments>",
+        "arguments-empty",
+        id="the-arguments-element-goes-empty",
+    ),
+    # THE INSTALLER'S OWN PRECONDITION, GUARDING A FILE THE TASK NEVER RUNS.
+    # Same mutant as the wrong-script one above, different detector: that one
+    # says the file is not the responder, this one says the installer refuses
+    # to register without a file the argv no longer names.
+    pytest.param(
+        "tools/moon_sync_responder.py",
+        "tools/caveman_default.py",
+        "script-is-not-the-path-the-installer-requires:tools/caveman_default.py",
+        id="an-argv-naming-a-script-the-installer-does-not-check-for",
+    ),
+    # A DECLARED LABEL THAT IS NOT THIS TASK'S. Controlled here as well as in
+    # `test_the_label_membership_check_can_speak_on_its_own`, so the coverage
+    # arm below sees a control for it rather than an exemption.
+    pytest.param(
+        "--source scheduledtask",
+        "--source cli",
+        "source-not-the-task-label:cli",
+        id="a-declared-label-that-belongs-to-a-different-invocation",
+    ),
 )
+
+
+@pytest.mark.parametrize(("old", "new", "expected"), ARGV_MUTANTS)
 def test_the_grader_fires_on_a_mutated_argv(old: str, new: str, expected: str) -> None:
     """Non-vacuity: each detector is shown red on an in-memory mutant.
 
@@ -876,3 +1391,39 @@ def test_loading_a_script_is_gated_on_identity_first() -> None:
 
     responder = _exec_argv(_real_xml_text())[0]
     assert hasattr(_load_script(responder), TASK_LABEL_CONSTANT)
+
+
+def test_every_detector_has_a_control() -> None:
+    """The detector set and the mutant table are pinned to each other by SET EQUALITY.
+
+    A detector added without a control goes red here on its own, and so does
+    controlling one of the two exempt buckets later without removing it from
+    `UNCONTROLLED_TOKENS`. Populations, named: `GRADED_TOKENS` is every complaint
+    bucket `_complaint` will mint, and the covered set is the bucket half of
+    every expected token in `ARGV_MUTANTS`.
+    """
+    assert ARGV_MUTANTS, "the mutant table is empty - this arm is measuring nothing"
+    covered = {param.values[2].split(":", 1)[0] for param in ARGV_MUTANTS}
+    assert covered <= set(GRADED_TOKENS), (
+        f"the mutant table expects buckets the grader cannot mint: {sorted(covered - set(GRADED_TOKENS))}"
+    )
+    assert set(GRADED_TOKENS) - covered == set(UNCONTROLLED_TOKENS)
+
+
+def test_the_installer_derivations_are_not_empty() -> None:
+    """Every expectation above is READ from the installer, so an empty read is fatal.
+
+    Each helper raises on an empty derivation, and this arm is what makes those
+    floors non-vacuous: it names the count and the population it is counted over,
+    and shows both derived placeholders are drawn from that same table rather
+    than invented. `substituted` is the placeholder-token half of the
+    `$xml.Replace` calls in `ops/install_responder_task.ps1`.
+    """
+    substituted = _installer_substitutions()
+    assert len(substituted) == 6, f"the installer substitutes {sorted(substituted)}"
+    assert _installer_interpreter_placeholder() in substituted
+    assert _installer_install_root_placeholder() in substituted
+    assert _installer_interpreter_placeholder() != _installer_install_root_placeholder(), (
+        "both derivations resolve to one placeholder - they cannot discriminate"
+    )
+    assert _installer_required_script().endswith(".py")

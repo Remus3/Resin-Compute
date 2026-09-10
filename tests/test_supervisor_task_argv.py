@@ -34,9 +34,11 @@ different task, and two of its central mechanisms do not transfer:
     spawning), and a scheduled task carrying it is a supervisor that starts at
     logon, prints into a hidden `pythonw.exe` with no console, and exits.
 
-NEITHER SIDE OF ANY COMPARISON IS RETYPED. A literal argv written into a test is
-a snapshot: it agrees with itself on the day it is written and with nothing
-afterwards. Both sides are READ:
+EVERY EXPECTATION ABOUT THE ARGV IS READ, NEVER RETYPED. A literal argv written
+into a test is a snapshot: it agrees with itself on the day it is written and
+with nothing afterwards. So for each of the five questions below, the value the
+tracked XML is graded against is derived from the installer or from the module,
+and only the XML side is a literal:
 
   - WHICH INTERPRETER: `ops/install_scheduled_task.ps1:120-122` declares which
     placeholder tokens it substitutes and what it substitutes into each, and
@@ -61,6 +63,47 @@ afterwards. Both sides are READ:
     `build_parser()` of the module the argv names, and the parsed namespace must
     not be a dry run.
 
+WHAT IS HAND-TYPED HERE ANYWAY, AND WHETHER DRIFT REDDENS. The sentence above
+used to read "NEITHER SIDE OF ANY COMPARISON IS RETYPED", which was FALSE AS
+WRITTEN and worse than no sentence, because a reader trusts it. It is true only
+of the five ARGV EXPECTATIONS listed above. The population enumerated here is
+different and larger: every hand-typed value in this file that stands opposite
+something readable on disk - the NEEDLES that find each side, and the IDENTITY
+LISTS that interpret them. None of these is an expectation about the argv; all
+of them can drift.
+
+  - `TASK_NS`, the task-schema namespace URI. GUARDED, indirectly and totally:
+    if the tracked XML's `xmlns` moves, `_exec_fields` finds zero `Exec` nodes
+    and `test_the_tracked_supervisor_task_argv_grades_clean` reddens on
+    `exec-count:0`. A wrong namespace here cannot go quiet.
+  - `SUPERVISOR_CONTRACT`, the chosen identity subset of `ops/supervisor.py`'s
+    module-level names. `ops/supervisor.py` declares no `__all__`, so there is
+    no list to read and the choice has no other side. GUARDED by
+    `test_the_supervisor_contract_is_pinned_by_membership_and_by_length`, which
+    pins length and set identity in one assertion and requires every name to be
+    declared at module level in that file. It was UNGUARDED until that arm
+    existed, and four of the five symbols could be dropped together with zero
+    red anywhere in the suite.
+  - `_REPLACE_RE`, `_BANNER_RE`, `_XML_PATH_RE` and `_MATCH_RE` hand-type the
+    installer's SYNTAX, never its values. GUARDED: each derivation raises on an
+    empty scan, and `test_the_installer_derivations_are_not_empty` names the
+    count each scan is expected to return and the population it counts over.
+  - `'if __name__ == "__main__":'` and the `"def build_parser("` /
+    `"def main("` needles, in the exact double-quote form this tree formats to.
+    GUARDED BY POLARITY rather than by a detector: a reformat to single quotes
+    makes these arms go RED, not quietly green, so the failure mode is a false
+    alarm and never a miss.
+  - `"dry_run"`, `argparse`'s dest derived from `--dry-run`. GUARDED, BUT IN A
+    DIFFERENT ARM: `grade_task_argv` reads it as `getattr(parsed, "dry_run",
+    False)`, so a renamed dest would make that one detector go SILENTLY quiet,
+    while `test_the_tracked_argv_means_a_supervising_run_and_not_a_dry_one`
+    reads `.dry_run` as a plain attribute and raises `AttributeError`. The
+    rename is caught by the suite; it is not caught by the detector.
+  - The control subjects `headless.runner` and `ops.health`, and the XML
+    literals in `ARGV_MUTANTS`. GUARDED: `_module_file` returning `None`
+    reddens the arms that name them, and `_mutate` asserts `old in xml_text` so
+    a stale mutation target reddens rather than mutating nothing.
+
 WHAT IS DELIBERATELY NOT GRADED. `argparse`'s `prog=` at `ops/supervisor.py:370`
 reads like a link between the module and the dotted name in the argv, and it is
 not one: `prog` only shapes `--help` text, so a mismatch is cosmetic and grading
@@ -73,8 +116,11 @@ response this tree has been defeated by three times. If an anchor fails here,
 re-anchor it; do not trim it.
 
 NON-VACUITY. Every detector is shown red on an in-memory mutant, and
-`test_every_detector_has_a_control` pins the detector set to the mutant table by
-SET EQUALITY, so a detector added without a control goes red on its own. The
+`test_every_detector_has_a_control` pins `GRADED_TOKENS` - the complaint buckets
+and nothing else - to the mutant table by SET EQUALITY, so a detector added
+without a control goes red on its own. It says nothing about the other two
+collections here: `SUPERVISOR_CONTRACT` is pinned by its own arm, and
+`UNCONTROLLED_TOKENS` is pinned as the difference this same arm asserts. The
 mutants vary SHAPE as well as value - a valid placeholder in the wrong slot, a
 real module that is the wrong module, a real module that is not a CLI at all, an
 abbreviation `argparse` resolves happily - because a control that only plants
@@ -163,10 +209,11 @@ _IMPORT_FAILURES = (
     ValueError,
 )
 
-#: The installer's own placeholder shape, at `ops/install_scheduled_task.ps1:125`,
-#: where it throws on any survivor. Same pattern, so a token this grader calls a
-#: placeholder is a token that installer would refuse to leave behind.
-_PLACEHOLDER_RE = re.compile(r"__[A-Z_]+__")
+#: The installer's own placeholder-survivor test, `$xml -match '...'` at
+#: `ops/install_scheduled_task.ps1:124`, which throws on any survivor at 125.
+#: The pattern INSIDE those quotes is read rather than retyped - see
+#: `_installer_placeholder_pattern`.
+_MATCH_RE = re.compile(r"\$xml\s+-match\s+'([^']*)'")
 
 _REPLACE_RE = re.compile(
     r"\$xml\s*=\s*\$xml\.Replace\(\s*'(__[A-Z_]+__)'\s*,\s*(\$[A-Za-z_]\w*)\s*\)"
@@ -211,6 +258,53 @@ def _installer_substitutions() -> dict[str, str]:
             "no placeholder substitutions found in the installer - the scan is measuring nothing"
         )
     return found
+
+
+def _installer_placeholder_pattern() -> re.Pattern[str]:
+    """What the installer CALLS a placeholder, read from the installer itself.
+
+    WHY READ RATHER THAN GUARD. Retyping `__[A-Z_]+__` here and welding a
+    drift guard beside it would leave two authorities and a detector between
+    them; reading deletes the second authority instead of policing it, and it
+    is what the rest of this file already does with every other expectation.
+    The pattern is the one the installer enforces at
+    `ops/install_scheduled_task.ps1:124-125`, so a token this grader calls a
+    placeholder is exactly a token that installer would refuse to leave behind.
+    Widen or narrow that line and this derivation moves with it.
+
+    Three floors, all in this one derivation rather than in a separate arm:
+    the declaration must be found, the pattern must compile under Python's
+    `re` (PowerShell's `-match` is a .NET regex, and the two dialects agree on
+    this shape but are not the same language), and it must both accept every
+    token the installer actually substitutes and reject a bare XML word - a
+    pattern matching everything or nothing would otherwise be handed back as
+    authoritative.
+    """
+    match = _MATCH_RE.search(_installer_text())
+    if match is None:
+        raise AssertionError(
+            "the installer declares no placeholder-survivor pattern - "
+            "the placeholder derivation is measuring nothing"
+        )
+    source = match.group(1)
+    try:
+        pattern = re.compile(source)
+    except re.error as exc:
+        raise AssertionError(
+            f"the installer's placeholder pattern {source!r} does not compile under Python re: {exc}"
+        ) from exc
+    substituted = sorted(_installer_substitutions())
+    rejected = [token for token in substituted if not pattern.fullmatch(token)]
+    if rejected:
+        raise AssertionError(
+            f"the installer's own pattern {source!r} does not match tokens it substitutes: {rejected}"
+        )
+    if pattern.search("WorkingDirectory"):
+        raise AssertionError(
+            f"the installer's placeholder pattern {source!r} matches ordinary XML text - "
+            "every element in the Exec block would be reported as a placeholder"
+        )
+    return pattern
 
 
 def _installer_command() -> tuple[str, tuple[str, ...]]:
@@ -317,6 +411,22 @@ def _declares(path: Path, declaration: str) -> bool:
     return any(line.startswith(needle) for line in path.read_bytes().splitlines())
 
 
+def _declares_a_module_level_name(path: Path, name: str) -> bool:
+    """Whether the file declares `name` at module level as a def, class or assignment.
+
+    Built on `_declares`, so it is the same BYTE SCAN and still never imports
+    the file it is asked about. The four prefixes are the ways the symbols in
+    `SUPERVISOR_CONTRACT` are actually declared in `ops/supervisor.py`:
+    `def supervise(` at 293, `class SupervisorConfig:` at 98, and
+    `DEFAULT_CHILD_ARGS = ` at 74. `class Name(` is included because a base
+    class is a spelling of the same declaration, not a different one.
+    """
+    return any(
+        _declares(path, prefix)
+        for prefix in (f"def {name}(", f"class {name}:", f"class {name}(", f"{name} = ")
+    )
+
+
 def _declared_option_strings(parser: argparse.ArgumentParser) -> set[str]:
     """Every option spelling the parser declares, e.g. `--dry-run`, `--interval`.
 
@@ -380,7 +490,11 @@ def grade_task_argv(xml_text: str) -> list[str]:
 
     # PLACEHOLDER SURVIVORS, the installer's own failure mode at its line 125.
     block = " ".join(part or "" for part in (command, arguments, working_directory))
-    for token in sorted(set(_PLACEHOLDER_RE.findall(block))):
+    # `group(0)` rather than `findall`: the pattern comes off the installer, and
+    # `findall` would silently return CAPTURE GROUPS instead of whole tokens if a
+    # future installer wrapped its pattern in parentheses.
+    placeholder_re = _installer_placeholder_pattern()
+    for token in sorted({found.group(0) for found in placeholder_re.finditer(block)}):
         if token not in substituted:
             complaints.append(_complaint("unsubstituted-placeholder", token))
 
@@ -721,6 +835,71 @@ def test_the_tracked_argv_names_the_supervisor_and_not_a_neighbour() -> None:
     )
 
 
+def test_the_supervisor_contract_is_pinned_by_membership_and_by_length() -> None:
+    """`SUPERVISOR_CONTRACT` itself, pinned - the arm the file shipped without.
+
+    THE DEFECT THIS EXISTS FOR, measured at b3bef1a by driving 24 arms in memory
+    against mutated contracts. The population of 24: the two arms that grade the
+    real artifact's identity, `test_every_detector_has_a_control`,
+    `test_loading_a_module_is_gated_on_identity_first`, and every entry of
+    `ARGV_MUTANTS` through `test_the_grader_fires_on_a_mutated_argv`. Replacing
+    the whole contract with `("supervise",)` scored 24/24 with zero failures, so
+    FOUR of its five symbols could be deleted together and nothing anywhere went
+    red. The contract carries the entire module-identity claim and was the one
+    collection in this file with neither its length nor its set identity pinned.
+    `test_every_detector_has_a_control` pins a set by equality, but the set it
+    pins is `GRADED_TOKENS`, and it says nothing about this tuple.
+
+    WHY THE EXPECTATION IS HAND-TYPED HERE, AND WHAT GUARDS IT. `ops/supervisor.py`
+    declares no `__all__`, so there is no readable list to compare against; the
+    contract is a CHOSEN subset of that module's module-level names, and a
+    choice has no other side to be read from. The hand-typed set is therefore
+    graded against ground truth by the second assertion: every name in it must
+    be declared at module level in `ops/supervisor.py`, so a symbol cannot be
+    invented here without also being invented there.
+
+    WHY THE REDUNDANCY IS DELIBERATE. Measured above, `("supervise",)` alone
+    already discriminates `ops.supervisor` from every neighbour in the tree
+    today. The other four are not there to discriminate - they are there to say
+    WHICH MODULE this is against a tree that may grow a second `supervise`, and
+    a future reader who shrinks the tuple to the minimum that still passes has
+    traded the identity claim for the discrimination one. That is why the length
+    is pinned in the SAME assertion as the membership rather than beside it: a
+    length in a separate arm leaves the membership arm free to be satisfied by a
+    prefix, which is exactly the arity blindness this tree was caught by last
+    session.
+    """
+    supervisor_source = _module_file("ops.supervisor")
+    assert supervisor_source is not None, "ops.supervisor is not on disk - this arm reads it"
+
+    # ONE ASSERTION, BOTH DIRECTIONS. Set equality reddens on a dropped symbol
+    # and on an invented one; the length beside it reddens on a duplicate, which
+    # set equality alone would absorb.
+    assert (len(SUPERVISOR_CONTRACT), set(SUPERVISOR_CONTRACT)) == (
+        5,
+        {"build_parser", "main", "supervise", "SupervisorConfig", "DEFAULT_CHILD_ARGS"},
+    ), (
+        f"the supervisor contract is {SUPERVISOR_CONTRACT} - it identifies the module the "
+        "task argv names, and no other arm in this file notices when it shrinks"
+    )
+
+    undeclared = [
+        name
+        for name in SUPERVISOR_CONTRACT
+        if not _declares_a_module_level_name(supervisor_source, name)
+    ]
+    assert undeclared == [], (
+        f"the contract names symbols {supervisor_source.relative_to(REPO_ROOT).as_posix()} "
+        f"does not declare at module level: {undeclared}"
+    )
+
+    # The positive control for that scan, in the same arm: a scan that answered
+    # True for everything would have passed the assertion above vacuously.
+    assert not _declares_a_module_level_name(
+        supervisor_source, "SymbolTheSupervisorDoesNotDeclare"
+    ), "the declaration scan accepts a name that is not in the file - it is measuring nothing"
+
+
 def test_the_tracked_argv_means_a_supervising_run_and_not_a_dry_one() -> None:
     """The meaning grade, read off the namespace the supervisor's own parser builds.
 
@@ -799,3 +978,51 @@ def test_the_installer_derivations_are_not_empty() -> None:
     assert len(substituted) == 3, f"the installer substitutes {sorted(substituted)}"
     assert _installer_command()[0] in substituted
     assert _installer_install_root_placeholder() in substituted
+
+
+def test_the_placeholder_shape_is_read_from_the_installer_that_enforces_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """WHAT COUNTS AS A PLACEHOLDER is read, and installer drift reddens here.
+
+    THE DEFECT THIS EXISTS FOR, measured at b3bef1a. `_PLACEHOLDER_RE` hand-typed
+    `__[A-Z_]+__`, duplicating the pattern `ops/install_scheduled_task.ps1:124`
+    enforces and throws on at 125, with no drift guard of any kind. Change the
+    installer's notion of a placeholder and this grader silently disagreed with
+    it about what a placeholder even is, staying green in both directions - a
+    survivor the installer would now refuse could go unreported here, and a
+    token the installer no longer substitutes could still read as legitimate.
+
+    The three controls below are in-memory drifted installers. The real
+    `ops/install_scheduled_task.ps1` is never written, and the drifted texts are
+    built from the pattern READ out of it through `_mutate`, whose presence
+    assertion means a stale drift target reddens rather than mutating nothing.
+    """
+    real = _installer_text()
+    source = _installer_placeholder_pattern().pattern
+    assert source, "the installer's placeholder pattern is empty - this arm is measuring nothing"
+
+    # THE STRONG CONTROL: the derived pattern reaches the grader's output. A
+    # widened installer pattern - one that also calls the dotted module name a
+    # placeholder - must make the UNMUTATED tracked XML mint a complaint. A
+    # grader still consulting a hardcoded pattern cannot produce this token.
+    widened = _mutate(real, f"-match '{source}'", f"-match '(?:{source}|ops\\.supervisor)'")
+    monkeypatch.setitem(globals(), "_installer_text", lambda: widened)
+    assert "unsubstituted-placeholder:ops.supervisor" in grade_task_argv(_real_xml_text())
+    monkeypatch.undo()
+
+    # DRIFT, NARROWED: an installer that calls only one literal token a
+    # placeholder no longer describes the tokens it substitutes, and the
+    # derivation refuses to hand that back as authoritative.
+    narrowed = _mutate(real, f"-match '{source}'", "-match '__INSTALL_ROOT__'")
+    monkeypatch.setitem(globals(), "_installer_text", lambda: narrowed)
+    with pytest.raises(AssertionError):
+        _installer_placeholder_pattern()
+    monkeypatch.undo()
+
+    # DRIFT, DECLARATION GONE: the installer stops testing for survivors at all.
+    # The derivation must go red rather than fall back to a remembered shape.
+    renamed = _mutate(real, f"$xml -match '{source}'", f"$xmlBody -match '{source}'")
+    monkeypatch.setitem(globals(), "_installer_text", lambda: renamed)
+    with pytest.raises(AssertionError):
+        _installer_placeholder_pattern()
