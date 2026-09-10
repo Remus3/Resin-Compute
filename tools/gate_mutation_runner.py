@@ -360,6 +360,35 @@ class MutantResult:
         rather than counting it. The exclusions above are meant to make this
         impossible; this property is what makes a hole in them visible instead
         of silent.
+
+        IT IS A DIAGNOSTIC AND NOT A LIVE PROTECTION, and stating that is the
+        whole point of this paragraph. `suite_argv` emits `--ignore` for EVERY
+        name in `EXCLUDED_MODULES`, and `SHAPE_GRADER_MODULES` is a subset of
+        `EXCLUDED_MODULES` by construction, so under the campaign's own argv
+        pytest never COLLECTS a shape grader, `parse_first_failure` can never
+        return a node id naming one, and this property is structurally False
+        for every mutant of a real campaign. It can be True only where the
+        ignore list is BYPASSED: a `suite_runner` that builds its own argv, or
+        a caller constructing a `MutantResult` directly, which is exactly what
+        this tool's own arms do.
+
+        MAKING IT REACHABLE BY WEAKENING THE EXCLUSIONS WAS CONSIDERED AND
+        REJECTED. Dropping the shape graders out of `--ignore` would restore
+        the confound the exclusions exist to remove, at the scale measured
+        under `SHAPE_GRADER_MODULES` - 34 of the 35 live mutants redden the
+        bindings module over syntax alone. A reachable diagnostic bought at
+        that price is not protection, it is the defect wearing the detector's
+        clothes.
+
+        SO `undeclared_shape_graders` IS THE ONLY LIVE PROTECTION AGAINST A
+        HOLE IN THE EXCLUSION LIST, and it is the one with a stated blind spot.
+        `_binds_and_reads_responder` cannot see a module that reads the
+        responder through `importlib.util.spec_from_file_location`; that limit,
+        the four modules it lets through, and the measured population it was
+        derived from are written down in that function's docstring. An
+        unreachable property that LOOKS like protection is worse than none,
+        which is why the reachability is stated here rather than left to be
+        inferred by a reader who happens to open `suite_argv`.
         """
         module = self.kill_module
         return self.killed and module is not None and module in SHAPE_GRADER_MODULES
@@ -647,6 +676,53 @@ def _binds_and_reads_responder(source: str) -> bool:
     clean result means "no module of this shape is undeclared", never "no
     confound exists". A syntactically broken file is not a candidate either;
     pytest would fail to collect it long before a campaign could be misread.
+
+    THE IMPORTLIB ROUTE IS THE BLIND SPOT INSIDE THE DECLARED SHAPE, and it is
+    named here because the list above did not name it and a reader would have
+    taken that list for the whole of the cost. FOUR modules -
+    `tests/test_moon_sync_responder.py`,
+    `tests/test_responder_broadcast_refusal.py`,
+    `tests/test_responder_delivery_gates.py` and
+    `tests/test_responder_refusal_gates.py` - each bind
+    `MODULE = ROOT / "tools" / "moon_sync_responder.py"` AT MODULE LEVEL to a
+    plain `Name`, so criterion 1 passes on all four, and then read that name
+    through `importlib.util.spec_from_file_location`, where the bound name is
+    an ARGUMENT and never the receiver of an attribute access. Criterion 2
+    therefore fails and all four are missed.
+
+    `_READ_ATTRS` IS DELIBERATELY NOT WIDENED TO COVER THEM. Those four IMPORT
+    the responder to exercise its BEHAVIOUR. They are the tests a campaign
+    exists to consult, not graders of the target's shape, so a detector that
+    reported them would be wrong on every run and would train a reader to
+    ignore it - the same argument already recorded for why
+    `undeclared_shape_graders` subtracts all of `EXCLUDED_MODULES` and not just
+    `SHAPE_GRADER_MODULES`. Widening a matcher is additionally the repair this
+    tree has been defeated by three times, and the standing lesson is that
+    after the second defeat you ask what claim the mechanism CAN support rather
+    than stretching the match. The honest repair for a detector whose shape is
+    its finding is to state the scope.
+
+    THE MEASURED POPULATION, so that "narrow" is a number rather than an
+    adjective. Measured in this tree at `6be6961` on 2026-09-09 by a
+    `sitecustomize.py` patching `io.open` and `builtins.open` across ONE full
+    `python -m pytest tests` run - 1880 passed, 1 skipped: 197 open events on
+    `tools/moon_sync_responder.py`, of which 195 attribute to a repo file and 2
+    attribute to a frozen pseudo-file frame that is no repo file at all. Those
+    195 come from 15 DISTINCT REPO FILES - 14 under `tests/` plus
+    `tools/gate_mutation_runner.py`. That population is EVERY FILE THAT OPENS
+    THE RESPONDER DURING ONE APPLICATION-SUITE RUN.
+    `responder_reading_modules` names 3 of them, and the gap of 12 is not a
+    defect: this detector's question is "is a module of THIS SHAPE undeclared",
+    and it is never "does anything else read this file".
+
+    15 IS A LOWER BOUND ON THAT POPULATION AND NOT A TOTAL. `importlib` binds
+    `io.open_code` inside `_bootstrap_external` before any such patch can land,
+    so the import-time reads the four modules above perform are NOT among the
+    195 - which is why not one of those four appears in the 15 even though each
+    provably reads the file. Reads from subprocesses, and every read performed
+    by the `agents/pity_engine` suite, were outside the sample as well. A
+    sampled negative is a statement about the sample, so the sampling rule is
+    reported beside the number rather than left for a reader to assume away.
     """
     try:
         tree = ast.parse(source)
