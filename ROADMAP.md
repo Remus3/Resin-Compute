@@ -11,6 +11,177 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **CLOSED 2026-09-09. STEP THREE OF THE GATE CENSUS SHIPPED AS A NAME-TO-SITE
+  BINDING TABLE, AND THE BRIEF THAT ASKED FOR A REGISTRY WAS REFUTED BEFORE ANY
+  CODE EXISTED.** `tests/test_gate_name_bindings.py`, landed at `f571234` and
+  extended at `68a189f`. A planner refuted the registry brief with measurements
+  rather than with an opinion and the refutation held: a name-list registry
+  would have duplicated the coverage arm's set equality and added a SECOND
+  hand-typed count beside `_FLOOR`, which is the failure class that fired three
+  times in one session here.
+
+  EVERY NUMBER BELOW NAMES THE POPULATION IT COUNTS, because THREE DIFFERENT
+  POPULATIONS sit near the figure "3 of 18" and only one of them means BOUND TO
+  A SITE. All of them re-derived at `68a189f` in throwaway detached worktrees,
+  none inherited:
+
+    - SIX of the 18 live gate names appear anywhere in
+      `tests/test_responder_gate_census.py` as an EXACT STRING LITERAL. Counted
+      by a `tokenize` pass comparing STRING tokens against the 18 names read out
+      of `tools/moon_sync_responder.py`, because a text grep would also match a
+      name sitting in prose.
+    - FIVE names REACH `_line_of_tag_named`: the three literal arguments plus
+      the three in `_MULTIPLICITY_TAG_NAMES`, union five. `draft-verdict` is the
+      literal that never reaches it.
+    - THREE is the count of UNIQUE LITERAL ARGUMENTS to `_line_of_tag_named`,
+      by the grep for that call with a quoted name argument piped to
+      `sort -u | wc -l`. That is the figure the superseded row below carries,
+      and it is NOT the bound-to-a-site population.
+    - FOUR names redden the census when swapped against a control name that no
+      reddening adjacent swap touches - `counterparty-agreement`,
+      `delivery-write-all`, `hop-budget` and `refusal-recorded`. THE PLANNER'S
+      "3 of 18 bound to a site" DID NOT REPRODUCE HERE; the isolating probe
+      says four.
+    - ONE, and this is the honest reading. Of those four, only `hop-budget`
+      reddens an arm that READS THE STATEMENT under the tag,
+      `test_the_report_names_the_statement_and_not_only_its_line`. The other
+      three redden the MULTIPLICITY arms, which pick tags BY NAME and then
+      compute expected LINE arithmetic, so moving a name shifts the arithmetic
+      without anything having looked at a statement. That is positional
+      coincidence and not a name-to-site binding, which makes the planner's
+      underlying point STRONGER than the number it carried: on the strictest
+      reading the census bound ONE name of 18, and by accident.
+
+  THE ADJACENT-SWAP FIGURE REPRODUCED EXACTLY. 17 adjacent swaps of the 18 tag
+  names, each run against the census in a detached worktree: 13 GREEN, 4 RED.
+  The responder was restored afterwards and `git status --porcelain` in that
+  worktree printed nothing before it was removed.
+
+  THE ROTATION FIGURE DID NOT REPRODUCE AS A CLAIM ABOUT THE MODULE. Rotating
+  all 18 names one position left leaves the census at exit 1, 2 failed 76
+  passed, and both failures are the accidental line-arithmetic arms named above.
+  The planner's wording was about the census's PROBLEM LISTS being empty, and
+  those were not separately enumerated here, so that exact wording is neither
+  confirmed nor refuted; the stronger reading of it - that the census is BLIND
+  to a full rotation - is REFUTED. The same rotation reddens
+  `tests/test_gate_name_bindings.py` at 7 failed 2 passed, which is the positive
+  control the census cannot give.
+
+  THE BINDING RULE IS EQUALITY AT A LOCATED LINE, NEVER CONTAINMENT, AND IT IS
+  IN THE MECHANISM RATHER THAN IN A COMMENT. The site is the line at
+  `tag_line + 1`, LOCATED by the tag's own line number and never searched for,
+  and the binding holds if and only if that line, stripped, EQUALS the
+  hand-typed anchor. WHY, and this is the part a later reader needs: A
+  CONTAINMENT RULE HAS A REPAIR GRADIENT. When an anchor stops matching, the
+  cheap repair is to SHORTEN THE NEEDLE until it matches again, which is the
+  matcher-widening this tree has been defeated by three times. Under equality no
+  trim can ever restore a match, so the only repair available is to RETYPE the
+  line - which is re-anchoring, which is the thing that was wanted. Two arms
+  carry the rule rather than a sentence:
+  `test_no_proper_prefix_or_suffix_of_an_anchor_can_restore_a_match` substitutes
+  every non-empty proper prefix and every non-empty proper suffix of every
+  anchor, and `test_an_empty_anchor_is_reported_and_never_matches` carries the
+  empty string that enumeration leaves out.
+
+  CENSUS CEILING ITEM 1 IS HALF CLOSED AND THE OPEN HALF IS NAMED. DO NOT WRITE
+  THAT IT IS CLOSED. The SITE half is now checked, by the bindings module. The
+  MEANING half is closed by NOTHING: an anchor is a TEXT EQUALITY, so binding
+  the `hop-budget` tag to `if not within_budget(inbox, bounds):` asserts that
+  the name SITS ON that statement and asserts nothing at all about whether the
+  name DESCRIBES it. A name that agrees with the thing it names remains an
+  agreement no machine in this tree checks.
+
+  THE RECORD IS CORRECTED ON WHERE THAT CEILING ITEM LIVES. A prior hand-off
+  placed it in `docs/LEDGER.md`. It is not there. It is in the MODULE DOCSTRING
+  of `tests/test_responder_gate_census.py`, whose CEILING heading opens at line
+  74 with item 1 immediately under it at line 78 - opened and read this session.
+  `docs/LEDGER.md` MENTIONS census ceiling items in prose, which is how the
+  confusion started, but it holds no ceiling LIST for anything to be item 1 of.
+
+- **AN ADJUDICATED CALL, 2026-09-09. GATE `spawn-failure` KEEPS ITS `try:` LINE
+  AS ITS SINGLE ANCHOR AND GAINS NO SECOND HANDLER-COVERING ANCHOR.** VERDICT:
+  CANDIDATE ONE, single anchor, FIVE CRITERIA TO NIL.
+
+  THE RULING DID NOT TURN ON THE ANCHOR. It turned on THE MOTIVATING FACT BEING
+  FALSE. A second anchor was wanted so that the bindings module would see the
+  mutant `spawn-failure/except-reraise`, on the belief that that mutant is in
+  the standing 8-survivor set. IT IS NOT IN IT. The survivor set is enumerated
+  in `docs/LEDGER.md`, in the entry headed "The mutation runner ships, four of
+  its own kills were false, and the census arms pinned literals where they
+  claimed classes", in the paragraph opening "THE STANDING RESULT":
+  `no-destination/if-false`, `workspace-trust/if-false`,
+  `refusal-recorded/if-false`, `bounce-mark/if-true`,
+  `bounce-write-all/operand-1` and `operand-2`, `delivery-write-all/operand-1`
+  and `operand-2`. VERIFIED HERE by opening that list and reading all eight -
+  `spawn-failure/except-reraise` is ABSENT from it. It is killed instead by
+  `tests/test_moon_sync_responder.py:868`,
+  `test_a_spawn_that_raises_is_a_held_cycle_and_not_a_crash`, whose presence at
+  that line was confirmed by opening the file.
+
+  AN INDEPENDENT SECOND REASON, and it does not share the first one's premise.
+  The bindings module is EXCLUDED FROM THE CAMPAIGN as a shape grader, so a
+  campaign-shaped benefit from a second anchor is ZERO BY CONSTRUCTION: the
+  campaign never runs the module whose coverage the second anchor would widen.
+  Two reasons that fail independently is why this row records both.
+
+  THE RESIDUAL THE RULING ORDERED WRITTEN DOWN is in the module docstring rather
+  than filed here, because that is where the next person reaching for a second
+  anchor will be standing. A binding is a claim about the TAG-TO-SITE PAIRING
+  ONLY, and `spawn-failure/except-reraise` is INVARIANT under it, because that
+  mutant rewrites handler BODIES and leaves the `try:` header line
+  byte-identical.
+
+  THE COMMON-MODE RISK THE ADJUDICATOR FOUND, WHICH THE BRIEF HAD MISSED.
+  Nothing forbade a BLANK LINE OR A COMMENT landing between a tag and its site,
+  which would shift EVERY binding IN THE SAME DIRECTION at once - the one
+  failure a per-gate table cannot catch by internal disagreement, since no two
+  entries would disagree. It is now an arm,
+  `test_a_blank_line_or_a_comment_between_a_tag_and_its_site_is_reported`.
+
+  THE 34 OF 35 FIGURE IS ANCHOR-DEFINITION-DEPENDENT, AND ANY LATER READER
+  CITING IT MUST SAY WHICH DEFINITION. Under the equality rule at
+  `tag_line + 1` it is 34 of 35 with survivor `spawn-failure/except-reraise` -
+  inherited from ceiling item C3 of the bindings module and NOT re-measured
+  here, because the campaign was not re-run this slice. Under a WHOLE-FILE
+  SUBSTRING sweep it is 32, and the mechanism for the difference WAS re-derived
+  here: exactly two of the 18 anchors are non-unique file-wide, the `try:` line
+  at 17 occurrences in `tools/moon_sync_responder.py` against one inside
+  `_run_once`, and the `if reasons:` line at two against one. No other anchor of
+  the 18 is duplicated anywhere in that file.
+
+- **CLOSED 2026-09-09. SEAM (f) IS CLOSED, AND RSC NO LONGER HOLDS AN OPEN
+  POSITION AGAINST RC.** RC's operator ADOPTED the diff gate and DELETED the
+  own-origin push carve-out rather than softening it, on RC's own stated reason
+  that two readings of a boundary rule in one file is how a future session picks
+  the convenient one. RC's note is
+  `moon_sync_inbox/2026-09-09-2130-from-RC-ADOPTED-the-diff-gate-your-concession-carried-it-and-RC-has-no-sweep-yet.md`.
+  What RC now runs: a push halts and pings when its DIFF touches a
+  cross-repository byte-pinned artifact or trips a sibling-name sweep, and not
+  on an ordinary push that passes the suites and the sweep. Every other clause of
+  RC's boundary is unchanged, it binds every RC session including an attended
+  one, and there is still NO TIMEOUT.
+
+  RC VOLUNTEERED THE HOLE UNASKED, WHICH IS THE PART WORTH KEEPING. RC has NO
+  sibling-name sweep, and RC's pre-push hook is GIT LFS ONLY, so half the gate
+  RC adopted has nothing to run against today. RC wrote that hole INTO its own
+  rule paragraph rather than leaving the rule looking complete, and filed its own
+  item to build the missing half, with acceptance that it runs over the push DIFF
+  rather than the whole tree, carries a positive-control arm of RC's OWN known
+  escape shapes, and preserves the LFS invocation.
+
+  RC DECLINED TO COPY THIS TREE'S LITERALS, AND WAS RIGHT TO. RC took the
+  positive-control idea and the framing that a sweep is a better shape rather
+  than a solved problem, and refused the escape list itself, because importing a
+  sibling's literals would put sibling-identifying strings into a public repo -
+  which is the exact failure such a sweep exists to prevent.
+
+  WHAT IS NOT RECORDED HERE, DELIBERATELY. Nothing in RC's note is an agreement
+  about this tree's own gate, and none is recorded as one. RC states plainly that
+  it verified RC's side only and did not re-derive this tree's citations against
+  this tree's disk. The other three participants are on ORDERED STANDBY and are
+  not named: silence from them is NOT dissent, and no position is attributed to
+  them.
+
 - **CLOSED 2026-09-09. THE 0-BYTE TEMP LEAK IN `core/atomic_io.py` IS FIXED,
   AND IT WAS TWO DEFECTS RATHER THAN ONE.** Measured at `3533965`:
   `atomic_write_text(target, chr(0xD800))` RAISED `UnicodeEncodeError` out of
@@ -150,8 +321,10 @@ version. What follows is everything the scaffold deliberately did not do.
   is a unilateral rule with extra steps. RSC changed position and RC did not,
   and that is the part a later reader needs.
 
-- **OPEN AND RE-SPECCED. STEP THREE OF THE GATE CENSUS IS NOT THE REGISTRY THE
-  EARLIER BRIEF ASKED FOR.** A planner refuted that brief with measurements
+- **SUPERSEDED 2026-09-09 - STEP THREE HAS SHIPPED AND IS CLOSED IN THE ROW AT
+  THE TOP OF THIS SECTION. LEFT STANDING RATHER THAN DELETED, SO A LATER READER
+  SEES THE POSITION AND NOT ONLY THE OUTCOME. STEP THREE OF THE GATE CENSUS IS
+  NOT THE REGISTRY THE EARLIER BRIEF ASKED FOR.** A planner refuted that brief with measurements
   rather than with an opinion, and the refutation held. Its figures, recorded
   as THE PLANNER'S readings of 2026-09-09 and not re-derived in this row: 13 of
   17 adjacent gate-name swaps leave the census GREEN, and rotating all 18 names
@@ -194,6 +367,14 @@ version. What follows is everything the scaffold deliberately did not do.
   the session temp directory and WILL NOT SURVIVE. It must be re-derived. Do
   not cite a path under `Temp` as if it were durable; it is not, and a row that
   did would be worse than this one.
+
+  WHICH OF THIS ROW'S FIGURES SURVIVED RE-MEASUREMENT, checked at `68a189f` and
+  not taken on trust. The 13-of-17 adjacent-swap figure REPRODUCED EXACTLY. The
+  3-of-18 figure is a real count of a real population - the unique literal
+  arguments to `_line_of_tag_named` - but it is NOT the bound-to-a-site
+  population this row used it as, which is four under an isolating swap and one
+  under the strictest reading. The rotation figure did not reproduce as a claim
+  about the module. All three are set out in the closed row above.
 
 - **CLOSED 2026-09-09. A PROSE CLAIM IN THE GATE CENSUS DECAYED AND NOTHING
   WATCHED IT.** `tests/test_responder_gate_census.py` claimed 18 tags "all of

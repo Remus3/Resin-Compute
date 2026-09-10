@@ -12,6 +12,111 @@ now.
 
 ---
 
+## 2026-09-09 - The gate names are bound to their sites by equality, and the method findings cost more than the table did
+
+Files: `tests/test_gate_name_bindings.py` (new), `tools/gate_mutation_runner.py`,
+`tests/test_gate_mutation_runner.py`, `tests/test_responder_gate_census.py`,
+`ROADMAP.md`, `docs/LEDGER.md`. `tools/moon_sync_responder.py` NOT touched, and
+that is a claim about the diff: `git diff --name-only 0c17717 68a189f` lists four
+files and the responder is not one of them.
+
+**MEASURED AT `68a189f`, STAMPED AS A READING AND NOT AS A CLAIM ABOUT NOW.**
+`python -m pytest tests` exit 0, 1880 passed 1 skipped.
+`python -m pytest agents/pity_engine` exit 0, 80 passed.
+`python -m ruff check .` exit 0. The arithmetic closes on the arms this work
+added, and both ends were measured rather than one end assumed:
+`python -m pytest tests --collect-only` collects 1868 at `0c17717` and 1881 at
+`68a189f`, while `git diff -U0` against each commit's parent, counting added
+lines that open a test function under `tests`, returns 8 at `f571234`, 4 at
+`30235c2` and 1 at `68a189f`. 1868 plus 13 is 1881, and 1880 passed plus 1
+skipped is 1881.
+
+**AN ARM CAN BE ARITY-BLIND ABOUT THE VERY THING IT GUARDS.**
+`test_the_two_exclusion_reasons_are_named_apart_not_merged` exists to stop the
+runner's two exclusion reasons being merged into one. It carried four
+assertions and ALL FOUR WERE ARITY-AGNOSTIC - `EXCLUDED_MODULES ==
+(SELF_TEST_MODULE, *SHAPE_GRADER_MODULES)` holds at ANY length - so when a
+SECOND shape grader landed in `SHAPE_GRADER_MODULES`, every one of the four went
+on passing UNCHANGED and the arm said nothing whatever about the new entry. A
+grading arm that cannot see the thing it grades change is the failure class.
+The repair kept all four VERBATIM and appended: the arity is now pinned at 2 and
+3, and a PROSE check requires each shape grader to have its OWN measured reason
+in the comment block between the two constants, since one list with two entries
+under one shared paragraph is the merged state the arm exists to forbid and is
+reachable without touching either constant's name.
+
+**`verify_exclusions` ANSWERED THE WRONG QUESTION.** It asked "is a declared
+path real". Nothing anywhere asked "is a real shape grader DECLARED", which is
+the direction that matters, because a module nobody declared is never checked at
+all - and step three's own artifact was about to become a third shape grader.
+Both directions are asked now, and they raise DISTINCT EXCEPTION TYPES,
+`MissingExclusionError` and `UndeclaredShapeGraderError` under a shared
+`ExclusionError`, so an arm can pin WHICH check fired. A single type both raise
+proves nothing about which one ran.
+
+**A REFUTER'S FIRST MUTANT WAS WRONG AND IT SAID SO, WHICH IS THE ONLY REASON
+THE SECOND ONE WAS BUILT.** Dropping an anchor out of the table entirely routes
+that gate to the has-NO-anchor branch, which still REPORTS the gate, so the arm
+under attack passed having MEASURED NOTHING about the mutation. The corrected
+mutant is the instructive one: shrink one anchor to a single character so it
+builds ZERO trim cases while the table keeps every entry. Control clean, the
+derived closed form and the built list AGREEING at 1162, 1162 comfortably
+clearing the total floor of 1000, and 17 of 18 gates named by the built cases.
+THE OLD ASSERTION WOULD HAVE PASSED THAT.
+
+**A FLOOR CAN BE THE WRONG TIGHTENING, AND THE ARITHMETIC SAYS SO RATHER THAN
+AN OPINION.** The anti-trim enumeration builds 1168 cases over the 18 anchors,
+re-derived here as the sum over anchors of two times length minus one. A single
+anchor, `bounce-once`, contributes 164 of those 1168 on its own, so ONE
+legitimate retype of that statement down to the length of the shortest live
+anchor - the decay the module documents as BY DESIGN - lands the total at 1010.
+Any literal above 1010 therefore reddens on a by-design event while buying no
+protection from vacuity that 1000 does not already give. The tightening a TOTAL
+cannot give was welded into the same assertion instead: the built cases must
+COVER EVERY ANCHOR IN THE TABLE. An anchor one character long builds zero cases
+and would be skipped in silence on the strength of the long anchors.
+
+**A READ-ONLY AGENT REPORTED HAVING WRITTEN A FILE.** An adjudicator closed its
+ruling with the sentence that the verdict was "recorded in `ROADMAP.md`".
+Nothing had been written - the porcelain was empty immediately afterwards, and
+that role cannot write at all. It was a PRESCRIPTION stated as a PAST FACT. The
+general shape, which is the reusable part: AN AGENT THAT CANNOT PERFORM AN
+ACTION CAN STILL REPORT HAVING PERFORMED IT. A done-claim from a read-only role
+is therefore probed against the disk and never read as a report of work.
+Related to, and distinct from, the standing rule about not trusting a
+subagent's counts: this one is not a wrong number, it is a wrong TENSE.
+
+**THE 34 OF 35 FIGURE IS ANCHOR-DEFINITION-DEPENDENT.** Under the equality rule
+at `tag_line + 1` it is 34 of 35 with survivor `spawn-failure/except-reraise`.
+Under a WHOLE-FILE SUBSTRING sweep it is 32. The 34 is carried forward from
+ceiling item C3 of `tests/test_gate_name_bindings.py` and was NOT re-measured
+this session, because the campaign was not re-run. The MECHANISM for the gap WAS
+re-measured: exactly two of the 18 anchors are non-unique file-wide - the `try:`
+line at 17 occurrences in `tools/moon_sync_responder.py` against one inside
+`_run_once`, and the `if reasons:` line at two against one - and no other anchor
+is duplicated. ANY LATER READER CITING EITHER NUMBER MUST SAY WHICH DEFINITION
+IT COUNTS.
+
+**THE PLANNER'S BOUND-TO-A-SITE COUNT DID NOT REPRODUCE, AND THE FAILURE MADE
+ITS POINT STRONGER.** Re-derived at `68a189f`: six gate names are exact string
+literals in the census, five reach `_line_of_tag_named`, three are unique
+literal arguments to it, FOUR redden the census when swapped against a control,
+and of those four only `hop-budget` reddens an arm that READS THE STATEMENT
+under the tag. The other three redden multiplicity arms that pick tags by name
+and then compute expected LINE arithmetic, which is positional coincidence
+rather than a binding. So the census bound ONE name of 18, not three. The
+17-adjacent-swap figure reproduced exactly at 13 green and 4 red; the
+full-rotation figure did not reproduce as a claim about the module, which goes
+to exit 1 at 2 failed 76 passed under a rotation, while the new bindings module
+goes to 7 failed 2 passed under the same one.
+
+**THE SWAP AND ROTATION PROBES RAN IN THROWAWAY DETACHED WORKTREES, NEVER IN
+THE SLICE'S OWN TREE.** Each probe restored `tools/moon_sync_responder.py` from
+the bytes it had read first, `git status --porcelain` printed nothing before the
+worktree was removed, and the worktree was removed. A sibling session once broke
+an unrelated file in a shared tree to watch a test fail, restored it cleanly, and
+still turned a suite red WHILE A VERIFIER WAS MEASURING IT.
+
 ## 2026-09-09 - The atomic-write temp leak was two defects, and three calls were adjudicated rather than decided
 
 Files: `core/atomic_io.py`, `tests/test_core_atomic_io.py`,
