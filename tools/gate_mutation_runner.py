@@ -183,7 +183,52 @@ SELF_TEST_MODULE = "tests/test_gate_mutation_runner.py"
 #: comment calls THE GUARD, not decoration - the term that stops `all([])`
 #: reporting a delivery to zero destinations as delivered. Nothing in the suite
 #: tests it, and the old report hid that behind a KILLED.
-SHAPE_GRADER_MODULES: tuple[str, ...] = ("tests/test_responder_gate_census.py",)
+#:
+#: SECOND ENTRY - `tests/test_gate_name_bindings.py`, WITH ITS OWN REASON,
+#: WHICH IS NOT THE CENSUS'S AND IS STRICTLY WIDER.
+#:
+#: The census grades the AST of the tagged statement, so its false kills are
+#: CONFINED to the mutants that change AST shape - the 2 BoolOp gates and their
+#: 4 mutants, as the confinement paragraph above records, with `if True`,
+#: `if False` and the `except`-reraise families provably immune. That
+#: confinement argument does NOT carry over, and assuming it would is the trap
+#: this paragraph exists to close.
+#:
+#: The bindings module reads the responder AT IMPORT - `_LIVE_SOURCE =
+#: RESPONDER.read_text(...)` at `tests/test_gate_name_bindings.py:79` - and
+#: binds each of the 18 `# GATE:<name>` tags to the line IMMEDIATELY BELOW the
+#: tag by STRING EQUALITY against a hand-typed anchor in its `_ANCHORS` table.
+#: An equality on a line's literal bytes is the WIDEST available shape
+#: assertion. Every mutation this tool performs rewrites the text of the tagged
+#: statement, so a mutant reddens that module whenever its first rewritten line
+#: is an anchored line - whether or not the AST shape survives. `if not usable:`
+#: becoming `if True:` preserves the AST the census grades and destroys the
+#: equality the bindings module grades.
+#:
+#: MEASURED IN THIS TREE at f571234 on 2026-09-09, WITHOUT running pytest: the
+#: live plan is 35 mutants and 0 unmutatable; the clean responder has 0 anchor
+#: violations; and 34 of the 35 mutant sources produce at least one anchor
+#: violation. The single exception is `spawn-failure/except-reraise`, whose
+#: anchor is the bare line `try:` - the mutation rewrites the handler body
+#: below it and leaves the anchored line untouched.
+#:
+#: 34 of 35 is why this is declared BEFORE its first campaign rather than after
+#: a report has been believed. An undeclared module reddening 34 of 35 mutants
+#: would let a campaign print 34 syntax reddenings as KILLED and exit 0 - the
+#: exact defect the false-kill work exists to prevent, restored at a larger
+#: scale than the one it was built to catch, and this time with almost nothing
+#: left over to notice it by.
+#:
+#: This is the case exclusion two was written as a TEMPLATE for; see the
+#: sentence above calling it "a template for every future module that reads
+#: `tools/moon_sync_responder.py` and asserts things about its AST". The
+#: template being correctly applied once is not evidence it will be applied
+#: again, which is why `undeclared_shape_graders` below stops the campaign
+#: depending on anyone remembering to.
+SHAPE_GRADER_MODULES: tuple[str, ...] = (
+    "tests/test_responder_gate_census.py",
+    "tests/test_gate_name_bindings.py",
+)
 
 #: Every path handed to pytest as `--ignore` for a campaign run, in a fixed
 #: order so the report's suite line is stable. The two reasons above are the
@@ -206,7 +251,28 @@ class GateTagError(ValueError):
 
 
 class ExclusionError(RuntimeError):
-    """An excluded path does not exist, so its `--ignore` would be a no-op."""
+    """Something is wrong with the campaign's exclusion set.
+
+    KEPT AS THE BASE so that a caller which only cares that the campaign
+    refused still catches both failures. The two subclasses below exist because
+    a caller that catches only this cannot say WHICH check fired, and the two
+    checks are opposite questions - see each subclass.
+    """
+
+
+class MissingExclusionError(ExclusionError):
+    """A DECLARED path is not a file, so its `--ignore` would be a no-op.
+
+    The declared-side failure. `missing_exclusions` is its detector.
+    """
+
+
+class UndeclaredShapeGraderError(ExclusionError):
+    """A REAL module reads the responder and is in NOBODY'S exclusion list.
+
+    The corpus-side failure, and the opposite question from the one above.
+    `undeclared_shape_graders` is its detector.
+    """
 
 
 class RestoreError(RuntimeError):
@@ -546,15 +612,187 @@ def missing_exclusions(repo_root: Path, excluded: Sequence[str] = EXCLUDED_MODUL
     return [name for name in excluded if not (repo_root / name).is_file()]
 
 
-def verify_exclusions(repo_root: Path, excluded: Sequence[str] = EXCLUDED_MODULES) -> None:
-    """Raise `ExclusionError` unless every excluded path exists. See above."""
+#: The token a candidate module must bind. The responder's module name rather
+#: than its path, so that `REPO_ROOT / "tools" / "moon_sync_responder.py"` and
+#: `from tools import moon_sync_responder` both mention it.
+_RESPONDER_NEEDLE = "moon_sync_responder"
+
+#: Attribute names that READ a path's bytes. A module that binds the responder
+#: and never calls one of these is not reading it.
+_READ_ATTRS = frozenset({"read_text", "read_bytes", "open"})
+
+
+def _binds_and_reads_responder(source: str) -> bool:
+    """True when `source` binds the responder at module level and then reads it.
+
+    THE SHAPE OF THIS DETECTOR IS THE SHAPE OF ITS FINDING, so it is written
+    narrowly and its cost is stated rather than hidden. It asks two questions
+    and takes the conjunction:
+
+    1. Is there a MODULE-LEVEL assignment whose value mentions the responder,
+       bound to a plain `Name`? Module level because a grader that reads the
+       responder inside one function is a grader for one arm, whereas the
+       confound this campaign cares about is a module whose whole verdict is
+       derived from the file under mutation.
+    2. Is that same name LATER the receiver of `.read_text`, `.read_bytes` or
+       `.open`? Naming the responder is not reading it - eight modules in this
+       tree mention it in a docstring, an expected-output fixture or an assert
+       and never open it.
+
+    WHAT IT CANNOT SEE, stated so a later reader does not mistake a clean sweep
+    for a proof. A module that reads the responder through a local variable, a
+    fixture, a helper or an import of another module's constant is invisible to
+    it - `tools/gate_mutation_runner.py` itself is exactly that case and is
+    correctly NOT a candidate, since it reads through the local `path`. So a
+    clean result means "no module of this shape is undeclared", never "no
+    confound exists". A syntactically broken file is not a candidate either;
+    pytest would fail to collect it long before a campaign could be misread.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+
+    bound: set[str] = set()
+    for node in tree.body:
+        targets: list[ast.expr]
+        value: ast.expr | None
+        if isinstance(node, ast.Assign):
+            targets, value = list(node.targets), node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if _RESPONDER_NEEDLE not in ast.unparse(value):
+            continue
+        bound.update(t.id for t in targets if isinstance(t, ast.Name))
+
+    if not bound:
+        return False
+    return any(
+        isinstance(node, ast.Attribute)
+        and node.attr in _READ_ATTRS
+        and isinstance(node.value, ast.Name)
+        and node.value.id in bound
+        for node in ast.walk(tree)
+    )
+
+
+def tracked_python_files(repo_root: Path) -> list[str]:
+    """Every tracked `.py` path under `repo_root`, posix form, git's order.
+
+    THE CORPUS IS DERIVED FROM `git ls-files`, which is the same command
+    `tools/precommit_gate.py`, `tests/test_no_sibling_names.py` and
+    `tests/test_docs_consistency.py` build their corpora from. Deriving it the
+    same way means an untracked scratch file cannot fail a campaign and a
+    tracked module cannot hide from one.
+    """
+    proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
+        ["git", "ls-files", "--", "*.py"],  # noqa: S607 - git is on PATH by policy
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [line.strip().replace("\\", "/") for line in proc.stdout.splitlines() if line.strip()]
+
+
+def responder_reading_modules(repo_root: Path, relpaths: Sequence[str] | None = None) -> list[str]:
+    """Every module in the corpus that binds the responder and reads it.
+
+    THIS IS THE FUNCTION THAT ENUMERATES THE CORPUS, and its absence was the
+    hole. `missing_exclusions` walks the DECLARED sequence and asks of each
+    declared path whether it is real; nothing asked the opposite question, so a
+    module that grades the target's shape and appears in NOBODY'S list was
+    never looked at by anything. A detector that only validates declarations
+    can only ever find a stale declaration - never a missing one.
+
+    `relpaths` IS INJECTABLE so an arm can drive a hand-typed corpus. Without
+    it every arm would need a git repository in a temp directory, and a
+    detector whose arms can only run against the live tree is a detector whose
+    firing has never been observed. Passing an explicit sequence skips
+    `git ls-files` entirely; passing None derives the corpus from it.
+
+    Paths that do not exist or cannot be decoded are SKIPPED rather than raised
+    on: this function answers "which real modules read the responder", and a
+    path the caller invented is the other detector's business.
+    """
+    corpus = tracked_python_files(repo_root) if relpaths is None else [str(p) for p in relpaths]
+    found: list[str] = []
+    for rel in corpus:
+        path = repo_root / rel
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if _binds_and_reads_responder(source):
+            found.append(rel.replace("\\", "/"))
+    return found
+
+
+def undeclared_shape_graders(
+    repo_root: Path,
+    relpaths: Sequence[str] | None = None,
+    excluded: Sequence[str] = EXCLUDED_MODULES,
+) -> list[str]:
+    """Responder-reading modules that no exclusion list names, in corpus order.
+
+    SUBTRACTS ALL OF `EXCLUDED_MODULES`, not just `SHAPE_GRADER_MODULES`.
+    `tests/test_gate_mutation_runner.py` is a genuine responder-reading module
+    and is already excluded under the OTHER reason, so subtracting only the
+    shape-grader list would report this tool's own test module as undeclared
+    forever and train a reader to ignore the finding.
+
+    Non-empty means a campaign is about to run with a module that can redden
+    over syntax while the report calls it a kill.
+    """
+    declared = {name.replace("\\", "/") for name in excluded}
+    return [rel for rel in responder_reading_modules(repo_root, relpaths) if rel not in declared]
+
+
+def verify_exclusions(
+    repo_root: Path,
+    excluded: Sequence[str] = EXCLUDED_MODULES,
+    relpaths: Sequence[str] | None = None,
+) -> None:
+    """Refuse a campaign whose exclusion set is wrong in EITHER direction.
+
+    Two checks, TWO DISTINCT EXCEPTION TYPES, both under `ExclusionError`. A
+    single shared type would make the two indistinguishable, and an arm pinning
+    a type both raise proves nothing about which check ran.
+
+    `MissingExclusionError` - a declared path is not real. `--ignore` of an
+    unknown path is a silent no-op.
+
+    `UndeclaredShapeGraderError` - a real shape grader is declared nowhere.
+    THIS HARD-FAILS RATHER THAN WARNING, on the same argument that already
+    makes the missing-path check raise: a campaign is a half-hour run whose
+    output is a file, and a warning inside a report nobody re-reads is exactly
+    the failure mode the false-kill work exists to prevent. Refusing to start
+    costs one line of typing; a believed report costs the whole campaign.
+
+    `relpaths` is appended LAST with a default so every existing positional
+    call still builds.
+    """
     missing = missing_exclusions(repo_root, excluded)
     if missing:
-        raise ExclusionError(
+        raise MissingExclusionError(
             "these campaign exclusions name paths that do not exist under "
             f"{repo_root}: {', '.join(missing)}. pytest ignores an unknown "
             "--ignore silently, so the campaign would have run with the "
             "confound those paths were named to remove."
+        )
+
+    undeclared = undeclared_shape_graders(repo_root, relpaths, excluded)
+    if undeclared:
+        raise UndeclaredShapeGraderError(
+            "these modules under "
+            f"{repo_root} read {RESPONDER.name} and are named in no exclusion "
+            f"list: {', '.join(undeclared)}. A module that grades the target "
+            "file's SHAPE reddens over syntax, and under -x the campaign would "
+            "record KILLED while learning nothing about whether any test drives "
+            "the gate. Add each to SHAPE_GRADER_MODULES with its OWN measured "
+            "reason, or to SELF_TEST_MODULE if it decides this tool's verdict."
         )
 
 
