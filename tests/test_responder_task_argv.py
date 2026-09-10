@@ -155,6 +155,24 @@ from typing import NamedTuple
 
 import pytest
 
+# THE LIVENESS GRADER IS IMPORTED, NOT TRANSCRIBED. `ops/install_responder_task.ps1`
+# and `ops/install_scheduled_task.ps1` run the SAME construct with the same
+# variable names, so a second copy of the grader here would be a second thing to
+# keep in step - which is how this tree earned a neutraliser asymmetry it is
+# still carrying. One grader, two texts, one mutant table.
+from tests.test_supervisor_task_argv import (
+    _CALL_OPERATOR_RE,
+    _EXIT_RE,
+    _LASTEXITCODE_RE,
+    LIVENESS_MUTANTS,
+    LIVENESS_TOKENS,
+    _installer_console_python_variable,
+    _installer_liveness_checker,
+    _installer_task_name_variable,
+    _significant_statements,
+    grade_installer_liveness,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TASK_XML = REPO_ROOT / "ops" / "ResinCompute-Responder.xml"
 #: The responder's OWN installer, and not `ops/install_scheduled_task.ps1`.
@@ -1427,3 +1445,168 @@ def test_the_installer_derivations_are_not_empty() -> None:
         "both derivations resolve to one placeholder - they cannot discriminate"
     )
     assert _installer_required_script().endswith(".py")
+
+
+# ---------------------------------------------------------------------------
+# THIS INSTALLER'S LIVENESS INVOCATION
+#
+# THE DEFECT THIS EXISTS FOR, measured at 88c0874. The liveness grading added to
+# `tests/test_supervisor_task_argv.py` covered ONE of the TWO tracked installers.
+# `git grep -n 'exit $livenessExit' -- ops/` returns two hits,
+# `ops/install_responder_task.ps1:254` and `ops/install_scheduled_task.ps1:217`,
+# and `ops/install_responder_task.ps1:231-254` runs the same construct - the
+# console python resolved by the same function, the checker built by the same
+# `Join-Path`, `$LASTEXITCODE` captured into `$livenessExit`, that value exited.
+# Zero tracked tests graded it. This file mentioned line 231 exactly once, at
+# `_installer_required_script`, and only to EXCLUDE it from a match. So an edit
+# that pointed the responder's checker at the wrong interpreter, dropped the
+# task name, or swallowed the exit status left every suite green while the
+# installer went on printing LIVENESS ESTABLISHED for a task nothing had
+# established.
+#
+# WHAT THESE ARMS ARE, IN THE SAME TERMS AS THE GRADER THEY CALL: A SHAPE GRADER
+# OVER TEXT. Nothing below registers the task, executes the `.ps1`, or runs the
+# checker. An installer that is textually perfect and broken at runtime - a
+# `Set-StrictMode` violation, a quoting bug, a `PATH` that resolves some other
+# `python.exe` - grades clean from here. What is ruled out is a text-level drift
+# in WHICH interpreter, WHICH arguments, and whether the checker's status
+# survives to the caller.
+#
+# NOTHING IS WRITTEN TO `ops/install_responder_task.ps1`. Every mutant is an
+# in-memory string.
+# ---------------------------------------------------------------------------
+
+
+def test_the_responder_installer_liveness_invocation_grades_clean() -> None:
+    """The neighbours-survive guard for this installer's liveness grade.
+
+    A grader that complained about everything would score on every mutant below
+    and mean nothing. This one assertion is what makes that impossible HERE - the
+    equivalent arm in `tests/test_supervisor_task_argv.py` is about a different
+    file and cannot stand in for it.
+    """
+    assert grade_installer_liveness(_installer_text(), INSTALLER_PS1.name) == []
+
+
+def test_the_responder_liveness_checker_is_run_with_the_console_python_and_the_task_name() -> None:
+    """WHICH interpreter and WHICH arguments, by equality, in order, at pinned length.
+
+    ONE ASSERTION CARRIES THE WHOLE CLAIM. The tuple on the left is the whole
+    invocation read out of the installer and the tuple on the right is built from
+    three independent derivations, so order and length are pinned with identity
+    rather than beside it - `EXPECTED == (a, *rest)` holds at any length, and
+    that arity blindness is a defect this tree has already been caught by.
+
+    THE TASK NAME IS THE REGISTERED ONE. This installer prints no task-name
+    banner, so the derivation reads `Register-ScheduledTask -TaskName`: the
+    checker takes the task name as its one positional
+    (`ops/check_task_liveness.py:705`), and any other variable asks about a task
+    that was never registered.
+
+    The floor that stops this comparing two empties: the derivations each raise
+    on an empty read, and the invocation must be found at all.
+    """
+    text = _installer_text()
+    label = INSTALLER_PS1.name
+    statements = _significant_statements(text)
+    calls = [match for statement in statements if (match := _CALL_OPERATOR_RE.match(statement))]
+    assert len(calls) == 1, f"{label} makes {len(calls)} call-operator invocations"
+
+    interpreter = calls[0].group(1)
+    argv = tuple(calls[0].group(2).split())
+    checker_variable, checker_path = _installer_liveness_checker(text, label)
+
+    assert (interpreter, argv) == (
+        _installer_console_python_variable(text, label),
+        (checker_variable, _installer_task_name_variable(text, label)),
+    )
+    assert checker_path.is_file()
+
+
+def test_the_responder_liveness_exit_status_is_captured_adjacently_and_propagated() -> None:
+    """The status must reach the caller, and the read must be about the checker.
+
+    Two mechanisms, both asserted here rather than inferred from the absence of a
+    complaint: the statement IMMEDIATELY after the invocation reads
+    `$LASTEXITCODE` into a variable, and the LAST exit in the script is that
+    variable with no other exit after the invocation to pre-empt it.
+    `$LASTEXITCODE` is clobbered by the next native command, so adjacency is the
+    mechanism and not a style preference.
+
+    THE EARLIER EXITS ARE NOT COUNTED, AND THAT IS DELIBERATE. This installer
+    exits 3 twice before the invocation, for an absent checker and an absent
+    console python. Those are LIVENESS UNVERIFIED paths that never reach the
+    checker, so the population is the exits AFTER the call and not every exit.
+    """
+    text = _installer_text()
+    statements = _significant_statements(text)
+    index = next(
+        position
+        for position, statement in enumerate(statements)
+        if _CALL_OPERATOR_RE.match(statement)
+    )
+    following = statements[index + 1 :]
+    assert following, "the liveness invocation is the last statement - nothing reads its status"
+
+    captured = _LASTEXITCODE_RE.match(following[0])
+    assert captured is not None, (
+        f"the statement after the liveness invocation is {following[0]!r}, "
+        "so the captured status is not the checker's"
+    )
+    exits = [statement for statement in following if _EXIT_RE.match(statement)]
+    assert exits == [f"exit {captured.group(1)}"], (
+        f"the exits after the liveness invocation are {exits} - the script's verdict is "
+        "either not the checker's status or is pre-empted by an earlier exit"
+    )
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "expected"),
+    [pytest.param(old, new, expected, id=name) for name, old, new, expected in LIVENESS_MUTANTS],
+)
+def test_the_liveness_grader_fires_on_a_mutated_responder_installer(
+    old: str, new: str, expected: str
+) -> None:
+    """Non-vacuity: each liveness detector is shown red against THIS installer.
+
+    THE TABLE IS THE SUPERVISOR'S, AND THAT IS THE POINT. Both installers carry
+    the mutation targets verbatim, so importing the table proves the two files
+    are graded by one mechanism rather than by two that may drift apart. The
+    uniqueness floor is asserted HERE rather than in a separate arm: `_mutate`
+    replaces the FIRST occurrence, so a target present twice would leave a second
+    copy standing and the mutant would be a weaker text than its id claims - and
+    a target present ZERO times would make this arm grade the real file twice.
+    """
+    text = _installer_text()
+    assert text.count(old) == 1, f"{old!r} appears {text.count(old)} times - _mutate replaces one"
+    assert expected in grade_installer_liveness(_mutate(text, old, new), INSTALLER_PS1.name)
+
+
+def test_every_liveness_detector_has_a_control_on_the_responder_installer() -> None:
+    """`LIVENESS_TOKENS` is pinned to what the mutants ACTUALLY MINT from this file.
+
+    STRONGER THAN THE TABLE-LEVEL EQUALITY IT COMPLEMENTS. The supervisor's
+    control arm compares `LIVENESS_TOKENS` against the EXPECTED tokens written
+    into `LIVENESS_MUTANTS` - a claim about the table. This one runs the grader
+    and collects the buckets it MINTS from mutated copies of
+    `ops/install_responder_task.ps1`, so a detector that the shared table names
+    but that cannot fire against this installer goes red here.
+
+    Populations, named: `LIVENESS_TOKENS` is every bucket
+    `grade_installer_liveness` will mint, and `observed` is the bucket half of
+    every complaint the mutants below actually produced from THIS file.
+    """
+    assert LIVENESS_MUTANTS, "the liveness mutant table is empty - this arm is measuring nothing"
+    text = _installer_text()
+    observed: set[str] = set()
+    for _name, old, new, expected in LIVENESS_MUTANTS:
+        complaints = grade_installer_liveness(_mutate(text, old, new), INSTALLER_PS1.name)
+        assert expected in complaints, (
+            f"{expected} was not minted from a mutated {INSTALLER_PS1.name} - got {complaints}"
+        )
+        observed.update(complaint.split(":", 1)[0] for complaint in complaints)
+    assert observed == set(LIVENESS_TOKENS), (
+        f"detectors that never fired against this installer "
+        f"{sorted(set(LIVENESS_TOKENS) - observed)}, buckets minted that are not declared "
+        f"{sorted(observed - set(LIVENESS_TOKENS))}"
+    )

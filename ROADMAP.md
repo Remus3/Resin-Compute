@@ -49,6 +49,87 @@ version. What follows is everything the scaffold deliberately did not do.
   plus indentation, and it pre-replaces the two common comment markers. Six
   other split shapes that NEITHER side can see are now recorded at the site.
 
+- **NO NEW ADJUDICATED CALL WAS NEEDED ON 2026-09-10 EITHER, AND THE SECOND
+  SESSION OF THAT DAY IS WHY THE RULE IS WORTH RESTATING. TEN STAND.** Three
+  disagreements arose and every one was settled by a COMMAND. A carried row
+  said an evidence-ledger trim was ungraded; a doc already said otherwise. A
+  carried row said an installer was graded by nothing; two sweeps already
+  opened the file. A builder claimed a delta of plus fourteen; a node-id set
+  diff said the population it counted was not the one at HEAD. None of those
+  needed a ruling, because in each case a command could disagree with the
+  claim. AN ADJUDICATOR IS FOR A QUESTION MEASUREMENT CANNOT CLOSE. Reaching
+  for one where a command would do is how a ruling gets made about nothing.
+
+- **CLOSED 2026-09-10. TWO INSTALLERS CARRIED THE SAME UNGRADED LIVENESS CALL,
+  AND THE SLICE THAT GRADED ONE OF THEM WAS REFUTED ON SCOPE BEFORE IT
+  MERGED.** `ops/install_scheduled_task.ps1` invokes the liveness checker at
+  line 198 and propagates its status at line 217. A carried row said that call
+  was graded by nothing, and a builder graded it - a `grade_installer_liveness`
+  helper that DERIVES every expectation from the installer text, ten
+  parametrised mutants, a set-equality control arm with no uncontrolled bucket,
+  and an arm asserting the module docstring's derivation claim is TRUE OF THE
+  MODULE rather than merely present.
+
+  A SCOPE-AND-SIBLINGS ADVERSARY THEN REFUTED IT, AND THE REFUTATION IS THE
+  VALUABLE PART. The tracked `.ps1` population is TWO, not one:
+  `git grep -n 'exit $livenessExit' -- ops/` answers
+  `ops/install_responder_task.ps1:254` and `ops/install_scheduled_task.ps1:217`.
+  The second installer carries the identical construct and ZERO tracked tests
+  named it. The row named one file and the dispatch inherited that narrowness.
+  A follow-on slice GENERALISED the grader to take a text and a label, so one
+  grader and one mutant table now cover both installers, and every one of the
+  ten mutant targets was independently counted as present EXACTLY ONCE in BOTH
+  files - a target present zero times would be a no-op mutant, which is an arm
+  that cannot fail.
+
+  TWO WORDINGS WERE CORRECTED BEFORE THEY REACHED A DOCSTRING, and both are
+  the kind that would have been re-refuted later. "Graded by nothing" is FALSE
+  of the file - `tests/test_task_state_claims.py:216` and
+  `tests/test_ci_workflow_complement.py:241` already pin it for NEGATIVE
+  properties. The true statement is that the liveness INVOCATION and its exit
+  propagation were ungraded. And these arms are A SHAPE GRADER OVER TEXT:
+  nothing registers or executes either installer, so a `.ps1` that is textually
+  perfect and runtime-broken under StrictMode, quoting or PATH still grades
+  clean. Both files now say so in those terms.
+
+- **CLOSED 2026-09-10. THE INVOCATION-LEDGER ROW NAMED THE WRONG WRITER, AND
+  THE SUITE IS WORTH KEEPING FOR A DIFFERENT REASON THAN THE ONE IT WAS
+  DISPATCHED FOR.** The row said `_trim_invocations` in
+  `tools/moon_sync_responder.py` destroys evidence with no archive and that its
+  destructive path was unexercised. BOTH HALVES WERE REFUTED FROM ARTIFACTS
+  ALREADY ON DISK: `docs/INBOX_TRIAGE_2026-09-09.md` and an earlier entry in
+  this file both scope the defect to the METRICS ledger and both say the
+  invocation-log trim is correct as it stands, its lines not being evidence
+  rows; and `tests/test_moon_sync_responder.py:1715` already drove it. FIVE
+  sites share the trim-and-discard root cause, not one - responder lines 1207,
+  1135, 1476 and 1492, plus `scripts/watch_inbox.py:876`, and that last one is
+  the only trim that actually fires here. The premise that the watcher's log is
+  uncapped is also false: `scripts/watch_inbox.py:237` caps it at 2000 lines.
+
+  THE SUITE MERGED ANYWAY, on a measured basis rather than on the row's.
+  `MAX_INVOCATION_BYTES` is the ONLY trigger; `MAX_INVOCATION_LINES` is merely
+  the keep-count applied after it fires, so over the line cap ALONE the ledger
+  is left byte for byte unchanged. The pre-existing arm drives a fixture over
+  BOTH caps at once and cannot tell them apart. Driven as a mutant, widening
+  the trigger to include the line cap kills ONLY the new arm and the
+  pre-existing one survives. THAT DISCRIMINATION IS THE SLICE'S WORTH, and it
+  is independent of the wrong premise it was dispatched on. A row can be wrong
+  about the defect and still point at a real gap - but only a mutation says
+  which.
+
+- **MEASURED 2026-09-10, AND NOT DONE. THE WORKTREE PRUNE IS NOT AVAILABLE
+  UNATTENDED, AND "43 STALE WORKTREES" WAS A WRONG POPULATION.** The 43
+  directory entries under `.claude/worktrees` are 42 worktrees plus ONE STRAY
+  FILE, `conftest_backup.bytes`, 8822 bytes. A 44th worktree is registered at
+  `C:/rsc-wt-atomic`, OUTSIDE THIS REPO ROOT and dirty, so removing it would
+  cross clause (a) of the halt boundary and it was left alone. Of the 42, ZERO
+  are removable: all 42 are DIRTY, and reachability was never the binding
+  constraint since all 42 HEADs are ancestors of `main`. 35 carry tracked
+  modifications; 7 carry untracked files that are AUTHORED SOURCE, not build
+  noise - among them `tools/gate_mutation_runner.py` in two separate trees.
+  441M stands. `git worktree prune --dry-run -v` printing nothing is consistent
+  and is not evidence of cleanliness: it reports only MISSING directories.
+
 - **CLOSED 2026-09-10. A SWEEP ASYMMETRY THAT TURNED OUT TO BE EXTENSIONALLY A
   NO-OP, AND THE BUILDER REFUSED TO MANUFACTURE THE RED IT WAS ASKED FOR.**
   Checking RC's report exposed that `tests/test_no_sibling_names.py` fed its

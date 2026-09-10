@@ -126,10 +126,18 @@ real module that is the wrong module, a real module that is not a CLI at all, an
 abbreviation `argparse` resolves happily - because a control that only plants
 the case the matcher already handles cannot discover that the matcher is narrow.
 The real file is never written; every mutant is a string in memory.
+
+WHAT WAS ADDED AFTER THE FACT, AND WHERE. Two graders live below the argv one and
+are documented at the block comment that introduces them: the installer's LIVENESS
+INVOCATION (`ops/install_scheduled_task.ps1:198` and `:217`), which was graded by
+nothing at 88c0874, and the CLAIM THIS DOCSTRING MAKES about derivation, which was
+graded by nothing either. Both read tracked bytes off disk and neither registers,
+runs or executes anything.
 """
 from __future__ import annotations
 
 import argparse
+import ast
 import importlib
 import re
 import shlex
@@ -1026,3 +1034,653 @@ def test_the_placeholder_shape_is_read_from_the_installer_that_enforces_it(
     monkeypatch.setitem(globals(), "_installer_text", lambda: renamed)
     with pytest.raises(AssertionError):
         _installer_placeholder_pattern()
+
+
+# ---------------------------------------------------------------------------
+# THE LIVENESS INVOCATION, AND THE DOCSTRING'S OWN CLAIM
+#
+# Added because both were UNGRADED at 88c0874, measured this session.
+#
+#   1. `ops/install_scheduled_task.ps1:198` runs the liveness checker and `:217`
+#      exits with its status. A grep of `tests/` for `consolePython`,
+#      `livenessExit` or `LIVENESS` returned exactly one hit -
+#      `tests/test_task_state_claims.py:259` - and that hit is a SYNTHETIC
+#      negative-control literal inside a parametrize for `_violates_code_rule`.
+#      It never opens the installer. The block above this one reads the same
+#      `.ps1` and stops at its line 132 banner, so an edit that pointed the
+#      checker at the wrong interpreter, dropped the task name, or swallowed the
+#      exit status left every suite green while the installer went on printing
+#      LIVENESS ESTABLISHED for a task nothing had established.
+#   2. The docstring paragraph "EVERY EXPECTATION ABOUT THE ARGV IS READ, NEVER
+#      RETYPED" replaced a sentence that was FALSE AS WRITTEN, and nothing
+#      grades the replacement. A drift back is a silent lie to the next reader.
+#
+# THE POPULATION IS TWO, AND THE FIRST VERSION GRADED ONE. `git grep -n
+# 'exit $livenessExit' -- ops/` returns two tracked hits,
+# `ops/install_responder_task.ps1:254` and `ops/install_scheduled_task.ps1:217`,
+# and `ops/install_responder_task.ps1:231-254` runs the same construct with the
+# same variable names. So the grader below takes its text and its label as
+# PARAMETERS, and `tests/test_responder_task_argv.py` runs the identical mutant
+# battery against the second installer. The one derivation that did not
+# transfer was the task name: it was read from a banner only the supervisor
+# prints, and it now reads `Register-ScheduledTask -TaskName`, which both carry.
+#
+# STILL NOT GRADED, AND STILL DELIBERATELY: registration, and RUNTIME BEHAVIOUR
+# OF ANY KIND. Nothing below calls `schtasks`, runs either installer, or
+# executes the checker. THIS IS A SHAPE GRADER OVER TEXT: an installer that is
+# textually perfect and broken at runtime - `Set-StrictMode`, quoting, a `PATH`
+# that resolves some other `python.exe` - grades clean from here. The installer
+# is READ as text and the checker is checked for existence and for a `__main__`
+# guard, and no claim beyond that is made.
+#
+# WHAT WAS TRUE BEFORE THIS BLOCK EXISTED, stated precisely because a looser
+# version of it is false: `ops/install_scheduled_task.ps1` was already pinned by
+# `tests/test_task_state_claims.py:216` and by
+# `tests/test_ci_workflow_complement.py:241,263` for NEGATIVE properties. What
+# nothing graded was the liveness INVOCATION and its exit propagation.
+# ---------------------------------------------------------------------------
+
+#: Every complaint bucket the liveness grader can mint. Held apart from
+#: `GRADED_TOKENS` because the two graders read different artifacts and a shared
+#: bucket list would let a mutant for one satisfy the coverage arm for the other.
+LIVENESS_TOKENS = (
+    "liveness-invocation-count",
+    "liveness-interpreter-is-not-the-resolved-console-python",
+    "liveness-argv-is-not-the-checker-and-the-task-name",
+    "liveness-exit-not-captured",
+    "liveness-exit-not-propagated",
+    "liveness-exit-shadows-the-verdict",
+)
+
+#: `& $exe $arg $arg ...` - a PowerShell call-operator invocation whose every
+#: token is a variable. The real invocation at `ops/install_scheduled_task.ps1:198`
+#: has that shape, and requiring it is what makes the argv readable at all.
+_CALL_OPERATOR_RE = re.compile(r"^&\s+(\$[A-Za-z_]\w*)((?:\s+\$[A-Za-z_]\w*)+)$")
+
+#: `$var = Resolve-Something`. The installer resolves the CONSOLE interpreter
+#: through a function rather than reusing `$PythonwExe`, and which variable
+#: holds the result is read from this assignment rather than retyped.
+_CONSOLE_PYTHON_RE = re.compile(r"^[ \t]*(\$[A-Za-z_]\w*)\s*=\s*(Resolve-[A-Za-z]\w*)\s*$", re.M)
+
+#: Every `$var = Join-Path $root 'relative'` in the installer. The XML path is
+#: derived from this shape too, at `_XML_PATH_RE`; here the whole population is
+#: read so the `.py` member can be selected rather than its name retyped.
+_JOIN_PATH_RE = re.compile(
+    r"^[ \t]*(\$[A-Za-z_]\w*)\s*=\s*Join-Path\s+(\$[A-Za-z_]\w*)\s+'([^']*)'\s*$", re.M
+)
+
+#: The banner that tells the operator WHICH task the script is acting on. Same
+#: shape as `_BANNER_RE`, and it is the reason the task-name variable is derived
+#: rather than assumed: the checker takes the task name as its one positional
+#: (`ops/check_task_liveness.py:705`), so handing it any other variable queries
+#: a task that does not exist and the verdict is about nothing.
+_TASK_NAME_BANNER_RE = re.compile(
+    r"Write-Step\s*\(\s*'task name\s*:\s*'\s*\+\s*(\$[A-Za-z_]\w*)\s*\)"
+)
+
+#: `Register-ScheduledTask -TaskName $Var`. THE TASK-NAME DERIVATION FOR BOTH
+#: INSTALLERS, and the reason it is this statement rather than the banner: the
+#: checker must be asked about the task that was actually REGISTERED, and this
+#: is the only line in either script that registers one. The supervisor also
+#: prints a task-name banner and the responder does not, so a banner-based
+#: derivation graded one installer and raised on the other - which is how the
+#: liveness grading came to cover one of the two tracked installers. The
+#: supervisor's banner keeps its own floor, at the arm that names it.
+_REGISTER_TASK_NAME_RE = re.compile(
+    r"Register-ScheduledTask\s+-TaskName\s+(\$[A-Za-z_]\w*)\b"
+)
+
+#: `$var = $LASTEXITCODE`, the only reading of a native command's status that
+#: PowerShell offers, and it is clobbered by the next native call.
+_LASTEXITCODE_RE = re.compile(r"^(\$[A-Za-z_]\w*)\s*=\s*\$LASTEXITCODE$")
+
+_EXIT_RE = re.compile(r"^exit\b.*$")
+
+
+def _liveness_complaint(bucket: str, detail: str = "") -> str:
+    """One stable complaint token for the liveness grader, `bucket` or `bucket:detail`.
+
+    Mirrors `_complaint`, including the refusal of an undeclared bucket, so the
+    declared detector set is enforced by the code that mints the tokens.
+    """
+    if bucket not in LIVENESS_TOKENS:
+        raise AssertionError(f"{bucket} is not a declared liveness complaint bucket")
+    return f"{bucket}:{detail}" if detail else bucket
+
+
+def _significant_statements(text: str) -> list[str]:
+    """Every non-blank, non-comment line of a PowerShell script, stripped.
+
+    ADJACENCY IS THE POINT. `$LASTEXITCODE` holds the status of the LAST native
+    command, so a statement wedged between the invocation and the capture can
+    replace the verdict with its own. Comments and blank lines cannot run, so
+    they are removed rather than counted, and the strip also drops the `\\r` of
+    the CRLF this `.ps1` carries on disk.
+    """
+    statements = [line.strip() for line in text.splitlines()]
+    return [line for line in statements if line and not line.startswith("#")]
+
+
+def _installer_console_python_variable(text: str, label: str) -> str:
+    """The variable holding the CONSOLE interpreter, and the function it comes from.
+
+    Two floors in the one derivation: exactly one `Resolve-*` assignment must
+    exist, and the function it names must be DECLARED in the same script. A
+    resolver that is called but never defined would be a `CommandNotFoundException`
+    under `Set-StrictMode`, not a console python.
+
+    `label` names WHICH installer the text came from, so a red says which of the
+    two tracked scripts drifted rather than "the installer".
+    """
+    found = _CONSOLE_PYTHON_RE.findall(text)
+    if len(found) != 1:
+        raise AssertionError(
+            f"{label} makes {len(found)} Resolve-* assignments - "
+            "the console-interpreter derivation is not reading one variable"
+        )
+    variable, function = found[0]
+    declared = any(
+        line.startswith(f"function {function}") for line in text.splitlines()
+    )
+    if not declared:
+        raise AssertionError(
+            f"{label} assigns {variable} from {function}, which it never declares"
+        )
+    return variable
+
+
+def _installer_liveness_checker(text: str, label: str) -> tuple[str, Path]:
+    """The variable holding the checker path, and the file `-LiteralPath` would find.
+
+    The checker is SELECTED out of the installer's Join-Path population by being
+    the `.py` one, so its filename is read rather than retyped. Three floors:
+    exactly one such path, it must be rooted at the same install-root variable
+    the task XML is read from, and the file it names must exist AND carry a
+    `__main__` guard. That last one is not decoration - a checker without a guard
+    is imported by `python` and exits 0, and `ops/install_scheduled_task.ps1:201`
+    reads 0 as LIVENESS ESTABLISHED.
+    """
+    candidates = [
+        (variable, root, relative)
+        for variable, root, relative in _JOIN_PATH_RE.findall(text)
+        if relative.endswith(".py")
+    ]
+    if len(candidates) != 1:
+        raise AssertionError(
+            f"{label} builds {len(candidates)} .py paths with Join-Path - "
+            "the liveness-checker derivation is not reading one file"
+        )
+    variable, root, relative = candidates[0]
+    xml_root = _XML_PATH_RE.search(text)
+    if xml_root is None or root != xml_root.group(1):
+        raise AssertionError(
+            f"{label} roots the checker at {root} but reads the task XML from "
+            f"{xml_root.group(1) if xml_root else 'nothing'} - they are not the same checkout"
+        )
+    path = REPO_ROOT / relative.replace("\\", "/")
+    if not path.is_file():
+        raise AssertionError(f"{label} runs {relative}, which is not on disk")
+    if not _declares(path, 'if __name__ == "__main__":'):
+        raise AssertionError(
+            f"{relative} has no __main__ guard - python would import it and exit 0, "
+            "which the installer reads as LIVENESS ESTABLISHED"
+        )
+    if not _declares(path, "def main("):
+        raise AssertionError(f"{relative} declares no main - it is not a CLI")
+    return variable, path
+
+
+def _installer_task_name_variable(text: str, label: str) -> str:
+    """The variable the installer REGISTERS the task under.
+
+    Read from the one `Register-ScheduledTask -TaskName` statement rather than
+    from the param block, so the variable handed to the checker is the same one
+    the scheduler was given. The checker takes the task name as its one
+    positional (`ops/check_task_liveness.py:705`), so any other variable queries
+    a task that was never registered and the verdict is about nothing.
+
+    Two floors: exactly one registration, and the variable it names must be
+    declared in the param block with a non-empty default, or the checker is
+    handed an empty task name and reports on nothing.
+
+    NOT THE BANNER. `_TASK_NAME_BANNER_RE` reads a line only the supervisor
+    installer has, so deriving from it graded one of the two tracked installers
+    and raised on the other. The banner is still a floor, but a supervisor-only
+    one, asserted at the arm that reads it.
+    """
+    registrations = _REGISTER_TASK_NAME_RE.findall(text)
+    if len(registrations) != 1:
+        raise AssertionError(
+            f"{label} makes {len(registrations)} Register-ScheduledTask -TaskName calls - "
+            "the task-name derivation is not reading one registration"
+        )
+    variable = registrations[0]
+    default = re.search(
+        r"^\s*\[string\]\s*" + re.escape(variable) + r"\s*=\s*'([^']+)'", text, re.M
+    )
+    if default is None:
+        raise AssertionError(
+            f"{label} registers the task under {variable} but declares no non-empty "
+            "default for it in the param block"
+        )
+    return variable
+
+
+def grade_installer_liveness(text: str, label: str) -> list[str]:
+    """Complaints about an installer's liveness invocation and its exit propagation.
+
+    A SHAPE GRADER OVER TEXT, AND NOTHING MORE. Nothing here registers a task,
+    executes the `.ps1`, or runs the checker. An installer that is textually
+    perfect and broken at runtime - a `Set-StrictMode` violation, a quoting bug,
+    a `PATH` that resolves a different `python.exe` - grades clean from here.
+    What this rules out is a text-level drift in WHICH interpreter, WHICH
+    arguments, and whether the status survives to the caller.
+
+    BOTH TRACKED INSTALLERS RUN THROUGH IT. `ops/install_scheduled_task.ps1` and
+    `ops/install_responder_task.ps1` carry the same construct, so `text` and
+    `label` are parameters rather than a hardcoded read: the first version of
+    this grader read one file by name and left the second ungraded.
+
+    Returns an empty list when the installer runs the checker it resolves, with
+    the console interpreter it resolves and the task name it announces, captures
+    that run's status from `$LASTEXITCODE` in the very next statement, and exits
+    with the captured value and nothing else.
+
+    EQUALITY, NEVER CONTAINMENT, as everywhere else in this file: the argv is
+    compared as a TUPLE, which pins its length and its identity in one
+    comparison, and a dropped `$TaskName` is therefore a complaint rather than a
+    prefix that still matches.
+    """
+    complaints: list[str] = []
+    statements = _significant_statements(text)
+    calls = [
+        (index, match)
+        for index, statement in enumerate(statements)
+        if (match := _CALL_OPERATOR_RE.match(statement)) is not None
+    ]
+    if len(calls) != 1:
+        return [_liveness_complaint("liveness-invocation-count", str(len(calls)))]
+
+    index, match = calls[0]
+    interpreter = match.group(1)
+    argv = tuple(match.group(2).split())
+
+    expected_interpreter = _installer_console_python_variable(text, label)
+    checker_variable, _ = _installer_liveness_checker(text, label)
+    expected_argv = (checker_variable, _installer_task_name_variable(text, label))
+
+    if interpreter != expected_interpreter:
+        complaints.append(
+            _liveness_complaint(
+                "liveness-interpreter-is-not-the-resolved-console-python", interpreter
+            )
+        )
+    if argv != expected_argv:
+        complaints.append(
+            _liveness_complaint(
+                "liveness-argv-is-not-the-checker-and-the-task-name", " ".join(argv)
+            )
+        )
+
+    # THE CAPTURE, AND ITS ADJACENCY. Anything at all between the invocation and
+    # the read is a chance for `$LASTEXITCODE` to be about a different command.
+    following = statements[index + 1 :]
+    if not following:
+        return [*complaints, _liveness_complaint("liveness-exit-not-captured", "end of script")]
+    captured = _LASTEXITCODE_RE.match(following[0])
+    if captured is None:
+        return [*complaints, _liveness_complaint("liveness-exit-not-captured", following[0])]
+    capture_variable = captured.group(1)
+
+    # PROPAGATION. The LAST exit reachable after the invocation is the script's
+    # verdict, and every earlier one after the invocation can pre-empt it.
+    exits = [statement for statement in following if _EXIT_RE.match(statement)]
+    if not exits:
+        return [*complaints, _liveness_complaint("liveness-exit-not-propagated", "none")]
+    if exits[-1] != f"exit {capture_variable}":
+        complaints.append(_liveness_complaint("liveness-exit-not-propagated", exits[-1]))
+    complaints.extend(
+        _liveness_complaint("liveness-exit-shadows-the-verdict", statement)
+        for statement in exits[:-1]
+    )
+    return complaints
+
+
+#: `(id, old, new, expected token)`. One in-memory mutant per liveness detector,
+#: and TWO for every bucket whose single token hides two different repairs. The
+#: real `ops/install_scheduled_task.ps1` is never written.
+LIVENESS_MUTANTS = (
+    (
+        "the-checker-is-never-run-at-all",
+        "& $consolePython $livenessChecker $TaskName",
+        "Write-Step 'skipping the liveness check'",
+        "liveness-invocation-count:0",
+    ),
+    (
+        "a-second-call-operator-so-the-graded-invocation-is-only-one-of-them",
+        "& $consolePython $livenessChecker $TaskName",
+        "& $consolePython $livenessChecker $TaskName\n& $consolePython $livenessChecker $TaskUser",
+        "liveness-invocation-count:2",
+    ),
+    (
+        "the-checker-runs-under-the-windowless-interpreter-the-task-uses",
+        "& $consolePython $livenessChecker $TaskName",
+        "& $PythonwExe $livenessChecker $TaskName",
+        "liveness-interpreter-is-not-the-resolved-console-python:$PythonwExe",
+    ),
+    # ARITY, NOT JUST IDENTITY. The checker's one positional is the task name,
+    # so a dropped argument is a checker invoked with no subject at all.
+    (
+        "the-task-name-argument-is-dropped",
+        "& $consolePython $livenessChecker $TaskName",
+        "& $consolePython $livenessChecker",
+        "liveness-argv-is-not-the-checker-and-the-task-name:$livenessChecker",
+    ),
+    (
+        "the-checker-is-handed-the-account-instead-of-the-task",
+        "& $consolePython $livenessChecker $TaskName",
+        "& $consolePython $livenessChecker $TaskUser",
+        "liveness-argv-is-not-the-checker-and-the-task-name:$livenessChecker $TaskUser",
+    ),
+    (
+        "the-status-is-assigned-a-constant-instead-of-being-read",
+        "$livenessExit = $LASTEXITCODE",
+        "$livenessExit = 0",
+        "liveness-exit-not-captured:$livenessExit = 0",
+    ),
+    # ADJACENCY, WHICH A PRESENCE CHECK CANNOT SEE. The capture is still there
+    # and still reads `$LASTEXITCODE`; it is simply no longer about the checker.
+    (
+        "a-native-call-lands-between-the-checker-and-the-capture",
+        "$livenessExit = $LASTEXITCODE",
+        "& $consolePython --version\n$livenessExit = $LASTEXITCODE",
+        "liveness-exit-not-captured:& $consolePython --version",
+    ),
+    (
+        "the-verdict-is-captured-and-then-thrown-away",
+        "exit $livenessExit",
+        "exit 0",
+        "liveness-exit-not-propagated:exit 0",
+    ),
+    (
+        "the-script-simply-runs-off-the-end-after-capturing",
+        "exit $livenessExit",
+        "Write-Step 'finished'",
+        "liveness-exit-not-propagated:none",
+    ),
+    (
+        "an-earlier-exit-pre-empts-the-verdict-that-is-still-written-below-it",
+        "exit $livenessExit",
+        "exit 0\nexit $livenessExit",
+        "liveness-exit-shadows-the-verdict:exit 0",
+    ),
+)
+
+
+def test_the_installer_liveness_invocation_grades_clean() -> None:
+    """The neighbours-survive guard for the liveness grader.
+
+    A grader that complained about everything would score on every mutant below
+    and mean nothing. This one assertion is what makes that impossible.
+    """
+    assert grade_installer_liveness(_installer_text(), INSTALLER_PS1.name) == []
+
+
+def test_the_liveness_checker_is_run_with_the_console_python_and_the_task_name() -> None:
+    """WHICH interpreter and WHICH arguments, by equality, in order, at pinned length.
+
+    ONE ASSERTION CARRIES THE WHOLE CLAIM. The tuple on the left is the whole
+    invocation read out of the installer and the tuple on the right is built from
+    three independent derivations, so order and length are pinned with identity
+    rather than beside it - `EXPECTED == (a, *rest)` holds at any length and that
+    is the arity blindness this tree was caught by.
+
+    The floor that stops this from comparing two empties: the derivations each
+    raise on an empty read, and the invocation must be found at all.
+
+    THE BANNER FLOOR IS IN THIS ARM AND NOT BESIDE IT. The task-name derivation
+    now reads `Register-ScheduledTask -TaskName`, which both tracked installers
+    carry; the banner it used to read is supervisor-only. Asserting the banner in
+    a separate arm would leave this one free to agree with a registration the
+    operator was never shown, so the cross-check sits under the tuple it guards.
+    """
+    text = _installer_text()
+    label = INSTALLER_PS1.name
+    statements = _significant_statements(text)
+    calls = [match for statement in statements if (match := _CALL_OPERATOR_RE.match(statement))]
+    assert len(calls) == 1, f"{label} makes {len(calls)} call-operator invocations"
+
+    interpreter = calls[0].group(1)
+    argv = tuple(calls[0].group(2).split())
+    checker_variable, checker_path = _installer_liveness_checker(text, label)
+
+    assert (interpreter, argv) == (
+        _installer_console_python_variable(text, label),
+        (checker_variable, _installer_task_name_variable(text, label)),
+    )
+    assert checker_path.is_file()
+
+    # THE SUPERVISOR-ONLY FLOOR, kept from the banner derivation this arm used
+    # to depend on. The responder installer prints no such banner, so the
+    # requirement moved here rather than being dropped: the task this installer
+    # SHOWS the operator must be the task it registers and asks about.
+    banner = _TASK_NAME_BANNER_RE.search(text)
+    assert banner is not None, (
+        f"{label} prints no task-name banner - the operator is not shown which task "
+        "the liveness verdict below it is about"
+    )
+    assert banner.group(1) == argv[1], (
+        f"{label} shows the operator {banner.group(1)} and asks the checker about "
+        f"{argv[1]} - the verdict is about a different task than the banner names"
+    )
+
+
+def test_the_liveness_exit_status_is_captured_adjacently_and_propagated() -> None:
+    """The status must reach the caller, and the read must be about the checker.
+
+    Two mechanisms, both asserted here rather than inferred from the absence of a
+    complaint: the statement IMMEDIATELY after the invocation reads
+    `$LASTEXITCODE` into a variable, and the LAST exit in the script is that
+    variable and there is no other exit after the invocation to pre-empt it.
+    `$LASTEXITCODE` is clobbered by the next native command, so adjacency is the
+    mechanism and not a style preference.
+    """
+    statements = _significant_statements(_installer_text())
+    index = next(
+        position
+        for position, statement in enumerate(statements)
+        if _CALL_OPERATOR_RE.match(statement)
+    )
+    following = statements[index + 1 :]
+    assert following, "the liveness invocation is the last statement - nothing reads its status"
+
+    captured = _LASTEXITCODE_RE.match(following[0])
+    assert captured is not None, (
+        f"the statement after the liveness invocation is {following[0]!r}, "
+        "so the captured status is not the checker's"
+    )
+    exits = [statement for statement in following if _EXIT_RE.match(statement)]
+    assert exits == [f"exit {captured.group(1)}"], (
+        f"the exits after the liveness invocation are {exits} - the script's verdict is "
+        "either not the checker's status or is pre-empted by an earlier exit"
+    )
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "expected"),
+    [pytest.param(old, new, expected, id=name) for name, old, new, expected in LIVENESS_MUTANTS],
+)
+def test_the_liveness_grader_fires_on_a_mutated_installer(
+    old: str, new: str, expected: str
+) -> None:
+    """Non-vacuity: each liveness detector is shown red on an in-memory mutant.
+
+    `ops/install_scheduled_task.ps1` is never written. `_mutate` asserts the
+    target is present, so a stale mutation reddens rather than grading the real
+    file twice, and the uniqueness floor is asserted HERE rather than in a
+    separate arm: `_mutate` replaces the FIRST occurrence, so a target that
+    appears twice would leave a second copy standing and the mutant would be a
+    weaker text than its id claims.
+    """
+    text = _installer_text()
+    assert text.count(old) == 1, f"{old!r} appears {text.count(old)} times - _mutate replaces one"
+    assert expected in grade_installer_liveness(_mutate(text, old, new), INSTALLER_PS1.name)
+
+
+def test_every_liveness_detector_has_a_control() -> None:
+    """`LIVENESS_TOKENS` and `LIVENESS_MUTANTS` are pinned to each other by SET EQUALITY.
+
+    A detector added without a control goes red here on its own. Populations,
+    named: `LIVENESS_TOKENS` is every bucket `_liveness_complaint` will mint, and
+    the covered set is the bucket half of every expected token in
+    `LIVENESS_MUTANTS`. Unlike `GRADED_TOKENS` there is no uncontrolled member,
+    so the equality is exact in both directions.
+    """
+    assert LIVENESS_MUTANTS, "the liveness mutant table is empty - this arm is measuring nothing"
+    covered = {expected.split(":", 1)[0] for _, _, _, expected in LIVENESS_MUTANTS}
+    assert covered == set(LIVENESS_TOKENS), (
+        f"uncontrolled detectors {sorted(set(LIVENESS_TOKENS) - covered)}, "
+        f"controls for buckets that cannot be minted {sorted(covered - set(LIVENESS_TOKENS))}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE DOCSTRING'S OWN CLAIM, GRADED AS A CLAIM
+# ---------------------------------------------------------------------------
+
+#: The sentence `fe6c004` put in place of one that was false as written. Read
+#: out of the parsed module docstring, never out of this file's raw source - the
+#: needle below is itself a line of that source, so a raw-source search would
+#: find its own definition and pass on a module whose docstring said nothing.
+ARGV_DERIVATION_CLAIM = "EVERY EXPECTATION ABOUT THE ARGV IS READ, NEVER RETYPED."
+
+#: The bullets under that claim, `  - WHICH ...:`. The claim enumerates the
+#: questions it covers, so the enumeration is the population the arm below must
+#: control - and it is READ from the prose rather than retyped beside it.
+_CLAIMED_QUESTION_RE = re.compile(r"^  - (WHICH [A-Z ]+?):", re.M)
+
+
+def _module_docstring() -> str:
+    """This module's docstring, parsed out of the tracked source bytes.
+
+    READ FROM DISK, NOT FROM `__doc__`. `python -OO` discards docstrings, and a
+    `__doc__` of `None` under it would make every check below vacuous rather than
+    red. `ast` reads the source either way.
+    """
+    source = Path(__file__).resolve().read_bytes()
+    non_ascii = [byte for byte in source if byte > 0x7F]
+    assert not non_ascii, f"this module is not 7-bit ASCII on disk: {non_ascii[:8]}"
+    docstring = ast.get_docstring(ast.parse(source.decode("ascii")))
+    assert docstring, "this module has no docstring - the claim below is about nothing"
+    return docstring
+
+
+def test_the_docstrings_derivation_claim_is_true_of_this_module(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The docstring says the argv expectations are DERIVED. This proves it.
+
+    THE DEFECT THIS EXISTS FOR, measured at 88c0874. `fe6c004` replaced
+    "NEITHER SIDE OF ANY COMPARISON IS RETYPED" - false as written - with the
+    sentence in `ARGV_DERIVATION_CLAIM`, and a grep of this module for `__doc__`,
+    `MODULE_DOC` or `_DOCSTRING` returned zero. The corrected sentence could drift
+    back to the false one, or stay while the code beneath it stopped deriving
+    anything, and nothing anywhere would go red.
+
+    A STRING-PRESENCE CHECK IS NOT A GRADER, so presence is only the first half.
+    The second half DRIFTS EACH EXPECTATION'S SOURCE and requires the UNMUTATED
+    tracked XML to mint a specific complaint. A retyped expectation cannot
+    produce that complaint: it does not move when its source moves. That is the
+    whole content of the word "read" in the sentence being graded.
+
+    THE POPULATION IS READ FROM THE PROSE. The claim enumerates five questions as
+    `  - WHICH ...` bullets, and the drift table below is pinned to that
+    enumeration by set equality, so a sixth question added to the docstring
+    without a control reddens here, and so does dropping a control.
+
+    NOTHING IS WRITTEN. The installer drifts are in-memory strings built through
+    `_mutate`, whose presence assertion means a stale drift target reddens rather
+    than drifting nothing, and the parser drift is a `monkeypatch.setattr` on the
+    imported supervisor module.
+    """
+    docstring = _module_docstring()
+    assert docstring.count(ARGV_DERIVATION_CLAIM) == 1, (
+        f"the module docstring carries {docstring.count(ARGV_DERIVATION_CLAIM)} copies of the "
+        f"corrected derivation claim {ARGV_DERIVATION_CLAIM!r} - fe6c004 put exactly one there "
+        "in place of a sentence that was false as written"
+    )
+    # NON-VACUITY, NOT A RETYPED COUNT. The number of questions is NOT pinned
+    # here: the set equality at the bottom of this arm pins the population in
+    # both directions, and a hand-typed count beside it would be a second
+    # authority to keep in step for no added detection. All this floor says is
+    # that the scan found something to control.
+    claimed = set(_CLAIMED_QUESTION_RE.findall(docstring))
+    assert claimed, (
+        "the docstring enumerates no WHICH-question bullets - either the claim lost its "
+        "enumeration or this scan no longer reads it, and the equality below would be vacuous"
+    )
+
+    real = _installer_text()
+    covered: set[str] = set()
+
+    # WHICH INTERPRETER. The installer stops substituting the token the XML
+    # carries. A grader holding a retyped `__PYTHONW_EXE__` cannot notice.
+    drifted = _mutate(real, "$xml.Replace('__PYTHONW_EXE__'", "$xml.Replace('__PYTHONW_BINARY__'")
+    monkeypatch.setitem(globals(), "_installer_text", lambda: drifted)
+    assert "command-is-not-the-installer-interpreter:__PYTHONW_EXE__" in grade_task_argv(
+        _real_xml_text()
+    )
+    monkeypatch.undo()
+    covered.add("WHICH INTERPRETER")
+
+    # WHICH ARGUMENTS. The banner the installer prints grows a flag the XML does
+    # not carry, and the tracked argv is now the one that disagrees.
+    drifted = _mutate(real, "+ ' -m ops.supervisor')", "+ ' -m ops.supervisor --interval 30')")
+    monkeypatch.setitem(globals(), "_installer_text", lambda: drifted)
+    assert "argv-is-not-the-installer-command:-m ops.supervisor" in grade_task_argv(
+        _real_xml_text()
+    )
+    monkeypatch.undo()
+    covered.add("WHICH ARGUMENTS")
+
+    # WHICH WORKING DIRECTORY. The install-root placeholder is renamed at the
+    # substitution the expectation is derived through.
+    drifted = _mutate(real, "$xml.Replace('__INSTALL_ROOT__'", "$xml.Replace('__CHECKOUT_ROOT__'")
+    monkeypatch.setitem(globals(), "_installer_text", lambda: drifted)
+    assert "working-directory-is-not-the-install-root:__INSTALL_ROOT__" in grade_task_argv(
+        _real_xml_text()
+    )
+    monkeypatch.undo()
+    covered.add("WHICH WORKING DIRECTORY")
+
+    # WHICH MODULE. The expectation is the DISK, reached through `_module_file`.
+    # Replace that reader and the verdict must move with it.
+    monkeypatch.setitem(globals(), "_module_file", lambda dotted: None)
+    assert "module-file-missing:ops.supervisor" in grade_task_argv(_real_xml_text())
+    monkeypatch.undo()
+    covered.add("WHICH MODULE")
+
+    # WHICH FLAGS AND WHAT THEY MEAN. The spellings and the meaning both come off
+    # the supervisor's own `build_parser`. Flip what that parser says `--dry-run`
+    # defaults to and the meaning grade must flip with it, on an argv that is
+    # byte-for-byte the tracked one.
+    supervisor = _load_module("ops.supervisor")
+    original_build_parser = supervisor.build_parser
+
+    def _dry_run_by_default() -> argparse.ArgumentParser:
+        parser = original_build_parser()
+        for action in parser._actions:
+            if action.dest == "dry_run":
+                action.default = True
+        return parser
+
+    assert "task-argv-is-a-dry-run" not in grade_task_argv(_real_xml_text())
+    monkeypatch.setattr(supervisor, "build_parser", _dry_run_by_default)
+    assert "task-argv-is-a-dry-run" in grade_task_argv(_real_xml_text())
+    monkeypatch.undo()
+    covered.add("WHICH FLAGS AND WHAT THEY MEAN")
+
+    assert covered == claimed, (
+        f"questions the docstring claims with no drift control {sorted(claimed - covered)}, "
+        f"drift controls for questions the docstring does not claim {sorted(covered - claimed)}"
+    )
