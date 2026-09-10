@@ -14,9 +14,22 @@ THE BINDING RULE IS EQUALITY AT A LOCATED LINE, NEVER CONTAINMENT.
     anchor in `_ANCHORS`.
   - `in`, `startswith`, `endswith` and `re.search` are never applied to an
     anchor anywhere in this file. That is enforced by the MECHANISM and not by
-    this sentence: `test_no_proper_prefix_or_suffix_of_an_anchor_can_restore_a_match`
-    substitutes every proper prefix and every proper suffix of all 18 anchors
-    and requires each one to FAIL.
+    this sentence, and by TWO arms rather than one.
+    `test_no_proper_prefix_or_suffix_of_an_anchor_can_restore_a_match`
+    substitutes every NON-EMPTY proper prefix and every NON-EMPTY proper suffix
+    of every anchor in `_ANCHORS` and requires each one to FAIL.
+    `test_an_empty_anchor_is_reported_and_never_matches` carries the one that
+    enumeration leaves out - the EMPTY STRING, which is a proper prefix and a
+    proper suffix of every anchor there is - one substitution per anchor in
+    `_ANCHORS`. The empty case is held apart ON PURPOSE: an empty anchor is a
+    HOLE IN THE TABLE, which I1 forbids outright, and not a trim of a real
+    anchor, so folding it into the trim enumeration would blur two distinct
+    claims into one count.
+
+    Neither sentence above carries a bare case count, and neither should. A
+    count sentence must NAME ITS POPULATION - whose enumeration, of what - and a
+    population named as "every anchor in `_ANCHORS`" cannot decay away from the
+    loop under it when an anchor is retyped, while a number can and would.
 
 WHY EQUALITY AND NOT CONTAINMENT. A containment rule has a repair gradient.
 When an anchor stops matching, the cheap repair is to SHORTEN THE NEEDLE until
@@ -322,10 +335,40 @@ def test_no_proper_prefix_or_suffix_of_an_anchor_can_restore_a_match():
     """R4 - ANTI-TRIM, the executable statement of "a trim does not match".
 
     This is the arm that makes the equality rule a MECHANISM rather than a
-    comment. Every proper prefix and every proper suffix of every one of the 18
-    anchors is substituted for that gate's anchor and must produce EXACTLY ONE
-    violation naming that gate. The untrimmed table is the control in the same
-    assertion as the case count, so a run over zero cases cannot pass.
+    comment. THE POPULATION IS THE LOOP BELOW: every NON-EMPTY proper prefix and
+    every NON-EMPTY proper suffix of every anchor in `_ANCHORS` is substituted
+    for that gate's anchor and must produce EXACTLY ONE violation naming that
+    gate. `cut` starts at 1, so the EMPTY proper prefix and suffix is NOT built
+    here; it is the subject of `test_an_empty_anchor_is_reported_and_never_matches`,
+    because an empty anchor is a hole in the table rather than a trim of a real
+    anchor.
+
+    The arm's NAME states a PROPERTY - no proper prefix or suffix of an anchor
+    restores a match - and stays true of the empty string, which does not
+    restore one either. This DOCSTRING states the ENUMERATION, and the
+    enumeration is the non-empty half of that property. Do not read either as a
+    claim about the other, and do not "repair" one to match the other.
+
+    `derived` is the size of the enumeration in closed form, checked against the
+    built list in the same assertion, so the population is NAMED rather than
+    numbered and no sentence here has to carry a count that could rot.
+
+    THE FLOORS, both welded into the same assertion as the control, because a
+    floor living in an arm of its own leaves this arm vacuous:
+
+      - `len(cases) >= 1000` is the TOTAL floor, and it is deliberately NOT
+        raised further. Measured over this table: the largest single anchor
+        contributes 164 cases, so retyping that one statement down to the length
+        of the shortest live anchor - the C2 decay this module documents as BY
+        DESIGN - lands the total at 1010. Any literal above 1010 reddens on a
+        single legitimate re-anchor while buying no protection from vacuity that
+        1000 does not already give.
+      - `covered == set(_ANCHORS)` is the tightening the total floor CANNOT
+        give. An anchor one character long builds ZERO cases, so that gate would
+        be skipped in silence while the total sat comfortably over the floor on
+        the strength of the long anchors. Requiring the built cases to name
+        EVERY gate in the table closes that, and costs nothing a real anchor
+        pays.
     """
     control = [name for name, _ in _violations(_LIVE_SOURCE, _ANCHORS, RELPATH)]
     cases: list[tuple[str, str]] = []
@@ -334,14 +377,53 @@ def test_no_proper_prefix_or_suffix_of_an_anchor_can_restore_a_match():
             cases.append((name, anchor[:cut]))
             cases.append((name, anchor[-cut:]))
     derived = sum(2 * (len(anchor) - 1) for anchor in _ANCHORS.values())
-    assert control == [] and len(cases) == derived and len(cases) >= 1000, (
-        f"control reported {control}; built {len(cases)} cases against derived {derived}"
+    covered = {name for name, _ in cases}
+    assert (
+        control == []
+        and len(cases) == derived
+        and len(cases) >= 1000
+        and covered == set(_ANCHORS)
+    ), (
+        f"control reported {control}; built {len(cases)} cases against derived "
+        f"{derived}; those cases name {len(covered)} gates of {len(_ANCHORS)}"
     )
     for name, trimmed in cases:
         table = dict(_ANCHORS)
         table[name] = trimmed
         reported = [gate for gate, _ in _violations(_LIVE_SOURCE, table, RELPATH)]
         assert reported == [name], f"trimming {name!r} to {trimmed!r} reported {reported}"
+
+
+def test_an_empty_anchor_is_reported_and_never_matches():
+    """R7 - THE EMPTY ANCHOR, the one proper prefix and suffix R4 does not build.
+
+    The empty string is a proper prefix AND a proper suffix of every anchor
+    there is, and R4's enumeration starts at length 1, so R4 never substitutes
+    it. Without this arm the anti-trim property would be claimed over a
+    population one case per anchor short of the property's own wording.
+
+    It is carried HERE rather than folded into R4 because it is a DIFFERENT
+    failure mode. A trim is a real anchor shortened until it matches again; an
+    empty anchor is a TABLE WITH A HOLE IN IT, which invariant I1 already
+    forbids outright in `test_the_table_covers_every_live_tag_name`. Folding the
+    two together would merge two distinct claims into one count and leave
+    neither separately readable.
+
+    THE POPULATION IS THE LOOP BELOW: one substitution per anchor in `_ANCHORS`,
+    each required to produce EXACTLY ONE violation naming that gate. The
+    untrimmed table rides in as the control in the same assertion as the floor,
+    for R4's reason - a run over zero cases must not read as a pass.
+    """
+    control = [name for name, _ in _violations(_LIVE_SOURCE, _ANCHORS, RELPATH)]
+    cases: list[tuple[str, str]] = [(name, "") for name in _ANCHORS]
+    assert control == [] and len(cases) >= _FLOOR, (
+        f"control reported {control}; built {len(cases)} cases against floor {_FLOOR}"
+    )
+    for name, emptied in cases:
+        table = dict(_ANCHORS)
+        table[name] = emptied
+        reported = [gate for gate, _ in _violations(_LIVE_SOURCE, table, RELPATH)]
+        assert reported == [name], f"emptying the anchor for {name!r} reported {reported}"
 
 
 def test_a_blank_line_or_a_comment_between_a_tag_and_its_site_is_reported():
