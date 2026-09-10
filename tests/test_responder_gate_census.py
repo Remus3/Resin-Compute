@@ -76,10 +76,23 @@ module's own limits, and a claim like that is testable; the previous wording
 asserted that an unclassifiable shape raises, which was FALSE for the whole
 name-grammar class above.
 
-  1. NAMING. It checks the name's GRAMMAR and its uniqueness, and nothing about
-     its meaning. It cannot tell whether `# GATE:hop-budget` sits above the
-     hop-budget consult site rather than above some other one, so a name is a
-     label for a human, not a checked claim.
+  1. NAMING - HALF CLOSED, AND THE OPEN HALF IS THE MEANING. THIS MODULE still
+     checks the name's GRAMMAR and its uniqueness and nothing else. It binds no
+     name to any site of its own, so on this module's evidence alone
+     `# GATE:hop-budget` could sit above any consult site whatever.
+     The SITE half is now checked ELSEWHERE, by
+     `tests/test_gate_name_bindings.py`, which binds each gate name to its site
+     by EQUALITY against the line immediately below the tag. That makes "the
+     tag sits above the right site" false as a claim about the SUITE while it
+     stays true as a claim about THIS MODULE, which is why the limit is still
+     recorded here rather than deleted.
+     The MEANING half is STILL OPEN AND IS CLOSED BY NOTHING. An anchor is a
+     TEXT EQUALITY: binding `# GATE:hop-budget` to
+     `if not within_budget(inbox, bounds):` asserts that the name sits on THAT
+     STATEMENT and asserts nothing at all about whether the name DESCRIBES it.
+     A name reading `hop-budget` over a statement that consults a hop budget is
+     an agreement no machine in this tree checks, so on MEANING a name remains
+     a label for a human, not a checked claim.
   2. UNTAGGED CONSULT SITES - HALF-CLOSED, WITH THE OPEN HALF NAMED. Both
      directions of one comparison are now asserted. That every TAG sits on a
      real site is `not tagged - tight`, asserted by
