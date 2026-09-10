@@ -11,6 +11,103 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **HALTED AND PARKED FOR THE OPERATOR 2026-09-10 - A COUNTERPARTY ASKED FOR A
+  JOINT RE-PIN, AND THE ANSWER IS THAT THERE IS NOTHING HERE TO RE-PIN.** RC
+  reported a two-word sibling name SPLIT ACROSS A COMMENT-CONTINUATION WRAP in
+  its own `tests/test_loop_concurrency.py`, invisible to a whole-token search,
+  and asked whether this tree carries the same bytes. Step 1 of its request is
+  a MEASUREMENT OF OUR OWN DISK and was answered inside the session that
+  received it, because SILENCE READS AS DISSENT. Steps 2 through 4 are a JOINT
+  RE-PIN, which is an AGREEMENT IN ANOTHER PARTY'S TREE and therefore clause
+  (c) of the halt boundary. HALTED. No timeout and no default-deny, which
+  matches RC's own statement that it will not proceed on a delay.
+
+  **MEASURED: NO.** Over 213 tracked paths at `5b2027b`, RAW contiguous hits
+  land only inside `tests/test_no_sibling_names.py` itself, which is
+  `SELF`-exempt by design; NORMALISED-ONLY hits, using RC's normalisation
+  verbatim, are ZERO across every tracked file. The probe was written with ZERO
+  BACKSLASH LITERALS, every pattern built from `chr(92)`, because a mangled
+  pattern here yields a FALSE CLEAN rather than an error - and it carried a
+  positive control that made a planted split visible before it reported
+  nothing. A sweep that has not been run against a form it MUST match is not
+  evidence.
+
+  **THE CORRECTION MATTERS MORE THAN THE ANSWER, and it generalises.** RC's
+  premise was that our copy is byte-identical to its own. IT IS NOT, AND THE
+  CONTRACT SAYS SO: `tests/test_loop_concurrency.py` pins `ops/loop/slots.py`
+  and `ops/loop/winmutex.py` by SHA256 and DOES NOT PIN ITSELF. The two test
+  modules may legitimately diverge and measurably do - our `SHARED_SHA256`
+  block spans lines 126 to 143, not RC's 474 to 539, and our file is 811 lines.
+  A LINE NUMBER IN ANOTHER TREE'S FILE IS A CLAIM ABOUT THAT TREE. Cite a
+  shared artifact by content and by what the contract actually pins, never by
+  line number and never by an assumed identity the contract does not assert.
+
+  RC's underlying rule is right and is adopted: EVERY WHOLE-TOKEN SEARCH IS A
+  CLAIM ABOUT THE VALUE'S CONTIGUITY, NOT ABOUT ITS PRESENCE. Our sweep is not
+  contiguity-only and already covers RC's exact shape by design - it matches a
+  whole-file blob that is never line-split, its separator class spans a newline
+  plus indentation, and it pre-replaces the two common comment markers. Six
+  other split shapes that NEITHER side can see are now recorded at the site.
+
+- **CLOSED 2026-09-10. A SWEEP ASYMMETRY THAT TURNED OUT TO BE EXTENSIONALLY A
+  NO-OP, AND THE BUILDER REFUSED TO MANUFACTURE THE RED IT WAS ASKED FOR.**
+  Checking RC's report exposed that `tests/test_no_sibling_names.py` fed its
+  two matchers DIFFERENT VIEWS of a file - the paired matcher got the
+  comment-stripped text, the solo matcher the raw body. Two matchers in one
+  function, one hardened and one not, is the shape where a reader assumes the
+  whole function has the stronger property. The dispatch brief called that a
+  live blind spot and demanded a red-before arm proving a solo name broken by a
+  comment marker is now caught.
+
+  **THE BRIEF WAS WRONG AND THE BUILDER SAID SO RATHER THAN WIDENING A
+  MATCHER.** The stripper substitutes A SPACE, not nothing, and the solo
+  alternatives are single contiguous words with no separator class - so a
+  comment-broken solo name misses on BOTH views and the change alters no
+  behaviour. Proven three ways: 1176 constructed break cases with zero
+  disagreement while the same harness showed the paired matcher gaining in 384;
+  400000 randomised differential cases, 61961 carrying a real solo hit, ZERO
+  disagreements; and the demanded arm run against a copy mutated back to the
+  pre-slice view, `11 passed` exit 0 - green before and green after. THE
+  RED-THAT-NEVER-WAS IS THE RESULT. What landed instead is an asymmetry arm
+  proven non-vacuous by mutating the guarded mechanism itself, plus the six
+  measured blind-spot classes written at the site with a statement that says it
+  is a list of six that were measured and NOT a proof that no seventh exists.
+
+  Two further corrections the builder made to its own brief, AND THE FIRST OF
+  THEM WAS THEN RECONCILED WRONG IN THIS VERY ENTRY BEFORE A VERIFIER CAUGHT
+  IT. The brief's count of raw hits inside the module was 9; the builder
+  measured 13. The reconciliation first written here was that these are 9 LINES
+  carrying 13 MATCHES. THAT IS FALSE, and a verifier refuted it by counting
+  both populations directly: 13 is ALL match objects over the PRISTINE
+  `5b2027b` bytes, sitting on 7 distinct lines; 9 is SOLO-ONLY match objects
+  over the CURRENT bytes, sitting on 5. The current bytes carry 20 matches on
+  14 lines. THE TWO FIGURES DIFFER BY FILE VERSION AND BY MATCHER SUBSET, NOT
+  BY LINES VERSUS MATCHES. Record this one in full, because the failure is more
+  instructive than the number: a lines-versus-matches story is the OBVIOUS
+  reconciliation for two counts of one thing, it was reached for without being
+  measured, and it was wrong. AN UNMEASURED RECONCILIATION IS ANOTHER
+  UNMEASURED COUNT. That makes three instances this session of a figure
+  travelling further than the measurement behind it, and this third one was
+  authored by the merger rather than by any subagent.
+
+  The verifier also refuted the SHAPE of the no-op check, while confirming its
+  conclusion. Comparing the two versions' offender lists over the real corpus
+  is 0 against 0 and therefore VACUOUS - it would agree no matter what the
+  change did. The claim is substantiated instead by a differential that can
+  disagree: the solo matcher run over the raw body against the stripped view,
+  across all 213 tracked paths including the module itself, 9 matches against 9
+  matches, zero files differing. A COMPARISON THAT CANNOT DISAGREE IS NOT
+  EVIDENCE, EVEN WHEN ITS CONCLUSION IS RIGHT. And solo coverage
+  is NOT uniform: two of the five solo alternatives decompose into the paired
+  product, so a comment break in those two IS caught, by the paired matcher and
+  never by the solo one.
+
+  **LEFT UNENACTED, DELIBERATELY, FOR THE OPERATOR.** The change that would
+  actually close the gap is the stripper's replacement string, a space to the
+  empty string. Measured: it catches the solo comment-break AND double-reports
+  the two decomposable alternatives. It alters shared paired-matcher behaviour,
+  so it was reported rather than taken.
+
 - **CLOSED 2026-09-10. FIVE CARRIED OPEN ROWS WERE RE-PROBED BEFORE ANY SLICE
   WAS SPENT, AND FOUR OF THEM CITED THE WRONG FILE OR THE WRONG LINE.** This
   is the row-decay lesson arriving one level up again, and it is now cheap
