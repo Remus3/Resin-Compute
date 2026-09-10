@@ -547,6 +547,44 @@ def test_the_census_is_excluded_as_a_shape_grader_and_the_path_is_the_file_it_me
     assert "moon_sync_responder" in path.read_text(encoding="ascii")
 
 
+def test_the_name_bindings_module_is_excluded_and_is_the_file_it_means() -> None:
+    """A WIDER shape grader than the census, and the census's confinement fails.
+
+    `tests/test_gate_name_bindings.py` binds each of the 18 `# GATE:` tags to
+    the line immediately below it by STRING EQUALITY against a hand-typed
+    anchor. The census grades an AST, so it can only false-kill a mutant that
+    changes AST shape - 4 of 35. An equality on a line's literal bytes has no
+    such ceiling: `if not usable:` becoming `if True:` leaves the AST the census
+    grades intact and destroys the equality this module grades.
+
+    MEASURED IN THIS TREE at f571234 on 2026-09-09 without running pytest, by
+    planning the live mutants and asking this module's own `_violations`
+    instrument about each mutant source: 35 mutants planned, 0 unmutatable, 0
+    anchor violations on the CLEAN responder, and 34 of the 35 mutant sources
+    producing at least one anchor violation. The sole exception is
+    `spawn-failure/except-reraise`, whose anchor is the bare line `try:` while
+    the mutation rewrites the handler body underneath it.
+
+    Undeclared, that module would let a campaign print 34 syntax reddenings as
+    KILLED and exit 0.
+
+    The path half is the non-vacuity control, as in the census arm above: an
+    `--ignore` of a path pytest cannot find is a silent no-op, so this arm would
+    stay green through a rename while the confound came back. Confirming the
+    file also READS the responder is what makes it the module this exclusion
+    means rather than merely some file at that path.
+    """
+    bindings = "tests/test_gate_name_bindings.py"
+    argv = gmr.suite_argv("tests")
+    path = REPO_ROOT / bindings
+    assert bindings in gmr.SHAPE_GRADER_MODULES, gmr.SHAPE_GRADER_MODULES
+    assert f"--ignore={bindings}" in argv, argv
+    assert path.is_file(), path
+    source = path.read_text(encoding="ascii")
+    assert "moon_sync_responder" in source
+    assert "read_text" in source
+
+
 def test_the_two_exclusion_reasons_are_named_apart_not_merged() -> None:
     """One list, two arguments, and a reader must be able to tell them apart.
 
@@ -554,6 +592,19 @@ def test_the_two_exclusion_reasons_are_named_apart_not_merged() -> None:
     file's shape" are different claims with different consequences, so they live
     in different constants. Merging them would leave the next person to add an
     exclusion with no way to say which argument they are invoking.
+
+    STRENGTHENED, NOT WEAKENED, when `SHAPE_GRADER_MODULES` grew to 2. The four
+    assertions this arm carried were all arity-agnostic - `EXCLUDED_MODULES ==
+    (SELF_TEST_MODULE, *SHAPE_GRADER_MODULES)` holds for a list of any length -
+    so all four went on passing unchanged through the second entry landing, and
+    the arm said nothing whatever about it. That is the failure this file's own
+    header calls a grading arm that cannot see the thing it grades be wrong.
+
+    So the arity is now PINNED, and the claim that carries the actual weight is
+    added: each shape grader must have its OWN reason in prose, in the comment
+    block between the two constants. One list with two entries and one shared
+    paragraph is the merged state this arm exists to forbid, and it is reachable
+    without touching either constant's name.
     """
     assert gmr.SELF_TEST_MODULE not in gmr.SHAPE_GRADER_MODULES
     assert gmr.EXCLUDED_MODULES == (gmr.SELF_TEST_MODULE, *gmr.SHAPE_GRADER_MODULES)
@@ -561,6 +612,18 @@ def test_the_two_exclusion_reasons_are_named_apart_not_merged() -> None:
     assert [name for name in gmr.EXCLUDED_MODULES if f"--ignore={name}" in gmr.suite_argv("tests")] == list(
         gmr.EXCLUDED_MODULES
     )
+
+    assert len(gmr.SHAPE_GRADER_MODULES) == 2, gmr.SHAPE_GRADER_MODULES
+    assert len(gmr.EXCLUDED_MODULES) == 3, gmr.EXCLUDED_MODULES
+
+    runner = (REPO_ROOT / "tools" / "gate_mutation_runner.py").read_text(encoding="ascii")
+    self_at = runner.index("\nSELF_TEST_MODULE = ")
+    shape_at = runner.index("\nSHAPE_GRADER_MODULES: ")
+    assert self_at < shape_at, (self_at, shape_at)
+    shape_prose = runner[self_at:shape_at]
+    for name in gmr.SHAPE_GRADER_MODULES:
+        assert name in shape_prose, name
+    assert "SECOND ENTRY" in shape_prose, "the second grader has no reason of its own"
 
 
 def test_every_declared_exclusion_exists_and_the_detector_fires_on_one_that_does_not() -> None:
@@ -579,6 +642,154 @@ def test_every_declared_exclusion_exists_and_the_detector_fires_on_one_that_does
     with pytest.raises(gmr.ExclusionError) as caught:
         gmr.verify_exclusions(REPO_ROOT, bogus)
     assert "does_not_exist_xyz" in str(caught.value)
+
+
+# --------------------------------------------------------------------------
+# The opposite question. `missing_exclusions` walks the DECLARED sequence and
+# asks of each declared path whether it is real, so the only thing it can ever
+# find is a STALE declaration. Nothing enumerated the corpus, so a module that
+# grades the target's shape and sits in NOBODY'S list was never looked at.
+#
+# Every fixture below is HAND-TYPED, for the reason the kill-site section
+# states: a grading arm that derives its corpus the same way the detector does
+# cannot see that derivation be wrong.
+# --------------------------------------------------------------------------
+
+#: BINDS the responder at module level and LATER READS it. A candidate.
+FAKE_READER = (
+    "from pathlib import Path\n"
+    "\n"
+    'TARGET = Path(__file__).parent / "tools" / "moon_sync_responder.py"\n'
+    'LIVE = TARGET.read_text(encoding="ascii")\n'
+    "\n"
+    "\n"
+    "def test_the_shape_is_what_it_was():\n"
+    '    assert "def _run_once" in LIVE\n'
+)
+
+#: MENTIONS the responder and never opens it. The control for question two -
+#: naming is not reading, and most modules in this tree that mention the
+#: responder only ever mention it.
+FAKE_MENTIONER = (
+    'NOTE = "tools/moon_sync_responder.py is only named here, never opened"\n'
+    "\n"
+    "\n"
+    "def test_the_note_says_so():\n"
+    '    assert "moon_sync_responder" in NOTE\n'
+)
+
+#: READS a file and never binds the responder. The control for question one -
+#: a detector keyed on `.read_text` alone would flag half the tree.
+FAKE_OTHER_READER = (
+    "from pathlib import Path\n"
+    "\n"
+    'OTHER = Path(__file__).parent / "tools" / "some_other_module.py"\n'
+    'BODY = OTHER.read_text(encoding="ascii")\n'
+    "\n"
+    "\n"
+    "def test_the_other_body_is_there():\n"
+    "    assert BODY\n"
+)
+
+
+def _plant(root: Path, name: str, source: str) -> str:
+    """Write one hand-typed corpus member as LF ASCII and return its relpath.
+
+    `write_bytes`, never `write_text`. `Path.write_text` translates LF to CRLF
+    on Windows and `.gitattributes eol=lf` hides it from every diff, so a
+    fixture written the convenient way is a fixture whose bytes are not the
+    bytes that were typed.
+    """
+    data = source.encode("ascii")
+    assert b"\r\n" not in data, name
+    (root / name).write_bytes(data)
+    return name
+
+
+def test_the_sweep_finds_every_responder_reader_and_every_one_is_declared() -> None:
+    """ONE WELDED ASSERTION: a floor, the three known readers, and the subset.
+
+    The three claims are welded because separating them makes the load-bearing
+    one vacuous. "Every reader found is declared" is trivially true of an empty
+    result, and an empty result is exactly what a broken corpus derivation or a
+    silently over-narrowed detector produces. A floor sitting in an arm of its
+    own does not protect this arm, because the two can pass in different runs.
+
+    MEASURED IN THIS TREE at f571234 on 2026-09-09: 129 tracked `.py` files, 13
+    of them mentioning `moon_sync_responder` anywhere, and exactly 3 candidates
+    with no false positives - the two shape graders and this module, which is a
+    genuine responder reader excluded under the OTHER reason. That is why
+    `undeclared_shape_graders` subtracts all of `EXCLUDED_MODULES` and not just
+    `SHAPE_GRADER_MODULES`.
+    """
+    known = {
+        "tests/test_gate_mutation_runner.py",
+        "tests/test_gate_name_bindings.py",
+        "tests/test_responder_gate_census.py",
+    }
+    found = gmr.responder_reading_modules(REPO_ROOT)
+    assert (
+        found
+        and known <= set(found)
+        and set(found) <= set(gmr.EXCLUDED_MODULES)
+        and gmr.undeclared_shape_graders(REPO_ROOT) == []
+    ), (found, gmr.EXCLUDED_MODULES)
+
+
+def test_the_undeclared_detector_fires_on_a_planted_reader_and_not_on_a_declared_one(
+    tmp_path: Path,
+) -> None:
+    """The detector FIRES, plus the CONTROL that it does not fire on everything.
+
+    Without the control arm this proves nothing: a detector that returns its
+    whole input would pass the firing half and be useless. So the SAME corpus
+    is swept twice, and the only thing that changes between the two sweeps is
+    whether the planted reader is declared.
+
+    The two non-candidates are in the corpus for both sweeps. They are what
+    makes the first result a discrimination rather than a count.
+    """
+    corpus = [
+        _plant(tmp_path, "fake_reader.py", FAKE_READER),
+        _plant(tmp_path, "fake_mentioner.py", FAKE_MENTIONER),
+        _plant(tmp_path, "fake_other_reader.py", FAKE_OTHER_READER),
+    ]
+    assert len(corpus) == 3, corpus
+
+    assert gmr.responder_reading_modules(tmp_path, corpus) == ["fake_reader.py"]
+
+    fires = gmr.undeclared_shape_graders(tmp_path, corpus, excluded=())
+    control = gmr.undeclared_shape_graders(tmp_path, corpus, excluded=("fake_reader.py",))
+    assert fires == ["fake_reader.py"] and control == [], (fires, control)
+
+
+def test_verify_exclusions_raises_a_distinct_type_per_check(tmp_path: Path) -> None:
+    """TWO CHECKS, TWO TYPES, and an arm that can tell which one fired.
+
+    A single shared exception type makes the two indistinguishable, and an arm
+    pinning a type both raise proves nothing about which check ran. Both stay
+    under `ExclusionError` so a caller that only cares that the campaign refused
+    still catches both - hence the sibling-negative assertion on each, which is
+    the half that would go vacuous if the subclasses were ever collapsed.
+    """
+    corpus = [
+        _plant(tmp_path, "fake_reader.py", FAKE_READER),
+        _plant(tmp_path, "fake_mentioner.py", FAKE_MENTIONER),
+    ]
+
+    with pytest.raises(gmr.UndeclaredShapeGraderError) as undeclared:
+        gmr.verify_exclusions(tmp_path, ("fake_mentioner.py",), corpus)
+    assert isinstance(undeclared.value, gmr.ExclusionError)
+    assert not isinstance(undeclared.value, gmr.MissingExclusionError)
+    assert "fake_reader.py" in str(undeclared.value)
+
+    with pytest.raises(gmr.MissingExclusionError) as missing:
+        gmr.verify_exclusions(tmp_path, ("nope_not_here.py",), corpus)
+    assert isinstance(missing.value, gmr.ExclusionError)
+    assert not isinstance(missing.value, gmr.UndeclaredShapeGraderError)
+    assert "nope_not_here.py" in str(missing.value)
+
+    assert gmr.MissingExclusionError is not gmr.UndeclaredShapeGraderError
 
 
 # --------------------------------------------------------------------------
