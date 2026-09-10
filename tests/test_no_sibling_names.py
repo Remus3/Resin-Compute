@@ -97,6 +97,27 @@ def _scan(paths: list[str], root: Path) -> tuple[int, list[str]]:
 
     Zero out of zero reads as a pass, so the caller asserts the CHECKED count
     before it looks at the offender list.
+
+    WHAT THIS SCAN IS LEXICALLY BLIND TO. Six classes, measured 2026-09-10
+    against this function, each returning zero in a run where a contiguous
+    positive control returned two hits - so the zeroes are the detector
+    staying silent and not the harness being dead. This is the list of six
+    that were measured. It is not a proof that no seventh exists.
+
+      1. A name split across a string-literal concatenation, as in an adjacent
+         pair of quoted fragments or an explicit `+` join.
+      2. A name with an intervening word between the halves.
+      3. A name whose two halves appear in reversed order.
+      4. A break on a character outside _SEP that the stripper does not remove.
+         Measured on `%`, `;`, `|`, `+`, and on an html comment opener.
+      5. A break inside a word rather than at the boundary between the halves.
+      6. A tracked file in a non-UTF-8 encoding. `errors="replace"` decodes it
+         to noise and it reads clean; measured on a utf-16 file whose utf-8
+         twin returned two hits in the same run.
+
+    None of the six is fixed here. Widening the matchers is not the answer to
+    them - that response has been tried in this tree and defeated. They are
+    written down so the next reader meets them before assuming coverage.
     """
     checked = 0
     offenders: list[str] = []
@@ -117,9 +138,23 @@ def _scan(paths: list[str], root: Path) -> tuple[int, list[str]]:
         # shreds the words it was meant to preserve. That was measured here on
         # this very line, and the positive controls below are what caught it.
         flat = re.sub(r"#|//", " ", body)
+        # BOTH matchers read `flat`, so the two make the same class of claim
+        # and a reader cannot mistake one matcher's property for the function's.
+        # STATE WHAT THAT BUYS, WHICH IS LESS THAN IT LOOKS. The stripping is
+        # load-bearing for _PAIRED and INERT for _SOLO: a solo alternative is
+        # one contiguous word with no separator class, and the substitution
+        # emits a SPACE rather than nothing, so a solo name broken by a comment
+        # marker still does not match on either view. Measured 2026-09-10 -
+        # over 400000 differential fuzz cases, 61961 of which carried a real
+        # solo hit, _SOLO on `flat` and _SOLO on `body` disagreed zero times,
+        # and over the 213-path tracked corpus the offender list is identical
+        # either way. This is a consistency fix and it closes no detection gap.
+        # Two of the five solo names do decompose into the _FIRST x _SECOND
+        # product, so a comment break in those two is caught - by _PAIRED, and
+        # never by _SOLO. The arm below pins all of that as behaviour.
         for match in _PAIRED.finditer(flat):
             offenders.append(f"{rel} -> {match.group(0)!r}")
-        for match in _SOLO.finditer(body):
+        for match in _SOLO.finditer(flat):
             offenders.append(f"{rel} -> {match.group(0)!r}")
     return checked, offenders
 
@@ -191,6 +226,84 @@ def test_the_scan_does_not_flag_a_codenamed_neighbour(tmp_path: Path):
     checked, offenders = _scan(["a.md"], tmp_path)
     assert checked == 1
     assert not offenders, offenders
+
+
+@pytest.mark.parametrize(
+    ("planted", "expected"),
+    [
+        # The comment stripping is LOAD-BEARING for the paired matcher.
+        ("# ported from Riot\n# Commander, which asserts this", 1),
+        ("riot#commander", 1),
+        ("daemon//slayer", 1),
+        # It is INERT for the solo matcher. The substitution emits a space, and
+        # a solo alternative is one contiguous word with no separator class, so
+        # the same break that is caught above is missed here on EITHER view.
+        # These three zeroes are the honest residual, not a fixed defect.
+        ("# vendored from Clock\n# speed on 2026-09-06", 0),
+        ("clock#speed", 0),
+        ("lantern//light", 0),
+        ("amber#stone", 0),
+        # ...except where a solo name happens to decompose into the paired
+        # product, which two of the five do. _PAIRED catches these; _SOLO does
+        # not, and moving _SOLO to the stripped view did not change that.
+        ("red#moon", 1),
+        ("legion//wallpaper", 1),
+        # The control. Without it the zeroes above and a dead harness read the
+        # same, so it lives in THIS arm rather than in a separate one.
+        ("vendored from Clockspeed on 2026-09-06", 1),
+    ],
+)
+def test_a_comment_break_is_caught_in_a_paired_name_and_missed_in_a_solo_one(
+    tmp_path: Path, planted: str, expected: int
+):
+    """Pin the asymmetry as BEHAVIOUR so a later edit cannot move it silently.
+
+    Both matchers read the stripped view, but only one of them can use it. A
+    reader who sees a single `flat` feeding two `finditer` calls will assume
+    the comment-wrap property covers both names, and it does not. This arm is
+    what a future widening of _SOLO, or a change to the stripper's replacement
+    string, has to come here and update on purpose.
+    """
+    (tmp_path / "offender.md").write_bytes(planted.encode("ascii"))
+    checked, offenders = _scan(["offender.md"], tmp_path)
+
+    assert checked == 1, f"the control corpus was {checked} files, expected 1"
+    assert len(offenders) == expected, (
+        f"{planted!r} produced {offenders}, expected {expected} hit(s)"
+    )
+
+
+def test_moving_the_solo_matcher_to_the_stripped_view_changed_no_behaviour():
+    """The stripped view and the raw view are the same input to _SOLO.
+
+    Measured before the move and asserted here after it, so the claim in
+    _scan's comment is checked rather than remembered. This goes red the day
+    the stripper stops emitting a space, or _SOLO grows a separator class -
+    either of which would be a real change and needs a deliberate edit here.
+    """
+    probes = [
+        "clock#speed",
+        "clock//speed",
+        "# vendored from Clock\n# speed on 2026-09-06",
+        "lantern#light",
+        "amber//stone",
+        "clockspeed",
+        "a#b clockspeed //c",
+    ]
+    hits = 0
+    for probe in probes:
+        flat = re.sub(r"#|//", " ", probe)
+        raw_hits = [m.group(0) for m in _SOLO.finditer(probe)]
+        flat_hits = [m.group(0) for m in _SOLO.finditer(flat)]
+        hits += len(raw_hits)
+        assert raw_hits == flat_hits, (
+            f"{probe!r} differs between the raw and stripped views: "
+            f"{raw_hits} vs {flat_hits}"
+        )
+    assert hits == 2, (
+        f"the probe set produced {hits} solo hits, expected 2 - a probe set "
+        "that matches nothing would agree with itself trivially"
+    )
 
 
 def test_the_guard_states_what_it_cannot_catch():
