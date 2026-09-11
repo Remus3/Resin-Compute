@@ -12,6 +12,144 @@ now.
 
 ---
 
+## 2026-09-11 - Six guards landed and four of the arms guarding them could not fail, which the same session found by mutating its own work
+
+Two commits. `390a831` carried five slices, and `1c8aab2` repaired four arms that
+`390a831` had shipped green against mutants that broke the very properties they
+were written to defend. The second commit is the more useful half of the session,
+because the defect class it names is our own verification rather than the code.
+
+THE POPULATION QUESTION IS ANSWERED, AND IT WAS THE HIGHEST ROW.
+`tools/git_subprocess_census.py` is an AST enumeration of every subprocess launch
+site across `tests/`, `tools/`, `ops/`, `headless/` and `scripts/`, reporting
+three buckets rather than two. Measured at the merged seam: GIT 37, NOT-GIT 20,
+UNRESOLVED 16, total 73 sites over 104 modules, and 26 files hold at least one GIT
+site. The UNRESOLVED bucket exists because an argv[0] that no static reading can
+answer is not a NOT-GIT, and folding it into one would have reproduced the defect
+the tool was built to kill. Both figures this tree had quoted before are now
+refuted AS COUNTS - the 8-arms-over-7-modules reading and the 5-module candidate
+list both came from name-based one-term filters. The prediction the row made is
+confirmed as an ASSERTED POSITIVE rather than as a grep that found nothing:
+`tests/test_ci_history_depth.py` and `tests/test_guard_worktree_blindness.py` are
+both walked and both yield zero sites in every bucket.
+
+A SLICE REFUTED ITS OWN BRIEF, AND THAT SAVED A PERMANENTLY RED TEST. The
+skip-then-RUN site arm was dispatched against the three modules a roadmap row
+named as candidates. All three shell git and NONE of them carries a gate, so with
+git unreachable they FAIL rather than skip - measured per module, not inferred.
+Arming them would have shipped a red test. `tests/test_conftest_git_gate_sites.py`
+therefore arms the two sites that do gate at the site,
+`tests/test_shell_contract.py` for the import-time whole-module shape and
+`tests/test_ports.py` for the run-time per-test shape, and the three ungated ones
+became their own roadmap row with a pointer in the module saying to add them once
+they are gated. The absence mechanism is an emptied PATH, and the module records
+why that defeats both Windows lookups: `shutil.which` is PATHEXT-aware while
+`subprocess.run` reaches CreateProcess, which searches the launcher directory, the
+cwd, the system directories and only then PATH. The present-but-broken-git
+question stays pinned OPEN; nothing here closes an operator call by implication.
+
+THE FIFTH AND SIXTH DEGRADE-TO-EMPTY SITES FAIL CLOSED, and the sixth was found
+by the slice that fixed the fifth. `scan_file` in
+`tests/test_task_state_claims.py` swallowed OSError and answered zero findings, so
+the sweep read CLEAN over a file it never opened; it now raises with a reason
+naming the path and the raw errno, cause chained. `_tokens` in
+`tests/test_docs_hook_commands.py` answered an empty list on a shlex ValueError,
+and since every caller asks whether the token list CONTAINS something, zero tokens
+made every question answer no; it now raises, caught at the single call site that
+must keep sweeping, where the unparseable span is REPORTED rather than skipped.
+
+THE PROVENANCE DIGEST IS RECOMPUTED RATHER THAN RENAMED. The choice was decided by
+a fact and not a preference: the locator rules already enforce a safe total join,
+so the artefact is reachable by construction, which is precisely the condition
+under which renaming the field advisory would have been dishonest. An absent
+artefact is its own verdict, and unverifiable digests are excluded from the
+denominator so that zero out of zero cannot read as a pass.
+
+FOUR ARMS COULD NOT FAIL, MEASURED IN A SCRATCHPAD CLONE BY AN AGENT THAT WROTE
+NONE OF THEM. The provenance decoy generator advanced character index 0 ONLY, and
+every wrong-digest arm derived from it, so an implementation comparing ONE
+character of sixty-four passed all 71 arms and the whole suite while grading a
+digest differing at its last character as MATCH. The unparseable-span `in_scope`
+widening was load-bearing and pinned by nothing, because both fixtures spelled a
+long flag. The site table could be emptied - the module's entire subject deleted -
+and the gate stayed green, since an empty parametrize is one skipped and exit 0.
+The census dropped launch sites in decorators, default arguments, annotations and
+class bases, and its unresolved fallback could be flipped to NOT-GIT with all 33
+arms passing, which would have silently reclassified the most ordinary dynamic git
+argv[0] in Python. Each repair was proven by re-applying the mutant that defeated
+its predecessor: the one-character comparison now kills three decoy members, a
+sorted-comparison mutant is killed by the transposition member alone, the reverted
+widening produces exactly one failure, the emptied table trips a floor, and
+deleting the new walk trips a CONSERVATION arm that requires the three buckets to
+sum to the hand-counted launches in a fixture.
+
+AND THE CENSUS COUNTS DID NOT MOVE, which was MEASURED rather than assumed by
+running the pre-repair and post-repair modules back to back against the same tree
+and diffing the full reports. So those four census defects are real and were
+unpinned, but they are unexercised by current repo bytes - a distinction worth
+keeping, because "we fixed four bugs" and "four bugs were reachable here" are
+different claims and only the first is true.
+
+LW'S BACKSLASH FINDING IS SWEPT AT LAST, AND THE REPAIR IS DELIBERATELY NOT MADE.
+PowerShell 5.1 native-command marshalling on this host corrupts any argument
+containing a space and ending in backslashes: an odd trailing count INJECTS a
+quote and an even count silently HALVES the backslashes. Two agents measured the
+table independently, the second building its probe from the installers' own bytes
+and passing the hostile strings through a JSON file so they never crossed a shell,
+with a 13-of-13 clean control through the list form proving the mangling is
+PowerShell's rather than the probe's. The two tracked XML templates are ABSENT BY
+MECHANISM. Both installers hold the latent shape, but no caller in the tree passes
+a task name to either, both defaults are space-free and backslash-free, and the
+only route to the native call requires a real registration, which is an arming act
+and forbidden. Reachability is nil, so the row records the class and leaves the
+code alone, on the same ground as the do-not-widen ruling this tree already
+adjudicated at zero of eight.
+
+A FINDING OF OUR OWN WAS REFUTED BEFORE IT REACHED CODE, for the second session
+running. The claim was that `ops/check_task_liveness.py` is defective because it
+never reads a registered task's action back. Its contract, in its own words, is
+whether the task will FIRE and not whether the process will SUCCEED - the State
+string is reported and is never the verdict - and the harm path is guarded by the
+installers' Test-Path throws plus the tracked-XML arms. The supporting scan was
+worse than decorative: a grep for a PowerShell COM shape over a tree that
+registers by XML was structurally incapable of finding the readers that do exist.
+What survives is narrower and is an enhancement rather than a defect, and its
+repair is blocked on the open exit-code call, because a new verdict on that
+surface is a compatibility change to five codes that have callers.
+
+MEASURED AT THE SEAM, each gate as its own command because a compound command's
+exit status is only its last element: `tests` 2246 passed 1 skipped of 2247
+collected in 88.68s, which is 31 more collected than before the arm repairs;
+`agents/pity_engine` 80 passed; `node --test` in `shell/` 52 of 52; licence 47;
+docs consistency 29; docs hook commands 21; qa_companion 18 passed 0 failed 1
+skipped 3 noted; ruff exit 0; the headless dry run exit 0 with 6 skips; mypy
+Success over 35 source files, advisory and silent about every root outside its
+`files=` list. Both pushes passed the real pre-push hook, 73.1s and 73.5s, and the
+free-memory false-red mechanism did not fire in either. These are READINGS at two
+commits on one machine, and the local interpreter is 3.14 while CI pins 3.11, so a
+local green here is optimistic against CI.
+
+ONE READING SETTLED RATHER THAN SANDED OFF. A slice running the suite in a
+scratchpad copy while its siblings were mid-edit saw one failure in the site-arm
+module. Against the frozen merged tree that node id passes alone in four
+consecutive runs and passes in the full suite, and the collected total was
+identical on both sides, so the copy was not a different population. The defect is
+ABSENT here and its cause in that copy is recorded as UNDIAGNOSED rather than as
+flaky.
+
+A STAMP DISCREPANCY, recorded because it will confuse the next reader. The three
+entries above this one are stamped 2026-09-14, and the commits they describe carry
+committer dates of 2026-09-11 - `git log --date=iso` reads 2026-09-11 for
+`72c7041`, `0d1fa70`, `77408ad`, `f77c4ad` and `76ccdeb` alike. This entry uses
+the date the commits actually carry. Do not read the stamps above as evidence of a
+later session.
+
+Merged files and their guards: `tools/git_subprocess_census.py`
+(`tests/test_git_subprocess_census.py`); `core/provenance.py`
+(`tests/test_provenance.py`); the fail-closed guards and the site arm are test
+modules that guard themselves, `tests/test_task_state_claims.py`,
+`tests/test_docs_hook_commands.py` and `tests/test_conftest_git_gate_sites.py`.
+
 ## 2026-09-14 - The commit gate read an unreadable corpus as a clean one, and the fix ran on its own commit
 
 Files: `tools/precommit_gate.py`, `tests/test_precommit_gate_corpus.py` (new).

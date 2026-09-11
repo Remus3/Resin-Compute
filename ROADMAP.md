@@ -11,8 +11,167 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **OPEN 2026-09-14, NEW THIS SESSION AND GENUINELY UNGRADED - NOTHING ANYWHERE
-  GRADES A REPAIRED CALL SITE END TO END.** `tests/test_conftest_git_gate.py`
+- **CLOSED 2026-09-11 at `390a831` AND `1c8aab2` - FIVE ROWS FLIP, AND ONE OF THEM
+  FLIPS WITH ITS PREMISE CORRECTED.** Each slice ran on a disjoint write-list and
+  was graded by an agent that did not write it. Every figure here was observed at
+  the merged seam rather than carried forward from a slice report.
+
+  THE GIT-CALL POPULATION IS NOW COUNTED RATHER THAN FILTERED.
+  `tools/git_subprocess_census.py` walks every subprocess launch site across
+  `tests/`, `tools/`, `ops/`, `headless/` and `scripts/` and reports THREE buckets:
+  GIT 37, NOT-GIT 20, UNRESOLVED 16, total 73 sites over 104 modules, 26 files
+  holding at least one GIT site. The UNRESOLVED bucket is the honest part - an
+  argv[0] no static reading can answer is not a NOT-GIT. Both figures this tree
+  previously quoted are REFUTED AS COUNTS, the 8-arms-over-7-modules reading and
+  the 5-module candidate list alike, because both came from name-based one-term
+  filters. The row's own prediction is CONFIRMED AS AN ASSERTED POSITIVE:
+  `tests/test_ci_history_depth.py` and `tests/test_guard_worktree_blindness.py` are
+  both WALKED and both produce zero launch sites in any bucket, so a skip on either
+  would have been a false skip with no defect behind it.
+
+  THE SKIP-then-RUN SITE ARM LANDED, AND IT REFUTED ITS OWN BRIEF.
+  `tests/test_conftest_git_gate_sites.py` runs a module with git unreachable and
+  asserts it SKIPS, then runs it with git present and asserts it RUNS ITS
+  ASSERTIONS. THE THREE SITES THE EARLIER ROW NAMED AS CANDIDATES CARRY NO GATE AT
+  ALL - `tests/test_no_sibling_names.py`, `tests/test_ci_workflow_complement.py`
+  and `tests/test_responder_gate_census.py` each shell git with no gate, and under
+  an unreachable git they FAIL rather than skip, measured. Arming them as briefed
+  would have shipped a permanently red test, so the arm covers the two sites that
+  gate AT the site - `tests/test_shell_contract.py` for the import-time
+  whole-module shape and `tests/test_ports.py` for the run-time per-test shape.
+  The absence mechanism is an emptied PATH, and why that defeats BOTH Windows
+  lookups is recorded in the module: `shutil.which` is PATHEXT-aware while
+  `subprocess.run` reaches CreateProcess, which searches the launcher directory,
+  the cwd, the system directories and then PATH. The present-but-broken-git
+  question is STILL PINNED OPEN and nothing here closes it.
+
+  TWO DEGRADE-TO-EMPTY GUARDS FAIL CLOSED. `scan_file` in
+  `tests/test_task_state_claims.py` swallowed OSError and reported ZERO FINDINGS on
+  an unreadable tracked file; it now raises with a reason naming the path and the
+  raw errno, cause chained. Its sibling `_tokens` in
+  `tests/test_docs_hook_commands.py` answered an empty list on a shlex ValueError,
+  and every caller asks whether the token list CONTAINS something, so zero tokens
+  made every question answer no; it now raises, caught at the one call site that
+  must keep sweeping, where the unparseable span is REPORTED rather than skipped.
+
+  THE PROVENANCE DIGEST IS RECOMPUTED. `core/provenance.py` declared `sha256` and
+  `parent_sha256` with no hashlib, so a format regex was the only validation.
+  RECOMPUTE-AND-COMPARE was chosen over renaming the field advisory, and the reason
+  is a fact rather than a preference: the locator rules already enforce a safe
+  total join, so the artefact is reachable by construction. An absent artefact is
+  its OWN verdict, and unverifiable digests are kept out of the denominator so zero
+  out of zero cannot read as a pass.
+
+- **THE CLASS THAT MATTERS MOST FROM 2026-09-11, AND IT IS ABOUT OUR OWN ARMS.
+  FOUR OF THE FIVE ARMS THAT LANDED AT `390a831` COULD NOT FAIL, AND A MUTATION
+  PASS FOUND EACH ONE BEFORE CI DID. REPAIRED AT `1c8aab2`.** Every one was green
+  against a mutant that broke the exact property the arm was written to defend, so
+  every one had pinned a SHAPE rather than an INPUT.
+
+  The provenance decoy generator advanced CHARACTER INDEX 0 ONLY, and every
+  wrong-digest arm derived from it, so an implementation comparing one character of
+  sixty-four passed all 71 arms while grading a digest differing at its last
+  character as MATCH. The repair is a decoy FAMILY - index 0, index 63, a middle
+  index, an adjacent transposition that moves only the order - plus a structural arm
+  that no prefix or suffix shortcut survives for any k in 1..63.
+
+  The unparseable-span `in_scope` widening was load-bearing and pinned by nothing:
+  reverting it left the module and the whole suite green, because both fixtures
+  spelled a long flag and the reason term was never why any arm passed.
+
+  The site table could be emptied and the gate stayed green, because AN EMPTY
+  PARAMETRIZE IS ONE SKIPPED AND EXIT 0 - the module's own docstring named that trap
+  and then nothing asserted a floor.
+
+  The census DROPPED launch sites in decorators, default arguments, annotations and
+  class bases, which is worse than misbucketing because a missing row is invisible;
+  and its unresolved fallback could be flipped to NOT-GIT with all 33 arms passing,
+  which would have silently reclassified the most ordinary dynamic git argv[0] in
+  Python. The walk now derives its non-body positions BY SUBTRACTION from the child
+  nodes rather than from an enumerated list, so a grammar position nobody named is
+  still walked, and a CONSERVATION arm asserts the three buckets sum to the
+  hand-counted launches in a fixture.
+
+  THE CENSUS COUNTS DID NOT MOVE, and that was MEASURED rather than assumed, by
+  running the pre-repair and post-repair modules back to back against this tree and
+  diffing the full reports. So those four census defects are real and unpinned but
+  UNEXERCISED BY CURRENT REPO BYTES.
+
+  THE DURABLE RULE, and it is cheap to lose: ASK WHAT INPUT AN ARM FEEDS, NEVER
+  WHETHER THE ARM EXISTS - and when the arm is new, mutate the implementation it
+  defends before believing it.
+
+- **SWEPT 2026-09-11 AND THE ANSWER IS A LATENT CLASS, NOT A DEFECT. LW'S
+  BACKSLASH FINDING IS MEASURED HERE AT LAST, AND THE REPAIR IS DELIBERATELY NOT
+  MADE.** PowerShell 5.1 native-command marshalling on this host corrupts any
+  argument containing a SPACE and ending in BACKSLASHES: an odd trailing count
+  INJECTS a quote, and an even count silently HALVES the backslashes. The table was
+  measured twice by two agents, the second building its probe from the installers'
+  own bytes and passing the hostile strings through a JSON file so they never
+  crossed a shell - and a 13-of-13 clean control through the list form proves the
+  mangling is PowerShell's and not the probe's.
+
+  PER CARRIER. `ops/ResinCompute-Responder.xml` and
+  `ops/ResinCompute-Supervisor.xml` are ABSENT BY MECHANISM rather than by
+  inspection: the first substitutes only two DateTime placeholders whose value space
+  is digits, hyphen, colon and T, and the second's arguments are a literal constant.
+  Both installers hold the LATENT shape - each passes an unvalidated task-name
+  string to one native command - but `git grep` finds ZERO callers passing a task
+  name to either installer, both defaults are space-free and backslash-free, and the
+  only route to the native call requires a real registration, which is an arming act
+  and forbidden. `ops/check_task_liveness.py` accepts a trailing backslash through
+  `_TASK_NAME_RE` and rejects an injected quote, so the odd case fails closed at
+  exit 3 while the even case reaches exit 2.
+
+  WHY NO REPAIR. Reachability is nil, and this tree has already adjudicated a
+  do-not-widen ruling on a class whose reachability measured zero of eight. A
+  hardening with no reachable defect behind it is ceremony that then has to be kept
+  accurate. IF A CALLER EVER PASSES A NON-DEFAULT TASK NAME, THIS ROW BECOMES LIVE
+  AND THE VALIDATION GOES IN THEN.
+
+- **OPEN 2026-09-11, SMALL, AND THE ROW IS THAT THREE MODULES SHELL GIT WITH NO
+  GATE.** `tests/test_no_sibling_names.py`, `tests/test_ci_workflow_complement.py`
+  and `tests/test_responder_gate_census.py` shell git and carry no gate at the site,
+  so on a host without a reachable git they FAIL rather than skip - measured, not
+  inferred, with the failing counts observed per module. Gating them is a separate
+  slice because it touches files the arm slice did not own, and the arm that would
+  grade the repair already exists in `tests/test_conftest_git_gate_sites.py`, which
+  carries a pointer saying to add them to its site table once they are gated. DO NOT
+  ARM THEM IN THAT TABLE FIRST - that ships a permanently red test.
+
+- **OPEN 2026-09-11, SMALL, A RESIDUAL OF THE FAIL-CLOSED REPAIR AND NAMED SO IT IS
+  NOT MISTAKEN FOR CLEANLINESS.** `scan_tree` in
+  `tests/test_task_state_claims.py` skips a path whose `is_file()` is False, and
+  `Path.is_file()` SWALLOWS OSError INTERNALLY and answers False. So a real file
+  whose PARENT directory denies traversal is still dropped from the sweep as absent,
+  and the fail-closed repair covers open failures rather than stat failures. The
+  current arm PINS that skip as intended behaviour, so changing it is a deliberate
+  decision and not a bug fix - hard-failing there would break a partial checkout.
+
+- **OPEN 2026-09-11, SMALL, AN ASYMMETRY BETWEEN TWO SIBLING INSTALLERS.**
+  `ops/install_scheduled_task.ps1` throws on an unsubstituted placeholder left in
+  the task XML; `ops/install_responder_task.ps1` performs the same substitution
+  family and carries NO such throw. Found while refuting a different claim, so it is
+  recorded rather than fixed, and it is the kind of gap that only shows up when a
+  template gains a placeholder nobody wired.
+
+- **NEEDS THE OPERATOR 2026-09-11, NON-BLOCKING, AND IT IS THE NARROW CLAIM THAT
+  SURVIVED A REFUTATION.** `ops/check_task_liveness.py` never reads a registered
+  task's ACTION back - its probe collects nine fields and none of them is the
+  command, the arguments or the working directory. THE CLAIM THAT THIS IS A DEFECT
+  WAS REFUTED: the tool's contract is FIRING and not SUCCEEDING, in its own words
+  the State string is reported but is never the verdict, and the harm path is
+  guarded by the installers' own Test-Path throws plus the tracked-XML arms in
+  `tests/test_responder_task_argv.py` and `tests/test_supervisor_task_argv.py`.
+  WHAT SURVIVES IS NARROWER: between registration and first fire there is no action
+  signal at all, because `LastTaskResult` only exists after a run. That is an
+  ENHANCEMENT REQUEST against an out-of-contract question, and its repair is BLOCKED
+  ON THE OPEN EXIT-CODE CALL below, because any new verdict on that surface is a
+  compatibility change to the five codes that have callers.
+
+- **DONE 2026-09-11 at `390a831` AND HARDENED AT `1c8aab2`, BUT NOT AT THE THREE
+  SITES THIS ROW NAMED - READ THE CORRECTION IN THE TOP BLOCK BEFORE ACTING ON
+  THE REST OF THIS ROW.** `tests/test_conftest_git_gate.py`
   grades the HELPERS - `classify_git_probe`, `require_git_repository`,
   `skip_module_without_git` - and it grades them well. What no arm does is take a
   module that shells git, run it with git ABSENT, and assert the module SKIPS, then
@@ -24,7 +183,8 @@ version. What follows is everything the scaffold deliberately did not do.
   `tests/test_responder_gate_census.py`. THE RUN HALF IS THE LOAD-BEARING HALF - a
   skip-only arm is satisfied by a guard that never lets anything run.
 
-- **OPEN 2026-09-14, UNSWEPT HERE - AND UNSWEPT IS NOT CLEAN.** LW reported a
+- **SWEPT 2026-09-11, AND THE VERDICT IS A LATENT CLASS WITH REACHABILITY NIL -
+  THE MEASURED TABLE AND THE PER-CARRIER VERDICTS ARE IN THE TOP BLOCK.** LW reported a
   backslash-handling finding on the schtasks and PowerShell argument path, where a
   Windows path separator inside a quoted argument can be consumed before the task
   ever sees it, so an argv element reaches the registered task mangled. NO SWEEP
@@ -38,7 +198,9 @@ version. What follows is everything the scaffold deliberately did not do.
   MSYS path conversion rewrites a lone `/F` into a drive path, which is the same
   root cause in the opposite tool.
 
-- **OPEN 2026-09-14, AND THE POINT OF THE ROW IS THAT THE POPULATION IS UNKNOWN.**
+- **DONE 2026-09-11 at `390a831` - THE POPULATION IS NOW COUNTED AND THE TOOL IS
+  TRACKED. THE COUNTS ARE IN THE TOP BLOCK AND THEY SUPERSEDE EVERY FIGURE IN
+  THIS ROW.**
   Both false-red figures this tree has quoted - the 8 red arms over 7 modules, and
   the 5-module candidate list - came from NAME-BASED ONE-TERM FILTERS, and the
   second was already measured to over-report by roughly a factor of two thirds. An
@@ -245,7 +407,8 @@ version. What follows is everything the scaffold deliberately did not do.
   filter. Distinct from the `_ensure_parent` naming row further down, which is
   about the same function and a different defect.
 
-- **OPEN 2026-09-13. A FIFTH DEGRADE-TO-EMPTY SITE, AND IT IS IN A GUARD.** Same
+- **DONE 2026-09-11 at `390a831` - THE FIFTH SITE AND THE SIXTH SIBLING NAMED
+  BELOW BOTH FAIL CLOSED NOW, WITH ONE RESIDUAL RECORDED IN THE TOP BLOCK.** Same
   root cause as the six fixed at `b3ff9fe` and `6c351b3`. `scan_file` in
   `tests/test_task_state_claims.py` does `except OSError: return []`, so an
   unreadable tracked file is reported as ZERO FINDINGS, and `scan_tree` only
@@ -297,8 +460,8 @@ version. What follows is everything the scaffold deliberately did not do.
   digests reproduce BYTE-EXACT, and that proves TRANSPORT ONLY - we hashed LW's
   own bytes and we are the same carrier. We carry none of those four files.
 
-- **OPEN 2026-09-13, from LW section 5.1, bucket APPLICABLE-AND-NOT-DONE.
-  RECORDED IS NOT PINNED.** `core/provenance.py` declares `sha256` and
+- **DONE 2026-09-11 at `390a831`, RECOMPUTE-AND-COMPARE CHOSEN OVER ADVISORY, AND
+  THE ARM THAT PROVED IT WAS ITSELF DEFECTIVE UNTIL `1c8aab2`.** `core/provenance.py` declares `sha256` and
   `parent_sha256`, writes both into the record, and contains NO hashlib at all -
   `grep -n hashlib core/provenance.py` returns nothing. The only validation is a
   FORMAT REGEX, which is exactly this tree's recorded trap that a shape arm pins
