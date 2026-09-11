@@ -236,6 +236,13 @@ DEFAULT_INVOCATIONS = RUNTIME_DIR / "inbox_invocations.log"
 #: question the log answers - did this fire, just now - is about the recent end.
 MAX_INVOCATION_LINES = 2000
 
+#: U+FFFD, what `errors="replace"` substitutes for a byte the decoder cannot
+#: take. WRITTEN AS `chr(0xFFFD)` BECAUSE THIS TREE IS 7-BIT ASCII BY RULE and
+#: the pre-commit glyph gate rejects the literal. `_log_tail` folds it down to
+#: an ASCII `?` before anything is written back - see that docstring for why
+#: retaining it would grow the file threefold per fire.
+_REPLACEMENT = chr(0xFFFD)
+
 #: The ENTRY POINT column. `cli` is what a hook produces, because a hook runs
 #: `python scripts/watch_inbox.py` and reaches `main` through the `__main__`
 #: guard. `main` is an in-process call - a test, or another tool importing this
@@ -762,6 +769,41 @@ def mark_seen(inbox: Path, state: Path) -> bool:
     return atomic_write_json(state, payload)
 
 
+def _reported_record(reported: Path) -> tuple[set[str], str | None]:
+    """The keys shown, and the REASON the record is unusable if it is.
+
+    Returns `(keys, None)` when the record is ABSENT or READABLE, and
+    `(set(), reason)` when a file exists at `reported` whose contents this
+    module cannot use.
+
+    ABSENT AND UNREADABLE ARE NOT THE SAME STATE, and this is the only place
+    that says so. `read_json` returns its default for a missing file, for an
+    undecodable one and for corrupt JSON alike, so every caller here used to
+    see one empty set for three different facts. Absent is legitimately empty
+    history; unreadable is history that is on disk and cannot be seen. A caller
+    that splices the second with new data and writes it back deletes it.
+
+    FAIL CLOSED IS THE POINT, taken from `tools/moon_sync_responder.py`'s
+    `refusals_usable`, which was written for exactly this fail-open hazard. A
+    caller holding a reason must REFUSE ITS WRITE and leave the bytes where
+    they are, so the record can be repaired rather than replaced.
+
+    `reason` IS A SHORT MODULE-CHOSEN LABEL, NEVER A RAW PARSE STRING. It
+    reaches a user-facing surface, and this tree does not surface raw error
+    text. The raw failure is already logged by `read_json` at error level,
+    which is where it belongs.
+    """
+    if not reported.exists():
+        return set(), None
+    payload = read_json(reported, default=None)
+    if not isinstance(payload, dict):
+        return set(), "the record is present but could not be parsed"
+    shown = payload.get("reported")
+    if not isinstance(shown, list):
+        return set(), "the record is present but carries no list of keys"
+    return {k for k in shown if isinstance(k, str)}, None
+
+
 def read_reported(reported: Path) -> set[str]:
     """The keys this repo has ever SHOWN the operator. Corrupt means empty.
 
@@ -771,19 +813,37 @@ def read_reported(reported: Path) -> set[str]:
     is separated out to prevent, re-entering behind it. Its only reader is
     `withdrawn`. `test_the_report_record_is_never_a_second_acknowledgement_path`
     pins that, and it is the arm nobody asks for.
+
+    UNREADABLE STILL DEGRADES TO EMPTY HERE, DELIBERATELY. This function is a
+    READER for readers: its only caller is `withdrawn`, which prints. A degraded
+    read there under-reports withdrawals and can never invent one, so it fails
+    in the safe direction, and making it raise instead would take the
+    session-start hook down with it. Every WRITER goes through
+    `_reported_record` and refuses. `test_read_reported_still_degrades_to_empty_
+    for_its_reading_callers` pins the split so a later reader cannot "finish the
+    fix" by tightening the wrong half.
     """
-    payload = read_json(reported, default=None)
-    if not isinstance(payload, dict):
-        return set()
-    shown = payload.get("reported")
-    if not isinstance(shown, list):
-        return set()
-    return {k for k in shown if isinstance(k, str)}
+    return _reported_record(reported)[0]
 
 
 def record_reported(reported: Path, keys: list[str]) -> bool:
-    """Add `keys` to the record of what has been shown. Union, never a rewrite."""
-    merged = read_reported(reported) | set(keys)
+    """Add `keys` to the record of what has been shown. Union, never a rewrite.
+
+    THE DOCSTRING ABOVE USED TO BE FALSE, which is how this was found. The
+    union started from `read_reported`, and an unreadable record read as the
+    empty set - so the "union" was a total rewrite from nothing wearing a
+    union's name, and one stray byte in the record turned the next report into
+    an erasure of everything ever shown.
+
+    AN UNUSABLE RECORD IS NOW REFUSED RATHER THAN REPLACED: False comes back,
+    nothing is written, and the bytes stay on disk to be repaired. False is
+    surfaced by `_main` as a degraded line; it is not an exception, because
+    this runs inside a session-start hook.
+    """
+    known, unusable = _reported_record(reported)
+    if unusable is not None:
+        return False
+    merged = known | set(keys)
     reported.parent.mkdir(parents=True, exist_ok=True)
     return atomic_write_json(reported, {"version": 1, "reported": sorted(merged)})
 
@@ -823,26 +883,65 @@ def prune_records(inbox: Path, reported: Path) -> bool:
     never be cleared by anything. Every arm passed, because every arm asserted
     that a withdrawal REPORTS and none asserted that it STOPS. A report the
     reader cannot clear is a defect even when every line in it is true.
+
+    AND AN UNREADABLE RECORD IS REFUSED RATHER THAN PRUNED TO NOTHING. The
+    intersection used to start from a degraded read, so a record this module
+    could not parse was answered with `"reported": []` - the acknowledge
+    destroying the exact history it exists to maintain, and doing it on the one
+    command the operator runs deliberately. False comes back and the bytes are
+    left alone; `_main` refuses the whole acknowledge on it.
     """
+    known, unusable = _reported_record(reported)
+    if unusable is not None:
+        return False
     present = {entry.key for entry in _entries(inbox)}
     reported.parent.mkdir(parents=True, exist_ok=True)
-    keep = sorted(read_reported(reported) & present)
+    keep = sorted(known & present)
     return atomic_write_json(reported, {"version": 1, "reported": keep})
 
 
 def _log_tail() -> list[str]:
-    """The lines already in the invocation log, oldest first. Unreadable is empty.
+    """The lines already in the invocation log, oldest first. Unreadable is MANGLED.
 
-    Degrading to empty rather than raising is the same choice the watermark
-    makes: a log this tool cannot read is a log it rewrites, which loses history
-    it could not see anyway - and the alternative is a hook that dies on a
-    corrupt runtime file and surfaces nothing at all.
+    THIS USED TO RETURN THE EMPTY LIST ON A DECODE FAILURE, and the docstring
+    that defended it argued that rewriting "loses history it could not see
+    anyway". That sentence is true about the corrupt BYTES and false about the
+    FILE. `log_invocation` does not append: it rebuilds the file from this tail
+    plus one new line and writes the result over the target. So one undecodable
+    byte anywhere - newest line or oldest - made the very next fire replace the
+    entire log with a single line, and `MAX_INVOCATION_LINES` was never the
+    only discard path. Reproduced 2026-09-10 on a COPY of the live record,
+    which held 664 lines at the time: two bytes took all 664. The live log
+    itself has never been truncated - the consequence is demonstrated, not
+    suffered. Degrading a READ to empty is defensive; splicing that empty with
+    new data and writing it BACK converts unreadable history into DELETED
+    history, which is a different act.
+
+    THE PRECEDENT IS `tools/moon_sync_responder.py`, which reads its own
+    invocation log with `errors="replace"` and is immune to this by
+    construction. Preserving mangled bytes beats deleting readable ones.
+
+    FOLDING THE REPLACEMENT CHARACTER DOWN TO ASCII `?` IS A DEPARTURE FROM
+    THAT PRECEDENT AND IS DELIBERATE. The responder only ever TRIMS, and rarely;
+    this module rewrites the whole file on EVERY fire, and `atomic_write_text`
+    encodes UTF-8. A retained U+FFFD would therefore be written back as three
+    bytes, read back on the next fire as three replacement characters and
+    written back as nine - one bad character growing threefold per fire, past a
+    billion bytes inside twenty. `?` is ASCII, so the rewrite is stable and the
+    mangled line stops changing. `test_a_second_fire_does_not_grow_the_mangled_
+    line` pins that, and it is the arm nobody asks for.
+
+    STILL NEVER RAISES. A hook that dies on a corrupt runtime file surfaces
+    nothing at all, so an OSError or a ValueError out of the read is still the
+    empty list - which is now the ABSENT case and only the absent case.
+    `UnicodeDecodeError` has left the tuple because `errors="replace"` cannot
+    raise it; it is a `ValueError` subclass in any event, so nothing narrowed.
     """
     try:
-        raw = DEFAULT_INVOCATIONS.read_text(encoding="ascii")
-    except (OSError, UnicodeDecodeError, ValueError):
+        raw = DEFAULT_INVOCATIONS.read_text(encoding="ascii", errors="replace")
+    except (OSError, ValueError):
         return []
-    return [line for line in raw.splitlines() if line.strip()]
+    return [line.replace(_REPLACEMENT, "?") for line in raw.splitlines() if line.strip()]
 
 
 def log_invocation(source: str, disposition: str, now: float | None = None) -> bool:
@@ -1027,6 +1126,17 @@ def _main(argv: list[str] | None) -> tuple[int, str]:
     # at which point it is worse than absent, because it looks wired.
     gone = withdrawn(inbox, state, reported)
 
+    # RESOLVED ONCE, HERE, AND USED THREE TIMES BELOW. An unreadable report
+    # record degrades `withdrawn` as well as the two writers - the baseline
+    # unions in `read_reported`, so an unreadable record silently UNDER-reports
+    # withdrawals. That read is not itself a fourth defect: it cannot invent a
+    # withdrawal and it destroys nothing, so it fails in the safe direction.
+    # What it cannot do is stay quiet about it, because a short withdrawal
+    # section and a correct one look identical on screen. So the condition is
+    # surfaced once, in words, rather than fixed in a reader that must not
+    # raise.
+    _, unusable = _reported_record(reported)
+
     if entries or gone or not args.quiet_when_empty:
         _render(entries, heading)
 
@@ -1042,12 +1152,33 @@ def _main(argv: list[str] | None) -> tuple[int, str]:
             print(f"  [gone] {key}")
         print("  (run --mark to acknowledge; they are carried until you do)")
 
+    if unusable is not None:
+        # A DEGRADED STATE IN WORDS, NOT A RAW ERROR STRING. `unusable` is one
+        # of two labels this module chose; the parse failure itself went to the
+        # log inside `read_json`, which is where a reader who wants it can find
+        # it. The second line is the actionable half: nothing here repairs the
+        # file, and nothing here overwrites it either.
+        print(f"the record of what has been shown is unusable - {unusable}")
+        print(f"  (it will NOT be rewritten; repair or remove {reported})")
+        print("  (withdrawal reporting is incomplete until you do)")
+
     # Recorded AFTER rendering, so the record is of what was actually shown.
     # This never touches the watermark and never feeds the unread decision.
     if entries:
         record_reported(reported, [entry.key for entry in entries])
 
     if args.mark:
+        # REFUSED BEFORE EITHER WRITE, NOT BETWEEN THEM. `mark_seen(...) and
+        # prune_records(...)` runs the watermark write FIRST, so a prune that
+        # failed printed "it stays where it was" about a watermark that had
+        # already moved - a true-sounding line about a state that no longer
+        # held. Checking here keeps that line honest: on a refusal neither
+        # record is touched, and the acknowledge can be retried once the
+        # report record is repaired.
+        if unusable is not None:
+            print("could not read the record of what has been shown - the acknowledge is refused")
+            print("  (the watermark stays where it was; nothing was rewritten)")
+            return 0, TERMINAL_MARK_FAILED
         # The acknowledge is the deliberate act, so it is what the line says
         # happened. Whether it LANDED is the fact worth keeping: a mark that
         # failed leaves the watermark where it was, and the next session then
