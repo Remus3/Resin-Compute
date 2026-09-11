@@ -3028,3 +3028,135 @@ def test_the_real_probe_reports_the_end_boundary_value_and_not_just_the_key():
             assert value in report, f"EndBoundary {value} never reached the rendered report"
 
     print(f"\n[end-boundary value arm] RAN against {path}{name}, EndBoundary values {expected}")
+
+
+# ---------------------------------------------------------------------------
+# THE CONSOLEHOST STARTUP-FAILURE EXIT CODES
+#
+# Measured 2026-09-11 on this machine: powershell.exe invoked with a broken
+# SystemRoot returns 4294901760, which is 0xFFFF0000, ConsoleHost's
+# ExitCodeInitFailure, with EMPTY stdout and a UTF-16LE stderr reading
+# "Internal Windows PowerShell error.  Loading managed Windows PowerShell
+# failed with error 8009001d". The CLR never loaded, so the script never ran.
+# A control set - no PATH, no APPDATA, no USERPROFILE, no COMSPEC, no windir,
+# and TEMP pointing at a nonexistent directory - each returned 0, while a parse
+# error, a command-not-found and a `throw` each returned 1.
+#
+# 0xFFFE0000, which is 4294836224, is the sibling ExitCodeCtrlBreak.
+#
+# The defect these arms pin: the subject mapped EVERY non-zero code to one
+# headline about needing a different account or a different TaskPath. For this
+# class that headline is FALSE, and an operator who reads it goes hunting a
+# privilege problem that does not exist. The truth was only in the raw detail.
+#
+# THE CODES ARE SPELLED AS LITERALS HERE, deliberately, and not imported from
+# the subject. An arm that reads a constant the fix introduces dies on
+# AttributeError before it can measure anything, and red by absent API is not
+# red by measurement. These are live on today's bytes.
+_CONSOLEHOST_INIT_FAILURE_CODE = 4294901760  # 0xFFFF0000
+_CONSOLEHOST_CTRL_BREAK_CODE = 4294836224  # 0xFFFE0000
+
+
+def _collect_facts_over_a_stubbed_launcher(monkeypatch, returncode, stdout="", stderr=""):
+    """Drive collect_facts with a launcher that only reports an exit code.
+
+    NO PROCESS STARTS. The 0xFFFF0000 reading came from a real powershell.exe
+    invocation with a broken SystemRoot; reproducing that here would mean
+    breaking this machine's environment while other work runs on it. The exit
+    code, the empty stdout and the stderr text are the ENTIRE input to the
+    branch under test, so a stub carries them faithfully.
+
+    The interpreter lookup is stubbed too, so these arms measure the branch and
+    not whether this particular box has PowerShell on PATH.
+    """
+    if liveness.subprocess is not subprocess:
+        raise AssertionError(
+            "the subject is not bound to the real stdlib subprocess module, so replacing run() "
+            "here would neuter nothing it holds"
+        )
+
+    def _fake_run(argv, **kwargs):
+        return subprocess.CompletedProcess(list(argv), returncode, stdout, stderr)
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    monkeypatch.setattr(liveness, "_powershell_executable", lambda: "powershell.exe")
+    return liveness.collect_facts("ResinCompute-Responder")
+
+
+_MEASURED_INIT_FAILURE_STDERR = (
+    "Internal Windows PowerShell error.  Loading managed Windows PowerShell failed with "
+    "error 8009001d"
+)
+
+
+@pytest.mark.parametrize(
+    "code,label",
+    [
+        (_CONSOLEHOST_INIT_FAILURE_CODE, "0xFFFF0000 ExitCodeInitFailure"),
+        (_CONSOLEHOST_CTRL_BREAK_CODE, "0xFFFE0000 ExitCodeCtrlBreak"),
+    ],
+)
+def test_a_consolehost_startup_failure_is_not_reported_as_a_refused_query(monkeypatch, code, label):
+    """The interpreter never started, so nothing refused anything."""
+    with pytest.raises(liveness.ProbeError) as caught:
+        _collect_facts_over_a_stubbed_launcher(
+            monkeypatch, code, stdout="", stderr=_MEASURED_INIT_FAILURE_STDERR
+        )
+    reason = caught.value.message
+    lowered = reason.lower()
+
+    assert "account" not in lowered, (
+        f"exit {code} ({label}) means the interpreter never started. The reason offered the "
+        f"operator an ACCOUNT to go and change: {reason!r}"
+    )
+    assert "taskpath" not in lowered, (
+        f"exit {code} ({label}) means the interpreter never started. The reason offered the "
+        f"operator a TaskPath to go and change: {reason!r}"
+    )
+    assert "refus" not in lowered, (
+        f"exit {code} ({label}) is not a refusal - the query was never put to the scheduler. "
+        f"The reason called it one: {reason!r}"
+    )
+    assert "start" in lowered, (
+        f"the reason for exit {code} ({label}) must say the host FAILED TO START, which is the "
+        f"one fact that redirects the operator away from a privilege hunt. Got: {reason!r}"
+    )
+    assert "interpreter" in lowered or "powershell" in lowered or "host" in lowered, (
+        f"the reason for exit {code} ({label}) must name WHAT failed to start. Got: {reason!r}"
+    )
+
+    # The raw detail is what made the diagnosis possible on this machine and must
+    # survive the new branch intact - exit code, stderr, stdout.
+    raw = caught.value.raw
+    assert str(code) in raw, f"the raw detail dropped the exit code: {raw!r}"
+    assert "8009001d" in raw, f"the raw detail dropped the stderr that carries the cause: {raw!r}"
+    assert "stdout=" in raw, f"the raw detail dropped the stdout field: {raw!r}"
+
+
+def test_a_control_other_non_zero_exit_still_reports_the_refusal(monkeypatch):
+    """THE CONTROL THE FIX COULD OTHERWISE SWALLOW.
+
+    Without this arm a branch written as `if returncode != 0` on the new path
+    would route EVERY failure to "the interpreter did not start", and no arm in
+    this file would say so. Exit 1 is what a parse error, a command-not-found
+    and a `throw` each produced on this machine - a real answer from a host that
+    started - and it must keep the generic headline.
+    """
+    with pytest.raises(liveness.ProbeError) as caught:
+        _collect_facts_over_a_stubbed_launcher(
+            monkeypatch, 1, stdout="", stderr="Get-ScheduledTask : Access is denied."
+        )
+    reason = caught.value.message
+    lowered = reason.lower()
+    assert "refus" in lowered, f"exit 1 must still read as a refused query. Got: {reason!r}"
+    assert "account" in lowered and "taskpath" in lowered, (
+        f"exit 1 must still point the operator at the account and the TaskPath. Got: {reason!r}"
+    )
+    assert "exit 1;" in caught.value.raw, f"the raw detail dropped the exit code: {caught.value.raw!r}"
+
+
+def test_a_control_a_zero_exit_with_a_payload_is_unaffected(monkeypatch):
+    """The success path does not go anywhere near the new branch."""
+    payload = {"exists": True, "task_name": "ResinCompute-Responder", "triggers": []}
+    got = _collect_facts_over_a_stubbed_launcher(monkeypatch, 0, stdout=json.dumps(payload))
+    assert got == payload, f"a zero exit with a real payload must be returned verbatim, got {got!r}"
