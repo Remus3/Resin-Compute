@@ -152,7 +152,15 @@ def _skippable(path: str) -> bool:
     return any(s in p for s in _SKIP_PARTS)
 
 
-def _git(args: list[str], root: str | None) -> str:
+def _git(args: list[str], root: str | None) -> str | None:
+    """stdout on success, `None` when git could not answer.
+
+    It used to return `out.stdout` unconditionally and never look at
+    `out.returncode`, so a `git diff --cached` that exited 129 - the exit code
+    a non-repo directory really produces - came back as `""` and was
+    indistinguishable from a repo with nothing staged. `None` is the only way a
+    caller can tell "read, and empty" from "not read at all".
+    """
     try:
         out = subprocess.run(
             ["git", *args],
@@ -162,9 +170,11 @@ def _git(args: list[str], root: str | None) -> str:
             timeout=20,
             creationflags=_NO_WINDOW,
         )
+        if out.returncode != 0:
+            return None
         return out.stdout
     except (OSError, subprocess.SubprocessError):
-        return ""
+        return None
 
 
 _DASH_C = re.compile(r"git\s+-C\s+(\"([^\"]+)\"|'([^']+)'|(\S+))")
@@ -187,13 +197,19 @@ def _root_from_command(command: str) -> str | None:
     return root
 
 
-def _staged_added(root: str) -> dict[str, dict]:
+def _staged_added(root: str) -> dict[str, dict] | None:
     """Return {path: {"ranges": [(start, end)...], "lines": [(lineno, text)...]}}.
 
     Only ADDED lines and their line ranges - the gate never judges a line this
     commit did not write.
+
+    `None` when the staged diff could not be read at all, which is a different
+    fact from an empty dict and must not be collapsed into one. An empty dict is
+    a genuine no-op commit; `None` is a corpus the gate never saw.
     """
     diff = _git(["diff", "--cached", "--unified=0", "--no-color"], root)
+    if diff is None:
+        return None
     files: dict[str, dict] = {}
     cur: str | None = None
     lineno = 0
@@ -533,10 +549,31 @@ def _list_tracked(mode: str) -> int:
 def _check_staged(command: str) -> int:
     root = (
         _root_from_command(command)
-        or _git(["rev-parse", "--show-toplevel"], os.getcwd()).strip()
+        # Root RESOLUTION keeps its permissive fall-through: the designed
+        # default is correct in the hook's real invocation, and a wrong root now
+        # surfaces one line down as `_staged_added -> None` and blocks there, so
+        # one choke point at the CORPUS read is sufficient. `_git` can answer
+        # None, and `.strip()` on None is an AttributeError, hence the `or ""`.
+        or (_git(["rev-parse", "--show-toplevel"], os.getcwd()) or "").strip()
         or os.getcwd()
     )
     staged = _staged_added(root)
+    if staged is None:
+        # FAIL CLOSED. Same rule as _check_scan_files: a gate that scanned zero
+        # files must not report zero findings as a pass. The FAIL-OPEN RULE
+        # covers tool provisioning (ruff missing, message file unreadable) - a
+        # half the gate needs to RUN. The staged diff is not a tool; it is this
+        # half's SUBJECT, and an unreadable subject wedges only the one commit
+        # whose corpus cannot be read, which is the commit that must not pass.
+        sys.stderr.write(
+            "precommit_gate BLOCKED - the STAGED half did NOT run: `git diff "
+            "--cached` could not be read.\n  Root consulted: "
+            + root
+            + "\n  NO scan was performed - no banned-glyph check on added "
+            "lines, no py_compile, no net-new ruff. A gate that read zero "
+            "staged lines must not report zero findings as a pass.\n"
+        )
+        return 1
     violations: list[str] = []
 
     # 1. Banned glyphs on ADDED lines, named as file:line.
