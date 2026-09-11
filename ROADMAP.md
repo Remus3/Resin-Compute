@@ -174,16 +174,34 @@ version. What follows is everything the scaffold deliberately did not do.
   35 source files, ADVISORY because its roots exclude `tests/` and `conftest.py`,
   which is where most of this session's bytes landed.
 
-- **OPEN 2026-09-11, AND IT IS A HOLE THE CENSUS CANNOT CONSERVE ITS WAY OUT
-  OF.** `tools/git_subprocess_census.py` emits NO SITE AT ALL when `call.func` is
-  itself a Call - `getattr(subprocess, "run")(...)` and
-  `functools.partial(subprocess.run)(...)` are both invisible - and its launcher
-  set is `subprocess`-only, so `os.system` is invisible for a second and
-  independent reason. THE CONSERVATION ARM CANNOT HELP HERE, and that is the
-  point worth keeping: conservation compares emitted rows against hand-counted
-  launches, and a shape that emits nothing leaves nothing to conserve. The repair
-  is a resolver that walks a Call in func position and a launcher set derived
-  rather than enumerated.
+- **HALF OPEN, HALF DECAYED, AND DELIBERATELY NOT CLOSED WHOLESALE. REWORDED
+  2026-09-11 AFTER RE-MEASURING BOTH HALVES AT `13c771f`.** This row began as one
+  row with two independent defects in it, and closing it as a unit would have
+  silently retired a live second defect - which is the whole reason it is being
+  split in prose rather than flipped.
+
+  THE FIRST HALF IS DECAYED AND WAS ALREADY REPAIRED AT `2ae95f3`.
+  `tools/git_subprocess_census.py` no longer emits NO SITE when `call.func` is
+  itself a Call. Verified at `13c771f` by reading `_launcher_for`: the Attribute
+  and Name branches are unchanged and every other callee shape falls through to
+  an opaque-launch row, so `getattr(subprocess, "run")(...)` and
+  `functools.partial(subprocess.run)(...)` now produce UNRESOLVED rows rather
+  than silence. Nothing further is owed on this half.
+
+  THE SECOND HALF IS STILL OPEN, FOR AN INDEPENDENT REASON THAT THE FIRST REPAIR
+  DOES NOT TOUCH. `LAUNCHERS` at `tools/git_subprocess_census.py` line 134 is a
+  `subprocess`-only frozenset of five entry points, so `os.system`, `os.popen`
+  and the `os` exec and spawn families remain invisible no matter what the callee
+  resolver does. `subprocess.getoutput` and `subprocess.getstatusoutput` sit
+  outside it too. The module DECLARES all of that in its own docstring rather
+  than implying coverage, and reachability in this tree is zero today, so this is
+  a contract gap rather than a live leak - but it is a gap, and the row stays
+  open until the launcher set is derived rather than enumerated.
+
+  THE POINT WORTH KEEPING FROM THE ORIGINAL WORDING. Conservation compares
+  emitted rows against hand-counted launches, so a shape that emits nothing
+  leaves nothing to conserve. That argument applied to the first half and it
+  applies unchanged to the second.
 
 - **OPEN 2026-09-11, AND THE ROW IS THAT THE EXEMPT-ARM AUDIT CHECKS NAME
   PRESENCE RATHER THAN REACHABILITY.** A gate placed AFTER the launch is now
@@ -223,14 +241,112 @@ version. What follows is everything the scaffold deliberately did not do.
   residual is recorded rather than closed, and it is the FIFTH item in the
   operator row below.
 
-- **OPEN 2026-09-11, AND IT IS ABOUT THE INSTRUMENT RATHER THAN ABOUT ANY
-  FINDING IT PRODUCED.** Neither write tracer used this session sees
-  `os.open` plus `os.fdopen` - the descriptor is an int, so no path ever matches -
-  and that shape is LIVE in `ops/loop/slots.py`, which writes the machine-wide
-  bucket the halt ruling names by name. Neither tracer patches DELETION or
-  TRUNCATION at all, and this tree calls `shutil.rmtree` at session finish and
-  `unlink` in nine files, measured 2026-09-11. So every "0 bytes written" reading
-  taken with either tracer is a statement about the shapes it patched.
+- **CLOSED 2026-09-11 AT `13c771f` - THE FIRST TRACKED WRITE TRACER LANDS, AND
+  THE HONEST SHAPE IS THAT THE BUILD WAS WRONG AND REFUTATION FOUND IT.** The
+  detail is in `docs/LEDGER.md` under this session's heading. What belongs here
+  is what the row asked for and what the answer cost.
+
+  WHAT THE ROW ASKED FOR IS `tools/write_tracer.py` WITH
+  `docs/adr/ADR-010-write-tracer-coverage.md`, both guarded by
+  `tests/test_write_tracer.py`. `os.open` plus `os.fdopen` is covered, and so are
+  deletion and truncation. The first build passed its own arms and was then
+  REFUTED by two independent lenses.
+
+  THE HEADLINE WAS IN NEITHER DECLARED LIST: EMPTY-FILE CREATION WAS INVISIBLE.
+  That is the live shape at `ops/loop/slots.py:189` - lock-file creation in the
+  machine-wide bucket the halt ruling names - so a "0 bytes written" reading over
+  that bucket would have read CLEAN while the lock files appeared. There is now a
+  fourth op, `create`, and the gap was closed by widening the OP SET rather than
+  coverage, which is why the instrument still cannot certify that nothing was
+  written.
+
+  TWO OVERSTATEMENTS, and an overstatement is the worst class for an instrument
+  whose whole purpose is to stop a negative reading becoming a false claim. A
+  pre-entry descriptor was said to lose only path attribution with the bytes
+  still recorded; TRUE for raw `os.write(fd, data)`, FALSE for a file object,
+  measured at 9 bytes on disk with zero events. The two sub-cases are declared
+  separately now and must not be refolded into one sentence. And `os.dup2`
+  emitted a POSITIVELY WRONG PATH off a stale descriptor entry, naming one file
+  while the bytes landed in another; a wrong path is worse than no path, so the
+  unknown-source case evicts to an unattributed-descriptor label instead.
+
+  SILENT ROUTES IN NEITHER LIST ARE NOW IN ONE OF THEM. Covered: `os.ftruncate`,
+  `os.link`, `os.symlink`, `Path.touch`, the exclusive-create open mode and the
+  `shutil` copy family - the last by NAME, because `shutil.copy2` on CPython
+  3.14.4 on Windows takes a native fast path and decomposes into nothing
+  observable. Declared UNCOVERED instead: `io.FileIO` constructed directly,
+  metadata-only operations, and directory-level operations.
+
+  THE HONESTY ARM WAS ONE-SIDED, which is the two-guards rule failed and then
+  fixed. Adding an unpatched name went red; REMOVING a patched name stayed green.
+  The arm derives the patched set from the implementation and asserts equality in
+  BOTH directions.
+
+  A NEGATIVE RESULT WORTH RECORDING. The interpreter hypothesis SURVIVED: the
+  arms pass on CPython 3.14.4 and on 3.11.9, and `Path.rename` on 3.11.9 calls
+  `os.rename` directly with no accessor indirection.
+
+  THIS ROW'S OWN CORPUS FIGURE HAD DECAYED, AND IT DECAYED AT THE VERY COMMIT
+  THAT CLOSES THE ROW. It said `unlink` appears in nine files. That was TRUE when
+  written and is FALSE at `13c771f`, and the reason is that staging this slice's
+  own two files changed the population. Re-derived here from `git ls-files` at
+  `13c771f`, and every number below carries BOTH its population and its pattern
+  because the two answers differ: over the 144 tracked `.py` files, a literal
+  substring sweep for `unlink(` answers 11 files and 19 occurrences and for
+  `rmtree(` answers 6 and 7, while a word-boundary call form answers 10 and 17
+  for `unlink` and 5 and 5 for `rmtree`. The whole difference is
+  `_wrap_path_unlink(` and `_wrap_rmtree(` in the new module, which a word
+  boundary rejects and a substring accepts. Over all 228 tracked files the same
+  four sweeps answer 13 and 21, 7 and 8, 12 and 19, and 6 and 6, and a bare
+  substring sweep for `unlink` with no parenthesis reaches 18 files. The nine was
+  the word-boundary call form over tracked `.py` at `37bc3bc`, verified by
+  re-running that sweep against that commit.
+
+  THE DURABLE RULE, and it is the reusable part: AN INSTRUMENT THAT DOES NOT NAME
+  ITS OWN BLIND SPOTS CONVERTS A NEGATIVE READING INTO A FALSE CLAIM. Two
+  artifacts describing one mechanism drifted apart at the seam and were caught
+  only because the ADR author never saw the module.
+
+- **OPEN 2026-09-11, INBOX, BUCKET APPLICABLE-AND-NOT-DONE, AND IT IS A
+  CORRESPONDENCE DEBT RATHER THAN A CODE DEBT. CS ANSWERED ALL FIVE OF OUR
+  QUESTIONS AND WE HAVE ANSWERED NONE OF THEM BACK.** CS's positions note - named
+  in prose only, because the whole inbox directory is gitignored and a backticked
+  pointer there would point at an untracked path - carries positions on Q1
+  through Q5 plus a defect report. THIS TREE ANSWERED THE DEFECT HALF AND LEFT
+  Q1 THROUGH Q5 UNANSWERED. In this fleet SILENCE READS AS DISSENT, so five
+  unanswered positions currently read as five disagreements we do not hold.
+
+  THREE ARE ANSWERABLE HERE ON MEASURED GROUND AND NEED NO RULING. Q1, the
+  propagated artifact is the SHAPE rather than any repo's file, with CS's
+  refinement that the real test is whether the bytes ARE the contract - that is
+  already this tree's rule and the CAVEMAN banner is its worked example. Q2, the
+  gate tag literal - and see the self-correction below, because our stake in it
+  is not what we told the channel it was. Q4, each repo files its own measured
+  findings inbound and nobody copies a sibling's implementation file unrequested.
+
+  TWO NEED THE OPERATOR AND ARE FILED AS ITEMS IN THE ROW BELOW. Q3, because CS
+  proposes a distinguishing rule - if the tool is absent, is the thing this check
+  protects still protected, and if not then the absence IS the failure - and
+  agreeing to it is a BEHAVIOUR CHANGE to a shipped gate, not a position. It
+  would turn a currently-green arm red: `.githooks/pre-push` warns and continues
+  when `ruff` or `pytest` is unimportable, and
+  `test_pre_push_still_fails_open_when_nothing_carries_the_tools` in
+  `tests/test_hook_interpreter.py` asserts returncode 0 on a barren PATH. Both
+  verified by reading at `13c771f`. Q5, because CS offers to spend its own cycles
+  reproducing a blind spot for us, and accepting an offer of another party's
+  cycles is an agreement binding another party.
+
+  AND A SELF-CORRECTION THAT KILLS Q5's STATED PREMISE. Our own outbound question
+  of 2026-09-08 said this tree "cannot check your start/deliver finding here,
+  having no tagged gates". That was TRUE on the day it was written and has since
+  DECAYED: the gate tags landed on 2026-09-09, and at `13c771f`
+  `tools/moon_sync_responder.py` carries 20 `# GATE:` tags, measured this run,
+  all of them between lines 1928 and 2169, with the grammar pinned by
+  `tests/test_gate_name_bindings.py`. So the premise that we cannot check the
+  finding ourselves is dead, and Q5 should be re-asked or withdrawn rather than
+  answered as written. This is the same decay class as the corpus figure
+  corrected above: a prose count that nothing asserts, restated to a
+  counterparty.
 
 - **OPEN 2026-09-11, INBOX, BUCKET APPLICABLE-AND-NOT-DONE, two items.** The
   fifth LW note saying the plugin has already been sent is SUPERSEDED and needs a
@@ -247,17 +363,37 @@ version. What follows is everything the scaffold deliberately did not do.
   offered for it was REFUTED by reading. A non-reproduction is not an
   explanation, so the row stays open with no cause attached to it.
 
-- **NEEDS THE OPERATOR 2026-09-11, FIVE ITEMS, NON-BLOCKING, AND NOTHING BELOW IS
-  ANSWERED HERE.** The four carried questions all STAY OPEN and none of them was
-  touched by this session's work: the exit code owed to an interpreter that NEVER
-  STARTED; the three-record disposition asymmetry; arming the three standby
-  parties under the UNRULED no-answer rule; and the pre-first-fire action signal,
-  whose DEFECT claim was refuted and which survives only as an ENHANCEMENT
-  blocked on the first question. A FIFTH arose on 2026-09-11 and is the config
-  carve-out row above - `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM` are kept in
-  the inherited set, but an inherited value pointing at a config with
-  `core.excludesFile` was measured to change a corpus at rc 0, so the carve-out
-  is a judgement rather than an inertness finding.
+- **NEEDS THE OPERATOR 2026-09-11, EIGHT ITEMS, NON-BLOCKING, AND NOTHING BELOW
+  IS ANSWERED HERE.** The count is EIGHT because the list below runs to eight
+  numbered items; count the items, not this sentence, because a prose count that
+  nothing asserts is the decay class this file has now been bitten by three
+  times.
+
+  1. The exit code owed to an interpreter that NEVER STARTED.
+  2. The three-record disposition asymmetry.
+  3. Arming the three standby parties under the UNRULED no-answer rule.
+  4. The pre-first-fire action signal, whose DEFECT claim was refuted and which
+     survives only as an ENHANCEMENT blocked on item 1.
+  5. The config carve-out row above - `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM`
+     are kept in the inherited set, but an inherited value pointing at a config
+     with `core.excludesFile` was measured to change a corpus at rc 0, so the
+     carve-out is a judgement rather than an inertness finding. Arrived
+     2026-09-11.
+  6. The undeclared machine-wide scratch bucket in the git installation
+     directory, broadcast to four counterparties and NOT decided. Nothing has
+     been deleted, including this tree's own two files, and the halt row at the
+     top of this section holds the measurement. Carried from the session
+     hand-off and still AWAITING OPERATOR.
+  7. CS's Q3 - adopting the absence-IS-the-failure rule for a gate is a BEHAVIOUR
+     CHANGE to `.githooks/pre-push` and would turn
+     `test_pre_push_still_fails_open_when_nothing_carries_the_tools` red.
+     Arrived 2026-09-11.
+  8. CS's Q5 - accepting a counterparty's offer to spend its own cycles is an
+     agreement binding another party, and its stated premise is dead besides.
+     Arrived 2026-09-11.
+
+  Items 1 through 4 are the carried questions and NONE of them was touched by
+  this session's work.
 
 - **CLOSED 2026-09-11 at `390a831` AND `1c8aab2` - FIVE ROWS FLIP, AND ONE OF THEM
   FLIPS WITH ITS PREMISE CORRECTED.** Each slice ran on a disjoint write-list and

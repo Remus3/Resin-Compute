@@ -12,6 +12,113 @@ now.
 
 ---
 
+## 2026-09-11 - The instrument could not see a file being created, which is the one shape the bucket it was built to watch actually makes
+
+One commit, pushed: `13c771f`. Four files, 1733 insertions. The honest shape of
+this entry is that THE BUILD WAS WRONG AND REFUTATION FOUND IT: the first build
+passed every arm it shipped with, and two adversaries with distinct lenses
+returned REFUTED on it.
+
+THE HEADLINE DEFECT WAS IN NEITHER DECLARED LIST, AND SILENCE IS THE FAILURE THAT
+ARITHMETIC CANNOT CATCH. EMPTY-FILE CREATION WAS INVISIBLE. It was not covered
+and it was not declared uncovered, so a reader had no way to discover it. That is
+the live shape at `ops/loop/slots.py:189` - lock-file creation in the
+machine-wide bucket the halt ruling names by name - and it means a "0 bytes
+written" reading taken over that bucket would have come back CLEAN while the lock
+files appeared on disk. A true statement about bytes, and a false answer to the
+question being asked. There is now a fourth op, `create`, with an arm driving the
+real syscall shape. THE GAP WAS CLOSED BY WIDENING THE OP SET, NOT BY WIDENING
+COVERAGE, and that distinction is why the instrument still cannot certify that
+nothing was written - only that nothing was written through the routes it names.
+
+TWO OVERSTATEMENTS, WHICH IS THE WORST CLASS FOR THIS PARTICULAR INSTRUMENT,
+because an instrument whose entire purpose is to stop a negative reading becoming
+a false claim cannot afford to overstate its own reach.
+
+(i) THE PRE-ENTRY DESCRIPTOR CLAIM WAS TRUE FOR ONE SUB-CASE AND FALSE FOR THE
+OTHER. The draft said a descriptor opened before entry loses PATH ATTRIBUTION
+while the BYTES ARE STILL RECORDED. That holds for the raw `os.write(fd, data)`
+form. It is false for a FILE OBJECT opened before entry: that object's `write`
+reaches the C-level writer with no wrapped name anywhere on the path, so NOTHING
+is recorded - not an unattributed event, nothing. Measured on CPython 3.14.4 and
+3.11.9 with `open(p, "wb", buffering=0)` before the context and one 9-byte write
+inside it: 9 bytes on disk, zero events. The two sub-cases are now separate
+entries and the ADR says in terms that they must not be refolded into one
+sentence.
+
+(ii) `os.dup2` EMITTED A POSITIVELY WRONG PATH. A stale descriptor entry made it
+name one file while the bytes landed in another. A wrong path is worse than no
+path, because no path is visibly a gap and a wrong path reads as a finding. The
+unknown-source case now evicts to an unattributed-descriptor label.
+
+SILENT ROUTES MOVED INTO ONE LIST OR THE OTHER. Newly COVERED: `os.ftruncate`,
+`os.link`, `os.symlink`, `Path.touch`, the exclusive-create open mode, and the
+`shutil` copy family. The copy family is covered BY NAME rather than
+transitively, and the reason is measured: `shutil.copy2` on CPython 3.14.4 on
+Windows takes a native fast path and decomposes into nothing observable. Newly
+DECLARED UNCOVERED: `io.FileIO` constructed directly, which is a C type whose
+`write` cannot be replaced; metadata-only operations; and directory-level
+operations.
+
+THE HONESTY ARM WAS ONE-SIDED, AND THIS IS THE TWO-GUARDS RULE FAILED AND THEN
+FIXED. Adding an unpatched name to the covered list went red. REMOVING a patched
+name stayed GREEN - so the arm asserted that the declaration was not too small
+and said nothing about it being too large, which is exactly the direction an
+overstatement travels in. The arm now derives the patched set from the
+implementation and asserts equality in BOTH directions.
+
+A NEGATIVE RESULT, RECORDED BECAUSE IT SURVIVED RATHER THAN BECAUSE IT FAILED.
+The interpreter hypothesis held: every arm passes on CPython 3.14.4 and on
+3.11.9, and `Path.rename` on 3.11.9 calls `os.rename` directly with no accessor
+indirection, so the transitive coverage of `Path.rename` and `Path.replace` is
+not a 3.14-only accident.
+
+THE CORPUS FIGURES DECAYED DURING THE SESSION THAT MEASURED THEM, because staging
+the two new files changed the population. The ADR therefore states BOTH
+populations rather than picking one. Re-derived at `13c771f` from `git ls-files`,
+and each number carries its population and its pattern because the two answers
+differ: over the 144 tracked `.py` files a literal substring sweep for `unlink(`
+answers 11 files and 19 occurrences and for `rmtree(` answers 6 and 7, while a
+word-boundary call form answers 10 and 17 for `unlink` and 5 and 5 for `rmtree`.
+The entire difference is `_wrap_path_unlink(` and `_wrap_rmtree(` in the new
+module, which a word boundary rejects and a substring accepts. Over all 228
+tracked files the same four sweeps answer 13 and 21, 7 and 8, 12 and 19, and 6
+and 6, and a bare substring sweep for `unlink` with no parenthesis reaches 18
+files. The roadmap row's own "nine files" was the word-boundary call form over
+tracked `.py` and was TRUE at `37bc3bc`, verified by re-running that sweep
+against that commit; it went to ten at `13c771f`.
+
+THE DURABLE RULE FROM ALL OF IT. AN INSTRUMENT THAT DOES NOT NAME ITS OWN BLIND
+SPOTS CONVERTS A NEGATIVE READING INTO A FALSE CLAIM. And the mechanism that
+caught it is worth keeping too: two artifacts describing ONE mechanism drifted
+apart at the seam, and the drift was found only because the ADR author never saw
+the module. Independence is a prompt-level property, and this is what it bought.
+
+A SECOND CORRECTION THAT BELONGS WITH THIS ENTRY RATHER THAN WITH THE ROADMAP.
+This tree told the cross-repo channel on 2026-09-08 that it "cannot check your
+start/deliver finding here, having no tagged gates". That was true when written
+and DECAYED the next day. Measured this run at `13c771f`:
+`tools/moon_sync_responder.py` carries 20 `# GATE:` tags between lines 1928 and
+2169, with the grammar pinned by `tests/test_gate_name_bindings.py`. The claim is
+withdrawn, and the counterparty question that rests on it is re-asked rather than
+answered as written.
+
+Gates at the seam, each as its own command and every returncode read in Python,
+measured 2026-09-11 at `13c771f` plus this session's two doc edits: docs
+consistency rc 0, docs hook commands rc 0, sibling names rc 0, licence rc 0,
+`tests` rc 0, and `tools/precommit_gate.py --scan-files` over both edited
+documents rc 0.
+
+Merged files and their guard: `tools/write_tracer.py` and
+`docs/adr/ADR-010-write-tracer-coverage.md`, both guarded by
+`tests/test_write_tracer.py` - specifically
+`test_covered_routes_equals_the_patch_table_in_both_directions` for the honesty
+arm that had been one-sided, `test_the_create_op_is_declared_on_the_event_type`
+for the headline gap, and
+`test_the_pre_context_declaration_names_both_sub_cases_separately` for the
+overstatement that must not be refolded. `docs/adr/README.md` gained the one
+index line, guarded by `tests/test_docs_consistency.py`.
+
 ## 2026-09-11 - A census that fell silent rather than reporting, two widenings its own builder could not grade, and an undeclared scratch bucket four trees share
 
 One commit, pushed: `2ae95f3`, CI green. One outbound cross-repo note, and one
