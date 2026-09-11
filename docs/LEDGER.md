@@ -1647,7 +1647,37 @@ bytecode against source identical to HEAD. Purge `__pycache__` and
 disk, so the helper and the disk cross-check disagree - live-repo-relocated-GITDIR,
 under which the cross-check the adjudicated call depends on can carry a FALSE
 reason or false-red. Nothing in either file clears `GIT_DIR` or `GIT_WORK_TREE`.
-The pre-push gate does not currently hit it: `git hook run` shows `GIT_DIR=[]`.
+
+**CORRECTED 2026-09-11 - the sentence that stood here was configuration-scoped
+and did not say so.** It read: "The pre-push gate does not currently hit it: `git
+hook run` shows `GIT_DIR=[]`." That reading is TRUE OF A MAIN CHECKOUT and FALSE
+OF A LINKED WORKTREE, and the command it cites splits the same way, so it is not
+a neutral observer of its own question. Re-measured 2026-09-11 on git
+2.53.0.windows.3 in a throwaway repository with a main checkout and one linked
+worktree, every returncode read in Python:
+
+| pushed from | what the `pre-push` hook inherits |
+|---|---|
+| main checkout | `GIT_EXEC_PATH`, `GIT_PREFIX`; no `GIT_DIR` |
+| linked worktree | those two plus `GIT_DIR=<main>/.git/worktrees/<name>` |
+
+`git hook run --ignore-missing pre-push` reproduces both rows exactly, so the
+original reading was taken in the main checkout and generalised. This tree is
+worked in linked worktrees - `git worktree list` returned 52 entries here on
+2026-09-11, 1 main plus 51 linked - so the pre-push gate DOES hit the fourth
+disposition, on every push a builder makes.
+
+It hits more than the cross-check named above. `git ls-files` answered 224 paths
+clean and 1 path with a foreign `GIT_DIR` exported, at returncode 0 both times,
+and under that substitution `tests/test_readme_tree.py` reported this
+repository's tracked listing as a one-element frozenset while
+`tests/test_shell_contract.py` aborted COLLECTION at exit 2. The repair is not in
+either file named above: `conftest.py` at the repository root removes `GIT_DIR`
+and eight measured siblings at import, before any test module is loaded, and it
+is the root conftest rather than tests/conftest.py because that one is never
+loaded for `agents/pity_engine/`, which `.githooks/pre-push` also runs. The arms
+are in tests/test_git_env_scrub.py, which feeds each variable in as a real
+exported value rather than asserting that a fixture exists.
 
 Measured 2026-09-09 at the seam with caches purged, as a reading: `pytest tests`
 1606 passed / 1 skipped exit 0 - reconciling exactly as 1580 baseline plus 12 plus

@@ -59,11 +59,40 @@ FIXTURE TRAPS, each already paid for elsewhere in this tree:
     `GIT_DIR`/`GIT_INDEX_FILE` they go RED rather than wrong, which is the
     acceptable failure - but "every `git` call below" was false.
 
-    AND THE CITED MECHANISM IS NOT THE REAL ONE. On `git 2.53.0.windows.3`,
-    `pre-push` exports only `GIT_EDITOR`, `GIT_EXEC_PATH` and `GIT_PREFIX` - no
-    `GIT_DIR`, no `GIT_INDEX_FILE`. `pre-commit` exports `GIT_INDEX_FILE` but
-    still no `GIT_DIR`. The scrub is correct defensive practice and cheap; it
-    is not preventing the specific leak this comment used to claim.
+    AND THE CITED MECHANISM IS CONFIGURATION-SCOPED, which the correction above
+    it did not say and which made it read as a claim about git rather than about
+    one checkout. On `git 2.53.0.windows.3` the answer depends on WHERE the push
+    is made from. Measured 2026-09-11 in a throwaway repository with a main
+    checkout, one linked worktree and a `pre-push` that dumps its own
+    environment, every returncode read in Python:
+
+      MAIN CHECKOUT    `pre-push` sees `GIT_EXEC_PATH` and `GIT_PREFIX`, and no
+                       `GIT_DIR` and no `GIT_INDEX_FILE`.
+      LINKED WORKTREE  `pre-push` sees those two AND
+                       `GIT_DIR=<main>/.git/worktrees/<name>`.
+
+    `git hook run --ignore-missing pre-push` splits exactly the same way, so a
+    reading taken through that command inherits the same scope and is not a
+    third configuration. The `pre-commit` half - `GIT_INDEX_FILE` exported, no
+    `GIT_DIR` - is the 2026-09-06 reading carried forward and was NOT re-measured
+    on 2026-09-11.
+
+    THIS TREE IS WORKED IN LINKED WORKTREES under `.claude/worktrees/`, so the
+    worktree row is the live configuration and not the hypothetical one. What it
+    used to mean is the paragraph above: the two arms here that run `git
+    ls-files` against `REPO_ROOT` under the inherited environment went RED there.
+    They no longer do. `conftest.py` at the repository root now removes `GIT_DIR`
+    and eight siblings at IMPORT, before any test module is loaded, and
+    `tests/test_git_env_scrub.py` feeds each of them in as a real exported value
+    and measures the corpus that comes back. `_throwaway_env` still drops every
+    inherited `GIT_*` from the fixture's child environment, and that is still
+    load-bearing: a process-wide scrub at conftest import cannot defend against a
+    variable set DURING the run.
+
+    `GIT_EDITOR` IS NOT GIT'S DOING, and naming it alongside the other two read
+    as though it were. It is in this module's environment because the agent
+    harness exports it; a probe that clears `GIT_*` before pushing does not see
+    git put it back.
   * THE INTERPRETER IS PINNED via `PYTHON`, with backslashes as forward
     slashes, so the probe depends on the gate rather than on whatever PATH
     happens to resolve. `scripts/hook_python.sh` warns on stderr when it passes
