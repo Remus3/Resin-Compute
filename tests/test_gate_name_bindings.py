@@ -111,7 +111,7 @@ _TAG_STRICT = re.compile(r"^[ \t]*# GATE:([a-z0-9]+(?:-[a-z0-9]+)*)$")
 #: The floor every arm carries. A table over zero names satisfies every
 #: negative claim in this file, so the floor rides INSIDE the assertion it
 #: guards rather than in an arm of its own.
-_FLOOR = 18
+_FLOOR = 20
 
 #: The repair instruction carried in every violation message. The reason is
 #: part of it: an instruction without a reason is one a hurried reader talks
@@ -132,6 +132,7 @@ _ANCHORS: dict[str, str] = {
     "counterparty-agreement": "if bounds.armed and not agreed:",
     "trial-window": "if not window_open(bounds, now=started):",
     "hop-budget": "if not within_budget(inbox, bounds):",
+    "answered-usable": "if not answered_ok:",
     "empty-queue": "if not queue:",
     "no-destination": "if not dests:",
     "armed": "if not bounds.armed:",
@@ -147,6 +148,7 @@ _ANCHORS: dict[str, str] = {
     "bounce-mark": 'if result["bounced"]:',
     "zero-growth": 'if repeat and already_bounced and not result["held"] and not result["bounced"]:',
     "delivery-write-all": 'result["delivered"] = all(ok for ok, _ in written) and bool(written)',
+    "answered-recorded": "if not _remember_answered(DEFAULT_ANSWERED, note.name):",
 }
 
 
@@ -320,7 +322,7 @@ def test_every_adjacent_swap_of_two_anchors_is_reported():
 def test_rotating_every_anchor_is_reported_in_full():
     """R2 - THE FULL ROTATION, which is the case the census cannot see AT ALL.
 
-    Rotating all 18 anchors leaves every one of the census's problem lists
+    Rotating all 20 anchors leaves every one of the census's problem lists
     EMPTY: every site still carries a well-formed tag, every tag name still
     appears exactly once, and no site is untagged. Only a binding notices.
     """
@@ -357,12 +359,13 @@ def test_no_proper_prefix_or_suffix_of_an_anchor_can_restore_a_match():
     floor living in an arm of its own leaves this arm vacuous:
 
       - `len(cases) >= 1000` is the TOTAL floor, and it is deliberately NOT
-        raised further. Measured over this table: the largest single anchor
-        contributes 164 cases, so retyping that one statement down to the length
-        of the shortest live anchor - the C2 decay this module documents as BY
-        DESIGN - lands the total at 1010. Any literal above 1010 reddens on a
-        single legitimate re-anchor while buying no protection from vacuity that
-        1000 does not already give.
+        raised further. Measured over this table, 2026-09-10: the enumeration
+        totals 1312 cases and the largest single anchor - `bounce-once`, 83
+        characters - contributes 164 of them, so retyping that one statement down
+        to the length of the shortest live anchor, `try:` at 4 characters - the
+        C2 decay this module documents as BY DESIGN - lands the total at 1154.
+        Any literal above 1154 reddens on a single legitimate re-anchor while
+        buying no protection from vacuity that 1000 does not already give.
       - `covered == set(_ANCHORS)` is the tightening the total floor CANNOT
         give. An anchor one character long builds ZERO cases, so that gate would
         be skipped in silence while the total sat comfortably over the floor on

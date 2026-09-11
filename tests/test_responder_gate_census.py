@@ -40,9 +40,9 @@ cycle returns - an `ast.Assign` into a subscript whose value contains a
 choosing expression. Re-derived by `test_the_two_rules_are_re_derived_here_...`
 rather than transcribed, and measured on this tree:
 
-    bare If / Try / IfExp / BoolOp spots inside _run_once:  22, four of them false
-    consult-site spots by the rule above:                   18, none false
-    tagged sites:                                           18, all covered
+    bare If / Try / IfExp / BoolOp spots inside _run_once:  24, four of them false
+    consult-site spots by the rule above:                   20, none false
+    tagged sites:                                           20, all covered
 
 Widening a matcher is the response this tree has already been defeated by three
 times. The tighter rule has IDENTICAL coverage of every real gate and zero
@@ -105,14 +105,15 @@ name-grammar class above.
      AND NO MORE THAN THAT. `_tags` yields one entry per tag LINE and
      `_consult_site_spots` yields a SET of site lines, so TWO accepted sites
      written on ONE line share a single tag and both directions stay green.
-     Measured 2026-09-09 by inserting a hand-typed `# GATE:oneliner` above
-     `if agreed: result['z'] = agreed or why` in a copy of the responder: 20
-     site nodes, 19 distinct site lines, 19 tags, nothing untagged and nothing
+     Measured 2026-09-09 and re-derived 2026-09-10 against the 20-gate
+     responder, by inserting a hand-typed `# GATE:oneliner` above
+     `if agreed: result['z'] = agreed or why` in a copy of the responder: 22
+     site nodes, 21 distinct site lines, 21 tags, nothing untagged and nothing
      reported. Both halves of that line are shapes item 5 lists as ACCEPTED, so
      the open-shapes paragraph below does not cover it. `ruff` flags E701 there,
      and that is a DIFFERENT TOOL whose coverage this item may not claim as its
      own. So a FOURTH conjunct in the coverage arm requires the accepted-site
-     NODES to sit on DISTINCT LINES - 18 nodes on 18 distinct lines here, so it
+     NODES to sit on DISTINCT LINES - 20 nodes on 20 distinct lines here, so it
      passes today - and it is that requirement PLUS the two directions that
      gives identity per SITE rather than per line. FOURTH, not third: the arm's
      single assertion is a four-term `and`, counted by AST on 2026-09-09 and
@@ -125,14 +126,14 @@ name-grammar class above.
      not. `test_the_coverage_arm_itself_goes_red_on_two_sites_sharing_one_line`
      proves the arm reddens on a one-liner and CANNOT prove the distinct-line
      conjunct is what reddened it - measured, substituting the coincidental
-     proxy `len(sites) == len(_TAG_LINES)`, true today at 18/18 and not the
+     proxy `len(sites) == len(_TAG_LINES)`, true today at 20/20 and not the
      distinct-line property, left the whole file GREEN at 69 passed. No payload
      on that arm can fix it, because the proxy reddens on that same source too;
      what fixes it is a DIFFERENT SOURCE.
      `test_the_coverage_arm_reddens_on_the_collision_and_not_on_a_count_identity`
      is that source: a second accepted site appended onto an EXISTING tagged
-     site's line with a `;`, giving 19 site NODES on 18 distinct LINES against
-     18 tags, so the proxy is TRUE, the other two conjuncts are TRUE, and only
+     site's line with a `;`, giving 21 site NODES on 20 distinct LINES against
+     20 tags, so the proxy is TRUE, the other two conjuncts are TRUE, and only
      the distinct-line conjunct is False. The proxy leaves it GREEN and the real
      conjunct reddens it. Measured 2026-09-09: with the proxy substituted that
      arm is the ONLY failure in the file.
@@ -154,8 +155,8 @@ name-grammar class above.
      failure message name one colliding line where two existed.
      `test_the_coverage_arm_fires_on_every_collision_arity_and_not_on_a_clean_extra_gate`
      drives THE ARM over those same three sources requiring a RAISE, and then
-     over a hand-typed responder carrying one EXTRA CORRECTLY TAGGED gate - 19
-     nodes, 19 distinct lines, 19 tags, nothing untagged - requiring NO raise.
+     over a hand-typed responder carrying one EXTRA CORRECTLY TAGGED gate - 21
+     nodes, 21 distinct lines, 21 tags, nothing untagged - requiring NO raise.
      That over-fire control is what kills the four `site_lines` conjuncts, and
      no collision source of any arity can.
      WHAT REMAINS OPEN: the arities are a SAMPLE. A wrong conjunct agreeing with
@@ -193,7 +194,7 @@ name-grammar class above.
      asserted to be non-neighbours in tag order. NO FIXED ARITY BOUNDS AN
      ARBITRARY TRUNCATION - an arm removing k tags is satisfied by `[:k]` - so
      `test_removing_every_tag_reports_every_site_and_bounds_no_truncation`
-     removes EVERY tag and requires all 18 sites back by set equality, which
+     removes EVERY tag and requires all 20 sites back by set equality, which
      kills `reported[:n]` for every n below the tag count and claims nothing
      about an n at or above it.
      WHAT KILLS AN UNCONDITIONAL REPORTER, STATED OVER THE WHOLE FILE, because
@@ -279,7 +280,7 @@ name-grammar class above.
      in the coverage arm and in `test_gate_tag_names_are_unique` it shares one
      assertion with that arm's own judgement, because a floor in a separate arm
      leaves the primary arm vacuous. STANDALONE: elsewhere it pins the SCALE a
-     block runs at - that `_TAG_LINES` is long enough to parametrize 18 cases,
+     block runs at - that `_TAG_LINES` is long enough to parametrize 20 cases,
      that the re-derivation block is comparing real sets, that a synthetic
      mutant is still responder-sized - and there a separate line is right,
      because the scale is not the arm's judgement. Inside the coverage arm
@@ -288,10 +289,10 @@ name-grammar class above.
      which finds zero sites and so makes the set difference empty for the wrong
      reason - measured 2026-09-09, forcing that predicate to False gives 0 sites
      and 0 untagged reports. `len(_TAG_LINES) >= _FLOOR` catches an empty
-     `_TAG_LINES`, which would parametrize the 18-case refutation below over
+     `_TAG_LINES`, which would parametrize the 20-case refutation below over
      nothing and report `1 skipped` at exit 0 rather than a failure. Neither
      conjunct is what reddens an untagged site: stripping every tag from the
-     responder gives 18 untagged reports and turns the FIRST conjunct alone
+     responder gives 20 untagged reports and turns the FIRST conjunct alone
      False while both floors stay True.
   3. WHETHER A GATE IS EXERCISED. THIS CENSUS still says nothing about any test
      driving a gate, and nothing about whether a mutation at a gate's own call
@@ -329,7 +330,7 @@ name-grammar class above.
      then shipped `tests/test_responder_delivery_gates.py` carrying a
      section-banner tag at its line 272, with no instrument watching. What is
      true, re-derived over the git-tracked `.py` corpus with `tokenize`:
-       - 18 tags in `tools/moon_sync_responder.py`, the number `_FLOOR` pins;
+       - 20 tags in `tools/moon_sync_responder.py`, the number `_FLOOR` pins;
        - ONE more, `delivery-write-all` in
          `tests/test_responder_delivery_gates.py`, a banner cross-referencing
          the responder gate that file's arms exercise. It is documentation, not
@@ -418,11 +419,12 @@ _GRAMMAR = (
 
 # ANTI-VACUITY FLOOR. Welded into the same assertion as the judgement below,
 # because a floor asserted in a separate arm leaves the primary arm vacuous -
-# a census over zero tags passes every placement check it makes. 18 is the count
-# observed after the three untagged binding sites named in the referent
-# paragraph were tagged. Deliberately retiring a gate is expected to update this
-# constant IN THE SAME COMMIT that removes the tag.
-_FLOOR = 18
+# a census over zero tags passes every placement check it makes. It was 18 after
+# the three untagged binding sites named in the referent paragraph were tagged,
+# and is 20 as of 2026-09-10, when `answered-usable` and `answered-recorded`
+# landed in `_run_once`. Adding OR deliberately retiring a gate is expected to
+# update this constant IN THE SAME COMMIT that moves the tag.
+_FLOOR = 20
 
 
 class GateTagError(AssertionError):
@@ -1115,7 +1117,7 @@ def test_removing_no_tag_at_all_reports_nothing():
     SUBJECT is different from the coverage arm's. The coverage arm reads
     `RESPONDER.read_text()` at call time, and three arms in this file
     MONKEYPATCH `RESPONDER` at a synthetic file. This arm grades `_LIVE_SOURCE`,
-    the import-time snapshot that `_TAG_LINES`, `_FALSE_SPOTS` and all 18
+    the import-time snapshot that `_TAG_LINES`, `_FALSE_SPOTS` and all 20
     mutation cases are cut from. Its own first assertion is the ONLY call to
     `_untagged_consult_sites` on `_LIVE_SOURCE` in this file, so no other arm
     asserts that the snapshot itself is covered; every other arm asserts about a
@@ -1428,7 +1430,8 @@ def test_the_coverage_arm_itself_goes_red_on_two_sites_sharing_one_line(
     2026-09-09: substituting the coincidental proxy
     `len(sites) == len(_TAG_LINES)` for `_sites_sit_on_distinct_lines(source)`
     left this arm GREEN, because the inserted line raises the distinct site
-    lines to 19 against a `_TAG_LINES` frozen at 18 and the proxy reddens too.
+    lines to 21 against a `_TAG_LINES` frozen at 20 - counts re-derived
+    2026-09-10 - and the proxy reddens too.
     No payload here fixes that - the phrase "distinct lines" and the colliding
     line number are both in the message whichever conjunct fired. The
     discrimination needs a DIFFERENT SOURCE and lives in
@@ -1477,21 +1480,23 @@ def test_the_coverage_arm_reddens_on_the_collision_and_not_on_a_count_identity(
     proves the arm reddens on a one-liner. It does NOT prove the DISTINCT-LINE
     conjunct is what reddened it, and measured 2026-09-09 that gap is real:
     substituting the COINCIDENTAL PROXY `len(sites) == len(_TAG_LINES)` for
-    `_sites_sit_on_distinct_lines(source)` - true today at 18/18 and not the
+    `_sites_sit_on_distinct_lines(source)` - true today at 20/20, re-derived
+    2026-09-10, and not the
     distinct-line property at all - left the whole file GREEN at 69 passed,
-    because the proxy happens to redden on that one-liner too (19 distinct site
-    lines against 18 frozen tag lines) and the message says "distinct lines"
+    because the proxy happens to redden on that one-liner too (21 distinct site
+    lines against 20 frozen tag lines) and the message says "distinct lines"
     whichever conjunct fired.
 
     So this arm DEFEATS THE PROXY BY CONSTRUCTION. A second accepted site is
-    appended onto an EXISTING tagged site's line with a `;`, so:
+    appended onto an EXISTING tagged site's line with a `;`, so (re-derived
+    2026-09-10 against the 20-gate responder):
 
-        accepted site NODES         19        (was 18)
-        distinct site LINES         18        (unchanged - this is the trick)
-        tags                        18
+        accepted site NODES         21        (was 20)
+        distinct site LINES         20        (unchanged - this is the trick)
+        tags                        20
         untagged reports             0
 
-    Under that source `len(sites) == len(_TAG_LINES)` is 18 == 18 and TRUE, the
+    Under that source `len(sites) == len(_TAG_LINES)` is 20 == 20 and TRUE, the
     other two conjuncts are TRUE, and ONLY the distinct-line conjunct is False.
     That proxy therefore leaves the arm GREEN here and the real conjunct reddens
     it, which is the discrimination the sibling arm cannot make. The three
@@ -1523,8 +1528,8 @@ def test_the_coverage_arm_reddens_on_the_collision_and_not_on_a_count_identity(
         _LIVE_SOURCE, _COLLISION_ANCHOR, _COLLISION_APPENDED
     )
     assert _untagged_consult_sites(mutated, "synthetic") == []
-    assert len(_consult_site_node_lines(mutated)) == 19
-    assert len(_consult_site_spots(mutated)) == 18
+    assert len(_consult_site_node_lines(mutated)) == 21
+    assert len(_consult_site_spots(mutated)) == 20
     assert len(_consult_site_spots(mutated)) == len(_TAG_LINES)
     assert len(_consult_site_spots(mutated)) >= _FLOOR
     assert _colliding_site_lines(mutated) == [collision]
@@ -1589,8 +1594,8 @@ _COLLISION_APPENDED_PAIR = (
 
 #: THE OVER-FIRE CONTROL. One EXTRA accepted site, on its own new line, with a
 #: correct tag above it - a responder that simply grew a gate and tagged it. Its
-#: site count and node count both rise to 19 against an import-time `_TAG_LINES`
-#: frozen at 18, which is exactly the difference every count-shaped proxy reads
+#: site count and node count both rise to 21 against an import-time `_TAG_LINES`
+#: frozen at 20, which is exactly the difference every count-shaped proxy reads
 #: as a fault and the real property does not. Hand-typed, both lines.
 _CLEAN_EXTRA_TAG = f"{_TAG}advl-extra"
 _CLEAN_EXTRA_STATEMENT = 'result["advL_extra"] = bool(written) and True'
@@ -1696,10 +1701,10 @@ def test_the_coverage_arm_fires_on_every_collision_arity_and_not_on_a_clean_extr
         `len(site_lines) == len(_TAG_LINES)`, `len(site_lines) <= len(_TAG_LINES)`,
         `len(site_lines) <= _FLOOR` and `len(site_lines) == 18` are all FALSE on
         a responder that gained ONE correctly tagged gate, because its nodes go
-        to 19 against an import-time `_TAG_LINES` frozen at 18. Every collision
+        to 21 against an import-time `_TAG_LINES` frozen at 20. Every collision
         source in the world leaves those four alive; the CLEAN-EXTRA control at
         the end of this arm is what kills them, and it is also what stops a
-        conjunct hardcoded to today's 18 from re-pinning in the fourth position
+        conjunct hardcoded to today's 20 from re-pinning in the fourth position
         a number the ceiling says is deliberately not pinned there.
 
     No `parametrize` here on purpose: an empty list is `1 skipped` at exit 0

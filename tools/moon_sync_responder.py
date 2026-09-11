@@ -93,7 +93,7 @@ import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -141,6 +141,11 @@ GRAMMAR = "measurement-only (A5), M1 is a LOWER BOUND"
 #: RSC.
 GRAMMAR_LATENCY_ONLY = "LATENCY-ONLY, far end is human, M1 INAPPLICABLE"
 
+#: The cycle declined to answer because the ANSWERED RECORD is structurally
+#: unusable - see `answered_usable`. A separate name from `unrecordable`, and the
+#: tuple below says why.
+TERMINATION_UNANSWERABLE = "answered-unusable"
+
 #: Why a cycle produced no further hop. `exhausted` is the outcome both parties
 #: PREDICT under (i), so it confirms the bound rather than the channel; any
 #: other value, or no termination, is the finding.
@@ -165,6 +170,23 @@ TERMINATIONS = (
     # SIBLING'S INBOX. At a five-minute tick that is 288 files a day written
     # into somebody else's tree, and nothing said a word.
     "unrecordable",
+    # THE SECOND FAIL-CLOSED TERMINATION, AND IT IS DELIBERATELY NOT
+    # `unrecordable`. Two different records can be broken and an operator
+    # reading the log has to be able to tell which, because the repairs differ:
+    # `unrecordable` means the REFUSAL record cannot be written, this means the
+    # ANSWERED record cannot be. Reusing one string would have made the two
+    # indistinguishable in the only evidence that survives a cycle.
+    TERMINATION_UNANSWERABLE,
+)
+
+#: Set on the delivered path when the reply LANDED and the answered record did
+#: not take the name. Named rather than interpolated, because `refusal_key`'s
+#: docstring records what an interpolated reason string did to a fingerprint in
+#: this same module, and because an arm must be able to match it without
+#: retyping prose that would then drift.
+ANSWERED_NOT_RECORDED = (
+    "the reply was delivered and the answered record could not be written, "
+    "so this note may be answered again"
 )
 
 #: THE BOUNCE. A refusal that delivers nothing is indistinguishable, from the
@@ -321,6 +343,25 @@ MAX_BOUNCED_NOTES = 2_000
 #: note whose refusal reasons genuinely differ every cycle.
 MAX_METRICS_ROWS = 500
 
+#: THE CAP IS A BOUNDED ROTATE NOW, NOT A BARE DROP, and the suffix names the
+#: one generation it keeps. `record_cycle` used to apply
+#: `rows = rows[-MAX_METRICS_ROWS:]` and write the overflow NOWHERE, so the
+#: oldest M1-M6 evidence in the trial was destroyed by the arrival of the 501st
+#: row. The rows that fall off the live ledger are now written beside it, at
+#: `<metrics name><METRICS_ROTATION_SUFFIX>`, BEFORE the live ledger is
+#: replaced.
+#:
+#: THE ARCHIVE IS BOUNDED AT `MAX_METRICS_ROWS` ROWS AND THAT IS DELIBERATE.
+#: An unbounded archive is the `288-a-day` defect wearing a better name - the
+#: whole document is re-serialized on every append, so bytes written grow with
+#: the square of the cycle count whether the file is called live or archive. So
+#: the rotation file carries the NEWEST overflow rows up to the same cap and
+#: drops beyond it, which holds total on-disk rows at `2 * MAX_METRICS_ROWS`
+#: forever. Evidence still leaves the tree at that frontier; what changed is
+#: that the frontier moved from row 500 to row 1000 and the departure is now a
+#: stated bound rather than an accident.
+METRICS_ROTATION_SUFFIX = ".1"
+
 #: The invocation log cannot suppress a line: its entire purpose is that a
 #: cycle which declined to act still leaves proof it fired, so `log_invocation`
 #: is the one writer here that MUST emit every time. It is bounded by trimming
@@ -328,6 +369,14 @@ MAX_METRICS_ROWS = 500
 #: cycle pays nothing and the rewrite happens once every few thousand fires.
 MAX_INVOCATION_BYTES = 262_144
 MAX_INVOCATION_LINES = 2_000
+
+#: U+FFFD, what `errors="replace"` substitutes for a byte the decoder cannot
+#: take. WRITTEN AS `chr(0xFFFD)` BECAUSE THIS TREE IS 7-BIT ASCII BY RULE and
+#: `tools/precommit_gate.py` rejects the literal glyph in an authored file - a
+#: constant that cannot be typed is still a constant that can be built.
+#: `_trim_invocations` folds it down to an ASCII `?` before anything is written
+#: back; see that docstring for the threefold growth that retaining it causes.
+_REPLACEMENT = chr(0xFFFD)
 
 #: One line per invocation. See `log_invocation` for why this is a
 #: requirement of the trial rather than an improvement filed against it.
@@ -1064,6 +1113,82 @@ def build_prompt(note: Path, bounds: Bounds) -> str:
     )
 
 
+def _listed_record(path: Path, key: str) -> tuple[list[Any], str | None]:
+    """The list under `key`, and the REASON the record is unusable if it is.
+
+    Returns `(rows, None)` when the record is ABSENT or READABLE, and
+    `(<empty>, reason)` when a file exists at `path` whose contents this module
+    cannot use.
+
+    ABSENT AND UNREADABLE ARE NOT THE SAME STATE, and this is the only place
+    here that says so. `read_json` returns its default for a missing file, for
+    an undecodable one and for corrupt JSON alike, so every caller saw one
+    empty list for three different facts. Absent is legitimately empty history.
+    Unreadable is history that is on disk and cannot be seen, and a caller that
+    splices THAT with new data and writes the result back has deleted it.
+
+    FAIL CLOSED IS THE POINT, and the wording is `refusals_usable`'s, which was
+    written in this same file for this same fail-open hazard. A caller holding a
+    reason must REFUSE ITS WRITE and leave the bytes exactly where they are, so
+    the record can be repaired rather than replaced. The precedent for the
+    shape is `_reported_record` in `scripts/watch_inbox.py`.
+
+    AN EMPTY FILE IS UNREADABLE HERE, NOT ABSENT, and that is not an oversight.
+    Every writer of these records goes through `atomic_write_json`, which
+    replaces the target in one step and can therefore never leave a zero-byte
+    file behind. A zero-byte record is external corruption, so refusing it is
+    correct, and deleting the file is the repair that makes it absent again.
+
+    `reason` IS A SHORT MODULE-CHOSEN LABEL, NEVER A RAW PARSE STRING. These
+    records feed an unattended responder whose output reaches other repos, and
+    `CLAUDE.md` forbids a raw error string on a user-facing surface. The raw
+    failure is already logged by `read_json` at error level, which is where a
+    reader who wants it should look.
+    """
+    if not path.exists():
+        return [], None
+    payload = read_json(path, default=None)
+    if not isinstance(payload, dict):
+        return [], "the record is present but could not be parsed"
+    listed = payload.get(key)
+    if not isinstance(listed, list):
+        return [], f"the record is present but carries no list of {key}"
+    return listed, None
+
+
+def _rotation_path(metrics: Path) -> Path:
+    """Where the rows that fall off the live ledger go. Beside it, one generation."""
+    return metrics.with_name(metrics.name + METRICS_ROTATION_SUFFIX)
+
+
+def _rotate_metrics(metrics: Path, overflow: list[Any]) -> bool:
+    """Archive `overflow` beside `metrics`, bounded, BEFORE the live file moves.
+
+    THE BOUND IS `MAX_METRICS_ROWS` ROWS IN ONE FILE, stated in that constant's
+    own comment. The archive carries the newest overflow rows and drops beyond
+    the cap, so total on-disk rows hold at `2 * MAX_METRICS_ROWS` no matter how
+    many cycles run. An unbounded archive was NOT authorised and is not what
+    this is: the whole document is re-serialized on every write, so an archive
+    that grew forever would reproduce the quadratic-bytes defect the cap exists
+    to close.
+
+    IT FAILS CLOSED IN BOTH DIRECTIONS. An unreadable archive is refused rather
+    than replaced, on the same reasoning as `_listed_record`; and a refusal
+    here propagates, so `record_cycle` leaves the live ledger COMPLETE and over
+    its cap rather than short. A rotate that could silently degrade into a trim
+    would be worse than the trim it replaced, because the caller would believe
+    the rows were kept.
+    """
+    rotation = _rotation_path(metrics)
+    archived, unusable = _listed_record(rotation, "cycles")
+    if unusable is not None:
+        return False
+    kept = (archived + overflow)[-MAX_METRICS_ROWS:]
+    if not _ensure_parent(rotation):
+        return False
+    return atomic_write_json(rotation, {"version": 1, "cycles": kept})
+
+
 def record_cycle(
     metrics: Path,
     note: str,
@@ -1098,11 +1223,24 @@ def record_cycle(
     termination at all, is a finding that argues for the wider grammar
     immediately rather than after a safe run. A bare integer cannot tell those
     apart afterwards.
+
+    "APPENDS" USED TO BE FALSE ON THE ONE PATH WHERE IT MATTERED, which is how
+    this was found. The read was `read_json(metrics, default=None)` and an
+    unreadable ledger therefore produced the same empty list as an absent one,
+    so the next cycle wrote a ONE-ROW document over however many rows were on
+    disk and returned True. One stray byte in the record turned the next
+    measurement into an erasure of every measurement before it, and each row
+    carries five distinct numbers for a cycle that cannot be re-run.
+
+    AN UNUSABLE LEDGER IS NOW REFUSED RATHER THAN REPLACED: False comes back,
+    nothing is written, and the bytes stay on disk to be repaired. False is
+    already what an unwritable record produces here, and `_run_once` is fail-soft
+    on it by design - a poisoned state file degrades a cycle rather than ending
+    it. `_listed_record` carries the reasoning for the split.
     """
-    payload = read_json(metrics, default=None)
-    rows = payload.get("cycles") if isinstance(payload, dict) else None
-    if not isinstance(rows, list):
-        rows = []
+    rows, unusable = _listed_record(metrics, "cycles")
+    if unusable is not None:
+        return False
     # M1 IS OMITTED, NOT ZEROED, when the far end is human. A zero is a
     # measurement saying the chain terminated immediately; the truth is that
     # hops-to-quiescence is undefined when one end is a person. Writing 0 would
@@ -1132,9 +1270,24 @@ def record_cycle(
     # because the whole document is re-serialized on every append the BYTES
     # WRITTEN grow quadratically. Measured 2026-09-08: 100 cycles, 100 rows,
     # 54165 bytes, from ONE note.
-    rows = rows[-MAX_METRICS_ROWS:]
+    #
+    # AND IT IS A BOUNDED ROTATE RATHER THAN A BARE DROP, authorised 2026-09-11.
+    # `rows = rows[-MAX_METRICS_ROWS:]` wrote the overflow NOWHERE, so the cap
+    # that exists to bound the bytes was also destroying the oldest evidence in
+    # the trial, silently, at the arrival of the 501st row. The dropped rows now
+    # go to `_rotation_path(metrics)` first and the live file is replaced LAST,
+    # so every failure path leaves the live ledger COMPLETE rather than short.
+    # The archive is capped - see `METRICS_ROTATION_SUFFIX`.
     if not _ensure_parent(metrics):
         return False
+    if len(rows) > MAX_METRICS_ROWS:
+        overflow = rows[:-MAX_METRICS_ROWS]
+        rows = rows[-MAX_METRICS_ROWS:]
+        # ORDER IS THE WHOLE GUARANTEE. A failed rotate must not become a trim,
+        # so it returns before the live ledger is touched and the caller sees
+        # False with the over-cap ledger intact.
+        if not _rotate_metrics(metrics, overflow):
+            return False
     return atomic_write_json(metrics, {"version": 1, "cycles": rows})
 
 
@@ -1197,6 +1350,25 @@ def _trim_invocations() -> None:
 
     The trigger is a `stat` and not a read, so the common cycle pays one system
     call and the rewrite happens once every few thousand fires.
+
+    THE REPLACEMENT CHARACTER IS FOLDED DOWN TO AN ASCII `?` BEFORE THE WRITE,
+    and it is the read-encoding mismatch that makes it necessary rather than
+    tidiness. This function reads `encoding="ascii", errors="replace"`, so an
+    undecodable byte arrives as one U+FFFD; `atomic_write_text` encodes UTF-8,
+    so that one character is written back as THREE bytes; the next fire reads
+    those three bytes as ascii/replace and gets THREE replacement characters,
+    which are written back as nine. Threefold growth per fire, from one bad
+    byte, on a function whose entire purpose is to hold the file under a byte
+    cap - and the growth is fastest exactly when the file is already over the
+    cap, because that is when this fires every time.
+    `?` is ASCII, so the rewrite is stable and the mangled line stops changing.
+    `scripts/watch_inbox.py`'s `_log_tail` folds it for the same reason; the
+    difference is that it rewrites on every fire and this rewrites rarely, which
+    made the growth here LATENT rather than absent.
+
+    UNREADABLE IS STILL PRESERVED-AS-MANGLED RATHER THAN DISCARDED. Keeping
+    mangled bytes beats deleting readable ones, and `errors="replace"` cannot
+    raise `UnicodeDecodeError`, so the guard tuple is unchanged.
     """
     try:
         if DEFAULT_INVOCATIONS.stat().st_size <= MAX_INVOCATION_BYTES:
@@ -1204,18 +1376,113 @@ def _trim_invocations() -> None:
         lines = DEFAULT_INVOCATIONS.read_text(encoding="ascii", errors="replace").splitlines()
     except (OSError, ValueError):
         return
-    kept = lines[-MAX_INVOCATION_LINES:]
+    kept = [line.replace(_REPLACEMENT, "?") for line in lines[-MAX_INVOCATION_LINES:]]
     atomic_write_text(DEFAULT_INVOCATIONS, "".join(f"{line}\n" for line in kept))
 
 
 def _answered(path: Path) -> set[str]:
-    payload = read_json(path, default=None)
-    names = payload.get("answered") if isinstance(payload, dict) else None
-    return {n for n in names if isinstance(n, str)} if isinstance(names, list) else set()
+    """The notes already answered. UNREADABLE STILL DEGRADES TO EMPTY, DELIBERATELY.
+
+    This is the READER, and its only caller is the `pending` call in `_run_once`.
+    A degraded read there makes an already-answered note look eligible, so the
+    worst case is one duplicate reply. Making this raise instead would take an
+    unattended cycle down on a corrupt runtime file and surface nothing at all,
+    which is the failure mode this whole module is built to avoid.
+
+    WHAT BOUNDS THE DUPLICATE IS THE WRITER OVERWRITING, NOT THE WRITER
+    REFUSING, and an intermediate version of this docstring had that exactly
+    backwards. `_remember_answered` rewrites the record on a replaceable
+    poisoning, so the very next read succeeds and the duplicate is one rather
+    than one per cycle forever. `answered_usable` carries the arithmetic.
+
+    THE STRUCTURAL CLASSES ARE NOT BOUNDED BY ANYTHING THE WRITER CAN DO, so they
+    are stopped one level up: `_run_once` calls `answered_usable` before it calls
+    `pending` and declines the cycle. This function is not the place for that
+    check - `pending` must still run rather than raise.
+
+    The precedent for a reader that degrades while its writer does not is
+    `read_reported` in `scripts/watch_inbox.py`, and the split there turns on the
+    DIRECTION and CONSEQUENCE of the degrade rather than on the reader/writer
+    role. That is the same test applied here, and it comes out differently
+    because this record's degrade INVENTS work and its caller DELIVERS.
+    """
+    return {n for n in _listed_record(path, "answered")[0] if isinstance(n, str)}
+
+
+def answered_usable(path: Path) -> tuple[bool, str]:
+    """(whether the answered record can be read AND written, why not if not).
+
+    `refusals_usable` MIRRORED ONTO THE OTHER SUPPRESSION RECORD, and the split
+    is the same two classes for the same measured reason. Read that function for
+    the fail-open hazard both records share; what follows is why this one's
+    arithmetic points the way it does, because an intermediate version of this
+    module got it backwards.
+
+    THE REPLACEABLE CLASSES MUST STAY OPEN, AND THAT IS THE CORRECTION.
+    `_remember_answered` is THE ONLY THING THAT HEALS THIS RECORD. Refuse the
+    write on corrupt text, an empty file or a wrong-type document and the record
+    stays unreadable forever, so `_answered` degrades to empty on every later
+    cycle, `pending` reports the same note unanswered on every later cycle, and
+    `_run_once` answers it again on every later cycle. `deliver` never overwrites
+    an existing name and `_reply_name` stamps to the minute, so those replies
+    accumulate as DISTINCT FILES in a repository this one does not own - one per
+    cycle, forever, which is the 288-a-day shape. Overwriting costs ONE duplicate
+    per note the record was holding, once, and then the suppression works again.
+    Bounded beats unbounded, so the writer overwrites.
+
+    THE STRUCTURAL CLASSES FAIL CLOSED, because overwriting is not on offer
+    there: `atomic_write_json` cannot land on a path that is a directory or whose
+    parent is a file, so the record stays unreadable however many times the
+    writer tries and the bound above does not exist. Those are stopped one level
+    up - `_run_once` declines the cycle with `TERMINATION_UNANSWERABLE` rather
+    than delivering a reply it cannot record.
+
+    WHY THIS DIFFERS FROM `record_cycle`, WHICH REFUSES EVERY UNREADABLE CLASS.
+    A metrics row is irreplaceable EVIDENCE of a cycle that cannot be re-run, so
+    overwriting it destroys the only copy. An answered name is a SUPPRESSION KEY
+    whose entire job is to stop a second delivery, and a suppression key that
+    cannot be rewritten has already stopped suppressing. Same shape of poisoning,
+    opposite correct answer, and the difference is what the bytes are FOR.
+
+    ABSENT IS NOT AN ERROR. `ops/runtime/responder_answered.json` does not exist
+    until the first reply lands, so a cold start is the ordinary case; treating
+    absent as unusable would decline every cycle forever and look identical in
+    the log to the channel simply being quiet.
+    """
+    try:
+        if path.exists() and not path.is_file():
+            return False, "the answered record exists and is not a file, so no reply can be recorded"
+        if path.parent.exists() and not path.parent.is_dir():
+            return False, "the answered record's parent is not a directory, so no reply can be recorded"
+    except (OSError, ValueError) as exc:
+        return False, f"the answered record cannot be inspected ({exc.__class__.__name__})"
+    if not _ensure_parent(path):
+        return False, "the answered record's directory cannot be created, so no reply can be recorded"
+    try:
+        if path.is_file():
+            path.read_bytes()
+    except (OSError, ValueError):
+        return False, "the answered record cannot be read, so no reply can be recorded"
+    return True, "the answered record is readable and writable"
 
 
 def _remember_answered(path: Path, name: str) -> bool:
-    if not _ensure_parent(path):
+    """Add `name` to the record of what has been answered, HEALING it if need be.
+
+    A union over what could be read, which on a replaceable poisoning is nothing
+    - so the write is a rewrite, DELIBERATELY, and `answered_usable` carries the
+    arithmetic that says so. The only refusal is the structural one, where no
+    write can land at all and reporting success would make the duplicate loop
+    silent.
+
+    THE RETURN VALUE IS READ BY ITS CALLER. It was a bare statement in
+    `_run_once` once, so a failed answered-write reached neither the cycle
+    result, nor the metrics row, nor the invocation log, and a responder
+    re-answering one note every five minutes produced a log of perfectly
+    ordinary `delivered` lines.
+    """
+    usable, _why = answered_usable(path)
+    if not usable:
         return False
     return atomic_write_json(
         path, {"version": 1, "answered": sorted(_answered(path) | {name})}
@@ -1679,6 +1946,28 @@ def _run_once(
         result["termination"] = "budget"
         return result
 
+    # FAIL CLOSED BEFORE A NOTE IS EVEN SELECTED, for the STRUCTURAL classes of
+    # answered-record damage only. `_answered` degrades an unreadable record to
+    # the empty set, which makes every note look unanswered; on a replaceable
+    # poisoning `_remember_answered` rewrites the record and the cost is one
+    # duplicate, so those must go through. Where the record is a directory, or
+    # its parent is a file, NO write can land, so the record never heals, the
+    # same note is selected every cycle, and `deliver` writes a NEW minute
+    # stamped file into another repository on every tick. Unbounded, and the
+    # answered record has no bounce and no repeat-hold to fall back on.
+    #
+    # NOT `unrecordable` - see `TERMINATION_UNANSWERABLE`. And no metrics row:
+    # this exit is above note selection, like `window`, `budget` and `empty`, and
+    # a row keyed on no note would say less than the invocation line the wrapper
+    # writes unconditionally.
+    answered_ok, why_answered = answered_usable(DEFAULT_ANSWERED)
+    # GATE:answered-usable
+    if not answered_ok:
+        print(f"responder: NOT ANSWERING - {why_answered}")
+        result["reasons"] = [why_answered]
+        result["termination"] = TERMINATION_UNANSWERABLE
+        return result
+
     # HEAD-OF-LINE, and a sibling can cause it deliberately. A note already
     # bounced under the agreement in force has had everything said to it that
     # this responder can say, so it sorts to the BACK rather than blocking the
@@ -1865,7 +2154,22 @@ def _run_once(
         result["delivered"] = all(ok for ok, _ in written) and bool(written)
         result["actions"] = ["A5"]
         result["termination"] = "delivered"
-        _remember_answered(DEFAULT_ANSWERED, note.name)
+
+        # THE RETURN VALUE IS OBSERVED, AND IT WAS A BARE STATEMENT HERE. A False
+        # reached neither `result`, nor `record_cycle`'s reasons column, nor the
+        # invocation log, so a responder re-answering the same note every tick
+        # produced a log of perfectly ordinary `delivered` lines - the duplicate
+        # loop was SILENT, which is the property that makes it 288 a day rather
+        # than a thing somebody notices.
+        #
+        # THE TERMINATION STAYS `delivered`, because the reply DID land and that
+        # is the fact M2 is measured against. What changes is that the row now
+        # carries a reason, so "delivered" and "delivered but will be sent again"
+        # are distinguishable in the evidence.
+        # GATE:answered-recorded
+        if not _remember_answered(DEFAULT_ANSWERED, note.name):
+            print(f"responder: {ANSWERED_NOT_RECORDED}")
+            result["reasons"] = [ANSWERED_NOT_RECORDED]
 
     finished = time.time()
     record_cycle(
