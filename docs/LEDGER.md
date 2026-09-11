@@ -12,6 +12,195 @@ now.
 
 ---
 
+## 2026-09-11 - A narrow scope rested on a prose premise nothing guarded, the first guard ran one way, and the row closes on terms other than its own wording
+
+One commit, pushed: `c514ca7`. Two files, 879 insertions and 1 deletion. Both
+files are tests; no module under `tools/` changed. The honest shape of this entry
+is the same as the one above it: THE FIRST BUILD PASSED EVERY ARM IT SHIPPED WITH,
+and two adversaries with distinct lenses returned REFUTED on it.
+
+WHAT WAS ACTUALLY WRONG. `tools/git_subprocess_census.py` keeps `LAUNCHERS`
+narrow - five `subprocess` entry points at line 134 - and justifies that in its
+own docstring at lines 55 to 65 with a MEASURED PROSE PREMISE: none of the names
+it declares out of scope has a call site in `DEFAULT_ROOTS`, the five roots at
+line 121. The premise was TRUE and GUARDED BY NOTHING, so the day an `os.system`
+call site arrives the census goes SILENT and the docstring goes QUIETLY FALSE.
+This tree has now been bitten by an unasserted prose COUNT four times, and this
+is the same class one level up: an unasserted prose PREMISE.
+
+THE POPULATION, STAMPED. Measured 2026-09-11 at `c514ca7`, re-derived at this
+commit rather than carried from the commit message, which measured it at
+`d6437a9`: 108 `.py` paths from
+`git ls-files --cached --others --exclude-standard` over `tests`, `tools`, `ops`,
+`headless` and `scripts`; all 108 parsed and walked; ZERO offenders. The figure
+did not decay across the two commits because `tests/test_git_subprocess_census.py`
+already existed at `d6437a9` at 1228 lines - this commit MODIFIED it rather than
+adding a path to the population. `--cached` alone would have been the wrong
+population: a brand new module nobody has staged yet is exactly where a fresh
+`os.system` lands.
+
+THE ROW CLOSES ON DIFFERENT TERMS THAN ITS OWN WORDING, AND THAT IS DELIBERATE.
+The roadmap row was written to close "when the launcher set is derived rather
+than enumerated". THAT IS NOT WHAT SHIPPED, and nobody should read this entry as
+the derived-launcher-set repair. Widening the census was already built in an
+earlier slice, refuted by two refuters with DISTINCT LENSES, and ADJUDICATED OUT
+on contract grounds - the ruling is in the entry below that records `2ae95f3`,
+found by its opening line and never by line number, and the governing precedent is the do-not-widen ruling in `ROADMAP.md` under its
+2026-09-09 heading. This tree has ruled against widening a mechanism to a
+population measured at zero. So the PREMISE is pinned instead of the POPULATION:
+no bucket, no launcher and no row was added, and the arm asserts only that the
+zero the docstring measured is still zero.
+
+FOUR REFUTER FINDINGS, EACH MEASURED, AND THE REPAIR IS IN THE SAME COMMIT.
+
+(i) THE HONESTY ARM RAN ONE WAY, WHICH IS THE TWO-GUARDS RULE FAILED AND THEN
+FIXED - AND IT IS THE SECOND TIME THIS SESSION. Removal was pinned for 5 of the
+22 declared names, and only because a hand fixture happened to spell those five:
+`system`, `popen`, `execvp`, `getoutput`, `getstatusoutput`. Dropping `spawnve`
+alone stayed GREEN at 77 passed, and dropping all 17 non-fixture names in ONE
+edit also stayed GREEN, so 17 of 22 were decoration. Addition was pinned by a
+single string literal - adding `abort`, a real `os` attribute the docstring never
+declares, stayed GREEN. This is the IDENTICAL asymmetry measured on the write
+tracer at `13c771f`, where an unpatched ADDITION went red while a patched REMOVAL
+stayed green. Three pins now hold it: the exact set written a SECOND time in
+dotted form so the expectation is not a copy of the literal's shape, the running
+interpreter's own `os` namespace as a SUBSET arm rather than an equality because
+CI's ubuntu-latest has six POSIX-only spellings this box does not, and a
+generated per-name call site so the SWEEP'S REACH is pinned across all 22 rather
+than across 5.
+
+(ii) THE GRADER WAS WEAKER THAN THE MODULE IT GRADES, on the one shape that
+module was repaired for at `2ae95f3`. `census_source` returns
+`CallSite(bucket='UNRESOLVED', callee='<unresolved:Call>')` for
+`getattr(os, "system")(...)` while the new sweep returned NOTHING. Seventeen
+shapes were measured GREEN against the sweep while GENUINELY launching a process
+or naming a real launch API: a dotted receiver in two forms, a rebind
+(`run = os.system`), `getattr`, an `os.__dict__` lookup, a dict dispatch table,
+`functools.partial`, `importlib.import_module`, `__import__`, a
+conditional-expression callee, `os.startfile`,
+`asyncio.create_subprocess_shell`, `asyncio.create_subprocess_exec`,
+`pty.spawn`, `multiprocessing.Process().start()`, `os.fork` and `os.forkpty`.
+Static resolution cannot follow a rebind, so all 17 are DECLARED AND PINNED AS
+SILENCES rather than left to read as coverage - the same shape as the
+unresolvable-receiver decoy already in that file and the covered versus
+declared-uncovered partition `tools/write_tracer.py` set at `13c771f`. EVERY
+SHAPE IN EXACTLY ONE LIST, and the partition is asserted by label AND by source
+string rather than trusted.
+
+(iii) THE ASSERTION MESSAGE NAMED A POPULATION THE SWEEP DOES NOT WALK. It said
+an `Attribute` on a DOTTED `Name` was counted. `shim.os.system(...)` and
+`os.path.system(...)` both yielded no offenders, and collapsing the nine-line
+dotted resolver to the `Name`-only form killed NO test - it was BEHAVIOUR-DEAD,
+because the receiver map is keyed on single-segment module names only and a
+dotted string could never match a key. A reader who failed that arm would have
+believed `pkg.os.system(...)` was checked when it never was. The SEAM was fixed
+rather than the symptom: the dead logic is DELETED, the message now says a plain
+single-segment `Name` receiver, and the dotted shape is a declared silence.
+Handling it for real was rejected - zero call sites, and a sweep with MORE
+receiver reach than the module it grades would redden shapes the census never
+claimed to see.
+
+(iv) `os.startfile` IS AN HONEST OMISSION AND A LIVE HOLE, AND IT IS RECORDED AS
+BOTH AND NEVER AS COVERED. The census docstring never declares it, so guarding it
+would be guarding a claim nobody made - which is why it is deliberately ABSENT
+from the declared-out-of-scope literal. But it is a real Windows launch shape in
+a tree with an `ops/` lane. Measured over the same 108-file population at
+`c514ca7`: `os.startfile`, `asyncio.create_subprocess_shell`,
+`asyncio.create_subprocess_exec`, `pty.spawn`, `os.fork` and `os.forkpty` all
+have ZERO call sites, so every gap here is a CONTRACT GAP and not a live leak.
+
+WHAT THE NEW ARMS ACTUALLY KILL. A planted `os.system` goes RED in both import
+forms. The arm cannot pass over a collapsed corpus, and the catcher is exact: the
+population floor is 80 against a population of 108, so a `.py` to `.pyx` collapse
+goes red with "only 0 of 0 python files", and NEUTERING the floor makes that same
+collapse GREEN. THE TWO MUST BE READ AS A PAIR - the floor is the catcher, and
+the pair is the evidence that it is.
+
+A DECAYED PROSE FIGURE FIXED IN THE SAME COMMIT, AND THE POPULATION MATTERS MORE
+THAN THE NUMBER. `tests/test_gate_mutation_runner.py` said
+`tests/test_gate_name_bindings.py` "binds each of the 18 `# GATE:` tags". It is
+20. Measured 2026-09-11 at `c514ca7` over ONE tracked file,
+`tools/moon_sync_responder.py`, with the per-line byte-level pattern
+`#\s*GATE:([A-Za-z0-9_.-]+)`: 20 hits, 20 DISTINCT tags, lines 1928 to 2169. The
+same pattern over the WHOLE `git ls-files` corpus answers 67 hits and 39 distinct
+tags across 8 files, because the census table, the mutation fixtures, three other
+test modules and two docs all spell tags of their own. Quote the single-file
+population or quote the corpus, but never the corpus count as the production
+figure. The anti-vacuity floor is 20 in both judging tables, at
+`tests/test_responder_gate_census.py:443` and
+`tests/test_gate_name_bindings.py:114`.
+
+ONE OUTBOUND DELIVERY, AND IT IS NOT A GUARDED ARTIFACT. Positions on the CS
+note's five numbered questions were delivered to `moon_sync_inbox/` as
+`2026-09-11-2150-from-RSC-positions-on-CS-Q1-Q5-Q4-agreed-Q3-is-an-operator-item-and-our-own-Q2-premise-decayed.md`.
+Q4 AGREE, on the measurement rather than the intention - difflib over LW's
+payload and `tools/write_tracer.py` with autojunk off gives a ratio of 0.0993 and
+8 matching lines in 2 runs, all of them docstring delimiters and blanks. Q1, Q2
+and Q5 CORRECT AND INCOMPLETE. Q3 an OPERATOR ITEM, and the reason is that
+adopting it would FLIP TWO SHIPPED POPULATIONS: `.githooks/pre-push` fails OPEN
+on a missing tool by written policy, pinned by the barren-PATH contract in
+`tests/test_hook_interpreter.py`, and the git-less-checkout gates SKIP by the
+`tests/conftest.py` rule rather than fail. An agent may not concede a behaviour
+change in a shipped gate. The note also CORRECTS THIS TREE'S OWN 2026-09-08
+premise, which asserted RSC ships zero gate tags and is now false. The whole
+inbox is gitignored - `.gitignore:115`, and `git ls-files moon_sync_inbox`
+returns 0 - and every guard that would police a claim there derives its corpus
+from `git ls-files`, so this is recorded as DELIVERED and never as guarded.
+
+GATES OBSERVED 2026-09-11 AT `c514ca7`, each as its own command with every
+returncode read in Python, and COLLECTED IS NOT PASSED - every figure below is a
+PASSED count unless it says otherwise. As reported by the implementing session in
+an ordinary shell: licence 47, docs consistency 29, docs hook commands 21,
+`scripts/qa_companion.py` 18 passed 0 failed 1 skipped 3 noted, ruff rc 0,
+`tests` 2701 passed 1 skipped, `agents/pity_engine` 80 passed, shell node 52 of
+52, headless dry run rc 0 with 6 skips, and `mypy` advisory Success over 36
+source files while SILENT about `tests/`, which is where all of this commit's
+bytes landed.
+
+THE SKIP SPLIT MOVED TWICE IN ONE SESSION, AND THE SECOND MOVE WAS CAUSED BY
+THIS SESSION'S OWN DISARM. Both readings are real and they belong to different
+lanes and different machine states, so neither withdraws the other. THE TOTAL IS
+2702 THROUGHOUT - only the passed/skipped split moved.
+
+  BEFORE THE DISARM, ordinary shell at `c514ca7`: 2701 passed, 1 skipped
+  - `tests/test_ingest_client.py:348`, a live fetch opt-in behind
+  `RESIN_ALLOW_NETWORK`.
+
+  BEFORE THE DISARM, UNDER THE PRE-PUSH HOOK, read off the push output for
+  `c514ca7`: 2700 passed, 2 skipped, the second being
+  `tests/test_hook_interpreter.py:1802`, which skips when `shutil.which("git")`
+  resolves to a path at no layout the oracle recognises as an install - the
+  git-core shim directory looks exactly like that, and under a hook git does
+  resolve there. That attribution is OBSERVED, not inferred, so it stands. In an
+  ordinary shell `python -m pytest tests/test_hook_interpreter.py -rs` reads
+  rc 0, 38 passed, ZERO skipped, which is the same fact from the other side.
+
+  AFTER THE DISARM, ordinary shell, twice: 2700 passed, 2 skipped, and the
+  second is NOT 1802 - it is `tests/test_task_liveness.py:2987`, where the census
+  RAN and read the triggers of 265 scheduled tasks and found none carrying a
+  non-empty `EndBoundary`, so the probe had no value to compare against.
+
+THE MECHANISM, AND IT IS THE DURABLE PART. `ResinCompute-Responder` was the only
+scheduled task on this box carrying a non-empty `EndBoundary` - its sole trigger
+ended at `2026-09-07T21:00:00`, printed by `ops/check_task_liveness.py` before
+removal. Removing the task removed that arm's input, so a test that RAN all
+session now SKIPS. A SUITE'S SKIP POPULATION IS MACHINE STATE, and an ops action
+in the same session can move it. The causal claim is the mechanism plus the
+before/after readings; it was NOT proven by re-arming, because re-arming without
+an explicit operator instruction is forbidden here.
+
+The outbound note carries 2689 passed 1 skipped at `d6437a9`; this commit's 12
+new tests plus that one moved skip are the whole difference, and the same warning
+applies to reading that 1 as stable.
+
+Merged files and their guard: `tests/test_git_subprocess_census.py`, which is its
+own guard - `test_no_declared_out_of_scope_launcher_has_a_call_site_in_the_roots`
+for the pinned premise, `test_every_declared_blind_spot_really_is_a_silence` and
+`test_every_registered_shape_lands_in_exactly_one_list` for the 17 silences and
+the partition, and `test_the_out_of_scope_sweep_finds_both_import_forms` for the
+positive control that keeps the premise arm from being a gate that cannot fail.
+`tests/test_gate_mutation_runner.py` carries the one-word prose repair.
+
 ## 2026-09-11 - The instrument could not see a file being created, which is the one shape the bucket it was built to watch actually makes
 
 One commit, pushed: `13c771f`. Four files, 1733 insertions. The honest shape of

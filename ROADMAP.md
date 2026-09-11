@@ -174,11 +174,13 @@ version. What follows is everything the scaffold deliberately did not do.
   35 source files, ADVISORY because its roots exclude `tests/` and `conftest.py`,
   which is where most of this session's bytes landed.
 
-- **HALF OPEN, HALF DECAYED, AND DELIBERATELY NOT CLOSED WHOLESALE. REWORDED
-  2026-09-11 AFTER RE-MEASURING BOTH HALVES AT `13c771f`.** This row began as one
-  row with two independent defects in it, and closing it as a unit would have
-  silently retired a live second defect - which is the whole reason it is being
-  split in prose rather than flipped.
+- **BOTH HALVES NOW CLOSED, ONE AT `2ae95f3` AND ONE AT `c514ca7`, AND THE
+  SECOND CLOSES ON TERMS OTHER THAN THIS ROW'S OWN WORDING. REWORDED AGAIN
+  2026-09-11.** This row began as one row with two independent defects in it, and
+  closing it as a unit would have silently retired a live second defect - which
+  is why it was split in prose rather than flipped, and why the two halves are
+  still stated separately now that both are answered. Read the second half's
+  terms before citing this row as closed.
 
   THE FIRST HALF IS DECAYED AND WAS ALREADY REPAIRED AT `2ae95f3`.
   `tools/git_subprocess_census.py` no longer emits NO SITE when `call.func` is
@@ -188,20 +190,109 @@ version. What follows is everything the scaffold deliberately did not do.
   `functools.partial(subprocess.run)(...)` now produce UNRESOLVED rows rather
   than silence. Nothing further is owed on this half.
 
-  THE SECOND HALF IS STILL OPEN, FOR AN INDEPENDENT REASON THAT THE FIRST REPAIR
-  DOES NOT TOUCH. `LAUNCHERS` at `tools/git_subprocess_census.py` line 134 is a
-  `subprocess`-only frozenset of five entry points, so `os.system`, `os.popen`
-  and the `os` exec and spawn families remain invisible no matter what the callee
-  resolver does. `subprocess.getoutput` and `subprocess.getstatusoutput` sit
-  outside it too. The module DECLARES all of that in its own docstring rather
-  than implying coverage, and reachability in this tree is zero today, so this is
-  a contract gap rather than a live leak - but it is a gap, and the row stays
-  open until the launcher set is derived rather than enumerated.
+  THE SECOND HALF CLOSED 2026-09-11 AT `c514ca7` - BUT ON DIFFERENT TERMS THAN
+  THIS ROW'S OWN WORDING, AND THE DIFFERENCE IS THE POINT. This row said the
+  second half stays open "until the launcher set is derived rather than
+  enumerated". THAT IS NOT WHAT SHIPPED. `LAUNCHERS` at
+  `tools/git_subprocess_census.py` line 134 is STILL a `subprocess`-only
+  frozenset of five entry points, `os.system`, `os.popen` and the `os` exec and
+  spawn families are STILL invisible to it, and `subprocess.getoutput` and
+  `subprocess.getstatusoutput` are STILL outside it. Do not read this as the
+  derived-launcher-set repair.
+
+  WHAT SHIPPED INSTEAD, AND WHY THAT IS THE RIGHT CLOSE. The census justifies its
+  narrow scope in its own docstring at lines 55 to 65 with a MEASURED PROSE
+  PREMISE - none of the declared-uncovered names has a call site in
+  `DEFAULT_ROOTS`, the five roots at line 121. That premise was TRUE and GUARDED
+  BY NOTHING, so the day an `os.system` call site arrives the census goes SILENT
+  and the docstring goes QUIETLY FALSE. The PREMISE is now pinned instead of the
+  POPULATION: no bucket, no launcher and no row was added. Measured 2026-09-11 at
+  `c514ca7` - population 108 `.py` paths from
+  `git ls-files --cached --others --exclude-standard` over `tests`, `tools`,
+  `ops`, `headless` and `scripts`, all 108 parsed, ZERO offenders, guarded by
+  `test_no_declared_out_of_scope_launcher_has_a_call_site_in_the_roots` in
+  `tests/test_git_subprocess_census.py`. Widening the census was ALREADY BUILT,
+  refuted by two refuters with distinct lenses, and ADJUDICATED OUT on contract
+  grounds in the `docs/LEDGER.md` entry that records `2ae95f3` - find it by its
+  opening line and never by line number - governed by the
+  do-not-widen ruling under the 2026-09-09 heading in this file. Re-litigating
+  the derived launcher set therefore needs a NEW decision and not this row.
 
   THE POINT WORTH KEEPING FROM THE ORIGINAL WORDING. Conservation compares
   emitted rows against hand-counted launches, so a shape that emits nothing
   leaves nothing to conserve. That argument applied to the first half and it
-  applies unchanged to the second.
+  applies unchanged to the second - which is exactly why a decaying prose premise
+  had to become a red arm rather than a wider mechanism.
+
+- **OPEN 2026-09-11, AND IT IS AN HONEST OMISSION AND A LIVE HOLE AT THE SAME
+  TIME - NEVER WRITE IT UP AS COVERED.** `os.startfile` is a real Windows process
+  launch and it is invisible to `tools/git_subprocess_census.py`. It is ALSO
+  absent from that module's declared-out-of-scope list on purpose: the docstring
+  never claims it, so pinning it would be guarding a claim nobody made, and the
+  premise arm in `tests/test_git_subprocess_census.py` deliberately does not
+  sweep for it. That makes it a CONTRACT GAP a reader could mistake for coverage,
+  in a tree with an `ops/` lane where a `.bat` launch is a plausible shape.
+
+  MEASURED 2026-09-11 at `c514ca7`, population 108 `.py` paths from
+  `git ls-files --cached --others --exclude-standard` over `tests`, `tools`,
+  `ops`, `headless` and `scripts`: `os.startfile`,
+  `asyncio.create_subprocess_shell`, `asyncio.create_subprocess_exec`,
+  `pty.spawn`, `os.fork` and `os.forkpty` each have ZERO call sites. So the hole
+  is live in the SENSE THAT NOTHING GUARDS IT and dead in the sense that nothing
+  uses it - which is why this is a row and not a defect. The work, if it is ever
+  taken, is to DECLARE these six in the census docstring first and only then pin
+  them, in that order, because a pin against an undeclared name grades nothing.
+
+- **OPEN 2026-09-11 AS THE HONEST FRONTIER RATHER THAN AS DEFECTS, AND WIDENING
+  ANY OF THEM IS A NEW DECISION.** `tests/test_git_subprocess_census.py`
+  registers 17 shapes that its out-of-scope sweep is measured SILENT on while
+  they genuinely launch a process or name a real launch API. Ten are INDIRECT
+  CALLEE shapes - a dotted receiver in two forms, a rebind (`run = os.system`),
+  `getattr`, an `os.__dict__` lookup, a dict dispatch table, `functools.partial`,
+  `importlib.import_module`, `__import__` and a conditional-expression callee -
+  and seven are LAUNCH APIS THE CENSUS DOCSTRING NEVER DECLARES, the six above
+  plus `multiprocessing.Process().start()`.
+
+  THEY ARE DECLARED AND PINNED AS SILENCES, not left to read as coverage, so a
+  sweep that starts reporting one of them is NOTICED rather than welcomed. Every
+  registered shape lands in EXACTLY ONE of the covered and blind lists, asserted
+  by label and by source string. On one of the 17 the grader is WEAKER THAN THE
+  MODULE IT GRADES and that is recorded rather than repaired: the census emits
+  `CallSite(bucket='UNRESOLVED', callee='<unresolved:Call>')` for
+  `getattr(os, "system")(...)` while the sweep emits nothing.
+
+  WHY THERE IS NOTHING OWED HERE TODAY. Static resolution cannot follow a rebind,
+  and this tree has RULED against widening a mechanism to a population measured
+  at zero - see the do-not-widen ruling under the 2026-09-09 heading in this
+  file. Anyone who wants one of the 17 covered must open a new decision and carry
+  the contract cost, and a sweep with MORE receiver reach than the census it
+  grades would redden shapes the census never claimed to see.
+
+- **OPEN 2026-09-11 AS A RESIDUAL THIS SLICE CLOSED ELSEWHERE AND LEFT STANDING
+  HERE. THE SAME FILE HOLDS BOTH POPULATIONS, AND ONLY THE NEW ARM USES THE SAFE
+  ONE.** The premise arm added at `c514ca7` derives its population from
+  `git ls-files --cached --others --exclude-standard` precisely because an
+  `rglob` from the repo root reaches stale worktree copies. The PRE-EXISTING arms
+  in that same file do not: the `real_sites` fixture goes through
+  `census_paths`, and the opaque-callee node walk in
+  `test_the_widened_conservation_arm_would_notice_a_drop` goes through
+  `census._python_files`, both of which are an `rglob` at
+  `tools/git_subprocess_census.py:653`.
+
+  THE UNGUARDED PREMISE, STATED AS A PREMISE. Those arms rest on the assumption
+  that no directory under `tests`, `tools`, `ops`, `headless` or `scripts`
+  contains a nested checkout or a vendored copy. `_python_files` excludes
+  `__pycache__` and any `.git` path segment, so a nested checkout's METADATA is
+  filtered and its SOURCE FILES are not. `.claude/worktrees/` is outside those
+  five roots and so is not the hazard here; a future vendored tree inside one of
+  them is. Nothing asserts it, and the whole point of the `git ls-files` choice
+  next door is that this class of premise decays silently.
+
+  WHAT WOULD CLOSE IT. Either move the census's own file discovery to
+  `git ls-files` with a stated skip for a git-less checkout, which is a change to
+  a shipped module and not to a test, or add an arm asserting the `rglob`
+  population and the `git ls-files` population AGREE over the five roots. The
+  second is cheaper and grades the premise directly rather than replacing it.
 
 - **OPEN 2026-09-11, AND THE ROW IS THAT THE EXEMPT-ARM AUDIT CHECKS NAME
   PRESENCE RATHER THAN REACHABILITY.** A gate placed AFTER the launch is now
@@ -387,10 +478,22 @@ version. What follows is everything the scaffold deliberately did not do.
   7. CS's Q3 - adopting the absence-IS-the-failure rule for a gate is a BEHAVIOUR
      CHANGE to `.githooks/pre-push` and would turn
      `test_pre_push_still_fails_open_when_nothing_carries_the_tools` red.
-     Arrived 2026-09-11.
+     Arrived 2026-09-11. POSITION DELIVERED 2026-09-11 AND THE RULING IS
+     UNCHANGED - still an operator item, still not conceded. The outbound note
+     answers OPERATOR ITEM with a DRAFT POSITION and nothing more, and it WIDENS
+     what is at stake rather than narrowing it: the rule flips TWO shipped
+     populations here, the pre-push tool halves and the git-less-checkout gate
+     rows in `tests/test_conftest_git_gate_sites.py` that `tests/conftest.py`
+     rules must SKIP rather than fail. The draft's axis is WHAT IS MISSING, the
+     check's TOOL or its SUBJECT, and it agrees with CS on every fail-closed case.
   8. CS's Q5 - accepting a counterparty's offer to spend its own cycles is an
      agreement binding another party, and its stated premise is dead besides.
-     Arrived 2026-09-11.
+     Arrived 2026-09-11. POSITION DELIVERED 2026-09-11 as CORRECT AND INCOMPLETE
+     AND THE RULING IS UNCHANGED - the agreement still binds another party and is
+     still the operator's to make. What the note adds is that Q5's addressee
+     choice rested on "RSC has no tagged gates", a premise THIS TREE supplied on
+     2026-09-08 and which is now false: 20 tags, measured 2026-09-11 at
+     `c514ca7` in `tools/moon_sync_responder.py`.
 
   Items 1 through 4 are the carried questions and NONE of them was touched by
   this session's work.
