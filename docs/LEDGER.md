@@ -56,9 +56,60 @@ reddened `tests/test_gate_name_bindings.py` and
 an escape - the census then reports both sites as untagged consult sites. Both
 floors were RAISED, never lowered, and every assertion kept its strength: the
 census floor and the adjacent-swap count remain equalities. Non-vacuity was
-proven twice - removing one tag on a scratchpad copy reddened six arms, and
-renaming one so the tag COUNT stays constant was caught by the bindings module
-alone, which is the discrimination that module exists for.
+proven twice, and ONE OF THE TWO FIGURES HAS SINCE BEEN REFUTED AND RE-MEASURED -
+see the correction directly below. The probe that held is the rename: renaming one
+tag so the tag COUNT stays constant was caught by the bindings module alone, which
+is the discrimination that module exists for.
+
+**CORRECTION - "six arms" WAS REFUTED, AND WHY IT WAS UNCHECKABLE IS THE REUSABLE
+HALF.** An adversary with a does-it-reproduce lens re-ran both probes in a clean
+clone at `26c14d9`. Deleting the single `# GATE:answered-usable` line in
+`tools/moon_sync_responder.py` and running `tests/test_gate_name_bindings.py` with
+`tests/test_responder_gate_census.py` under `-p no:cacheprovider` gave exit 1 with
+43 failures, against a baseline of exit 0 in the SAME clone before the edit. The
+recorded "six" is wrong by roughly sevenfold on failures. Stamped as a probe
+reading in one clone at one commit, never as a live suite figure. The rename probe
+DID reproduce and stands as written - exit 1, 9 failures, every one of them in the
+bindings module, the census fully green.
+
+**THE DENOMINATOR IS NOT THE SAME ON BOTH SIDES, AND THAT IS THE WHOLE OF THE
+ARITHMETIC.** A first pass reported the mutant as 43 failed plus 45 passed against
+a baseline of 89 passed, which is 88 against 89 and reads as one lost test. A
+second pass in a separate clone at the same commit reconciled it, and NEITHER
+number was wrong: the missing case sits in NO result bucket because it was never
+COLLECTED. `_TAG_LINES` in `tests/test_responder_gate_census.py` is derived at
+import from the responder's own source, and the module parametrizes on it, so
+deleting a `# GATE:` tag DELETES A PARAMETRIZE CASE. Baseline collects 89 and
+passes 89; the mutant collects 88 and closes as 45 plus 43. The case that ceased
+to exist is `test_removing_one_tag_reports_exactly_that_site_as_untagged` at the
+deleted tag's line id, and the corroborating signature is that every surviving id
+SHIFTS DOWN BY ONE - a deleted source line, not a lost result. The error, skip,
+xfail and xpassed buckets were all measured empty, and a restore control returned
+the clone to 89 passed at its original byte size. So write the kill as 43 failed of
+88 COLLECTED in the mutant, against 89 collected at baseline. Writing "43 of 89"
+misstates the rate.
+
+**89 IS NOT AN ARM COUNT AND MUST NOT BE CITED AS ONE.** It is 69 plus
+`len(_TAG_LINES)`, so it moves whenever a `# GATE:` tag is added to or removed from
+`tools/moon_sync_responder.py`. UNRECONCILED, and left that way rather than
+resolved by preference: the two passes disagree on how many UNIQUE test functions
+go red, one saying 24 and the other 23, the same off-by-one shape as the
+denominator itself. No pass enumerated the function names, so neither figure is
+checkable, and the unique-function count is therefore NOT recorded here. The
+failure and collection counts above are the measured part.
+
+**WHY THE NUMBER DRIFTED.** No artifact anywhere recorded WHICH six arms, so "six"
+was checkable against nothing. And the probe is not re-runnable AS RECORDED:
+`tools/gate_mutation_runner.py` mutates gate STATEMENTS - `_edits_for` walks
+`ast.stmt` inside `run_once` - and its CLI has no mode that drops a `# GATE:`
+COMMENT, so this was never a tooled probe. Both guard modules resolve `REPO_ROOT`
+from `__file__.resolve().parents[1]` and the census shells `git ls-files` with
+`cwd=REPO_ROOT`, so the probe needs a WHOLE-TREE copy rather than a two-file
+scratchpad. A probe that is expensive to re-run and names no subjects decays into a
+number nobody can challenge. The commit body of `6c351b3` carries the refuted "six"
+and CANNOT be fixed - it is pushed, CI ran green on it, and rewriting published
+history to correct a number is worse than the number. The commit message holds the
+refuted figure; this ledger holds the correction.
 
 **STATE ALSO MEASURED at `41ba7d0` before any of it, stamped as a reading.**
 `pytest tests` 2106 passed 1 skipped; `agents/pity_engine` 80 passed; `node
@@ -81,10 +132,28 @@ THING THAT HEALS a replaceable answered record, so a writer that refuses turns
 the reader's degrade from ONE duplicate into ONE DELIVERY PER CYCLE FOREVER,
 into another repository's tree, `deliver` never overwriting a name and
 `_reply_name` being minute-resolution. Measured over three cycles per case,
-counted as files in the destination inbox: replaceable 3 before and 1 after,
-structural 3 before and 0 after, absent 1 then `empty`. The ruling is NEITHER
-candidate - mirror `refusals_usable`'s replaceable-versus-structural split - and
-it is recorded in `ROADMAP.md` under its own heading.
+counted as files in the destination inbox: structural 3 before and 0 after,
+absent 1 then `empty`. The ruling is NEITHER candidate - mirror
+`refusals_usable`'s replaceable-versus-structural split - and it is recorded in
+`ROADMAP.md` under its own heading.
+
+**CORRECTION - the REPLACEABLE "3 before" WAS REFUTED. The pre-change bytes
+delivered 1, not 3.** This paragraph used to read "replaceable 3 before and 1
+after" alongside the structural pair. A does-it-reproduce adversary ran all four
+parametrized arms of
+`test_a_replaceable_answered_record_still_answers_and_self_heals` against
+`6c351b3^` and every one PASSED, exit 0. The 3 was never a measurement of
+committed bytes: it was measured against the dispatch brief's ordered-then-
+REJECTED fail-closed `_remember_answered`, which was never committed and exists
+nowhere in history. The arm's own docstring says as much - it fails against a
+writer that REFUSES a replaceable record, and no such writer was ever in this
+tree. The conflation is that the commit body of `6c351b3` puts the replaceable
+figure in the same before/after sentence as the structural pair, where "before"
+DOES mean the committed pre-fix bytes. The STRUCTURAL half reproduces and is kept
+above unchanged: red on `6c351b3^` with `AssertionError: an unrecordable answer
+delivered 3 replies`. That commit body CANNOT be fixed - it is pushed, CI ran
+green on it, and rewriting published history to correct a number is worse than
+the number - so a reader who finds the commit message first is pointed HERE.
 
 **THE GAP THAT MADE IT INVISIBLE.** No tracked arm anywhere drives MULTIPLE
 cycles over a poisoned ANSWERED record; all eight existing multi-cycle `_drive`

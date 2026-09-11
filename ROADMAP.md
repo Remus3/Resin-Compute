@@ -66,9 +66,23 @@ version. What follows is everything the scaffold deliberately did not do.
   288-a-day bounce defect.
 
   MEASURED, three cycles per case, counted as files in the destination inbox: a
-  replaceable record delivered 3 before and 1 after; a structural record - a
-  non-empty directory at the path - delivered 3 before and 0 after; an absent
-  record delivers 1 and then terminates `empty`.
+  structural record - a non-empty directory at the path - delivered 3 before and
+  0 after; an absent record delivers 1 and then terminates `empty`.
+
+  CORRECTED, and the replaceable figure this row used to carry was REFUTED rather
+  than smoothed away. It read "a replaceable record delivered 3 before and 1
+  after". A does-it-reproduce adversary ran all four parametrized arms of
+  `test_a_replaceable_answered_record_still_answers_and_self_heals` against
+  `6c351b3^` and all four PASSED, exit 0 - the pre-change bytes delivered 1, not
+  3. The 3 was measured against the dispatch brief's ordered-then-REJECTED
+  fail-closed `_remember_answered`, which was NEVER COMMITTED and exists nowhere
+  in history; the arm's docstring says it fails against a writer that REFUSES a
+  replaceable record, and no such writer was ever in this tree. The structural
+  pair above reproduces and is untouched. The commit body of `6c351b3` states the
+  refuted figure in the same before/after sentence as that structural pair, and it
+  CANNOT be fixed - it is pushed, CI ran green on it, and rewriting published
+  history to correct a number is worse than the number. The commit carries the
+  refuted figure; this row and `docs/LEDGER.md` carry the correction.
 
   THE GAP IN THE EXISTING SUITE, which is why a single-cycle arm could not have
   caught this: NO tracked arm drives MULTIPLE cycles over a poisoned ANSWERED
