@@ -39,8 +39,28 @@ which is what makes them controls.
 STATED LIMIT. These arms observe THIS process. A write performed by a CHILD
 process - and this tree runs child pytest processes in several guard modules -
 is outside their reach, and was outside the tracer's reach too: the traced run
-counted 17492 bytes in-process against 19414 bytes on disk, a 1922 byte gap
-consistent with child-process logging.
+counted 17492 bytes in-process against 19414 bytes on disk, a 1922 byte gap.
+
+THE GAP HAS TWO COMPONENTS AND THIS PARAGRAPH USED TO CHARGE ALL OF IT TO CHILD
+PROCESSES. Corrected 2026-09-11:
+
+  89 bytes    CRLF TRANSLATION, which is not a write at all.
+              `logging.FileHandler` opens its file in TEXT mode with
+              `newline=None`, and `newline=None` is the TRANSLATING mode, so
+              every LF a handler emits leaves as CRLF on Windows. A tracer that
+              wraps `write` charges the string it was HANDED; the disk carries
+              one extra byte per record. 89 records went through that handler
+              in the traced run.
+  1833 bytes  everything else. Child-process logging is the leading candidate
+              and it is NOT a measured attribution - nothing has apportioned
+              this remainder, and saying so is the difference between a reading
+              and a claim.
+
+THE RATE IS RE-MEASURED HERE, THE HEADCOUNT IS NOT. As a control on win32,
+2026-09-11: 89 records of 11 bytes each charged 979 bytes in-process and landed
+as 1068 bytes on disk - a gap of exactly 89, with 89 CRLF pairs and 0 lone LF.
+That confirms the MECHANISM and the one-byte-per-record rate. The traced run was
+not re-run, so its 89-record count is carried forward as a reading.
 """
 from __future__ import annotations
 

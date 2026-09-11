@@ -62,6 +62,105 @@ sys.path.insert(0, str(Path(__file__).parent))
 _REAL_OS_NAME = os.name
 
 # ---------------------------------------------------------------------------
+# No INHERITED git environment may decide what this tree tracks.
+# ---------------------------------------------------------------------------
+#
+# THE DEFECT, MEASURED ON git 2.53.0.windows.3 WITH EVERY RETURNCODE READ IN
+# PYTHON. A throwaway repository with a main checkout, one linked worktree and a
+# `pre-push` that dumps its own environment:
+#
+#     push from the MAIN CHECKOUT      GIT_EXEC_PATH, GIT_PREFIX
+#     push from a LINKED WORKTREE      GIT_EXEC_PATH, GIT_PREFIX, and
+#                                      GIT_DIR=<main>/.git/worktrees/<name>
+#
+# `.githooks/pre-push` runs both suites, and this tree is worked in linked
+# worktrees under `.claude/worktrees/`, so a push from one of them runs every
+# guard in both suites with a foreign `GIT_DIR` exported.
+#
+# THE CORPUS REALLY CHANGES, AND IT CHANGES AT RETURNCODE 0. Measured this tree,
+# cwd at the repository root: `git ls-files` answered 224 paths clean and 1 path
+# with `GIT_DIR` pointed at a throwaway repository holding a single file. There
+# is no error and no non-zero exit - only a different answer. Run against the
+# real suite in that state, `tests/test_readme_tree.py` reported
+# `frozenset({'FOREIGN_MARKER.txt'})` as this repository's tracked listing, and
+# `tests/test_shell_contract.py` ABORTED COLLECTION - exit 2, the whole module
+# gone - because its `@pytest.mark.parametrize` argument came back empty.
+#
+# WHICH VARIABLES, DERIVED AND NOT RECALLED. Each candidate was exported in turn
+# and the four git queries this tree builds corpora from - `ls-files` plain,
+# `ls-files` under a pathspec, `check-attr` and `check-ignore`, plus `ls-tree` -
+# were compared against the clean answer. The nine below are every candidate
+# that made at least one of them answer DIFFERENTLY AND SUCCESSFULLY:
+#
+#   GIT_DIR                repoints the repository outright; `ls-files` and
+#                          `ls-tree` then describe another tree at exit 0
+#   GIT_INDEX_FILE         swaps the index `ls-files` reads, same silent effect
+#   GIT_WORK_TREE          moves the tree `check-ignore` resolves rules against
+#   GIT_COMMON_DIR         moves refs, so `ls-tree HEAD` resolves elsewhere
+#   GIT_OBJECT_DIRECTORY   moves objects, same reach into `ls-tree`
+#   GIT_LITERAL_PATHSPECS  changes every pathspec-filtered answer, and this tree
+#   GIT_NOGLOB_PATHSPECS   filters by pathspec in `tests/test_commit_trailers.py`
+#   GIT_GLOB_PATHSPECS     and in `tools/precommit_gate.py`
+#   GIT_ICASE_PATHSPECS
+#
+# DELIBERATELY NOT SCRUBBED, each for a measured reason:
+#
+#   GIT_CONFIG_GLOBAL, GIT_CONFIG_SYSTEM  changed NO probe, and
+#       `tests/test_hook_gate.py` sets both in its throwaway repository's child
+#       environment. Removing them here buys nothing and risks that fixture.
+#   GIT_CONFIG_COUNT  changes every probe by BREAKING git - exit 128, "missing
+#       config key GIT_CONFIG_KEY_0". That is a loud denial, not a silent
+#       substitution, and every corpus builder in this tree already fails or
+#       skips on a non-zero exit. It is also the same family as the two above.
+#   GIT_ALTERNATE_OBJECT_DIRECTORIES, GIT_CEILING_DIRECTORIES, GIT_NAMESPACE,
+#   GIT_ATTR_NOSYSTEM, GIT_DISCOVERY_ACROSS_FILESYSTEM  changed no probe.
+#   GIT_EXEC_PATH, GIT_PREFIX, GIT_EDITOR  changed no probe, and GIT_EXEC_PATH
+#       is how git finds its own helpers when it is invoked from a hook.
+#
+# WHY HERE AND NOT IN AN AUTOUSE FIXTURE. Corpus builders in this tree run at
+# IMPORT, not at test time: `tests/test_line_endings.py` calls `_measure_baseline()`
+# at module scope and `tests/test_shell_contract.py` builds a parametrize argument
+# from `git ls-files`. Both happen during COLLECTION, before the first fixture is
+# set up, so an autouse fixture arrives too late for exactly the sites whose
+# failure is worst. Module-level code in a conftest runs before any test module
+# is imported, which is the only grain that covers them.
+#
+# WHY THE ROOT CONFTEST AND NOT `tests/conftest.py`. `tests/conftest.py` is never
+# loaded for `agents/pity_engine/`, and `.githooks/pre-push` runs that suite too.
+# Measured with `GIT_DIR` exported and a `-p` plugin reporting at
+# `pytest_collection_finish`: before this scrub both suites saw the foreign
+# `GIT_DIR`; a scrub in `tests/conftest.py` would reach only one of them. This is
+# the same reasoning, and the same file, as the `RC_LOG_DIR` redirection below.
+#
+# WHAT IT DOES NOT REACH, STATED RATHER THAN IMPLIED. This is a mutation of THIS
+# process's environment, so it covers `git` launched by the pytest process and
+# by children that inherit from it. It does NOT reach `tools/precommit_gate.py`
+# or `scripts/install_hooks.py` when a git hook runs them directly, AND IT MUST
+# NOT: `pre-commit` exports `GIT_INDEX_FILE` on purpose, and the gate is supposed
+# to grade the index that hook is committing.
+#
+# The arms live in `tests/test_git_env_scrub.py`, including the positive control
+# that shows the corpus really does swap when the scrub is not in the way.
+_GIT_ENV_SCRUBBED: tuple[str, ...] = (
+    "GIT_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_LITERAL_PATHSPECS",
+    "GIT_NOGLOB_PATHSPECS",
+    "GIT_GLOB_PATHSPECS",
+    "GIT_ICASE_PATHSPECS",
+)
+
+#: What was actually removed, kept so a reader of a failing run can see whether
+#: the ambient environment was carrying anything at all. It is diagnostic and
+#: nothing asserts on it - the arms feed an input and measure the corpus.
+_GIT_ENV_REMOVED: dict[str, str] = {
+    name: os.environ.pop(name) for name in _GIT_ENV_SCRUBBED if name in os.environ
+}
+
+# ---------------------------------------------------------------------------
 # The suite must not write the operator's live day log.
 # ---------------------------------------------------------------------------
 #
