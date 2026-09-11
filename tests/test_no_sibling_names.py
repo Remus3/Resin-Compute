@@ -33,6 +33,25 @@ and a guard that only catches the easy spelling would have caught none of them:
 So the matcher here is case-insensitive, joins the whole file before matching so
 a wrapped name cannot hide, and treats space, underscore, hyphen, dot and colon
 as interchangeable separators.
+
+WHICH GIT GATE THIS MODULE USES, AND WHY THAT ONE.
+
+`require_git_repository()` - the RUN-time per-test shape - called from inside
+`_tracked_text_files()`, which is the single function here that shells git.
+
+Not `skip_module_without_git()`. That shape is for a module that touches git
+while it is being IMPORTED, typically to build a `parametrize` argument list.
+Nothing at module scope here reaches git: the corpus is built inside two test
+bodies, and the other arms in this file - the planted-offender controls, the
+codenamed-neighbour control, the comment-break pair, the stripped-view
+equivalence and the documented-blindness arm - all work on `tmp_path` fixtures
+or on this module's own constants. An import-time whole-module skip would throw
+those working guards away for a dependency they do not have. Measured under the
+absence mechanism in `tests/test_conftest_git_gate_sites.py`: 2 of 19 nodes
+reach git, so 17 keep running.
+
+The gate sits in the helper rather than being repeated at the top of each of the
+two callers, so a third caller added later cannot forget it.
 """
 from __future__ import annotations
 
@@ -41,6 +60,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import require_git_repository
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -81,7 +102,17 @@ def _tracked_text_files() -> list[str]:
     does not descend into a nested checkout, so a git-sourced corpus is
     structurally immune. 34 of 39 test modules here were immune for exactly this
     reason and 4 were not.
+
+    GATED, because a git-less checkout is a shape this repository is routinely
+    received in - Download ZIP, an sdist, a `git archive` extract. Without the
+    gate the `check=True` below raises FileNotFoundError and the caller reports a
+    FAILURE, which tells a reader nothing is wrong with the code and trains them
+    to ignore red. Trackedness is simply UNKNOWABLE there, so the honest answer
+    is a skip that names the missing repository. Falling back to an rglob would
+    be worse than either: it answers a different question while reporting green,
+    which is the exact defect the git-sourced corpus above exists to remove.
     """
+    require_git_repository()
     out = subprocess.run(
         ["git", "ls-files"],
         cwd=REPO_ROOT,

@@ -20,6 +20,36 @@ the comment and no enforcement until now.
 Parsed with a line scanner rather than a YAML library because this repository is
 stdlib-only at runtime and PyYAML is not a dependency. The scan is deliberately
 narrow - it reads the two `on:` trigger blocks and nothing else.
+
+WHICH GIT GATE THIS MODULE USES, AND WHY THAT ONE.
+
+`require_git_repository()` - the RUN-time per-test shape.
+
+Not `skip_module_without_git()`. Nothing at module scope reaches git: every
+workflow-parsing arm reads `.github/workflows/*.yml` off disk, and those are
+present in a `git archive` extract exactly as they are in a clone. Measured
+under the absence mechanism in `tests/test_conftest_git_gate_sites.py`: 5 of 34
+nodes reach git, so 29 keep running. An import-time whole-module skip would
+delete the coverage-hole guard this file exists for on a checkout where it is
+still perfectly answerable.
+
+THE GATE IS CALLED AT FOUR PLACES, BECAUSE GIT IS REACHED BY FOUR ROUTES AND
+THREE OF THEM ARE NOT `_git_z`. Gating only the obvious helper would have left
+three of the five nodes failing, which is how a partial gate reads as a
+finished one:
+
+  1. `_git_z()` - shells `git` directly.
+  2. `_listed()` - shells `tools/precommit_gate.py --list-tracked`, which builds
+     its own corpus from git INSIDE the child process. The failure therefore
+     surfaces as a non-zero child exit rather than as an OSError here, so it
+     looks nothing like case 1 at the call site.
+  3. `test_no_exempt_prefix_names_a_path_that_can_actually_be_committed` - an
+     inline `git check-ignore` in the test body.
+  4. `test_the_gitignore_probe_actually_distinguishes_ignored_from_tracked` -
+     the non-vacuity partner of 3, with its own inline `git check-ignore`.
+
+Cases 3 and 4 are gated in their bodies rather than through a shared helper
+because there is no shared helper to gate: each builds its own `subprocess.run`.
 """
 from __future__ import annotations
 
@@ -29,6 +59,8 @@ import sys
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import require_git_repository
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
@@ -190,7 +222,13 @@ def _git_z(*args: str) -> list[str]:
 
     Deliberately NOT routed through the gate: this is the independent side of
     the cross-checks below, so it must not share the gate's implementation.
+
+    "The gate" in that sentence is `tools/precommit_gate.py`, not the git gate
+    added below - they are unrelated mechanisms that unluckily share the word.
+    `require_git_repository()` here converts an unreachable git into a SKIP with
+    a reason, instead of the FileNotFoundError the bare `subprocess.run` raises.
     """
+    require_git_repository()
     out = subprocess.run(
         ["git", *args],
         cwd=str(REPO_ROOT),
@@ -202,6 +240,15 @@ def _git_z(*args: str) -> list[str]:
 
 
 def _listed(mode: str) -> set[str]:
+    """The gate's own tracked-file corpus, for `mode` in ("source", "docs").
+
+    GATED TOO, and this is the route a reader is most likely to miss.
+    `tools/precommit_gate.py --list-tracked` builds its corpus from git inside
+    the CHILD process, so with git unreachable the child exits non-zero and the
+    assertion below fails on an unhelpful stderr - a FAILURE, not a skip, and
+    with no OSError anywhere near this frame to hint at the cause.
+    """
+    require_git_repository()
     out = _gate("--list-tracked", mode)
     assert out.returncode == 0, f"--list-tracked {mode} failed: {out.stderr!r}"
     return {p for p in out.stdout.decode("utf-8", "surrogateescape").split("\0") if p}
@@ -284,7 +331,11 @@ def test_no_exempt_prefix_names_a_path_that_can_actually_be_committed():
 
     The fix is not "delete that one string". It is that an exemption for a
     committable path is a pre-cut hole, so every prefix must be gitignored.
+
+    Gated in the body: the `git check-ignore` below is built here rather than in
+    a shared helper, so there is nothing else to attach the gate to.
     """
+    require_git_repository()
     sys.path.insert(0, str(TOOLS))
     try:
         import precommit_gate
@@ -307,7 +358,14 @@ def test_no_exempt_prefix_names_a_path_that_can_actually_be_committed():
 
 
 def test_the_gitignore_probe_actually_distinguishes_ignored_from_tracked():
-    """NON-VACUITY for the arm above: the probe must reject a committable path."""
+    """NON-VACUITY for the arm above: the probe must reject a committable path.
+
+    Gated in the body for the same reason as its partner, and it MUST carry its
+    own gate. If only the arm above were gated, this one would still fail with
+    git unreachable - and a non-vacuity partner that fails while the arm it
+    defends skips is the worst of the three possible states.
+    """
+    require_git_repository()
     checked = subprocess.run(
         ["git", "check-ignore", "-q", "--no-index", "core/probe_not_ignored.json"],
         cwd=str(REPO_ROOT),

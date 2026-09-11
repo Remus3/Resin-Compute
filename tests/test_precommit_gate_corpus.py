@@ -18,6 +18,36 @@ unreadable - which is TOOL PROVISIONING, a half the gate needs to run itself.
 A staged diff is not a tool the gate needs; it is the staged half's SUBJECT.
 `_check_scan_files` already carves that class out, on the same reasoning: a
 gate that scanned zero files must not report zero findings as a pass.
+
+THE GIT GATE HERE IS RUN-TIME AND PARTIAL, AND BOTH HALVES OF THAT WERE MEASURED.
+
+This module was UNGATED until 2026-09-11. With `PATH` replaced by one empty
+directory and both lookups verified empty - `shutil.which` returning None and
+`subprocess.run(["git", ...])` raising `FileNotFoundError` - it reported
+`2 failed, 3 passed` at exit 1:
+
+  - `test_git_returns_str_on_success` - `_git` catches the `OSError` and returns
+    `None`, so `isinstance(None, str)` is False. Git is reached inside
+    `tools/precommit_gate.py`, a CHILD module, so no AST walk over THIS file can
+    see that dependency; only the gate call now in its body records it.
+  - `test_check_staged_passes_a_clean_repo_with_nothing_staged` - `_init_repo`
+    shells `git init` directly and the `FileNotFoundError` escapes.
+
+`require_git_repository()` - the RUN-time per-test helper - is therefore called
+in exactly those two places, and `skip_module_without_git()` is NOT used: git is
+reached from inside test bodies, never at import time, and an import-time
+whole-module skip would take the other three tests uncollected for a dependency
+they do not have.
+
+THE OTHER THREE ARE DELIBERATELY LEFT UNGATED, and the reason is that their
+assertions stay TRUE with git absent rather than merely unexercised. Each pins
+the shape of a FAILED read - `None` rather than `""`, rc 1 rather than rc 0 -
+and `_git` answers `None` for an `OSError` by the same `except` clause it
+answers `None` for exit 128. What changes with git absent is WHICH branch of
+`_git` produced the `None`, not whether the contract held. Gating them would
+delete three live guards to buy nothing. If `_git` ever stops catching
+`OSError`, they go RED under an absent git - which is the correct answer, not a
+regression in this gating.
 """
 
 from __future__ import annotations
@@ -27,6 +57,8 @@ import subprocess
 import sys
 
 import pytest
+
+from tests.conftest import require_git_repository
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 TOOLS = REPO_ROOT / "tools"
@@ -43,7 +75,15 @@ def gate():
 
 
 def _init_repo(path: pathlib.Path) -> None:
-    """A real repo with a real commit, so `git diff --cached` is answerable."""
+    """A real repo with a real commit, so `git diff --cached` is answerable.
+
+    THE GATE SITS HERE RATHER THAN IN THE CALLER, which is the shape
+    `tests/conftest.py` documents for `require_git_repository()`: raise the skip
+    at the single point where the dependency is real. Without it the three
+    `subprocess.run(["git", ...])` calls below raise `FileNotFoundError` on a
+    host with no git and the caller reports a FAILURE rather than a skip.
+    """
+    require_git_repository()
     subprocess.run(
         ["git", "init", "-q", "."], cwd=str(path), capture_output=True, timeout=60,
     )
@@ -78,7 +118,17 @@ def test_git_returns_none_on_nonzero_returncode(tmp_path, gate):
 
 
 def test_git_returns_str_on_success(gate):
-    """The arm that says the None is about FAILURE and not about everything."""
+    """The arm that says the None is about FAILURE and not about everything.
+
+    THE ONLY ARM IN THIS MODULE WHOSE GIT DEPENDENCY IS INVISIBLE TO AN AST WALK
+    OVER THIS FILE. It launches nothing itself - `gate._git` does, inside
+    `tools/precommit_gate.py` - so the census-backed git half of the derivation
+    in `tests/test_conftest_git_gate_sites.py` cannot see it and named only the
+    OTHER of this module's two failing nodes. The gate call is what puts this
+    node into the derived population, which is the gate half of that union doing
+    exactly the job it is there for.
+    """
+    require_git_repository()
     out = gate._git(["rev-parse", "--show-toplevel"], str(REPO_ROOT))
     assert isinstance(out, str)
     assert out.strip()
