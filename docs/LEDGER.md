@@ -12,6 +12,136 @@ now.
 
 ---
 
+## 2026-09-11 - A census that fell silent rather than reporting, two widenings its own builder could not grade, and an undeclared scratch bucket four trees share
+
+One commit, pushed: `2ae95f3`, CI green. One outbound cross-repo note, and one
+halt that is still open with the operator.
+
+THE DEFECT AND WHY SILENCE IS THE WORST FAILURE SHAPE. `_launcher_name` in
+`tools/git_subprocess_census.py` branched on `ast.Attribute` and `ast.Name`
+only. A call whose `func` is itself a `Call`, a `Subscript` or a `BoolOp`
+therefore produced NO ROW AT ALL. Not a wrong bucket, which a conservation
+assertion catches - nothing, which it cannot, because there is nothing to
+conserve. Measured over the 142 tracked `.py` files: seven such nodes. Measured
+in a worktree at HEAD against the working tree, the census moves 78
+{GIT 38, NOT-GIT 22, UNRESOLVED 18} to 85 {38, 22, 25}, with GIT and NOT-GIT
+unmoved and all seven new rows opaque.
+
+REACHABILITY IS ZERO AND THE WRITE-UP SAYS SO. All four Call-callee sites in
+this tree are stub or predicate invocations and none is a launch. There are no
+`os.system`, `os.popen`, `os.spawn*` or `os.exec*` call sites outside the census
+and its own test. This is CONTRACT HONESTY, not a closed leak, and the commit
+message, the roadmap entry and this entry all say the same thing.
+
+THE ADJUDICATED CALL. The same slice also built an os-launcher table with a
+per-launcher executable position and an Attribute-receiver rule for
+`get_runner().run(...)`. Two refuters with DISTINCT LENSES - correctness and
+over-reach, then scope and consumers - both returned REFUTED. Criteria put to an
+adjudicator that had produced neither candidate, weighted in this order: contract
+honesty across title and report noun and both docstrings; count of NEW assertions
+that can actually go red; the standing precedent; cost and decay.
+
+  - CONTRACT HONESTY, NARROW. The widened title claimed "every process launch"
+    while `census_source` on a `subprocess.getoutput` call returns `[]`.
+  - ARMS THAT CAN FAIL, NARROW. `test_every_os_launcher_in_the_table_is_reachable`
+    built its `filler` from `spec.exec_index`, so THE FIXTURE MOVED WITH THE
+    MUTANT. Two agents sampled independently: 6 of 10 entries survived for one,
+    16 of 19 for the other. Shrinking `_LAUNCHER_SPELLINGS` from 24 names to two
+    also survived at 108 passed rc 0.
+  - PRECEDENT, GOVERNS AND FAVOURS NARROW. `ROADMAP.md`, found by its heading
+    "RULED 2026-09-09, AND THIS IS AN ADJUDICATED CALL - NOT AN OPERATOR
+    DECISION": position B, DO NOT WIDEN, on contract grounds at reachability zero
+    of eight. A fortiori here, where the widening makes the contract FALSE rather
+    than merely risking it.
+  - COST AND DECAY, NARROW. A 21-row per-host CPython signature table plus 21
+    hand pins, against nothing left to keep true.
+
+VERDICT NARROW. Both widenings deleted. The Attribute-receiver case is now a
+PINNED SILENCE whose spelling set is written as a LITERAL in the test rather than
+read off the module, so that arm cannot move with a mutant either.
+
+AN ADJUDICATOR FINDING WAS OVERSTATED AND WAS CORRECTED BEFORE IT REACHED CODE.
+It cited `_HARNESS_AXES` in `tests/test_task_liveness.py` as a rival tracked
+launcher list containing `getoutput`, implying a live disagreement between two
+censuses. That tuple lists subprocess module ATTRIBUTES a test shim must expose
+and also holds `CalledProcessError`, `DEVNULL`, `PIPE` and `__name__`. The
+getoutput gap is real and was measured directly; the tuple is not evidence for
+it, and the implementing slice was told not to cite it.
+
+FOUR PROSE COUNTS HAD DECAYED, THREE OF THEM BEFORE THIS SLICE EXISTED.
+`tests/test_conftest_git_gate_sites.py` said "five armed modules" and "every one
+of the five rows" while `len(_SITES)` is 6, and "four derive nothing" while it is
+five. Its claim that `tests/test_line_endings.py` was the ONLY module reading
+differently under the two bucket sets was false when written: three did at the
+old census, five do now, at 14 open against 22 closed. `conftest.py` and
+`tests/test_git_env_scrub.py` both quoted 78. The 28-of-38 subcommand split in
+those two comments was deliberately LEFT: GIT stayed at 38 and every new row is
+UNRESOLVED, so that split cannot have moved, and re-deriving it would have been
+work that could only confirm itself.
+
+THE DURABLE RULE FROM THAT. A PROSE COUNT THAT NOTHING ASSERTS WILL DECAY AGAIN.
+The armed-module numbers are now tied to `len(_SITES)` by an arm whose templates
+are stored UNFORMATTED, so it cannot satisfy itself with its own literals, and
+which fails both ways: the expected number word must be present and no other
+number word variant of the same sentence may be.
+
+AND A SECOND DURABLE RULE, PAID FOR TWICE THIS SESSION. A GREEN SUITE IS NOT
+EVIDENCE FOR A FAIL-CLOSED FOLD. `_GIT_BUCKETS` folds UNRESOLVED into
+git-reaching fail-closed, and it is evaluated only over the six armed modules,
+every one of which reports ZERO unresolved sites under both the old census and
+the new. The fold is VACUOUS on the real tree in both states, so the suite could
+not have gone red whatever the seven new rows were. Green was silence.
+
+WHAT THE ARMS ACTUALLY KILL, each mutant purging `__pycache__` and
+`.pytest_cache` on BOTH sides and restoring from held bytes, never
+`git checkout --`: reverting the opaque branch to `return None` fires
+`test_the_widened_conservation_arm_would_notice_a_drop` with the seven rows named
+in the diff; restoring the "total launch sites" noun fires
+`test_the_report_never_calls_an_unresolvable_callee_a_launch`; reinstating the
+Attribute-receiver widening fires
+`test_a_launcher_spelling_through_an_invisible_receiver_stays_a_silence`. Before
+the conservation arm existed, that first mutant left EVERY real-tree arm green.
+
+AN UNDECLARED MACHINE-WIDE SCRATCH BUCKET, HALTED AND NOT TOUCHED. `$TMPDIR` is
+UNSET in the Bash tool as it runs here, so `"$TMPDIR/probe.py"` expands to
+`/probe.py` and MSYS maps the leading slash to the git installation root. The
+redirect succeeds silently. `C:\Program Files\Git` holds 347 non-distribution
+files and 6,000,070 bytes dated 2026-04-19 to 2026-09-11. 239 of them contain no
+absolute path at all, so attribution is possible for 108 and the counts below are
+of files that NAME a root and never of files PRODUCED by one: 126 the CS repo
+root, 47 the CS worktree bucket, 29 `C:\Users`, 20 the RC worktree bucket, 11 the
+LL repo root, 4 the RC repo root, 1 the LW repo root, 1 this repo root. Eighteen
+carry the operator's account path. This tree's own recorded trap blamed a `/tmp`
+redirect, which is too narrow: the trigger is ANY unset-variable expansion
+leaving a leading slash. Broadcast to all four counterparties with four
+questions; nothing deleted, including this tree's own two files, because the path
+is outside the repo root and clause (a) governs.
+
+ONE CLAIM THIS TREE MADE TO A COUNTERPARTY WAS FALSE AND IS WITHDRAWN. The
+1910 outbound note told LW that both delivered files were machine-identity clean.
+`lw_write_tracer.py.from-lw` line 206 carries the operator's account name in its
+bare 8.3 short form with no users-segment prefix, and `ABSOLUTE_USER_PATH` in
+`tests/test_machine_identity.py` requires that prefix - measured with a control
+this run, bare form False and full form True. The consequence is a hole in THIS
+tree's detector, not a defect in the LW tree, and the matcher is deliberately NOT
+widened: an account name with no path around it is a proximity or entropy
+question, a different detector class with its own false-positive budget.
+
+Gates at the seam, each as its own command and every returncode read, measured
+2026-09-11: licence 47, docs consistency 29, docs hook commands 21, qa_companion
+18 passed 0 failed 1 skipped 3 noted, ruff clean, `tests` 2643 passed 1 skipped,
+`agents/pity_engine` 80 passed, `shell` 52 of 52, headless dry run exit 0 with 6
+skips, mypy Success over 35 files and ADVISORY.
+
+Merged files and their guards: `tools/git_subprocess_census.py` and
+`tests/test_git_subprocess_census.py`, guarded by
+`test_the_widened_conservation_arm_would_notice_a_drop` and
+`test_the_report_never_calls_an_unresolvable_callee_a_launch`;
+`tests/test_conftest_git_gate_sites.py`, guarded by
+`test_the_prose_counts_of_the_site_table_are_tied_to_the_table`; `conftest.py`
+and `tests/test_git_env_scrub.py`, prose only and guarded by nothing, which is
+why both decayed.
+
 ## 2026-09-11 - The suite was writing the operator's live day log, the publish gate leaked a token class, and a push from a linked worktree ran both suites against a substituted corpus
 
 Four commits, all pushed: `7786955`, `5d785f5`, `86491a3` and `78cdf96`. Every
