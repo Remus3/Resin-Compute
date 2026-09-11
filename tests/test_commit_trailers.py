@@ -48,19 +48,22 @@ and 4 skipped with trackedness as the stated reason.
 """
 from __future__ import annotations
 
+import ast
 import os
 import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 from _pytest.outcomes import Skipped
 
 from tests import conftest
 from tests.conftest import git_unusable_reason, require_git_repository
+from tools import git_subprocess_census as census
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -265,6 +268,47 @@ def test_the_missing_git_skip_path_is_not_taken_in_a_real_checkout():
     extract the second proves the detector actually fires rather than being
     stuck on "usable". Assert only one and a detector welded to a single answer
     passes forever.
+
+    THIS ARM IS UNGATED ON PURPOSE, AND THE REASON IS A SEAM RATHER THAN AN
+    OVERSIGHT. With git hidden from both lookups it reports 1 failed / 7 passed
+    / 5 skipped at exit 1, because a checkout whose `.git` is on disk while git
+    the BINARY is missing takes the first branch below and `reason is None` is
+    false. Read alone, that says the arm should call `require_git_repository()`.
+
+    It must not, while `tests/test_conftest_skip_path_pinned.py` ships as it is.
+    That module drives this exact function through `_expect_assertion_error`,
+    which REJECTS `Skipped` BY NAME - "a skip is a green-looking non-result" -
+    and pins that ANY non-None reason inside a checkout must REDDEN here.
+
+    SIX ARMS THERE CARRY THAT, AND THEY ARE TWO POPULATIONS RATHER THAN ONE.
+    FIVE are parametrised cases of
+    `test_any_non_none_reason_inside_a_checkout_reddens_even_a_falsy_one`, with
+    ids `x`, the empty string, a single space, `0` and `git is fine actually`.
+    The SIXTH is a separate, non-parametrised arm,
+    `test_a_reason_inside_a_checkout_reddens_and_the_message_carries_that_reason`.
+    An earlier version of this paragraph called all six "parametrised reasons",
+    which merges two populations into one and decays the moment either half
+    moves.
+
+    BOTH GATE PLACEMENTS REDDEN, AND AN EARLIER EITHER-OR HERE CLAIMED THEY
+    MEASURE THE SAME. They do not. Each carries its own reading, measured over
+    the whole `tests` suite on 2026-09-11:
+
+      - INSIDE THE CHECKOUT BRANCH, immediately before its assert:
+        6 failed / 2255 passed / 1 skipped, RETURNCODE 1, all six in
+        `tests/test_conftest_skip_path_pinned.py` - exactly the six arms above.
+      - AT THE TOP OF THIS FUNCTION, before the `.git` probe runs at all:
+        8 failed / 2253 passed / 1 skipped, RETURNCODE 1. SEVEN in that module -
+        the six above plus its
+        `test_a_reason_with_no_disk_dot_git_is_a_pass_and_not_a_false_red` - and
+        ONE here, this module's own arm of that same name. A gate that fires
+        before the `.git` probe also takes the FORCED-SHAPE controls that drive
+        the `else:` branch, which the checkout placement leaves standing.
+
+    So the top placement is strictly worse than the checkout placement, and
+    neither is available. The seam was ADJUDICATED on 2026-09-11; the ruling and
+    the fact it rests on are in the section immediately below this function,
+    where the fact is pinned as an ARM rather than left as prose.
     """
     on_disk = [p for p in (REPO_ROOT, *REPO_ROOT.parents) if (p / ".git").exists()]
     reason = git_unusable_reason()
@@ -282,6 +326,512 @@ def test_the_missing_git_skip_path_is_not_taken_in_a_real_checkout():
             "reports git as usable - the detector is not detecting, and the guards "
             "that depend on it will fail with a confusing error instead of skipping"
         )
+
+
+# ---------------------------------------------------------------------------
+# The adjudicated exemption for the arm above, recorded as an ARM
+# ---------------------------------------------------------------------------
+#
+# ADJUDICATED 2026-09-11, against criteria written before either candidate was
+# read. OUTCOME B: leave `test_the_missing_git_skip_path_is_not_taken_in_a_real
+# _checkout` UNGATED and RECORD THE EXEMPTION. The runner-up - a
+# not-runnable-only helper in `tests/conftest.py` so the two cases stop sharing
+# one answer - lost because it turns this module's absent-git run into
+# RETURNCODE 0, which is the vacuous green this whole line of work exists to
+# prevent.
+#
+# WHY THE CONFLICT DISSOLVES rather than being traded off. The rule that gated
+# the rest of this module has a population: SITES THAT SHELL GIT. That arm
+# shells nothing. It CONSUMES `git_unusable_reason()` in order to AUDIT the
+# helper, which is the opposite relationship. So the rule has already been
+# applied here IN FULL, and the residual red under an absent git - 1 failed / 7
+# passed / 5 skipped, RETURNCODE 1, measured 2026-09-11 - comes from the one
+# site OUTSIDE that population. The arms it would have taken with it are not
+# mis-scoped either: `tests/test_conftest_skip_path_pinned.py` reports 14 passed
+# at RETURNCODE 0 under the same probe, being stub-driven and environment
+# independent.
+#
+# THE RULING STANDS AND ITS CITATION DOES NOT, and those are separate things.
+# RE-DERIVED PER SITE on 2026-09-11: this module holds THREE subprocess launches
+# - in `_git`, `_run_commit_msg_hook` and `_lane_candidates` - and each of those
+# three names `require_git_repository()` as a bare name on a line ABOVE its own
+# launch. So "three sites, all gated" is true, and "no launch inside the exempt
+# arm" is true of the module's text. What does NOT support either statement is
+# the evidence the adjudicator cited for it: `census._guard_of` is a MODULE-LEVEL
+# walk that answers GATED the moment the module NAMES one of the four helpers
+# anywhere, an import line included, so it would have answered GATED for all
+# three sites with every gate deleted. The ruling needs no reversal. Its citation
+# needed re-deriving, and this is the re-derivation.
+#
+# AN UNEXPLAINED SECOND FAILURE, RECORDED AS UNEXPLAINED. A mutation pass that
+# planted a `git status` launch inside the exempt arm reported a second failure,
+# in `tests/test_moon_sync_responder.py`, and the builder who saw it attributed
+# it to the planted launch touching live runtime records. THAT ATTRIBUTION IS
+# REFUTED BY READING: that module contains no git call, no subprocess launch of
+# git and no read of live `ops/runtime/` or `logs/`; its only git-adjacent match
+# is the field name `m1_status`, and the arms concerned write solely into
+# `tmp_path`. A later pass could not reproduce the failure and does not know
+# which arm it was. RE-PROBED 2026-09-11 on this tree: that same mutant run over
+# the whole `tests` suite reported 1 failed / 2261 passed / 1 skipped at
+# RETURNCODE 1, the one failure being the arm below and nothing in
+# `tests/test_moon_sync_responder.py`. A non-reproduction is not an
+# explanation, so the cause stays UNKNOWN. It is written down here as unknown
+# rather than left with a cause that reading disproves.
+#
+# A PROSE NOTE DECAYS. The premise is therefore pinned below instead: add a git
+# launch to that function and the exemption stops being true, so the arm goes
+# RED rather than silently covering it.
+#
+# STATED AS A LIMIT, NEVER ASSERTED. Nothing in this section says anything about
+# what a PRESENT-but-BROKEN git must do. That is an open operator call, pinned
+# open on purpose by `tests/test_conftest_git_gate.py`, and the adjudicator
+# disqualified the gating outcome partly BECAUSE it would have answered that
+# question by side effect - routing did-not-answer to SKIP.
+#
+# THE RESIDUAL THE ADJUDICATOR RECORDED, and it is part of the ruling rather
+# than a caveat on it: if the operator ever rules SKIP on that open question,
+# THIS EXEMPTION REOPENS and has to be decided again.
+
+#: The one arm this module leaves ungated, named rather than located. A line
+#: number here would decay on the next edit above it.
+_EXEMPT_UNGATED_ARM = "test_the_missing_git_skip_path_is_not_taken_in_a_real_checkout"
+
+#: The two `tests/conftest.py` helpers that actually DECIDE a skip.
+#: `census.GUARD_NAMES` lists FOUR, and the other two - `git_unusable_reason`
+#: and `classify_git_probe` - only PRODUCE A REASON. Folding those in would make
+#: the exempt arm read as gated, since calling the first of them is exactly what
+#: it does, so the distinction is the whole subject of this section.
+_SKIP_DECIDING_HELPERS = frozenset({"require_git_repository", "skip_module_without_git"})
+
+
+def _own_source() -> str:
+    """This module's own bytes, which is what the census is run over."""
+    return Path(__file__).resolve().read_text(encoding="utf-8")
+
+
+class _ScopeFacts(NamedTuple):
+    """Per-function spans, bare-name call sets, and gate-call line numbers."""
+
+    spans: dict[str, tuple[int, int]]
+    calls: dict[str, set[str]]
+    gate_lines: dict[str, list[int]]
+
+
+def _scope_facts(source: str) -> _ScopeFacts:
+    """Per-function line spans, bare-name call sets and gate-call lines.
+
+    A pure function of the source so the arm below can point it at synthetic
+    sources whose answer is known, rather than only at this file.
+
+    GATE CALLS ARE COLLECTED IN BOTH SPELLINGS. `require_git_repository()` and
+    `conftest.require_git_repository()` are the same gate doing the same thing,
+    and an earlier version of this helper saw only the first. Measured
+    2026-09-11 against the second spelling substituted into `_git`: the arm
+    below went RED on a gate that works, which is a false positive on correct
+    code and the worst kind of guard. The attribute spelling is matched on its
+    LAST component only, and only when that component is one of the two
+    skip-deciding helper names, so an unrelated `obj.run()` adds no edge.
+    """
+    spans: dict[str, tuple[int, int]] = {}
+    calls: dict[str, set[str]] = {}
+    gate_lines: dict[str, list[int]] = {}
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        spans[node.name] = (node.lineno, getattr(node, "end_lineno", None) or node.lineno)
+        named: set[str] = set()
+        gates: list[int] = []
+        for sub in ast.walk(node):
+            if not isinstance(sub, ast.Call):
+                continue
+            if isinstance(sub.func, ast.Name):
+                named.add(sub.func.id)
+                if sub.func.id in _SKIP_DECIDING_HELPERS:
+                    gates.append(sub.lineno)
+            elif isinstance(sub.func, ast.Attribute) and sub.func.attr in _SKIP_DECIDING_HELPERS:
+                gates.append(sub.lineno)
+        calls[node.name] = named
+        gate_lines[node.name] = sorted(gates)
+    return _ScopeFacts(spans, calls, gate_lines)
+
+
+def _name_closure(seed: Iterable[str], calls: dict[str, set[str]]) -> frozenset[str]:
+    """Close `seed` upwards over MODULE-LOCAL BARE-NAME CALL EDGES.
+
+    NAME PRESENCE, NOT REACHABILITY, AND THE DISTINCTION IS LOAD-BEARING. The
+    edges come from `ast.walk` over a whole function body, which has no order
+    and no control flow, so "f names g" is all this can ever mean. The limits
+    that buys are enumerated on the arm below rather than hidden here.
+
+    A fixpoint rather than a recursion, so a cyclic call graph terminates.
+    """
+    reached = set(seed)
+    changed = True
+    while changed:
+        changed = False
+        for name, called in calls.items():
+            if name not in reached and called & reached:
+                reached.add(name)
+                changed = True
+    return frozenset(reached)
+
+
+class _LaunchAudit(NamedTuple):
+    """One module's launch sites, and who they belong to."""
+
+    sites: tuple[census.CallSite, ...]
+    facts: _ScopeFacts
+    #: Sites held by at least one function span. Compared by COUNT against
+    #: `sites`, which is the conservation check - see the arm below.
+    attributed: tuple[census.CallSite, ...]
+    #: Functions whose own span holds a launch.
+    holding: frozenset[str]
+    #: `holding` closed over call edges: a function that names one of them.
+    launching: frozenset[str]
+    #: Functions that name a skip-deciding helper, closed over the same edges.
+    gate_naming: frozenset[str]
+    #: Functions that name a gate only AFTER their first launch, by line.
+    late_gates: tuple[str, ...]
+
+
+def _audit_launches(source: str, path: str) -> _LaunchAudit:
+    """Every subprocess launch in `source`, attributed to the functions holding it.
+
+    ATTRIBUTION IS TO EVERY ENCLOSING FUNCTION, NOT THE INNERMOST ONE. A launch
+    inside a nested `def` is genuinely held by the outer function too, and
+    innermost-only attribution would let a nested `def` inside the exempt arm
+    carry a launch the arm below then reports as clean. That case is one of the
+    stubs. It is also why the conservation check below is AT LEAST ONE owner
+    per site rather than exactly one: a nested launch legitimately has two.
+    """
+    sites = tuple(census.census_source(source, path))
+    facts = _scope_facts(source)
+    owners = [
+        [name for name, (start, end) in facts.spans.items() if start <= site.lineno <= end]
+        for site in sites
+    ]
+    attributed = tuple(site for site, held_by in zip(sites, owners) if held_by)
+    holding = frozenset(name for held_by in owners for name in held_by)
+    launching = _name_closure(holding, facts.calls)
+    gate_naming = _name_closure(
+        (name for name, lines in facts.gate_lines.items() if lines), facts.calls
+    )
+    late: list[str] = []
+    for name in sorted(holding):
+        lines = facts.gate_lines[name]
+        if not lines:
+            continue
+        start, end = facts.spans[name]
+        first_launch = min(site.lineno for site in sites if start <= site.lineno <= end)
+        if min(lines) > first_launch:
+            late.append(f"{name} (first gate line {min(lines)}, first launch line {first_launch})")
+    return _LaunchAudit(
+        sites, facts, attributed, holding, launching, gate_naming, tuple(late)
+    )
+
+
+#: The three ways a module's text can put the exempt arm back inside the
+#: population of the shell-git rule. Each is a distinct MECHANISM and each is
+#: driven by its own stub below; a repair that closed one and not the others
+#: is exactly what the 2026-09-11 refutation found.
+_LEXICAL = "LEXICAL"
+_TRANSITIVE = "TRANSITIVE"
+_UNATTRIBUTED = "UNATTRIBUTED"
+
+
+def _exemption_complaints(audit: _LaunchAudit) -> list[str]:
+    """Every reason the exempt arm's shells-nothing premise does NOT hold.
+
+    An empty list is the premise holding. Each complaint is prefixed with the
+    mechanism that produced it, so a stub caught for the wrong reason is a
+    visible failure rather than a lucky pass.
+    """
+    out: list[str] = []
+    span = audit.facts.spans.get(_EXEMPT_UNGATED_ARM)
+    if span is not None:
+        start, end = span
+        inside = sorted(
+            f"{site.callee} (bucket {site.bucket}) at line {site.lineno}"
+            for site in audit.sites
+            if start <= site.lineno <= end
+        )
+        if inside:
+            out.append(f"{_LEXICAL}: a launch sits inside the arm's own span: {inside}")
+    if _EXEMPT_UNGATED_ARM in audit.launching and _EXEMPT_UNGATED_ARM not in audit.holding:
+        via = sorted(audit.facts.calls[_EXEMPT_UNGATED_ARM] & audit.launching)
+        out.append(
+            f"{_TRANSITIVE}: the arm names {via}, which launch(es) git in this same "
+            "module, so the arm shells git through a module-local helper"
+        )
+    if len(audit.attributed) != len(audit.sites):
+        held = {id(site) for site in audit.attributed}
+        lost = sorted(
+            f"{site.callee} at line {site.lineno}"
+            for site in audit.sites
+            if id(site) not in held
+        )
+        out.append(
+            f"{_UNATTRIBUTED}: the census found {len(audit.sites)} launch site(s) and "
+            f"{len(audit.attributed)} were held by a function span, so {lost} belong to "
+            "no function and are audited neither for nor against the exemption"
+        )
+    return out
+
+
+#: STUBS THAT VARY MORE THAN ONE POSITION, which is the whole point of them.
+#: The previous single stub varied the ONE position its own mutant varied - a
+#: bare `def`, no decorator, the launch as the first body statement, literal
+#: argv, dotted `subprocess.run` - and was byte-for-byte the shape the detector
+#: already caught. A decoy that varies one position pins one position, and the
+#: 2026-09-11 refutation walked in through every position it held fixed.
+#:
+#: Each entry is (label, expected mechanism, source). The source is TEXT and is
+#: never executed, so an import that would not resolve at runtime is fine.
+_EXEMPT_ARM_LAUNCH_STUBS = (
+    (
+        "literal argv, dotted subprocess.run, first statement of the body",
+        _LEXICAL,
+        "import subprocess\n"
+        "\n"
+        "\n"
+        "def " + _EXEMPT_UNGATED_ARM + "():\n"
+        '    subprocess.run(["git", "status"], capture_output=True)\n',
+    ),
+    (
+        "aliased module, argv bound to a name, args= keyword, not the first statement",
+        _LEXICAL,
+        "import subprocess as sp\n"
+        "\n"
+        "\n"
+        "def " + _EXEMPT_UNGATED_ARM + "():\n"
+        "    note = 'an ordinary statement first'\n"
+        '    argv = ["git", "rev-parse", "HEAD"]\n'
+        "    sp.run(args=argv, capture_output=True)\n"
+        "    return note\n",
+    ),
+    (
+        "from-imported check_output, called by bare name",
+        _LEXICAL,
+        "from subprocess import check_output\n"
+        "\n"
+        "\n"
+        "def " + _EXEMPT_UNGATED_ARM + "():\n"
+        '    return check_output(["git", "log", "-1"])\n',
+    ),
+    (
+        "launch inside a nested def within the arm, which innermost-only attribution drops",
+        _LEXICAL,
+        "import subprocess\n"
+        "\n"
+        "\n"
+        "def " + _EXEMPT_UNGATED_ARM + "():\n"
+        "    def _inner():\n"
+        '        subprocess.run(["git", "status"], capture_output=True)\n'
+        "\n"
+        "    _inner()\n",
+    ),
+    (
+        "launch reached through a module-local helper the arm names",
+        _TRANSITIVE,
+        "import subprocess\n"
+        "\n"
+        "\n"
+        "def _git(*args):\n"
+        '    return subprocess.run(["git", *args], capture_output=True)\n'
+        "\n"
+        "\n"
+        "def " + _EXEMPT_UNGATED_ARM + "():\n"
+        '    _git("status", "--porcelain")\n'
+        "    return None\n",
+    ),
+    (
+        "launch in a DECORATOR, which sits ABOVE the def line and so above the span",
+        _UNATTRIBUTED,
+        "import subprocess\n"
+        "\n"
+        "import pytest\n"
+        "\n"
+        "\n"
+        "@pytest.mark.skipif(\n"
+        '    subprocess.run(["git", "status"], capture_output=True).returncode == 99,\n'
+        '    reason="never fires",\n'
+        ")\n"
+        "def " + _EXEMPT_UNGATED_ARM + "():\n"
+        "    return None\n",
+    ),
+)
+
+#: THE CONTROL, and without it every stub above could be reddening merely
+#: because the module contains a launch at all. Here one does - in `_launcher`,
+#: which the arm never names - and the expected answer is NO COMPLAINT.
+_EXEMPT_ARM_CLEAN_STUB = (
+    "import subprocess\n"
+    "\n"
+    "\n"
+    "def _launcher():\n"
+    '    return subprocess.run(["git", "status"], capture_output=True)\n'
+    "\n"
+    "\n"
+    "def " + _EXEMPT_UNGATED_ARM + "():\n"
+    "    return git_unusable_reason()\n"
+)
+
+
+def test_the_exempt_arm_launches_no_git_and_every_launch_here_names_a_gate() -> None:
+    """THE ADJUDICATED EXEMPTION, PINNED AS THE FACT IT RESTS ON.
+
+    Two halves, and they are different strengths on purpose.
+
+    HALF ONE IS THE EXEMPTION'S PREMISE. `tools/git_subprocess_census.py` finds
+    no subprocess launch that the exempt arm holds - not inside its own span,
+    not through a module-local helper it names, and no launch anywhere in this
+    module that belongs to no function at all. That is what puts it OUTSIDE the
+    population of the shell-git rule. Add a launch by any of those three routes
+    and this half reddens.
+
+    HALF TWO IS THAT THE RULE IS APPLIED HERE IN FULL. Every function that DOES
+    hold a launch must NAME one of the two skip-deciding helpers, itself or
+    through a module-local function it names.
+
+    WHAT "NAMES" MEANS, AND IT IS NOT "REACHES". The call edges come from
+    `ast.walk` over a whole function body. There is no ordering and no control
+    flow in that, so this arm can only ever assert NAME PRESENCE. Three shapes
+    therefore read as gated here while behaving otherwise, each measured
+    2026-09-11 by substituting it into `_git` and running this arm:
+
+      - A GATE PLACED AFTER THE LAUNCH. Behaviourally this is the defect the
+        rule exists to prevent: with `require_git_repository()` below
+        `subprocess.run(..., check=True)`, `_git` under an absent git RAISES
+        instead of skipping. Name presence alone read that as gated. THIS ONE
+        IS NOW CAUGHT, by a cheap line-number comparison rather than by control
+        flow - the first gate line in a launching function must precede its
+        first launch line. The comparison is per function and by LINE, so it
+        says nothing about a gate in a branch that does not execute.
+      - A GATE UNDER `if False:` - still a bare name in the body, still reads
+        as gated, NOT CAUGHT. Catching it needs control-flow analysis.
+      - A GATE INSIDE A NESTED `def` THAT IS NEVER CALLED - same, NOT CAUGHT.
+        `ast.walk` descends into the nested body and collects the name.
+
+    Those two are named as limits rather than papered over. An honest narrow
+    claim beats a broad one that is false.
+
+    THE CALL GRAPH IS MODULE-LOCAL. An edge exists only to a function DEFINED
+    in this module, so a call into an imported function that launches git is
+    invisible here. That is not a hole in the exemption: the census is over
+    this module's own bytes, and the exempt arm's relationship to
+    `git_unusable_reason()` - consuming it to AUDIT it - is the thing that was
+    adjudicated, not something this arm re-decides.
+
+    THE CENSUS `guard` COLUMN CANNOT CARRY HALF TWO, and that is measured
+    rather than assumed: `census._guard_of` walks the WHOLE module and answers
+    GATED if the module NAMES any of the four helpers ANYWHERE, so all three
+    launch sites in this file report `guard='GATED'` and would keep reporting
+    it after a gate was deleted from any one of them. Measured 2026-09-11. So
+    half two derives per-function name presence here instead of reading that
+    column, and the column is not consulted at all.
+
+    CONSERVATION IS AN ASSERTION AND NOT AN INVARIANT, because it has already
+    failed once. `node.lineno` for a decorated `FunctionDef` is the `def` line,
+    so a decorator sits ABOVE the span. A launch planted in a decorator on the
+    exempt arm was COUNTED by the census - three sites became four - and then
+    dropped by both halves: outside every span, so half one reported clean, and
+    owned by no function, so half two never audited it. Measured 2026-09-11.
+    The repair is not a decorator special case; it is the count check below,
+    which is the only shape that catches a drop whatever caused it.
+
+    NON-VACUITY IS BUILT IN rather than left to a mutation pass: the span
+    lookup has to have found a real, non-degenerate span, the census has to
+    have found launches at all, some function has to hold one, every stub in
+    `_EXEMPT_ARM_LAUNCH_STUBS` has to be caught BY ITS OWN MECHANISM, and the
+    clean control stub - which does contain a launch, in a function the arm
+    never names - has to be caught by none of them.
+
+    THIS ARM ASSERTS NOTHING ABOUT A PRESENT-BUT-BROKEN GIT. That is an open
+    operator call. If the operator ever rules SKIP on it, the exemption
+    recorded above REOPENS and this arm is what has to be revisited.
+    """
+    audit = _audit_launches(_own_source(), "tests/test_commit_trailers.py")
+    spans = audit.facts.spans
+
+    assert _EXEMPT_UNGATED_ARM in spans, (
+        f"{_EXEMPT_UNGATED_ARM} is not defined in this module, so the exemption "
+        "recorded above names a function that no longer exists and every assertion "
+        f"below it would be about nothing: {sorted(spans)[:8]}"
+    )
+    start, end = spans[_EXEMPT_UNGATED_ARM]
+    assert end > start, (
+        "the exempt arm's derived span is a single line, so 'no launch inside it' is "
+        "true of almost any file and this arm has stopped measuring: "
+        f"{(start, end)}"
+    )
+
+    assert audit.sites, (
+        "the census found NO subprocess launch anywhere in this module, so both halves "
+        "below are assertions over an empty set and cannot fail. Either the launches "
+        "are gone - in which case the gating this section records is moot and the "
+        "section should go - or the census stopped seeing them"
+    )
+
+    assert len(audit.attributed) == len(audit.sites), (
+        f"CONSERVATION: the census counted {len(audit.sites)} launch site(s) in this "
+        f"module and only {len(audit.attributed)} of them fall inside any function's "
+        "span. The leftovers are attributed to nobody, so no per-function claim below "
+        "covers them - which is exactly how a launch planted in a DECORATOR was "
+        "counted and then dropped by both halves. Attribute them or remove them; do "
+        "NOT drop the count check"
+    )
+
+    complaints = _exemption_complaints(audit)
+    assert not complaints, (
+        f"{_EXEMPT_UNGATED_ARM} no longer shells nothing: {complaints}. The "
+        "adjudicated exemption recorded above rests on that function launching no git "
+        "- it CONSUMES git_unusable_reason() to AUDIT the helper - so a launch it "
+        "holds, by any of those routes, puts it back INSIDE the population the gating "
+        "rule covers and the exemption no longer holds. Remove the launch, or re-open "
+        "the seam and adjudicate it again. Do NOT widen this arm to tolerate it"
+    )
+
+    assert audit.holding, (
+        f"the census reported {len(audit.sites)} launch site(s) and none of them fell "
+        "inside any function's span, so the attribution step matched nothing and half "
+        "two below is vacuous"
+    )
+    ungated = sorted(audit.launching - audit.gate_naming)
+    assert not ungated, (
+        f"{ungated} launch a subprocess in this module, directly or through a "
+        f"module-local function they name, with no {sorted(_SKIP_DECIDING_HELPERS)} "
+        "named anywhere on that path - so those sites FAIL rather than skip when git "
+        "is unreachable. The exemption above is specifically for the ONE arm that "
+        "shells nothing; it is not cover for a site that does"
+    )
+    assert not audit.late_gates, (
+        f"{list(audit.late_gates)} name a gate only AFTER their own first launch. "
+        "Name presence would have read that as gated, and it is not: a gate below "
+        "`subprocess.run(..., check=True)` never runs, so the function RAISES under an "
+        "absent git instead of skipping. Move the gate above the launch"
+    )
+
+    for label, mechanism, stub in _EXEMPT_ARM_LAUNCH_STUBS:
+        stub_complaints = _exemption_complaints(_audit_launches(stub, f"<stub {label}>"))
+        assert stub_complaints, (
+            f"the detector found nothing wrong with the stub '{label}', in which a "
+            "launch IS held by a function of the exempt name. Its empty answer about "
+            "this file therefore measured the detector rather than the file"
+        )
+        assert any(text.startswith(mechanism) for text in stub_complaints), (
+            f"the stub '{label}' was caught, but not by {mechanism} - the mechanism it "
+            f"exists to exercise: {stub_complaints}. A stub caught by the wrong "
+            "mechanism leaves its own mechanism unpinned"
+        )
+
+    control = _exemption_complaints(_audit_launches(_EXEMPT_ARM_CLEAN_STUB, "<clean stub>"))
+    assert not control, (
+        f"the CONTROL stub was reported dirty: {control}. It contains a launch, in a "
+        "function the exempt arm never names, and the correct answer is no complaint. "
+        "A detector that complains here is complaining about the presence of a launch "
+        "anywhere, so every stub above passes for a reason that has nothing to do with "
+        "the exempt arm"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -369,6 +369,20 @@ name-grammar class above.
 Why `ast` and not a bounded text window: a window cannot tell code from a
 comment or from a string that happens to sit inside it. That ceiling is already
 recorded in `ROADMAP.md` and is not re-derived here.
+
+WHICH GIT GATE THIS MODULE USES, AND WHY THAT ONE.
+
+`require_git_repository()` - the RUN-time per-test shape - called from inside
+`_tracked_python_files()`, the single function here that shells git.
+
+Not `skip_module_without_git()`, and the margin here is the widest of the three
+modules gated in this slice. Exactly ONE arm in this file needs a repository:
+the cross-corpus census. Everything else reads
+`tools/moon_sync_responder.py` and this module's own fixtures straight off
+disk, and all of that is present in a `git archive` extract. Measured under the
+absence mechanism in `tests/test_conftest_git_gate_sites.py`: 1 of 80 nodes
+reaches git, so 79 keep running. An import-time whole-module skip would throw
+away 79 working guards to excuse 1.
 """
 
 from __future__ import annotations
@@ -380,6 +394,8 @@ import tokenize
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import require_git_repository
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RESPONDER = REPO_ROOT / "tools" / "moon_sync_responder.py"
@@ -1904,7 +1920,14 @@ def _tracked_python_files() -> list[str]:
     picks up `.claude/worktrees/`, `__pycache__` and untracked scratch, and a
     census whose corpus contains stale copies of the tree is a measurement of
     the copies rather than of the tree.
+
+    GATED. With git unreachable the `check=True` below raises FileNotFoundError
+    and the single caller reports a FAILURE, which says nothing is wrong with
+    the code under test. The corpus is unknowable there, so the honest answer is
+    a skip naming the missing repository. Falling back to an rglob is exactly
+    the stale-copy measurement the paragraph above refuses.
     """
+    require_git_repository()
     completed = subprocess.run(
         ["git", "ls-files", "-z", "--", "*.py"],
         cwd=REPO_ROOT,
