@@ -181,30 +181,239 @@ class Dashboard:
 
 
 def _resin_panel(account: AccountState, now: datetime, **_: object) -> Panel:
-    """Resin state. Always has something true to say.
+    """Resin PROJECTED from the last recorded observation forward to `now`.
 
-    This is the only panel that needs no profile fetch and no account data, which
-    makes it the honest smoke test that the surface is alive at all.
+    THE DEFECT THIS SHAPE EXISTS TO PREVENT. This panel used to fold the ledger
+    to a balance and render that number as the current resin, never touching the
+    `now` it was handed. The same account therefore read identically at +0h, +4h
+    and +12h while `core.resin.resin_at` answered 20, 50 and 110 for the same
+    inputs. Resin regenerates on a wall clock whether anything reads it or not,
+    so that was not a stale number - it was a wrong one, and it got wronger the
+    longer the operator left the window open.
+
+    The fix is to call `core.resin.resin_at`, which already models the floor
+    quantization, the cap and the above-cap overflow rule. Nothing here re-derives
+    any of that, and nothing here retypes a constant: a second copy of the cap or
+    the regeneration interval would be a second source of truth free to drift out
+    of step with the first in silence.
+
+    WHY THE OBSERVATION MOMENT IS `last_synced_at`. The ledger entry carries its
+    own `occurred_at`, but the ledger is an append-only log of DELTAS, and a fold
+    of it is a balance as of the last event - not as of the last time anybody
+    looked at the account. `last_synced_at` is the moment the snapshot was taken,
+    which is the moment that balance was last known to be true.
+
+    AND THE HONESTY CONSTRAINT, which is the larger half of this function.
+    ADR-005's rule is that a panel never fakes a number. A projection is an
+    ESTIMATE, not a measurement: the instant the operator spends resin the
+    projection is high and this process cannot know. Regeneration only ever adds,
+    so a projection is an UPPER BOUND on the truth and never a lower one. The
+    panel therefore always says which of the two a number is, always shows the
+    observation it was projected from, and always shows how old that observation
+    is. A bare "137 / 200" with no provenance is the failure mode - it is
+    indistinguishable from a reading taken a second ago.
+
+    SIX STATES, and the reason for each:
+
+    1. No observation time and no resin ever recorded. READY, and it claims NO
+       balance. The regeneration rules are constants true of every account, so
+       there is something true to say and no number to be wrong about. This is
+       also the contract `tests/test_surface_model.py` pins - the resin panel is
+       the smoke test that the surface is alive at all, and it is READY about the
+       mechanism rather than about an account nobody has synced.
+    2. A recorded balance with no observation time. PARTIAL. The number is real
+       and undatable, and projecting it would mean inventing the elapsed time.
+    3. An observation stamped AHEAD of `now`. PARTIAL. One of the two clocks is
+       wrong. `resin_at` would decline to regenerate and hand back the observed
+       value, which is the right arithmetic and the wrong thing to PRESENT: it
+       would read as a confident present-tense measurement taken from a clock we
+       have just caught disagreeing with itself.
+    4. `now` exactly at the observation. READY, and the row says "observed"
+       rather than "projected", because at zero elapsed it IS the measurement.
+    5. A reading no older than STALE_AFTER. READY, projected, labelled.
+    6. A reading older than that. PARTIAL, and the split inside it is the
+       interesting one. Past `time_to_reach(observed, CAP)` the projection has
+       SATURATED: `resin_at` answers the cap for an observation of 10 and for one
+       of 190 alike, so the number stops being a function of anything the
+       operator did and becomes a function of the constants alone. Printing it
+       would render "200 / 200" - which reads as a measured, capped account - for
+       an account nobody has looked at in days. So past saturation the panel
+       presents NO present-tense number and shows only what was measured and
+       when. That one branch has THREE honest explanations rather than one,
+       because `time_to_reach` answers `timedelta(0)` at or above the cap and so
+       the branch fires with no refill span elapsed: see the comment at the
+       branch. Short of saturation the projection still carries information, so it
+       is shown and named an upper bound, which is the `_plan_panel` precedent: a
+       truthful PARTIAL that states its own limitation in the same breath as its
+       content.
     """
-    ledger_resin = account.ledger.balance_of(CurrencyKind.ORIGINAL_RESIN)
-    current = max(0, min(ledger_resin, resin.ORIGINAL_RESIN_CAP))
-    to_cap = resin.time_to_reach(current, resin.ORIGINAL_RESIN_CAP)
+    # Function-local, matching `_wishes_panel` and `_roster_panel`, and because
+    # this builder is the only thing in the module that needs it.
+    from datetime import UTC
 
-    rows = [
-        ("Resin", f"{current} / {resin.ORIGINAL_RESIN_CAP}"),
+    def _utc(moment: datetime) -> datetime:
+        """A naive datetime is taken to be UTC, as `core.resin` and `core.state_io` both do.
+
+        Mixing naive and aware datetimes in a subtraction raises, and a
+        hand-edited state file can carry either.
+        """
+        return moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
+
+    cap = resin.ORIGINAL_RESIN_CAP
+    # NOT clamped to the cap. `core/resin.py` is explicit that an above-cap
+    # balance is legal - Fragile Resin and event rewards push past 200 - and that
+    # `min(200, x)` destroys a real balance the operator paid for.
+    observed = max(0, account.ledger.balance_of(CurrencyKind.ORIGINAL_RESIN))
+    ever_recorded = any(e.currency is CurrencyKind.ORIGINAL_RESIN for e in account.ledger.entries)
+    observed_at = account.last_synced_at
+
+    mechanism = [
         ("Regenerates", f"1 per {resin.RESIN_REGEN_MINUTES} minutes"),
         ("Daily budget", f"{resin.daily_resin_budget()}"),
     ]
-    if to_cap is None:
+
+    def _unknown(reason: str, waiting: str, seen_at: str) -> Panel:
+        """A panel that states the measurement and refuses to state a present-tense one.
+
+        THE VALUE CELL CARRIES A VALUE, NOT A SENTENCE. `surface/render.py`
+        right-aligns every `dd`, so a reason long enough to wrap renders as prose
+        with a ragged left edge - measured in Chromium, four lines at 360px and
+        five at 620px and 900px, and the hardest thing on the board to read. The
+        cell therefore carries the bare word and `reason` leads `waiting_on`,
+        which is left-aligned prose the panel already has. Nothing is dropped:
+        `reason` is a complete sentence and is placed, not deleted.
+        """
+        rows = [
+            ("Resin now", "unknown"),
+            ("Observed", f"{observed} / {cap} at {seen_at}" if ever_recorded else "nothing recorded"),
+            *mechanism,
+        ]
+        return Panel(
+            panel_id="resin",
+            title="Resin",
+            state=PanelState.PARTIAL,
+            rows=tuple(rows),
+            waiting_on=f"{reason} {waiting}",
+        )
+
+    # 1. Nothing observed, ever.
+    if observed_at is None and not ever_recorded:
+        return Panel(
+            panel_id="resin",
+            title="Resin",
+            state=PanelState.READY,
+            rows=tuple([("Resin", "not recorded yet"), *mechanism]),
+            note=(
+                "No resin observation has been recorded, so this panel states the regeneration "
+                "rules and claims no balance. A sync gives it something to project from."
+            ),
+        )
+
+    # 2. A balance nobody dated.
+    if observed_at is None:
+        return _unknown(
+            "The reading carries no observation time.",
+            "The ledger holds a resin balance but nothing recorded when it was seen, "
+            "so there is no elapsed time to project across. Sync the account to date the reading.",
+            "an unrecorded time",
+        )
+
+    seen_at = _utc(observed_at).strftime("%Y-%m-%d %H:%M UTC")
+    elapsed = _utc(now) - _utc(observed_at)
+
+    # 3. An observation from the future.
+    if elapsed < timedelta(0):
+        return _unknown(
+            f"The reading is stamped {_humanise(-elapsed)} ahead of this clock.",
+            "The recorded observation time is ahead of the dashboard clock, so one of the two "
+            "is wrong and nothing can be projected across the gap. Re-sync to restamp the reading.",
+            seen_at,
+        )
+
+    # 6b. The projection has saturated, so it no longer says anything about this
+    # account. ONE branch, THREE honest readings of it, because `time_to_reach`
+    # returns `timedelta(0)` for an observation at or above the cap: there, the
+    # branch fires with NO refill span having elapsed at all. Saying the reading
+    # is "longer than a full refill" of zero is true of every reading ever taken
+    # and is therefore a statement about nothing - and the operator's own board
+    # reads 200 / 200, so that was the common case rather than a corner. The
+    # DECISION to withhold the projected number is correct in all three; only
+    # the explanation differs.
+    refill = resin.time_to_reach(observed, cap)
+    if elapsed > STALE_AFTER and (refill is None or elapsed >= refill):
+        age = _humanise(elapsed)
+        if observed > cap:
+            # Above-cap overflow is legal per `core/resin.py` and is never
+            # clipped, so the Observed row still shows the real balance.
+            reason = (
+                f"The reading is {age} old and was {observed - cap} above the cap, "
+                "which is a balance regeneration never adds to."
+            )
+            waiting = (
+                "An above-cap balance is carried forward unchanged rather than clamped, so a "
+                "projection would restate the observed number as though it had just been "
+                "measured. Sync to get a real number."
+            )
+        elif observed == cap:
+            reason = f"The reading is {age} old and was already at the cap, so no refill span had to elapse."
+            waiting = (
+                "Regeneration stops at the cap, so a projection would restate the observed "
+                "number as though it had just been measured. Sync to get a real number."
+            )
+        else:
+            reason = f"The reading is {age} old, longer than a full refill from that balance."
+            waiting = (
+                "A projection this far out reads as capped whatever was observed, so it would "
+                "state the regeneration constants and nothing about this account. Sync to get a "
+                "real number."
+            )
+        return _unknown(reason, waiting, seen_at)
+
+    projected = resin.resin_at(observed, observed_at, now)
+    stale = elapsed > STALE_AFTER
+    if elapsed == timedelta(0):
+        label = "Resin (observed)"
+    elif stale:
+        label = "Resin (projected upper bound)"
+    else:
+        label = "Resin (projected)"
+
+    rows = [
+        (label, f"{projected} / {cap}"),
+        ("Observed", f"{observed} / {cap} at {seen_at}"),
+        ("Observation age", _humanise(elapsed)),
+    ]
+    to_cap = resin.time_to_reach(projected, cap)
+    if to_cap is None or to_cap == timedelta(0):
         rows.append(("Time to cap", "already at cap"))
     else:
         hours, remainder = divmod(int(to_cap.total_seconds()), 3600)
         rows.append(("Time to cap", f"{hours}h {remainder // 60:02d}m"))
+    rows.extend(mechanism)
 
-    note = ""
-    if ledger_resin == 0:
-        note = "No resin events on the ledger yet, so this reads as empty rather than as measured."
-    return Panel(panel_id="resin", title="Resin", state=PanelState.READY, rows=tuple(rows), note=note)
+    if stale:
+        return Panel(
+            panel_id="resin",
+            title="Resin",
+            state=PanelState.PARTIAL,
+            rows=tuple(rows),
+            waiting_on=(
+                f"The reading is {_humanise(elapsed)} old. Regeneration is projected forward from "
+                "it, but any resin spent since is invisible here, so this is an upper bound and "
+                "not a measurement."
+            ),
+        )
+    return Panel(
+        panel_id="resin",
+        title="Resin",
+        state=PanelState.READY,
+        rows=tuple(rows),
+        note=(
+            ""
+            if elapsed == timedelta(0)
+            else "Projected forward by regeneration alone. Resin spent since the reading is not visible here."
+        ),
+    )
 
 
 def _today_panel(account: AccountState, now: datetime, **_: object) -> Panel:
