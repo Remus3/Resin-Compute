@@ -19,16 +19,54 @@ THREE BUCKETS, NEVER TWO.
   GIT         argv[0] statically resolves to a git executable
   NOT-GIT     argv[0] statically resolves to something that is not git
   UNRESOLVED  argv[0] is a parameter, a call, an f-string, a rebound name, a
-              starred splat, an empty sequence - anything this module cannot
-              answer at parse time
+              starred splat, an empty sequence - OR THE CALLEE ITSELF cannot be
+              resolved, so whether this is a call into subprocess at all is
+              unknown. Anything this module cannot answer at parse time
 
 The UNRESOLVED bucket is the honest part. A census that silently folds what it
 cannot resolve into NOT-GIT, or drops it, has reproduced the very defect this
 module exists to kill: a confident number whose denominator was never checked.
 
+AN UNRESOLVABLE CALLEE IS A ROW, NOT A SILENCE.
+
+`_launcher_for` used to branch on `ast.Attribute` and `ast.Name` and return None
+for everything else, which meant NO ROW AT ALL when `call.func` was itself a
+call - `getattr(subprocess, "run")(...)`, `functools.partial(subprocess.run)(...)`,
+a factory handing back a stub shaped exactly like `subprocess.run`. Silence, and
+a conservation assertion cannot catch silence because there is nothing left to
+conserve. The repair is SUBTRACTIVE, the same shape as `_outer_positions`: a
+func that is neither an Attribute nor a Name is unresolvable and says so, which
+also covers an `ast.Subscript` dispatch table and an `ast.BoolOp` picking an
+injected callable over a default without either having to be enumerated.
+
+An Attribute func whose RECEIVER does not resolve stays a silence. That was
+measured before it was decided: over `DEFAULT_ROOTS` there are hundreds of
+Attribute callees with an unresolvable receiver and not one of them is spelled
+like a subprocess entry point, so a rule keyed on the attribute name would have
+added rows to this census that no call site in this tree can reach. An arm for
+an unreachable rule is decoration, and this tree has ruled against widening a
+mechanism to a population measured at zero more than once.
+
+This widening is a CONTRACT-HONESTY repair and not a leak fix. Every
+func-is-a-call site in this tree was measured to be a stub or predicate
+invocation and none launches a process. What was broken was this module's claim
+to see every call it buckets.
+
+WHAT THIS CENSUS DOES NOT COVER, DECLARED RATHER THAN IMPLIED.
+
+`LAUNCHERS` is the five `subprocess` entry points below and nothing else, so
+`subprocess.getoutput` and `subprocess.getstatusoutput` are outside this
+census by construction even though both start a process. `os.system`,
+`os.popen` and the `os` exec and spawn families are outside it too. None of
+those is a leak in this tree - none has a call site in `DEFAULT_ROOTS` - and
+that is exactly why the population is left where it is rather than widened to
+cover a shape nothing here uses. The title of this module is narrow on purpose:
+it says SUBPROCESS CALL and not PROCESS LAUNCH, because the wider word would be
+a claim these names disprove.
+
 POSITIONS THAT ARE NOT A STATEMENT BODY.
 
-A launch can sit in a decorator expression, a default argument, an annotation or
+A call can sit in a decorator expression, a default argument, an annotation or
 a class base. Every one of those is evaluated in the ENCLOSING scope at
 definition time, and none of them is reachable by recursing into a scope node's
 `body` - which is all this module used to do, so every such call was DROPPED and
@@ -92,7 +130,13 @@ GUARD_UNKNOWN = "UNKNOWN"
 
 # The five subprocess entry points that actually launch a process. `Popen` is
 # included because a long-lived handle shells git exactly as much as `run` does.
+# See the module docstring for what this set deliberately leaves out.
 LAUNCHERS = frozenset({"run", "check_output", "check_call", "call", "Popen"})
+
+# The callee column for a row whose callee could not be resolved. The node kind
+# is appended so the report says WHAT was unresolvable rather than only that
+# something was.
+UNRESOLVED_CALLEE_PREFIX = "<unresolved:"
 
 # This tree's git-presence gates, defined in `tests/conftest.py`. A module that
 # names any of them is recorded GATED.
@@ -121,7 +165,13 @@ _Bindings = dict[str, "ast.expr | None"]
 
 @dataclass(frozen=True)
 class CallSite:
-    """One subprocess launch, with what could and could not be resolved."""
+    """One call site this census could or could not resolve.
+
+    A row is NOT a claim that a process starts here. A resolved row names a
+    subprocess entry point; an UNRESOLVED row may name a callee this module
+    could not read at all, which is precisely why it is a row rather than a
+    silence.
+    """
 
     path: str
     lineno: int
@@ -276,43 +326,87 @@ def _lookup(name: str, chain: Sequence[_Bindings]) -> tuple[bool, ast.expr | Non
     return False, None
 
 
-def _import_aliases(tree: ast.AST) -> tuple[set[str], dict[str, str]]:
+@dataclass(frozen=True)
+class _Imports:
+    """What the module's imports say `subprocess` is called here."""
+
+    subprocess_bases: frozenset[str]
+    subprocess_direct: dict[str, str]
+
+
+def _import_aliases(tree: ast.AST) -> _Imports:
     """Module bases that mean `subprocess`, and bare names bound to a launcher.
 
     Imports are collected across the whole tree rather than top-level only,
     because a `from subprocess import run` inside a function body is a real
     shape and skipping it would under-report.
     """
-    bases = {"subprocess"}
-    direct: dict[str, str] = {}
+    sub_bases = {"subprocess"}
+    sub_direct: dict[str, str] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "subprocess" and alias.asname:
-                    bases.add(alias.asname)
+                if not alias.asname:
+                    continue
+                if alias.name == "subprocess":
+                    sub_bases.add(alias.asname)
         elif isinstance(node, ast.ImportFrom):
-            if node.module != "subprocess":
-                continue
-            for alias in node.names:
-                if alias.name in LAUNCHERS:
-                    direct[alias.asname or alias.name] = alias.name
-    return bases, direct
+            if node.module == "subprocess":
+                for alias in node.names:
+                    if alias.name in LAUNCHERS:
+                        sub_direct[alias.asname or alias.name] = alias.name
+    return _Imports(
+        subprocess_bases=frozenset(sub_bases),
+        subprocess_direct=sub_direct,
+    )
 
 
-def _callee(
-    call: ast.Call, bases: set[str], direct: dict[str, str]
-) -> str | None:
-    """`subprocess.run` for a launch, None for anything that is not one."""
+_KIND_SUBPROCESS = "subprocess"
+_KIND_OPAQUE = "opaque"
+
+
+@dataclass(frozen=True)
+class _Launch:
+    """One resolved-or-not callee, and why it could not be resolved."""
+
+    callee: str
+    kind: str
+    reason: str = ""
+
+
+def _opaque_launch(func: ast.expr, reason: str) -> _Launch:
+    return _Launch(
+        callee=f"{UNRESOLVED_CALLEE_PREFIX}{type(func).__name__}>",
+        kind=_KIND_OPAQUE,
+        reason=reason,
+    )
+
+
+def _launcher_for(call: ast.Call, imports: _Imports) -> _Launch | None:
+    """The launcher this call reaches, or None where it reaches none.
+
+    None is a POSITIVE not-a-launch answer and is only ever returned where the
+    callee actually resolved. Where it did not, the answer is an opaque callee
+    that becomes an UNRESOLVED row - see the module docstring.
+    """
     func = call.func
     if isinstance(func, ast.Attribute):
-        if func.attr in LAUNCHERS and _dotted(func.value) in bases:
-            return f"subprocess.{func.attr}"
+        receiver = _dotted(func.value)
+        if receiver is None:
+            return None
+        if func.attr in LAUNCHERS and receiver in imports.subprocess_bases:
+            return _Launch(callee=f"subprocess.{func.attr}", kind=_KIND_SUBPROCESS)
         return None
     if isinstance(func, ast.Name):
-        target = direct.get(func.id)
+        target = imports.subprocess_direct.get(func.id)
         if target is not None:
-            return f"subprocess.{target}"
-    return None
+            return _Launch(callee=f"subprocess.{target}", kind=_KIND_SUBPROCESS)
+        return None
+    return _opaque_launch(
+        func,
+        f"callee is a {type(func).__name__} expression, so whether this is a "
+        "subprocess entry point at all is unknowable at parse time",
+    )
 
 
 def _verdict_for_text(text: str, *, shell_string: bool) -> tuple[str, str]:
@@ -478,48 +572,52 @@ def _outer_positions(node: ast.AST) -> list[ast.AST]:
     return [child for child in ast.iter_child_nodes(node) if id(child) not in body_ids]
 
 
+def _bucket_for(
+    call: ast.Call, launch: _Launch, scopes: Sequence[_Bindings]
+) -> tuple[str, str]:
+    """The bucket and the argv0 column for one call site."""
+    if launch.kind == _KIND_OPAQUE:
+        return UNRESOLVED, launch.reason
+    argv = _argv_expression(call)
+    if argv is None:
+        return UNRESOLVED, "no statically visible argv"
+    return _resolve_argv(argv, scopes, set(), shell=_shell_flag(call))
+
+
 def _walk_nodes(
     nodes: Sequence[ast.AST],
     scopes: list[_Bindings],
     path: str,
     guard: str,
-    bases: set[str],
-    direct: dict[str, str],
+    imports: _Imports,
     out: list[CallSite],
 ) -> None:
-    """Record every launch reachable from `nodes` under one binding chain."""
+    """Record every call site reachable from `nodes` under one binding chain."""
     for node in _iter_shallow(nodes):
         if isinstance(node, ast.Call):
-            callee = _callee(node, bases, direct)
-            if callee is None:
+            launch = _launcher_for(node, imports)
+            if launch is None:
                 continue
-            argv = _argv_expression(node)
-            if argv is None:
-                bucket, described = UNRESOLVED, "no statically visible argv"
-            else:
-                bucket, described = _resolve_argv(
-                    argv, scopes, set(), shell=_shell_flag(node)
-                )
+            bucket, described = _bucket_for(node, launch, scopes)
             out.append(
                 CallSite(
                     path=path,
                     lineno=node.lineno,
                     col=node.col_offset,
-                    callee=callee,
+                    callee=launch.callee,
                     bucket=bucket,
                     argv0=described,
                     guard=guard,
                 )
             )
         elif isinstance(node, _SCOPE_NODES):
-            _walk_nodes(_outer_positions(node), scopes, path, guard, bases, direct, out)
+            _walk_nodes(_outer_positions(node), scopes, path, guard, imports, out)
             _walk_scope(
                 _scope_body(node),
                 scopes,
                 path,
                 guard,
-                bases,
-                direct,
+                imports,
                 out,
                 _parameter_names(node),
             )
@@ -530,22 +628,21 @@ def _walk_scope(
     chain: list[_Bindings],
     path: str,
     guard: str,
-    bases: set[str],
-    direct: dict[str, str],
+    imports: _Imports,
     out: list[CallSite],
     seed: Iterable[str] = (),
 ) -> None:
     scopes = [*chain, _bindings_of(body, seed)]
-    _walk_nodes(body, scopes, path, guard, bases, direct, out)
+    _walk_nodes(body, scopes, path, guard, imports, out)
 
 
 def census_source(source: str, path: str) -> list[CallSite]:
-    """Every git-or-not subprocess launch in one chunk of Python source."""
+    """Every call site this census could or could not resolve, in one source."""
     tree = ast.parse(source)
-    bases, direct = _import_aliases(tree)
+    imports = _import_aliases(tree)
     guard = _guard_of(tree)
     out: list[CallSite] = []
-    _walk_scope(tree.body, [], path, guard, bases, direct, out)
+    _walk_scope(tree.body, [], path, guard, imports, out)
     out.sort(key=lambda site: (site.lineno, site.col))
     return out
 
@@ -613,7 +710,10 @@ def format_report(sites: Sequence[CallSite]) -> str:
     lines: list[str] = []
     lines.append("git subprocess census - AST enumeration, three buckets")
     lines.append("")
-    lines.append(f"total launch sites : {len(sites)}")
+    # NOT "launch sites". The population includes rows whose callee this module
+    # could not resolve at all, and calling those launches would be a claim the
+    # UNRESOLVED bucket exists precisely to refuse.
+    lines.append(f"total call sites : {len(sites)}")
     for bucket in BUCKETS:
         lines.append(f"  {bucket:<10} : {tally[bucket]}")
     lines.append("")
@@ -644,8 +744,9 @@ def format_report(sites: Sequence[CallSite]) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Enumerate every subprocess launch whose argv[0] is git. A census, "
-            "not a gate: it always exits 0."
+            "Enumerate every subprocess call whose argv[0] is git, plus every "
+            "call whose callee could not be resolved. A census, not a gate: it "
+            "always exits 0."
         )
     )
     parser.add_argument(

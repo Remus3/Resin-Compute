@@ -126,8 +126,8 @@ _REAL_OS_NAME = os.name
 #      The old block kept it on the first disposition alone.
 #
 # THE QUERIES THE CRITERION IS APPLIED TO ARE DERIVED FROM THE TREE, not chosen
-# by taste. `python -m tools.git_subprocess_census` enumerates 78 subprocess
-# launch sites over its default roots, 38 of them git. 28 of those 38 resolve
+# by taste. `python -m tools.git_subprocess_census` enumerates 85 subprocess
+# call sites over its default roots, 38 of them git. 28 of those 38 resolve
 # statically to a subcommand - ls-files 18, check-ignore 3, check-attr 2, and
 # one each of rev-parse, diff, init, add and commit - and 10 pass a splatted
 # argv no AST walk can resolve. Two consequences, both of which the first pass

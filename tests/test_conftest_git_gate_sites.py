@@ -800,15 +800,24 @@ def _direct_call_names(node: ast.AST) -> set[str]:
 #: `census.GIT` is a launch whose argv[0] statically resolved to a git
 #: executable. `census.UNRESOLVED` is folded in FAIL-CLOSED, and that call was
 #: MEASURED rather than taken on principle, because fail-closed is also the
-#: reading most likely to invent a requirement. Across the five armed modules
-#: the census reports ZERO unresolved launch sites, so open and closed derive
-#: the IDENTICAL required set for every one of the five rows - not one row gains
-#: a requirement, not one loses a node. Measured 2026-09-11. The only module in
-#: reach where the two readings differ at all is `tests/test_line_endings.py` -
-#: 21 tests closed against 14 open, through its `_launch_git` helper whose argv
-#: is a parameter - and it is not an armed row. Closed is therefore free today
-#: and is the only reading under which a launch the census cannot answer for
-#: leaves the population LOUDLY rather than silently.
+#: reading most likely to invent a requirement. Across the six armed modules
+#: the census reports ZERO unresolved call sites, so open and closed derive
+#: the IDENTICAL required set for every one of the six rows - not one row gains
+#: a requirement, not one loses a node. Measured 2026-09-11. Across `tests/*.py`
+#: FIVE modules read differently under the two settings, and NOT ONE of them is
+#: an armed row: `tests/test_line_endings.py` at 22 tests closed against 14 open,
+#: through its `_launch_git` helper whose argv is a parameter;
+#: `tests/test_session_hooks.py` at 6 closed against 1 open;
+#: `tests/test_task_liveness.py` at 4 closed against 0 open;
+#: `tests/test_task_state_claims.py` at 4 closed against 3 open; and
+#: `tests/test_provenance.py` at 2 closed against 0 open. The sentence this
+#: replaces said `tests/test_line_endings.py` was the ONLY one, and that was
+#: already false when it was written; the reading before this one said THREE,
+#: which was true of the narrower census this commit replaces. Re-derived here
+#: with this module's own `_module_facts()` and `_required_nodes()` over both
+#: bucket sets, which is why the number moves when the census widens. Closed is
+#: therefore free today and is the only reading under which a launch the census
+#: cannot answer for leaves the population LOUDLY rather than silently.
 _GIT_BUCKETS = frozenset({census.GIT, census.UNRESOLVED})
 
 
@@ -1493,7 +1502,7 @@ def test_every_armed_module_derives_at_least_one_git_reaching_test():
     whenever `required` is. Measured: forcing `_git_launching_functions()` to
     return the empty set left that arm GREEN - the gate-reaching half kept
     `required` non-empty and hid the loss completely - while this floor named
-    all five armed modules. That is why the floor is on the GIT half
+    all six armed modules. That is why the floor is on the GIT half
     specifically and why it is not folded into the arm above.
 
     On the REAL modules, deliberately. The stub arms nearby grade the resolver
@@ -1502,7 +1511,7 @@ def test_every_armed_module_derives_at_least_one_git_reaching_test():
     answers for a stub and returns nothing for this tree.
 
     Pinned per module rather than as one total, because a total is satisfied by
-    one module carrying the whole population while four derive nothing.
+    one module carrying the whole population while five derive nothing.
     """
     examined = 0
     empty: list[str] = []
@@ -1748,3 +1757,93 @@ def test_the_summary_reader_survives_a_run_with_no_tests_at_all():
         ("17", "passed"),
     ]
     assert _COUNT.findall("1 skipped in 0.03s") == [("1", "skipped")]
+
+
+#: THE PROSE COUNTS THAT ARE STATEMENTS ABOUT `_SITES`, AS TEMPLATES.
+#:
+#: Every one of them decayed silently when the table grew by a row: a number
+#: typed into a comment is asserted by nothing, so this file went on describing
+#: a table it no longer had while both suites stayed green. The templates below
+#: are stored UNFORMATTED, which is what stops the arm from being satisfied by
+#: its own literals - the string it searches for is built at run time and
+#: exists nowhere in this file except in the prose it is grading.
+#:
+#: DELIBERATELY NOT a loose regex over a number word next to the word "rows" or
+#: "modules". Four other spellings of a count live in this file and every one
+#: counts a DIFFERENT population: the parametrised cases of
+#: `test_any_non_none_reason_inside_a_checkout_reddens_even_a_falsy_one`, the
+#: historical note on the table growing from two rows, and twice the number of
+#: `ci-workflow-complement` node strings. A matcher wide enough to catch those
+#: would go red on a correct file, which is the opposite failure and no better.
+_SITE_COUNT_PROSE = (
+    "Across the {count} armed modules",
+    "the IDENTICAL required set for every one of the {count} rows",
+    "all {count} armed modules",
+)
+
+#: The same, ONE LESS than the row count: the sentence it grades says a total is
+#: satisfied by one row carrying the whole population while the rest carry none.
+_SITE_COUNT_LESS_ONE_PROSE = ("while {count} derive nothing",)
+
+#: Spelled out because the prose spells them out. Bounded on purpose: a table
+#: that outgrows this map should redden here rather than silently stop grading.
+_NUMBER_WORDS = {
+    1: "one",
+    2: "two",
+    3: "three",
+    4: "four",
+    5: "five",
+    6: "six",
+    7: "seven",
+    8: "eight",
+    9: "nine",
+    10: "ten",
+    11: "eleven",
+    12: "twelve",
+}
+
+
+def test_the_prose_counts_of_the_site_table_are_tied_to_the_table():
+    """THE ARM THAT WOULD HAVE CAUGHT THE DECAY THAT PROMPTED IT.
+
+    Three comment sentences and one docstring sentence stated the size of
+    `_SITES` in words. The table grew by a row, nothing anywhere compared the
+    two, and the file described the old table for as long as nobody re-read it.
+    Everything else in this module is derived from source; these were typed.
+
+    The tie is two-sided, which is what makes it non-vacuous. The expected
+    spelling must be PRESENT, so prose left behind by a growing table reddens;
+    and no OTHER spelling of the same sentence may be present, so a sentence
+    reworded to a stale number reddens even if a correct copy survives
+    elsewhere. Deleting the prose outright reddens too - the found set is then
+    empty and the expected word is missing from it.
+
+    Scoped by exact sentence rather than by pattern. The other counts in this
+    file are populations of parametrised cases, of node strings, and of a
+    historical table size, and a matcher loose enough to reach this one would
+    grade those as well.
+    """
+    source = Path(__file__).resolve().read_text(encoding="utf-8")
+    wrong: list[str] = []
+    for templates, expected in (
+        (_SITE_COUNT_PROSE, len(_SITES)),
+        (_SITE_COUNT_LESS_ONE_PROSE, len(_SITES) - 1),
+    ):
+        assert expected in _NUMBER_WORDS, (
+            "the site table outgrew the spelled-out number map, so this arm can no "
+            f"longer name the word its prose should carry: {expected}"
+        )
+        word = _NUMBER_WORDS[expected]
+        for template in templates:
+            found = {
+                candidate
+                for candidate in _NUMBER_WORDS.values()
+                if template.format(count=candidate) in source
+            }
+            if found != {word}:
+                wrong.append(f"{template!r} wants {word!r}, source carries {sorted(found)}")
+    assert not wrong, (
+        "a prose count in this file no longer states the size of `_SITES`, which is "
+        "the exact decay this arm exists for - the table moved and the sentences "
+        f"describing it did not: {wrong}"
+    )
