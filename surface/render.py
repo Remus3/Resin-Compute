@@ -40,6 +40,35 @@ _STATE_LABEL = {
     PanelState.NOT_WIRED: "not wired",
 }
 
+
+def _esc(text: str) -> str:
+    """Escape for HTML AND force the result to 7-bit ASCII.
+
+    TWO HAZARDS, ONE FUNCTION, AND THE SECOND ONE IS THE EASY ONE TO MISS.
+    `html.escape` closes the markup hole. It does NOT close the charset hole: it
+    passes every non-ASCII codepoint through untouched.
+
+    `MappedCharacter.display_name` is a nickname another player typed into
+    Genshin Impact. Nothing upstream constrains it to ASCII, and in practice it
+    carries CJK, accented Latin, an em-dash, a smart quote or a decorative star.
+    Interpolated raw, those land in the page and the rendered document silently
+    leaves 7-bit ASCII - the tree's hard rule - with no error anywhere.
+
+    MEASURED: a two-character roster whose names carried U+2014, U+2019, U+00A0,
+    U+2606 and two CJK codepoints put 48 non-ASCII bytes into the page.
+
+    `xmlcharrefreplace` turns each one into a numeric character reference, so the
+    byte stream is ASCII while the browser still paints the name the player
+    chose. Nothing is lost and nothing is transliterated. This is the same call
+    `render_json` already makes as `ensure_ascii=True`, and the two renderers
+    disagreeing about it was the defect.
+
+    ORDER MATTERS. Escape first so an ampersand becomes `&amp;`, then encode, or
+    the `&` this function itself emits would be double-escaped.
+    """
+    return escape(text, quote=True).encode("ascii", "xmlcharrefreplace").decode("ascii")
+
+
 STYLESHEET = """
 :root {
   color-scheme: dark;
@@ -50,7 +79,15 @@ STYLESHEET = """
   --ink-dim: #97a1b5;
   --ready: #4ec9a0;
   --partial: #e0b341;
-  --cold: #5b6577;
+  /* MEASURED, and the old value failed. `--cold` paints the NOT WIRED pill -
+     10px text AND its 1px border, via `border: 1px solid currentColor`. At
+     #5b6577 that pill measured 2.87:1 on `--card` (#191d27), under the 4.5:1
+     floor and under even the 3:1 large-text floor, which it does not qualify
+     for at 10px. The least legible thing on the board was the badge that says
+     a panel is NOT LIVE - the one honesty signal ADR-005 exists to carry.
+     #7d8798 measures 4.65:1 on `--card` and 5.12:1 on `--bg`, and stays clearly
+     dimmer than `--ink-dim` (6.48:1) so cold still reads as cold. */
+  --cold: #7d8798;
   --accent: #7aa2f7;
 }
 * { box-sizing: border-box; }
@@ -88,8 +125,15 @@ body {
   z-index: 10000;
   -webkit-app-region: no-drag;
 }
+/* The header WRAPS, and the shell's own minimum is why. `shell/lib/window.js`
+   sets `minWidth: 360`. A non-wrapping flex row plus `.meter`'s 190px floor
+   measured a 480px header inside a 360px body - 138px of horizontal overflow,
+   pushing the readiness meter, the one at-a-glance summary of how much of the
+   board is real, off the right edge. Wrapping costs nothing at the 900px
+   default, where the measured layout is byte-identical either way. */
 header {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 12px;
   margin-bottom: 14px;
@@ -98,7 +142,10 @@ h1 { font-size: 16px; margin: 0; letter-spacing: 0.04em; }
 .sub { color: var(--ink-dim); font-size: 12px; }
 .meter {
   margin-left: auto;
-  min-width: 190px;
+  /* `flex-basis` rather than `min-width`, so the meter PREFERS 190px and yields
+     instead of forcing the header wider than the window. */
+  flex: 1 1 190px;
+  min-width: 0;
 }
 .meter-track {
   height: 6px;
@@ -113,9 +160,16 @@ h1 { font-size: 16px; margin: 0; letter-spacing: 0.04em; }
    whole point is that it must not be readable as current at a glance. */
 .freshness { color: var(--ink-dim); font-size: 12px; }
 .state-stale { color: var(--partial); font-weight: 600; }
+/* `align-items: start` so a card is as tall as its own content. The default
+   `stretch` sizes every card to the tallest in its grid row: measured at the
+   900px default, a 6-row Plan card was inflated to 811px to match Teams, and
+   the NOT WIRED Wishes card to 188px, leaving hundreds of pixels of empty card.
+   A mostly-empty card reads as a panel that failed to load rather than as one
+   that has said its piece. */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  align-items: start;
   gap: 12px;
 }
 .card {
@@ -144,9 +198,28 @@ h1 { font-size: 16px; margin: 0; letter-spacing: 0.04em; }
 .state-partial { color: var(--partial); }
 .state-not_wired { color: var(--cold); }
 .card.state-not_wired h2 { color: var(--ink-dim); }
-dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; }
-dt { color: var(--ink-dim); }
-dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+/* TWO EQUAL COLUMNS, NOT `auto 1fr`, AND THE OLD VALUE STARVED THE VALUES.
+   With `auto` the label track sizes toward max-content, so ONE long label sets
+   the width for the whole card and the value track collapses to its own
+   min-content. Measured on the live roster at the 900px default: the label
+   "Verified seed characters absent" took 173px of a 249px card, leaving 65px
+   for every value in the Teams panel - "pyro" broke over three lines, and the
+   card grew to 811px inside a 620px window. `minmax(0, 1fr)` twice caps each
+   track and lets both wrap; the same board measured 0 starved values, 2 lines
+   worst case, and a 622px card. The `minmax(0, ...)` matters: a bare `1fr` has
+   an automatic minimum of min-content and would not shrink. */
+dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 3px 12px;
+}
+/* `overflow-wrap` because `unknown:10000118` is ONE unbreakable token to a
+   browser - a colon is not a break opportunity - and it is the single most
+   common label on a real roster, where most ids sit outside the verified seed
+   set. Without this it overflows its track instead of wrapping. */
+dt { color: var(--ink-dim); overflow-wrap: anywhere; }
+dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .waiting {
   margin: 8px 0 0;
   color: var(--ink-dim);
@@ -163,18 +236,18 @@ def _panel_html(panel: Panel) -> str:
     state_class = f"state-{panel.state.value}"
     parts = [
         f'<section class="card {state_class}">',
-        f'<h2>{escape(panel.title)}'
-        f'<span class="pill {state_class}">{escape(_STATE_LABEL[panel.state])}</span></h2>',
+        f'<h2>{_esc(panel.title)}'
+        f'<span class="pill {state_class}">{_esc(_STATE_LABEL[panel.state])}</span></h2>',
     ]
     if panel.rows:
         parts.append("<dl>")
         for label, value in panel.rows:
-            parts.append(f"<dt>{escape(label, quote=True)}</dt><dd>{escape(value, quote=True)}</dd>")
+            parts.append(f"<dt>{_esc(label)}</dt><dd>{_esc(value)}</dd>")
         parts.append("</dl>")
     if panel.waiting_on:
-        parts.append(f'<p class="waiting">{escape(panel.waiting_on, quote=True)}</p>')
+        parts.append(f'<p class="waiting">{_esc(panel.waiting_on)}</p>')
     if panel.note:
-        parts.append(f'<p class="note">{escape(panel.note, quote=True)}</p>')
+        parts.append(f'<p class="note">{_esc(panel.note)}</p>')
     parts.append("</section>")
     return "".join(parts)
 
@@ -186,8 +259,8 @@ def render_html(board: Dashboard) -> str:
     loads it as a top-level URL and there is no template layer above this.
     """
     percent = round(board.readiness * 100)
-    generated = escape(board.generated_at.isoformat(timespec="seconds"), quote=True)
-    freshness = escape(board.freshness, quote=True)
+    generated = _esc(board.generated_at.isoformat(timespec="seconds"))
+    freshness = _esc(board.freshness)
     stale_class = " state-stale" if board.is_stale else ""
     if board.is_stale:
         freshness += " (stale)"
