@@ -12,6 +12,195 @@ now.
 
 ---
 
+## 2026-09-14 - The commit gate read an unreadable corpus as a clean one, and the fix ran on its own commit
+
+Files: `tools/precommit_gate.py`, `tests/test_precommit_gate_corpus.py` (new).
+Landed at `72c7041`.
+
+**THE DEFECT, AND IT IS AN INDISTINGUISHABILITY RATHER THAN A CRASH.** `_git`
+returned `out.stdout` and never consulted `out.returncode`, and its except branch
+returned the empty string. `_staged_added` turned that empty string into an empty
+mapping, and `_check_staged` read an empty mapping as DATA rather than as a failed
+read - so no banned-glyph scan ran, no `py_compile` ran, no net-new `ruff` ran,
+and the function returned 0 WITH EMPTY STDERR. MEASURED: a clean tree with nothing
+staged, and a directory where `git diff --cached` exits 129, were BYTE-IDENTICAL
+to the caller - same return code, same empty stderr, nothing to tell them apart.
+`.githooks/pre-commit` runs the gate with `|| exit 1` under `set -e`, so that 0
+was a developer commit passing UNSCANNED.
+
+**THE ADJUDICATED CALL, THE TWELFTH, VERDICT CLOSED ON 4 OF 4 CRITERIA** -
+fidelity to the module's own rule, cost of being wrong, testability, and sibling
+consistency. The module's FAIL-OPEN RULE enumerates its own class inside its
+parenthesis and both members are TOOL PROVISIONING; the staged diff is not a tool
+the gate needs, it is the staged half's CORPUS, and `_check_scan_files` and
+`_tracked_split` already carve the corpus class out. Runner-up OPEN-LOUD lost on
+cost: a wrongly-closed gate costs one `--no-verify` before anything lands, while a
+wrongly-open one puts the defect IN HISTORY, and a force-push does not purge
+objects. RECORDED BECAUSE THE ADJUDICATOR DISCARDED ONE OF THE WINNER'S OWN
+ARGUMENTS: CLOSED had argued "the commit is about to fail anyway", which is FALSE -
+a stale `git -C` path left behind by a worktree agent yields an unreadable corpus
+while the real commit succeeds. The ruling is recorded in `ROADMAP.md` under its
+own heading; find it by that heading and not by a line number.
+
+**THE SECONDARY RULING, AND IT IS THE HALF THAT ACTUALLY RAN.** The
+`rev-parse --show-toplevel` call site KEEPS its permissive fall-through to
+os.getcwd(); only its `.strip()` had to become `(_git(...) or "").strip()`, or the
+new nullable return raises AttributeError. Because the hook passes the bare string
+`git commit` with no `-C`, that fall-through is the LIVE path on every developer
+commit, so the fix ran on its own commit.
+
+**VERIFICATION.** `tests/test_precommit_gate_corpus.py`, five arms. Three were red
+before the fix by AssertionError against a REAL git exit 129 rather than against a
+mocked one; two are controls that were green on both sides, one of them the clean
+repo with nothing staged, which is the case the defect was indistinguishable from.
+Plus the only valid test of a hook gate, run end to end: a banned glyph staged by
+explicit path, a real `git commit` attempted, exit 1 naming both the file and the
+glyph, HEAD unchanged afterwards.
+
+## 2026-09-14 - Every non-zero exit was reported as a refusal, so one class sent the reader hunting a cause that does not exist
+
+Files: `ops/check_task_liveness.py`, `tests/test_task_liveness.py`. Landed at
+`0d1fa70`.
+
+**THE DEFECT.** `collect_facts` mapped EVERY non-zero return code to one
+operator-facing reason naming an account and a TaskPath. For the ConsoleHost
+init-failure class that headline is false in every word: 4294901760 is 0xFFFF0000,
+ExitCodeInitFailure, with EMPTY stdout and a UTF-16LE stderr reading that loading
+managed Windows PowerShell failed with error 8009001d. The CLR never loaded and
+the script never ran, so nothing refused anything and neither an account nor a
+TaskPath is involved. The truth sat only in the DETAIL string.
+
+**THE FIX.** Two module-level named constants now carry the hex and the meaning,
+and the new branch PRECEDES the generic one. Its detail string is byte-identical
+to the generic branch's, so the diagnostic content survives and only the headline
+changes. The sibling 0xFFFE0000, ExitCodeCtrlBreak, is handled defensively;
+whether this tool can reach it at all is UNVERIFIED and recorded as such.
+
+**NO CLI EXIT CODE CHANGED, DELIBERATELY.** 0 LIVE, 1 DORMANT, 2 ABSENT, 3
+UNKNOWN, 4 AMBIGUOUS has callers, and an interpreter that never started still
+lands on UNKNOWN. Whether it deserves its own code is left to the operator and is
+filed in `ROADMAP.md` rather than decided here.
+
+**VERIFICATION.** `tests/test_task_liveness.py`, two arms red before the fix by
+AssertionError with both codes spelled as literals, plus two controls: exit 1
+keeps the generic headline, and exit 0 with a payload is returned verbatim.
+
+## 2026-09-14 - Two figures this tree wrote down were refuted, the denominator was a third mistake on the same passage, and a guard built to stop a false green converts into a false red
+
+Files: `ROADMAP.md`, `docs/LEDGER.md`, `NEXT_SESSION_PROMPT.md`. Landed at
+`77408ad`, `f77c4ad` and `76ccdeb`.
+
+**GATES MEASURED AT `76ccdeb`, STAMPED AS A READING AT THAT COMMIT AND NOT AS A
+LIVE CLAIM.** Local interpreter 3.14 while CI pins 3.11, so every local green here
+is OPTIMISTIC against CI. licence 47 passed; docs consistency 29 passed; docs hook
+commands 17 passed. `scripts/qa_companion.py` 18 passed 0 failed 1 skipped 3
+noted. `ruff` exit 0. `mypy` exit 0, no issues found in 34 source files, and that
+is ADVISORY - it says NOTHING about `scripts/`, `surface/`, `headless/`, `ops/` or
+`tests/`, so it is silent about most of the code in this entry. `pytest tests`
+2155 passed 1 skipped; `agents/pity_engine` 80 passed; `node --test` in `shell/`
+52 tests 52 pass 0 fail; `python -m headless.runner --once --dry-run` 0 pass 0
+fail 6 skip, exit 0. Responder task exit 1 DORMANT, sole trigger expired
+2026-09-07T21:00.
+
+**"SIX ARMS" WAS WRONG BY ROUGHLY SEVENFOLD, AND WHY IT WAS UNCHECKABLE IS THE
+REUSABLE HALF.** Deleting the one `# GATE:answered-usable` line in a clean clone
+gives exit 1 with 43 failures, against a baseline of exit 0 in the SAME clone
+before the edit. No artifact anywhere recorded WHICH six, so the figure was
+checkable against nothing, and it was never a tooled probe:
+`tools/gate_mutation_runner.py` mutates gate STATEMENTS through `_edits_for` over
+ast.stmt and has NO CLI mode that drops a comment.
+
+**THE REPLACEABLE DELIVERY COUNT "3 BEFORE" WAS ALSO WRONG, AND ITS ORIGIN IS THE
+FINDING.** All four parametrized arms of the replaceable self-heal test PASS
+against `6c351b3^`, so the pre-change bytes delivered 1. The 3 was measured against
+the dispatch brief's ordered-then-REJECTED fail-closed `_remember_answered`, which
+was never committed and exists NOWHERE in history - a number measured against an
+intention.
+
+**THE DENOMINATOR WAS A THIRD MISTAKE ON THE SAME PASSAGE.** 43 failed plus 45
+passed is 88, against a baseline of 89, and the missing case is in NO result
+bucket because it was never COLLECTED. `_TAG_LINES` in
+`tests/test_responder_gate_census.py` is derived at import from the responder's own
+source and the module parametrizes on it, so deleting a `# GATE:` tag DELETES A
+PARAMETRIZE CASE. The error, skip, xfail and xpassed buckets were all measured
+empty; a restore control returned the clone to 89 passed at its original byte
+size; and every surviving test id SHIFTS DOWN BY ONE, which is the corroborating
+signature of a deleted source line rather than a lost result. So the kill is 43 of
+88 COLLECTED in the mutant against 89 collected at baseline, and 89 is not an arm
+count at all - it is 69 plus `len(_TAG_LINES)`.
+
+**LEFT UNRECONCILED ON PURPOSE.** The unique-red-function count is 24 against 23,
+two passes disagreeing by one with NEITHER enumerating the function names, so
+neither figure is checkable and neither is recorded as the answer. The commit body
+of `6c351b3` carries the refuted figures and CANNOT be fixed - it is pushed, CI ran
+green on it, and rewriting published history to correct a number is worse than the
+number, so a reader who finds that message first is pointed here.
+
+**THE FALSE-RED CLASS, MEASURED IN OUR OWN BYTES AFTER LW FOUND IT IN THEIRS.**
+Stripping every PATH entry holding a git executable turned a green probe reading
+over 7 modules into 8 RED arms, TWO of them anti-vacuity arms - so a guard written
+to stop a false GREEN converts into a false RED. The error is FileNotFoundError
+WinError 2 RAISED AT EXEC, which makes a `check=True` argument IRRELEVANT because
+the exec raises before any exit code exists; that is recorded because it kills the
+obvious wrong fix. The mechanism in our bytes is `_tracked_text_files` in
+`tests/test_no_sibling_names.py`. THE MIRROR DIRECTION WORKS: 11 skips appeared and
+two anti-vacuity arms skipped correctly through `require_git_repository`, so the
+tree is PARTIALLY ARMED rather than unarmed.
+
+**THE CORRECTION TO THAT ROW IS THE REUSABLE HALF: THE FIVE-MODULE LIST WAS THE
+FILTER'S POPULATION, NOT THE REPAIR'S.** The row had warned that its own name-based
+one-term filter would over-report as well as under-report, and an AST probe
+confirmed the over-report, so the warning became a measurement. Only THREE of the
+five shell git at all. `tests/test_ci_history_depth.py` executes none - its only
+occurrence of the text subprocess.run is a STRING LITERAL fed to a regex.
+`tests/test_guard_worktree_blindness.py` has no subprocess call whatsoever. A skip
+added to either would be a FALSE SKIP with no defect behind it, which is the same
+over-fire error in the opposite direction. THREE IS A FLOOR AND NOT A COUNT: the
+whole-tree population is still unenumerated, and that is filed open.
+
+**THE PRE-PUSH GATE IS INTERMITTENT - DIAGNOSED, FILED, NOT FIXED.** A push was
+REFUSED reading 2 failed, 2148 passed, 2 skipped. The orchestrator's own hypothesis
+that the hook ENVIRONMENT was to blame is REFUTED BY COUNTER-EXAMPLE: the same
+commit through a real pre-push hook into a scratch bare repository gave 2150
+passed, 2 skipped in 97.77s, exit 0. Interpreter, PATH, powershell resolvability,
+user, timeout and cwd were each ruled out INDIVIDUALLY by measurement. The cause is
+load: the Windows resource-exhaustion detector logged low-virtual-memory events
+naming a python process holding about 10.4 GB, and the refused run took 474.67s,
+spanning both events. Two arms collapse "the census machinery is broken" with
+"powershell could not start just now", so a PUSH-BLOCKING VERDICT IS A FUNCTION OF
+FREE MEMORY. WHAT THE ARMS GET RIGHT, so nobody softens them: FAILED must fail and
+only NONE may skip, which is exactly what kills a vacuous skip - the MISSING
+DISTINCTION is the defect, not the strictness. The collected total was 2152 in
+every run, so nothing was silently dropped.
+
+**TRANSFERABLE TRAPS MEASURED THIS SESSION, each with its mechanism rather than as
+folklore.** Under Git Bash the shell status is 8-BIT, so an exit of 4294901760
+reads as 0 there and this exit code cannot be chased through a shell at all - only
+a returncode read in Python carries the full 32 bits. A COMPOUND command's exit
+status is its LAST element, so a trailing echo reported 0 and MADE A REFUSED PUSH
+LOOK LIKE IT HAD LANDED. And /tmp under Git Bash is a directory inside the Git
+installation rather than anything on the C: drive root, and files there PERSIST
+ACROSS AGENTS, so a stale file at a shared path reads exactly like fresh output -
+a subagent's leftover output was misread as a hook blocking a commit that had never
+run, because a failed `python -c` had short-circuited the `&&` chain before the
+commit was ever attempted.
+
+**INBOX: THREE LW NOTES TRIAGED AND MARKED, and the interesting verdicts are the
+ones that are not adoptions.** LW's Q3 claim about a shared conftest is refuted and
+we had ALREADY retracted it, so no new correction is owed - what LW adds is a
+SECOND CARRIER, which upgrades the claim from RETRACTED to DISPROVED. LW's "43 to
+0" is HALF MEASURED: the AFTER was re-run, but the BEFORE row is byte-identical to
+their earlier note and was carried forward, so the delta is ASSERTED rather than
+measured - and their own disclosed box saturation, applied to the post-repair probe
+only, would inflate the 43 numerator by the same noise. Their R3, that a
+present-but-broken git must still FAIL, CONFLICTS with our shipped
+`classify_git_probe`, which SKIPs it, and `tests/test_conftest_git_gate.py` pins
+that question as deliberately OPEN - so adopting their rule would silently close an
+open operator call. Their PATH-strip mirror mechanism is contraindicated here by
+our own measured trap: shutil.which is PATHEXT-aware while subprocess.run goes
+through CreateProcess, which appends only .exe. Their third note offers NO digest at
+all, and their with-git passing count moved by twelve between notes, unstated.
+
 ## 2026-09-12 - An adjudicator corrected the orchestrator's own brief, and the ledger-instance row was answered by finding that nothing has ever been written to it
 
 Files: `tools/moon_sync_responder.py`, `tests/test_responder_degraded_write.py`

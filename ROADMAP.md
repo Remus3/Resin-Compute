@@ -11,6 +11,56 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **OPEN 2026-09-14, NEW THIS SESSION AND GENUINELY UNGRADED - NOTHING ANYWHERE
+  GRADES A REPAIRED CALL SITE END TO END.** `tests/test_conftest_git_gate.py`
+  grades the HELPERS - `classify_git_probe`, `require_git_repository`,
+  `skip_module_without_git` - and it grades them well. What no arm does is take a
+  module that shells git, run it with git ABSENT, and assert the module SKIPS, then
+  run it with git PRESENT and assert the same module RUNS ITS ASSERTIONS rather
+  than skipping. That SKIP-then-RUN pair at the SITE is the arm that would catch a
+  repair which skips unconditionally, and a helper-level arm structurally cannot
+  see it. Candidate sites are the three that actually shell git:
+  `tests/test_no_sibling_names.py`, `tests/test_ci_workflow_complement.py` and
+  `tests/test_responder_gate_census.py`. THE RUN HALF IS THE LOAD-BEARING HALF - a
+  skip-only arm is satisfied by a guard that never lets anything run.
+
+- **OPEN 2026-09-14, UNSWEPT HERE - AND UNSWEPT IS NOT CLEAN.** LW reported a
+  backslash-handling finding on the schtasks and PowerShell argument path, where a
+  Windows path separator inside a quoted argument can be consumed before the task
+  ever sees it, so an argv element reaches the registered task mangled. NO SWEEP
+  HAS BEEN RUN AGAINST THIS TREE FOR IT. The candidate carriers here are
+  `ops/install_responder_task.ps1`, `ops/install_scheduled_task.ps1`,
+  `ops/ResinCompute-Responder.xml` and `ops/ResinCompute-Supervisor.xml`, and the
+  reader half is `ops/check_task_liveness.py`. Record the verdict as UNSWEPT until
+  somebody runs it: a class reported by another carrier and never looked for here
+  is an open question, not a negative result. This tree's own measured trap is
+  adjacent and explains why a shell probe is the wrong instrument - under Git Bash
+  MSYS path conversion rewrites a lone `/F` into a drive path, which is the same
+  root cause in the opposite tool.
+
+- **OPEN 2026-09-14, AND THE POINT OF THE ROW IS THAT THE POPULATION IS UNKNOWN.**
+  Both false-red figures this tree has quoted - the 8 red arms over 7 modules, and
+  the 5-module candidate list - came from NAME-BASED ONE-TERM FILTERS, and the
+  second was already measured to over-report by roughly a factor of two thirds. An
+  AST ENUMERATION OF EVERY subprocess CALL WHOSE argv[0] IS git, across `tests/`,
+  `tools/`, `ops/`, `headless/` and `scripts/`, HAS NEVER BEEN RUN. Until it is,
+  three is a FLOOR and not a count, and any future "N to 0" claim here inherits
+  exactly the defect found in LW's own 43: a denominator produced by a filter
+  nobody validated. THE ROW IS THE ENUMERATION, not the repair - run it first,
+  publish the list, and only then size the work.
+
+- **NEEDS THE OPERATOR 2026-09-14, NON-BLOCKING, one question.** Does an
+  interpreter that NEVER STARTED deserve its own CLI exit code from
+  `ops/check_task_liveness.py`? Today it lands on 3 UNKNOWN alongside every other
+  genuinely-unknown outcome, and the shipped branch fixed only the REASON STRING,
+  not the code. The argument for a distinct code is that a host-start failure is a
+  fact about THIS MACHINE RIGHT NOW and is retryable, while UNKNOWN is a fact about
+  the scheduler's answer and is not. The argument against is that 0 LIVE, 1
+  DORMANT, 2 ABSENT, 3 UNKNOWN, 4 AMBIGUOUS HAS CALLERS, so a sixth code is a
+  compatibility change to every one of them. NOT DECIDED HERE, deliberately. This
+  is the same distinction the intermittent pre-push row needs, so a ruling here
+  constrains that repair.
+
 - **OPEN 2026-09-14, AND IT IS THE WORSE-SHAPED OF THE TWO BECAUSE IT MAKES A
   PUSH-BLOCKING VERDICT NON-REPEATABLE.** Two arms in
   `tests/test_task_liveness.py` -
@@ -61,20 +111,26 @@ version. What follows is everything the scaffold deliberately did not do.
   mechanism. Find that one by its SAME ROOT CAUSE IN SEVEN MORE PLACES heading,
   and do not cite it by line number.
 
-- **OPEN 2026-09-14, small, AND PARTLY BEING FIXED AS THIS IS WRITTEN - SO IT IS
-  FILED AS THE CLASS AND NOT AS THE INSTANCE.** `collect_facts` in
+- **THE INSTANCE IS DONE 2026-09-14 AT `0d1fa70`, proven by
+  `tests/test_task_liveness.py`. THE CLASS QUESTION STAYS OPEN, small.** This row
+  was filed as the class and not as the instance, and that split is why only half
+  of it flips. `collect_facts` in
   `ops/check_task_liveness.py` mapped EVERY non-zero return code to ONE reason:
   that the scheduler refused the query and may need a different account or a
   different TaskPath. For the ConsoleHost init-failure class that headline is
   FALSE - nothing refused anything, and neither an account nor a TaskPath is
   involved. The truth sat only in the DETAIL string.
 
-  A concurrent slice is adding a branch for 0xFFFF0000 and its sibling
-  0xFFFE0000, which is ExitCodeCtrlBreak. THE CLASS is the durable finding: a
-  probe that collapses every failure mode into one OPERATOR-FACING reason sends a
-  reader hunting a cause that does not exist. WHAT REMAINS OPEN AFTER THAT BRANCH
-  LANDS IS THE QUESTION AND NOT THE INSTANCE - whether any other non-zero code
-  from this probe also deserves its own class. That is UNMEASURED.
+  THE BRANCH LANDED. Two module-level named constants now carry 0xFFFF0000 and
+  its sibling 0xFFFE0000, which is ExitCodeCtrlBreak; the new branch PRECEDES the
+  generic one and its detail string is byte-identical, so the diagnostic content
+  survived and only the false headline changed. Two arms went red before the fix
+  with both codes spelled as literals, and two controls held. UNVERIFIED AND
+  RECORDED AS SUCH: whether this tool can reach 0xFFFE0000 at all. THE CLASS is
+  the durable finding: a probe that collapses every failure mode into one
+  OPERATOR-FACING reason sends a reader hunting a cause that does not exist. WHAT
+  REMAINS OPEN IS THE QUESTION AND NOT THE INSTANCE - whether any other non-zero
+  code from this probe also deserves its own class. That is UNMEASURED.
 
   THE REPRODUCTION, recorded because it is what makes the class checkable.
   Invoking powershell.exe with a BAD SystemRoot returns 0xFFFF0000
@@ -117,6 +173,17 @@ version. What follows is everything the scaffold deliberately did not do.
   the new return type raises AttributeError. Because the hook pipes the bare
   string `git commit` with no `-C`, that fall-through is the LIVE path on every
   developer commit, so the fix ran on its own commit. Landed at `72c7041`.
+
+  **DONE 2026-09-14, proven by `tests/test_precommit_gate_corpus.py`** - five
+  arms, three of them red before the fix by AssertionError against a REAL git exit
+  129 rather than a mocked one, and two controls green on both sides, one of which
+  is the clean-repo-nothing-staged case the defect was BYTE-IDENTICAL to. Plus the
+  end-to-end check, which is the only valid test of a hook gate: a banned glyph
+  staged by explicit path, a real commit attempted, exit 1 naming file and glyph,
+  HEAD unchanged. RECORDED BECAUSE THE ADJUDICATOR DISCARDED ONE OF THE WINNER'S
+  OWN ARGUMENTS: CLOSED had also argued "the commit is about to fail anyway", and
+  that is FALSE - a stale `git -C` path left by a worktree agent yields an
+  unreadable corpus while the real commit succeeds.
 
   THE ADJUDICATOR'S OWN STATED COMMON-MODE RISK, recorded because agreement is
   not evidence: both candidates argued from the SAME inherited docstring without

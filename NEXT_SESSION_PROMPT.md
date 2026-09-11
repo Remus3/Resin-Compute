@@ -9,108 +9,32 @@ fenced block in this file.
 RSC - next session, HEADLESS, operator MAY BE PRESENT.
 
 Repo: C:\Resin Compute (github.com/Remus3/Resin-Compute). Counterparty: RC.
-CS, LW and LL on ORDERED STANDBY - silence is NOT dissent, do not write into
-their trees.
+CS, LW and LL are on ORDERED STANDBY - SILENCE IS NOT DISSENT, and do not write
+into their trees.
 
 READ FIRST: CLAUDE.md, README.md, docs/SPEC_SCAFFOLD.md, ROADMAP.md,
 docs/LEDGER.md, git log. Before any character build read
-docs/GOAL_SPEC_SEED_TEAM.md. Before a data source read docs/LICENSE_NOTES.md.
-Before re-litigating read docs/adr/README.md.
+docs/GOAL_SPEC_SEED_TEAM.md. Before adding a data source read
+docs/LICENSE_NOTES.md. Before re-litigating a past choice read
+docs/adr/README.md. A fresh clone runs ZERO hooks - first action there is
+python scripts/install_hooks.py.
 
-*** ONE THING WAS NOT RUN LAST SESSION AND IS LABELLED UNVERIFIED ***
-The responder fix MERGED and CI is green, but the independent VERIFIER and the
-ADVERSARY passes with distinct lenses did NOT run - /done arrived while the last
-slice was still working. The seam gate was re-run by the main thread, which is a
-ground-truth re-check and NOT a substitute for a refuter. If you spend one slice
-this session, spend it there, on the commit 6c351b3, with these lenses:
-  - correctness: does answered_usable's replaceable-versus-structural split hold
-    on the edge cases, and is the new `answered-unusable` termination reachable
-    by any path other than a monkeypatch?
-  - does-it-reproduce: re-run the cited numbers in a clean shell - the three-fire
-    byte series, the 3-to-1 and 3-to-0 delivery counts, the six-arms-red
-    non-vacuity probe - and read the exit codes rather than the claims.
-  - scope and siblings: the degrade-to-empty root cause was fixed at three sites
-    here and three in scripts/watch_inbox.py. Sweep for a FOURTH anywhere in the
-    tree and default to REFUTED if you cannot show the sweep was exhaustive.
-  ONE ARM SHAPE TO ATTACK FIRST: four of the five rotate arms went red by
-  `AttributeError: no attribute '_rotation_path'` - RED BY ABSENT API, not by
-  measurement. Only the fifth is behaviour-only. An arm that grades its own
-  scaffolding is the shape this tree has been bitten by.
-  AND ONE ADMITTED LIMITATION, from the builder itself:
-  test_a_failed_answered_write_is_reported_rather_than_discarded injects its
-  False by monkeypatching the call site, because every real structural route is
-  now stopped by the reader gate one level up. Stated at the site rather than
-  papered over. Decide whether that arm is worth what it costs.
+DO NOT RE-DERIVE GACHA CONSTANTS FROM MEMORY OR FROM A WEB SEARCH. They are in
+docs/SPEC_SCAFFOLD.md section 3 with the corrections in
+docs/adr/ADR-003-forecaster-model.md.
+  - The 50/50 is 55.000% CONSOLIDATED since version 5.0, not 50%.
+  - The weapon soft-pity ramp SATURATES AT PULL 77 under a 7% increment. Any
+    claim of 79 or 80 is arithmetically impossible.
+  - 1.600% is 1/E[wishes per 5-star], a long-run average, and is NEVER a
+    per-wish Bernoulli parameter. Forecasts use an absorbing Markov chain.
+  BOTH WERE CONFIRMED BY THE LIVE CLIENT ON 2026-09-11: the banner detail text
+  states 1.103% consolidated and this tree predicts 1.1034%; a talent-material
+  tooltip named Tuesday/Friday/Sunday, exactly ROTATION_SLOT_WEEKDAYS[1] in
+  core/domains.py. NEITHER FIGURE ENTERED data/ AND NEITHER MAY.
 
-WHAT LANDED AT 6c351b3, all four items, DO NOT REDO:
-  - record_cycle fails closed on an unreadable metrics ledger, bytes left
-    byte-identical, returns False.
-  - _trim_invocations folds U+FFFD to ASCII '?'. Pre-fix growth MEASURED at
-    [273363, 273369, 273387] bytes across three fires - +6 then +18, the
-    threefold expansion, caught live rather than argued.
-  - The metrics cap BOUNDED-ROTATES to one `.1` file holding the newest overflow
-    rows, total held at 2 * MAX_METRICS_ROWS. Rotation written FIRST, live file
-    LAST; a failed rotate propagates False with the live ledger untouched, so it
-    can never degrade into a trim. AUTHORISED by the 2026-09-11 adjudicated call.
-  - answered_usable(path) -> (bool, why) mirroring refusals_usable, per the
-    2026-09-12 adjudicated call. Replaceable poisonings DEGRADE and heal;
-    structural ones FAIL CLOSED with a new termination `answered-unusable`;
-    absent is truthfully empty. _remember_answered's bool is no longer discarded.
-
-DO NOT RE-DERIVE GACHA CONSTANTS. docs/SPEC_SCAFFOLD.md section 3, ADR-003.
-50/50 is 55.000% consolidated since 5.0. Weapon soft-pity saturates at pull 77
-under a 7% increment. 1.600% is 1/E[wishes per 5-star], NEVER per-wish
-Bernoulli. BOTH WERE CONFIRMED BY THE LIVE CLIENT ON 2026-09-11: the banner
-detail text states 1.103% consolidated and this tree predicts 1.1034%, four
-significant figures; and a talent-material tooltip named Tuesday/Friday/Sunday,
-exactly ROTATION_SLOT_WEEKDAYS[1] in core/domains.py. Neither figure entered
-data/ and neither may.
-
-NO BLOCKING QUESTIONS. Where you would escalate, dispatch an ADJUDICATOR and
-record the ruling in ROADMAP.md MARKED PLAINLY AS AN ADJUDICATED CALL. ELEVEN
-NOW STAND - 2026-09-12 added ONE, the reading half of _answered. Find each by
-HEADING in ROADMAP.md, never by line number. An adjudicator is for a question
-measurement cannot close.
-
-ADJUDICATE THE CONTESTED HALF BEFORE DISPATCH, NOT IN PARALLEL WITH IT. Measured
-cost last session: SendMessage is DISABLED, so a brief discovered to be wrong
-while its builder was running COULD NOT BE CORRECTED IN FLIGHT. Three sequential
-slices where one was planned. The ruling REFUTED THE ORCHESTRATOR'S OWN BRIEF -
-it had ordered a fail-closed writer that would have converted one duplicate
-delivery into ONE PER CYCLE FOREVER, because _remember_answered is the only
-thing that HEALS a replaceable record.
-
-DO NOT ARM ANYTHING. Verified DORMANT via
-`python ops/check_task_liveness.py ResinCompute-Responder`, exit 1, trigger
-expired 2026-09-07T21:00.
-
-*** STILL HALTED AND WAITING FOR THE OPERATOR - UNCHANGED, NOTHING NEW ***
-RC's JOINT RE-PIN REQUEST. STEP 1 IS DONE AND ANSWERED: NO - RAW hits only
-inside tests/test_no_sibling_names.py which is SELF-exempt, NORMALISED-ONLY hits
-ZERO. AND RC'S PREMISE IS WRONG: our tests/test_loop_concurrency.py pins
-ops/loop/slots.py and ops/loop/winmutex.py by SHA256 and DOES NOT PIN ITSELF, so
-the two test modules legitimately diverge. STEPS 2-4 HALTED under ruling clause
-(c). NOTHING IS BLOCKED ON US.
-
-THREE OPERATOR DECISIONS OUTSTANDING, NONE BLOCKING. The third is NEW.
-  1. refusals_usable at tools/moon_sync_responder.py deliberately does NOT fail
-     closed on corrupt content. INCONSISTENT with the rule
-     scripts/watch_inbox.py adopted on 2026-09-11. Defensible on cost rather
-     than accidental. Rule on it; do not silently harmonise either side.
-  2. Arming CS / LW / LL. Clause (c) needs bilateral agreement, they cannot
-     reply, and the ADOPTED rule is halt-and-wait with NO TIMEOUT. Only the
-     operator can lift standby or carve out clause (c).
-  3. NEW 2026-09-12 - THREE RECORDS IN ONE MODULE, THREE DISPOSITIONS.
-     record_cycle fails closed on ALL unreadable metrics classes;
-     answered_usable degrades on the replaceable ones and fails closed only on
-     the structural; refusals_usable is fail-open on corrupt content. The
-     defence is what the bytes are FOR - a metrics row is irreplaceable
-     evidence, an answered name is a suppression key - and that is an ARGUMENT,
-     NOT A MEASUREMENT. Rule on the SET, not on a pair.
-
-GATES, in /done order, EACH AS ITS OWN COMMAND. Chaining with && reports only
-the LAST link - a suite failure has already hidden behind a passing smoke test
-at the end of a chain.
+GATES, in /done order, EACH AS ITS OWN COMMAND. CHAINING WITH && REPORTS ONLY
+THE LAST LINK - a suite failure has already hidden behind a passing smoke test
+at the end of a chain in this tree.
   python -m pytest tests/test_licence_posture.py
   python -m pytest tests/test_docs_consistency.py
   python -m pytest tests/test_docs_hook_commands.py
@@ -120,185 +44,275 @@ at the end of a chain.
   python -m pytest agents/pity_engine
   cd shell && node --test
   python -m headless.runner --once --dry-run
-DO NOT PASS -q ON THE COMMAND LINE. pytest.ini sets it; a second makes it -qq
-and the summary line disappears entirely.
+DO NOT PASS -q ON THE COMMAND LINE. pytest.ini already sets it, and a second -q
+makes it -qq, which deletes the summary line entirely.
+NEVER RUN pytest . FROM THE ROOT. The two suites run SEPARATELY.
+mypy IS ADVISORY. Its files= roots are core/, engines/, ingest/,
+agents/pity_engine/ and tools/ only, so a Success says NOTHING about scripts/,
+surface/, headless/, ops/, tests/ or conftest.py. Zero out of zero reads as a
+pass. Run it anyway so a regression in a covered root surfaces.
 
-STATE AS OBSERVED 2026-09-12 at 6c351b3 ON MAIN, a reading not a promise.
-RE-MEASURE.
-  pytest tests   2146 passed 1 skipped, up from 2106 at the 41ba7d0 fork point.
-  COLLECTED AND PASSED ARE DIFFERENT
-  POPULATIONS. agents/pity_engine 80 passed. node --test 52 tests 52 pass 0
-  fail. licence 47, docs consistency 29, docs hook commands 17. qa 18 passed
-  0 failed 1 skipped 3 noted. ruff / headless / mypy exit 0.
-  mypy ADVISORY. Its 34 source files say NOTHING about scripts/, surface/,
-  headless/, ops/ or tests/. Never cite its Success about those.
-  git ls-files 219 paths. git ls-files -- '*.py' 136. BOTH DECAY.
-  CHECK EVERY SESSION, FIRST: gh run list --limit 5
-  CI: `ci` GREEN at 6c351b3, watched with `gh run watch --exit-status`, exit 0.
-  docs-guards GREEN at b128eb1, and `ci` did NOT fire on THAT push - that is
-  CORRECT, ci.yml carries paths-ignore '**/*.md' and docs-guards fires on
-  exactly what ci declines. b128eb1 was docs-only; 6c351b3 carried code.
-  LOCAL GREEN IS OPTIMISTIC. qa_companion NOTEs local ruff 0.15.12 / pytest
-  9.0.3 / mypy 2.1.0 are ALL OLDER than the CI pins, and the interpreter here is
-  3.14 while CI runs 3.11.
+STATE AS OBSERVED 2026-09-14 AT 76ccdeb ON MAIN. A READING AT THAT COMMIT, NOT A
+PROMISE ABOUT NOW. RE-MEASURE BEFORE CITING ANY OF IT.
+  pytest tests 2155 passed 1 skipped. agents/pity_engine 80 passed.
+  node --test in shell/ 52 tests 52 pass 0 fail.
+  licence 47 passed, docs consistency 29 passed, docs hook commands 17 passed.
+  qa_companion 18 passed 0 failed 1 skipped 3 noted.
+  ruff exit 0. mypy exit 0, no issues found in 34 source files - ADVISORY.
+  headless.runner --once --dry-run 0 pass 0 fail 6 skip, exit 0.
+  COLLECTED AND PASSED ARE DIFFERENT POPULATIONS. Do not restate any of these as
+  a live figure.
+  LOCAL GREEN IS OPTIMISTIC AGAINST CI: the interpreter here is 3.14 while CI
+  pins 3.11, and qa_companion NOTEs the local ruff, pytest and mypy as OLDER
+  than the CI pins.
+  CHECK CI FIRST, EVERY SESSION: gh run list --limit 5
+  Responder task exit 1 DORMANT, sole trigger expired 2026-09-07T21:00.
+  Inbox: no unread. Three LW notes were triaged AND marked last session. The
+  whole inbox directory is gitignored, so no guard whose corpus comes from
+  git ls-files can reach it - state the mechanism, never the universal claim.
 
-WHAT LANDED 2026-09-12, DO NOT REDO.
-  b128eb1 docs - the ADJUDICATED CALL on the reading half of _answered, the
-          correction it made to the orchestrator's own brief, the answered
-          ledger-instance CHECK, and five stale line numbers removed.
-  6c351b3 code - all four responder items, plus the two gate guards moved.
-  Two new open rows from the ruling: the three-record disposition asymmetry, and
-  answered_usable's _ensure_parent side effect. One from the guard slice: a
-  dated 18 in the census prose that now reads as a live count.
-  NOT DONE: the independent verifier and the adversary lenses. See the top.
-
-THE LEDGER-INSTANCE ANSWER, so nobody re-runs it. NO DIVERGENCE, and the reason
-is NOT convergence. All five record_cycle call sites pass DEFAULT_METRICS
-verbatim; six total references in non-test code, so no second binding exists to
-diverge; no add_argument sets it; the registered task sets no environment.
-AND THE LOAD-BEARING FINDING: ZERO M1-M6 ROWS HAVE EVER BEEN WRITTEN LIVE.
-_run_once returns at its empty-queue gate BEFORE the first record_cycle. The
-three JSON records are ABSENT from the ops runtime directory; the only live
-record is the invocation log at 48 lines, which decomposes exactly into 19
-start-plus-empty pairs plus 10 bare starts, its transition minute matching
-fe53f31. A census over four roots walked 211694 directories, found 197 instances
-of those four basenames, exactly ONE live, every responder_metrics.json under a
-pytest tmp dir, ZERO under C:\ProgramData.
-  RESIDUAL: the 10 bare starts have unrecoverable terminations and five are
-  off-boundary, so the live 48 is NOT provably 48 task fires - the rsp fixture
-  once wrote real lines into that exact live log and a leaked fixture line is
-  indistinguishable from a manual dry run. The census says nothing about other
-  drives, network paths, or any sibling tree.
-
-FIVE LINE NUMBERS IN ROADMAP.md WERE STALE AND ARE NOW GONE RATHER THAN
-CORRECTED. It cited record_cycle at BOTH :969 and :1102 for one definition; it
-is at :1067. The five call sites were cited 1615/1634/1665/1700/1738; they are
-1728/1748/1785/1822/1871. Deltas +98 and +113..+133. CITE BY NAME. Doc pointers
-have now decayed in three consecutive sessions.
-
-OPEN ROWS. RE-PROBE EACH BEFORE SPENDING A SLICE.
-  - The verifier and adversary passes at the top of this prompt. Highest
-    priority, because it is a done-claim nothing has tried to refute.
-  - THE CENSUS PROSE says "those 18 cases" and "all 18 of them PASSING" where the
-    parametrized block is now 20. It is a DATED 2026-09-09 finding reading as a
-    live count. Fifteen other 18/19 references in that file are correct as they
-    stand - quoted mutant expressions and dated results - so do not sweep them.
-    Repairing this pair properly means re-running the advF-garbage mutant.
-  - THREE RECORDS, THREE DISPOSITIONS, and it belongs to the operator. See
-    decision 3 above.
-  - The Resin panel has no automatic observation source. Original Resin is not
-    in the Enka payload and never will be. Today an observation is typed in by
-    hand. Same gap as the income-velocity item under Next.
-  - Still unmeasured on the operator's account: Original Resin sinks available
-    at AR 7, Daily Commission unlock status, Adventurer Handbook. One screen
-    (F1) closes all three.
-  - SIX split-name shapes NEITHER our sweep NOR RC's normalisation can see,
-    enumerated at the site in tests/test_no_sibling_names.py. NOT closed.
-  - Sender side is unguarded against editing a note after delivery. ALREADY
-    FILED at ROADMAP.md and docs/INBOX_TRIAGE_2026-09-09.md, and the row that
-    cited a digest at :1261 was REFUTED - that is refusal_key, hashing filename
-    plus bounce codes on the REFUSAL path. The real blocker is that no artifact
-    exists for a sender-side check to compare against.
-  - NO TRACKED ARM DRIVES MULTIPLE CYCLES OVER A POISONED ANSWERED RECORD on
-    main. All eight existing multi-cycle _drive arms target DEFAULT_REFUSALS.
-    The worktree adds one. If the merge is abandoned, this gap stays open, and a
-    single-cycle arm structurally CANNOT see a per-cycle-forever loop.
-
-THE OPERATOR'S ACCOUNT IS A REAL INPUT. uid 692912734, xMoonbeam, NA, AR 7,
-World Level 0, achievements 4, version 7.0. 9 characters, ALL ascension 0 and
-C0; only Dehya 10000079 and Noelle 10000034 resolve, the other seven render as
-unknown:<id> BY DESIGN. Dehya lvl 20 at ascension 0 is ON the first cap per
-engines/objectives.py ASCENSION_LEVEL_CAPS. Primogems 288, Mora 34102,
-Intertwined Fate 6, Starglitter 0, Stardust 165. Welkin ACTIVE with 26 days
-left as of 2026-09-10. Character-banner pity 0, no guarantee, and zero pulls on
-Weapon / Chronicled / Character Event. Original Resin observed 200/200 at
-2026-09-11T01:39:48Z.
-  DO NOT WRITE ANY OF THAT INTO data/. data/fixtures/ is HAND-AUTHORED only.
-  DO NOT resolve the seven unknown avatarIds by guessing - that is vendoring,
-  and the placeholder exists to prevent exactly it.
-
-SESSION SHAPE is orchestrated, multi-agent, self-adjudicating, self-adversarial
-by DEFAULT, and SUBAGENT-FIRST ALWAYS. The agent that produced a thing NEVER
-grades it. FREEZE THE CANDIDATE before dispatching a grader, and give every
-grader THREE state assertions - HEAD sha, git status --porcelain, and the
-candidate file's sha256 - so it can tell you the tree moved instead of grading
-the wrong bytes. This caught a real mid-audit move on 2026-09-11, and on
-2026-09-12 the same three assertions let two follow-on slices extend an
-uncommitted worktree safely.
-DISPATCH REFUTERS WITH DISTINCT LENSES. AGREEMENT BETWEEN TWO AGENTS IS NOT
-EVIDENCE - on 2026-09-11 two documents agreed about a metrics trim and were ONE
-input counted twice, proven by the identical WRONG line number in both.
-
-TRAPS THAT ACTUALLY BIT, every one measured.
-
-- A WRONG DISPATCH BRIEF COSTS A WHOLE SLICE, because SendMessage is DISABLED
-  and a running builder cannot be corrected. Adjudicate first.
-- A BUILDER THAT STOPS AT A SEAM COLLISION IS WORKING CORRECTLY. One did, on two
-  gate-guard files it did not own. Dispatch a slice for them; do not widen a
-  write-list mid-run.
-- A GATE THAT CANNOT FAIL PASSES ON BOTH SIDES OF A REAL DEFECT. Ask what INPUT
-  an arm feeds, not whether the arm exists.
-- RED BY ABSENT API IS NOT RED BY MEASUREMENT. An arm that dies on
-  AttributeError for a symbol the fix introduces has graded its own scaffolding.
-- A SAMPLED NEGATIVE IS A STATEMENT ABOUT THE SAMPLE. Report the rate with it.
-- AN EMPTY RESULT CAN BE A CLAIM ABOUT YOUR FILTER. State the filter.
-- tests/test_docs_consistency.py REJECTS A BACKTICKED POINTER AT AN UNTRACKED OR
-  ABSENT RUNTIME PATH. It caught two in this session's own ROADMAP edit. Name
-  such a path in prose, unbackticked, and say why.
-- /tmp_x.txt UNDER GIT BASH LANDS IN C:\Program Files\Git\, NOT the C: drive
-  root. cygpath -w it before claiming it was or was not created.
-- A LINE NUMBER IN A DOC DECAYS. Cite by content and re-measure before citing.
-- A NET-ZERO-BYTE-SIZE mutate-and-restore WITHIN THE SAME SECOND runs the
-  MUTANT'S BYTECODE. Purge __pycache__ AND .pytest_cache on BOTH sides.
-- NEVER `git checkout --` to restore a mutation, and it is far worse in a
-  worktree holding UNCOMMITTED slice work - it would destroy it. Save bytes,
-  restore, verify by sha256, assert source.count(old) == 1 before substituting.
-- COMPARING AN ENUM ACROSS TWO MODULE LOADS gives two distinct classes.
-- A QUOTED HEREDOC STILL MANGLES BACKSLASHES. Write .py with the editor tools.
-- write_text EMITS CRLF ON WINDOWS and .gitattributes eol=lf hides it. tests/ is
-  OUTSIDE test_no_crlf_writers.py's corpus.
-- grep -c '[^\x00-\x7F]' IS NOT A CHARACTER CLASS. Check bytes IN PYTHON.
-- NEVER TYPE A BANNED GLYPH AS A LITERAL, even in a test that enforces the rule.
-  Build from chr(0x2014) / chr(0xFFFD).
-- A WORKTREE MATERIALISES AT AN ANCESTOR OF THE DECLARED FORK POINT. Put an
-  explicit `git merge --ff-only <sha>` in every brief PLUS an assertion on
-  content that EXISTS ONLY AT THE FORK POINT.
-- UNCOMMITTED SLICE WORK IS INVISIBLE TO THE NEXT WORKTREE. Reuse the SAME
-  worktree for a follow-on slice - measured twice this session.
-- EnterWorktree REFUSES for a subagent. Use `git worktree add`.
-- TaskStop a finished agent once its report lands.
-- An empty pytest parametrize is `1 skipped`, exit 0, NOT a failure.
-- A PYTEST PROGRESS LINE IS 72 DOTS, NOT THE WHOLE RUN.
-- exit=$? AFTER A PIPE READS THE LAST PIPE STAGE. Redirect to a file.
-- NEVER NAME A SIBLING PROJECT IN PLAIN TEXT. RC, CS, LW, LL, RSC.
-- Never Stop-Process. taskkill //F //PID under Git Bash.
-- NEVER ADD A Co-Authored-By TRAILER, and never file its absence as a defect.
-
-CHECK TASK LIVENESS WITH THE CHECKER, NEVER A STATE STRING, NEVER THROUGH A
-PIPE:
+DO NOT ARM ANYTHING. The ResinCompute-Responder task is DORMANT and is to stay
+that way. Verify with the checker, never with a State string and never through a
+pipe:
   python ops/check_task_liveness.py ResinCompute-Responder
-Exit 0 LIVE, 1 DORMANT, 2 ABSENT, 3 UNKNOWN, 4 AMBIGUOUS. Observed 1 DORMANT.
+Exit 0 LIVE, 1 DORMANT, 2 ABSENT, 3 UNKNOWN, 4 AMBIGUOUS. A scheduled task reads
+Ready forever once its triggers have expired, so Ready is not a capability.
 KILL SWITCH:
   powershell -ExecutionPolicy Bypass -File .\ops\install_responder_task.ps1 -Remove
 
-INBOX: 157 files, 0 unread, all triaged and MARKED. RE-MEASURE. Gitignored
-wholesale - the guards derive their corpus from `git ls-files`, so an untracked
-path is outside their reach BY CONSTRUCTION. Do NOT write the universal "no
-guard reads it".
+THE HALT RULING. Halt and PING THE OPERATOR before:
+  (a) any write, delete, unlink or named-kernel-object acquisition whose target
+      path or namespace is OUTSIDE this repo root - explicitly the machine-wide
+      slot bucket under C:\ProgramData and the Global\ mutex namespace. The
+      session scratchpad is IN SCOPE by operator ruling: delete its worktrees
+      freely, no ping.
+  (b) any commit or push whose diff touches ops/loop/slots.py or
+      ops/loop/winmutex.py, or that trips tests/test_no_sibling_names.py.
+  (c) any arming, agreement, or behaviour change in ANOTHER PARTY'S TREE.
+EXPLICITLY NOT before an ordinary push that passes both suites and the
+sibling-name sweep with RESIN_SKIP_PREPUSH unset.
+WHY (b) EXISTS: tests/test_loop_concurrency.py pins those two files by sha256 as
+byte-identical across three carriers, so hardening either one desynchronises
+every carrier that has not moved.
 
-DO NOT REDO: everything at b3ff9fe, 3c4bcb5, 9f03062 and 2dc0965. The three
-vacuous floors. The supervisor and responder argv graders. The lane-selection
-pin. The _SOLO view asymmetry. The name-to-site binding table. The
-undeclared-shape-grader detector. The atomic_io 0-byte temp leak. The census
-prose decay. The eight gates exercised by nothing. slots.py re-pin. The
-ledger-instance divergence check - ANSWERED, no divergence. Manifest-as-key
-(withdrawn). Caveman dialect (settled). Wenyan (reverted 2026-06-27). Only M12
-exists. Do not re-derive the ceilings in docs/LEDGER.md. Do not re-litigate the
-eleven adjudicated calls without reading them. Do not re-sweep the mkdir sites.
-Do not rebuild the git-reason hand-typed fixture. Do not re-open the census
-REFERENT. Do not widen _READ_ATTRS, _FIRST, _SECOND, _SOLO or _SEP - WIDENING A
-MATCHER is the response this tree has been defeated by three times.
+WHAT LANDED 2026-09-14, ALL FIVE PUSHED AND CI GREEN ON EACH. DO NOT REDO.
+  72c7041 The commit gate read an UNREADABLE CORPUS as a CLEAN one. _git in
+          tools/precommit_gate.py returned stdout without consulting returncode,
+          so a directory where git diff --cached exits 129 was BYTE-IDENTICAL to
+          a clean tree with nothing staged - return 0, empty stderr, no
+          banned-glyph scan, no py_compile, no net-new ruff. Fails closed now.
+          THE TWELFTH ADJUDICATED CALL, CLOSED on 4 of 4 criteria. Proven by
+          tests/test_precommit_gate_corpus.py plus an end-to-end hook attempt.
+  0d1fa70 collect_facts in ops/check_task_liveness.py reported EVERY non-zero
+          exit as a scheduler refusal. 0xFFFF0000 is ExitCodeInitFailure - the
+          CLR never loaded and the script never ran, so the headline was false
+          in every word. New branch precedes the generic one, detail string
+          byte-identical. No CLI exit code changed.
+  77408ad Two recorded figures REFUTED.
+  f77c4ad Thirteen findings reached the roadmap.
+  76ccdeb A gate whose verdict depends on FREE MEMORY, plus a correction to a
+          row filed hours earlier the same session.
+
+REFUTED FIGURES - DO NOT QUOTE THE OLD ONES FROM ANY COMMIT BODY.
+  "Six arms" was wrong by roughly sevenfold. Deleting the one
+  # GATE:answered-usable line in a clean clone gives exit 1 with 43 FAILURES of
+  88 COLLECTED, against 89 collected and exit 0 at baseline in the SAME clone.
+  89 IS NOT AN ARM COUNT - it is 69 plus len(_TAG_LINES), and _TAG_LINES is
+  derived at import from the responder's own source, so DELETING A TAG DELETES A
+  PARAMETRIZE CASE. Error, skip, xfail and xpassed buckets all measured empty; a
+  restore control returned the clone to 89; surviving ids shift down by one.
+  The replaceable "3 before" was also wrong - the pre-change bytes delivered 1.
+  All four parametrized arms pass against 6c351b3^. The 3 was measured against a
+  dispatch brief's ordered-then-REJECTED writer that was NEVER COMMITTED and
+  exists nowhere in history.
+  STILL UNRECONCILED: the unique-red-function count, 24 against 23, two passes
+  disagreeing by one with NEITHER enumerating names. Enumerate once and retire
+  it. The commit body of 6c351b3 carries the refuted figures and CANNOT be fixed
+  - it is pushed and CI ran green on it, and rewriting published history to
+  correct a number is worse than the number. docs/LEDGER.md holds the
+  correction.
+
+OPEN WORK, HIGHEST PRIORITY FIRST. RE-PROBE EACH BEFORE SPENDING A SLICE.
+  1. THE PRE-PUSH GATE IS INTERMITTENT AND ITS VERDICT IS A FUNCTION OF FREE
+     MEMORY. A push was refused at 2 failed, 2148 passed, 2 skipped; the same
+     commit through a real pre-push hook into a scratch bare repo gave 2150
+     passed, 2 skipped in 97.77s, exit 0. The environment hypothesis is REFUTED
+     BY COUNTER-EXAMPLE - interpreter, PATH, powershell resolvability, user,
+     timeout and cwd were each ruled out individually. Cause is load: the
+     low-virtual-memory detector named a python process at about 10.4 GB and the
+     refused run took 474.67s, spanning two events. Two arms in
+     tests/test_task_liveness.py COLLAPSE "the census machinery is broken" with
+     "powershell could not start just now". DO NOT SOFTEN THE ARMS - FAILED must
+     fail and only NONE may skip, which is what kills a vacuous skip. The repair
+     is a DISTINCT CLASS for a host-start failure. Collected total was 2152 in
+     every run, so nothing was silently dropped.
+  2. THE WHOLE-TREE FALSE-RED POPULATION IS UNKNOWN, AND THAT IS THE ROW. Both
+     numbers this tree has quoted - 8 red arms over 7 modules, and a 5-module
+     candidate list - came from NAME-BASED ONE-TERM FILTERS, and the second was
+     measured to OVER-REPORT: only THREE of the five shell git at all.
+     tests/test_ci_history_depth.py executes none, its only subprocess.run text
+     being a STRING LITERAL fed to a regex; tests/test_guard_worktree_blindness.py
+     has no subprocess call at all. A skip added to either would be a FALSE SKIP
+     with no defect behind it. RUN THE AST ENUMERATION of every subprocess call
+     whose argv[0] is git across tests/, tools/, ops/, headless/ and scripts/
+     FIRST, publish the list, and only then size the work. Any "N to 0" claim
+     before that inherits the defect found in LW's own 43.
+  3. THE SKIP-then-RUN SITE-LEVEL ARM, genuinely new. tests/test_conftest_git_gate.py
+     grades the HELPERS and nothing grades a repaired CALL SITE end to end: run
+     the module with git absent and assert it SKIPS, run it with git present and
+     assert it RUNS ITS ASSERTIONS. The RUN half is load-bearing - a skip-only
+     arm is satisfied by a guard that never lets anything run.
+  4. answered_usable and refusals_usable in tools/moon_sync_responder.py share a
+     MISSING THIRD CLASS: readable-but-permanently-unwritable. Seeded with valid
+     JSON and a read-only attribute, the real run_once delivered 3 files over 3
+     cycles into a repo this one does not own. NOT LIVE while the task is
+     dormant. Any fix must touch BOTH.
+  5. LW'S schtasks/POWERSHELL BACKSLASH FINDING IS UNSWEPT HERE, and unswept is
+     NOT clean. Candidate carriers: ops/install_responder_task.ps1,
+     ops/install_scheduled_task.ps1, ops/ResinCompute-Responder.xml,
+     ops/ResinCompute-Supervisor.xml, and the reader ops/check_task_liveness.py.
+  6. A FIFTH DEGRADE-TO-EMPTY SITE IS IN A GUARD - scan_file in
+     tests/test_task_state_claims.py returns [] on OSError, so an unreadable
+     tracked file reports ZERO FINDINGS.
+  7. core/provenance.py declares sha256 and parent_sha256 and contains NO
+     hashlib. The only validation is a FORMAT REGEX - a shape arm pinning format
+     and not input. Recompute-and-compare, or rename the field ADVISORY, BEFORE
+     the first production writer lands.
+
+NEEDS THE OPERATOR, NONE BLOCKING.
+  - THE THREE-RECORD DISPOSITION ASYMMETRY IS THE OPERATOR'S CALL, ON THE SET
+    AND NOT ON A PAIR. record_cycle fails closed on all unreadable metrics
+    classes; answered_usable degrades on replaceable and fails closed only on
+    structural; refusals_usable is fail-open on corrupt content. The defence is
+    what the bytes are FOR, and that is an ARGUMENT, NOT A MEASUREMENT.
+  - DOES AN INTERPRETER THAT NEVER STARTED DESERVE ITS OWN CLI EXIT CODE from
+    ops/check_task_liveness.py? Today it lands on 3 UNKNOWN. For: a host-start
+    failure is a retryable fact about this machine now. Against: the five
+    existing codes HAVE CALLERS. A ruling here constrains open item 1.
+  - ARMING CS / LW / LL. Clause (c) needs bilateral agreement, three of five
+    cannot reply, and the adopted rule is HALT AND WAIT WITH NO TIMEOUT. The
+    NO-ANSWER RULE is UNRULED, not policy: timeout-plus-default-deny was
+    PROPOSED by an adjudicator and the operator has not ruled.
+  - LW'S Q2 - whether the gate tag literal is RC's # GATE: spelling - is
+    formally UNANSWERED BY THREE OF FIVE, because LW defers it to its own
+    operator as a POLICY COMMITMENT rather than a measurement.
+  - LW'S Q4 adds ONE WORD, "undigested", to a position we already hold: nobody
+    copies a file unrequested AND UNDIGESTED. SILENCE IS NOT AGREEMENT, so an
+    unanswered added word READS AS DISSENT. ANSWER IT.
+
+INBOX VERDICTS FROM LAST SESSION, so they are not re-derived.
+  LW's Q3 conftest claim is refuted and we had ALREADY retracted it, so no new
+  correction is owed - what LW adds is a SECOND CARRIER, upgrading RETRACTED to
+  DISPROVED. LW's "43 to 0" is HALF MEASURED: the AFTER was re-run, the BEFORE
+  row is byte-identical to their earlier note and was carried forward, so the
+  delta is ASSERTED - and their own disclosed box saturation, applied to the
+  post-repair probe only, would inflate the 43 numerator by the same noise.
+  Their R3, that a present-but-broken git must still FAIL, CONFLICTS with our
+  shipped classify_git_probe, which SKIPs it, and tests/test_conftest_git_gate.py
+  pins that question as deliberately OPEN - adopting their rule would SILENTLY
+  CLOSE AN OPEN OPERATOR CALL. Their PATH-strip mirror is contraindicated here:
+  shutil.which is PATHEXT-aware while subprocess.run goes through CreateProcess,
+  which appends only .exe. Their third note offers NO digest at all, and their
+  with-git passing count moved by twelve between notes, unstated.
+
+TRAPS THAT ACTUALLY BIT, every one MEASURED.
+  - UNDER GIT BASH THE SHELL STATUS IS 8-BIT, so an exit of 4294901760 reads as
+    0 there. Only a returncode read IN PYTHON carries the full 32 bits, so that
+    exit code CANNOT BE CHASED THROUGH A SHELL AT ALL.
+  - A COMPOUND COMMAND'S EXIT STATUS IS ITS LAST ELEMENT. A trailing echo
+    reported 0 and MADE A REFUSED PUSH LOOK LIKE IT HAD LANDED. Redirect each
+    command to its own file and read the codes separately.
+  - /tmp UNDER GIT BASH IS A DIRECTORY INSIDE THE GIT INSTALLATION, not the C:
+    drive root, AND FILES THERE PERSIST ACROSS AGENTS. A stale file at a shared
+    path reads exactly like fresh output: a subagent's leftover was misread as a
+    hook blocking a commit that had NEVER RUN, because a failed python -c had
+    short-circuited the && chain first. cygpath -w before claiming anything.
+  - A GATE THAT CANNOT FAIL PASSES ON BOTH SIDES OF A REAL DEFECT. Ask what
+    INPUT an arm feeds, never whether the arm exists.
+  - FileNotFoundError WinError 2 IS RAISED AT EXEC, so check=True is IRRELEVANT
+    to it. That kills the obvious wrong fix.
+  - RED BY ABSENT API IS NOT RED BY MEASUREMENT. An arm dying on AttributeError
+    for a symbol the fix introduces has graded its own scaffolding.
+  - A LINE NUMBER IN A DOC DECAYS - three consecutive sessions here. CITE BY
+    SYMBOL NAME and verify the symbol exists first.
+  - tests/test_docs_consistency.py REJECTS A BACKTICKED POINTER AT AN UNTRACKED
+    OR ABSENT RUNTIME PATH. Name such a path in PROSE, unbackticked, with the
+    reason. ops/runtime/ and the inbox are the usual offenders.
+  - write_text EMITS CRLF ON WINDOWS and .gitattributes eol=lf hides it from
+    every diff. Write bytes explicitly and check for CR.
+  - NEVER TYPE A BANNED GLYPH AS A LITERAL, even in a test enforcing the rule.
+    Build it from chr(0x2014) or chr(0xFFFD).
+  - grep -c on a hex escape range IS NOT A CHARACTER CLASS. It once found 1785
+    non-ASCII lines in a file with zero non-ASCII bytes. Check bytes IN PYTHON.
+  - A QUOTED HEREDOC STILL MANGLES BACKSLASHES. A FALSE CLEAN SWEEP is the
+    failure mode, not an error.
+  - A NET-ZERO-BYTE mutate-and-restore WITHIN THE SAME SECOND runs the MUTANT'S
+    BYTECODE. Purge __pycache__ AND .pytest_cache on BOTH sides.
+  - NEVER git checkout -- TO RESTORE A MUTATION, and it is far worse in a
+    worktree holding uncommitted slice work. Save bytes, restore, verify by
+    sha256, and assert source.count(old) == 1 before substituting.
+  - A PYTEST PROGRESS LINE IS PER-LINE, NOT THE WHOLE RUN. Counting the last
+    line once named the wrong module.
+  - AN EMPTY PYTEST PARAMETRIZE IS 1 skipped, exit 0, NOT a failure.
+  - A SCHEDULED TASK READS Ready FOREVER once its triggers expire. A State
+    string names a state, not a capability.
+  - NEVER Stop-Process. taskkill /F /PID, and under Git Bash taskkill //F //PID
+    - MSYS rewrites a lone /F into a drive path and the call fails SILENTLY when
+    redirected to /dev/null.
+  - py_compile BEFORE ANY RESTART. A syntax error crashes silently under
+    pythonw.exe. Restart with echo restart > restart_trigger.txt and verify by
+    reading a NEW pid and alive=true out of the health file under ops/runtime/,
+    never by looking at a window.
+  - NEVER NAME A SIBLING PROJECT IN PLAIN TEXT. RC, CS, LW, LL, RSC.
+  - NEVER ADD A Co-Authored-By TRAILER, and never file its absence as a defect.
+
+SESSION SHAPE is orchestrated, multi-agent, self-adjudicating and
+self-adversarial BY DEFAULT, and SUBAGENT-FIRST ALWAYS. The main session is the
+OPERATOR'S SURFACE and stays quiet and clear. THE AGENT THAT PRODUCED A THING
+NEVER GRADES IT. FREEZE THE CANDIDATE before dispatching a grader, and give
+every grader THREE state assertions - HEAD sha, git status --porcelain, and the
+candidate file's sha256 - so it can tell you the tree moved instead of grading
+the wrong bytes.
+AGREEMENT BETWEEN TWO AGENTS IS NOT EVIDENCE. If two agree, find their shared
+input and test THAT - two documents once agreed about a metrics trim and were
+ONE input counted twice, proven by the identical WRONG line number in both.
+DISPATCH REFUTERS WITH DISTINCT LENSES, never N identical skeptics.
+ADJUDICATE THE CONTESTED HALF BEFORE DISPATCH, NOT IN PARALLEL WITH IT.
+SendMessage is DISABLED here, so a brief found wrong mid-run COSTS A WHOLE
+SLICE - measured, three sequential slices where one was planned.
+A BUILDER THAT STOPS AT A SEAM COLLISION IS WORKING CORRECTLY. Dispatch a slice
+for the missing files; never widen a write-list mid-run.
+TaskStop a finished agent once its report lands - one re-notified about twenty
+times after reporting complete.
+NEVER TRUST A SUBAGENT'S CLAIM about test counts, green CI or file existence.
+Probe it independently, and report only counts observed THIS run.
+
+DO NOT REDO. Everything at 72c7041, 0d1fa70, 77408ad, f77c4ad and 76ccdeb.
+Everything at b3ff9fe, 3c4bcb5, 9f03062, 2dc0965, b128eb1 and 6c351b3. The
+three vacuous floors. The supervisor and responder argv graders. The
+lane-selection pin. The _SOLO view asymmetry. The name-to-site binding table.
+The undeclared-shape-grader detector. The atomic_io 0-byte temp leak. The eight
+gates exercised by nothing. The slots.py re-pin - RC's step 1 is ANSWERED NO and
+RC's premise is wrong, steps 2-4 HALTED under clause (c), and NOTHING IS BLOCKED
+ON US. The ledger-instance divergence check - ANSWERED, no divergence, and ZERO
+M1-M6 rows have ever been written live. Manifest-as-key (withdrawn). Caveman
+dialect (settled). Wenyan (reverted 2026-06-27). Do not re-litigate the twelve
+adjudicated calls without reading them - find each by HEADING in ROADMAP.md,
+never by line number. Do not widen _READ_ATTRS, _FIRST, _SECOND, _SOLO or _SEP:
+WIDENING A MATCHER is the response this tree has been defeated by three times,
+and after the second defeat the question is what claim the mechanism can support.
+
+THE OPERATOR'S ACCOUNT IS A REAL INPUT, AND NONE OF IT MAY REACH data/.
+uid 692912734, xMoonbeam, NA, AR 7, World Level 0, version 7.0. 9 characters,
+all ascension 0 and C0; only Dehya and Noelle resolve and the other seven render
+as unknown:<id> BY DESIGN - resolving them by guessing IS VENDORING. Primogems
+288, Mora 34102, Intertwined Fate 6, Stardust 165, Starglitter 0. Welkin active.
+Character-banner pity 0, no guarantee, zero pulls on Weapon / Chronicled /
+Character Event. Original Resin observed 200/200 at 2026-09-11T01:39:48Z - and a
+projection saturated at the cap carries no information, which is why the panel
+prints no present-tense number there. data/fixtures/ is HAND-AUTHORED ONLY.
 
 Keep chat under 500 output tokens, CAVEMAN ULTRA, 7-bit ASCII, no em-dashes, no
-en-dashes, no smart quotes.
+en-dashes, no smart quotes. Terseness is for CHAT ONLY - paths, commands, code
+and every committed artifact stay byte-exact.
 ```
