@@ -86,6 +86,18 @@ its verdict is known. Two stub modules built in `tmp_path` do that: one welded t
 skip unconditionally, which it must REPORT, and one that genuinely runs a passing
 test, which it must CLEAR. Without the second, a checker armed to flag
 everything would pass the first.
+
+TWO FLOORS UNDER THE TABLE AND THE GATE, BECAUSE BOTH HOLES WERE MEASURED.
+
+Everything above is parametrized over `_SITES` or is about the machinery, so an
+adversarial mutation pass found two ways to delete the subject and stay green.
+`_SITES = ()` left this module at 6 passed / 2 skipped / exit 0 and the whole
+suite green - the empty-parametrize trap this docstring already names, with
+nothing anywhere asserting a floor. Forcing `_mechanism_holds()` to return False
+left 8 passed / 2 skipped / exit 0, the two ABSENT arms simply gone.
+`test_the_site_table_is_not_empty_and_carries_both_gate_shapes` and
+`test_the_absent_half_cannot_be_skipped_while_the_mechanism_actually_holds`
+close those two, and neither is parametrized, on purpose.
 """
 from __future__ import annotations
 
@@ -381,6 +393,47 @@ _SITES: tuple[Site, ...] = (
 
 _SITE_IDS = [site.label for site in _SITES]
 
+#: The two gate SHAPES this pair exists to cover, as (label, gate) pairs read off
+#: the table above. Held as a separate constant so the floor arm below reddens on
+#: a table that was EMPTIED and also on one quietly collapsed to two copies of a
+#: single shape - both of which leave every parametrized arm reporting a skip and
+#: exit 0, which is not a failure.
+_REQUIRED_SHAPES = (
+    ("import-time-whole-module-gate", "skip_module_without_git"),
+    ("run-time-per-test-gate", "require_git_repository"),
+)
+
+
+def test_the_site_table_is_not_empty_and_carries_both_gate_shapes():
+    """THE FLOOR UNDER THE TABLE. Without it, deleting `_SITES` is GREEN.
+
+    Measured by an adversarial mutation pass: `_SITES = ()` left this module at
+    6 passed / 2 skipped / exit 0 and the whole suite green. An empty
+    `parametrize` is ONE SKIPPED and exit 0, never a failure - the exact trap
+    this module's own docstring names - and every other arm here is either
+    parametrized over `_SITES` or about the machinery, so nothing could notice
+    the module's whole subject disappearing. This arm is deliberately NOT
+    parametrized: an arm that iterates the table it is defending cannot defend an
+    empty one.
+    """
+    assert len(_SITES) >= 2, (
+        "the site table holds fewer than two sites, so at least one gate shape is "
+        "no longer measured and every parametrized arm in this module degenerates "
+        "to a skip with exit 0 - which is not a failure and would be read as a "
+        f"pass: {_SITE_IDS}"
+    )
+    present = {(site.label, site.gate) for site in _SITES}
+    missing = [pair for pair in _REQUIRED_SHAPES if pair not in present]
+    assert not missing, (
+        "the site table no longer carries both distinct gate shapes, so this pair "
+        "is measuring one shape twice while still reporting two parametrized "
+        f"cases: missing {missing}, present {sorted(present)}"
+    )
+    assert len(set(_SITE_IDS)) == len(_SITE_IDS), (
+        "two sites share a parametrize id, so the report cannot say which shape "
+        f"was measured: {_SITE_IDS}"
+    )
+
 
 def _present_half_problems(outcome: Outcome) -> list[str]:
     """Everything wrong with a run that was supposed to RUN ITS ASSERTIONS.
@@ -459,6 +512,58 @@ def test_the_same_site_runs_its_assertions_when_git_is_present(site: Site):
         f"{site.selection[0]} did not run its assertions with git PRESENT:\n  "
         + "\n  ".join(problems)
         + f"\n{outcome.stdout[-2000:]}"
+    )
+
+
+def test_the_absent_half_cannot_be_skipped_while_the_mechanism_actually_holds():
+    """THE FLOOR UNDER THE GATE. Without it, `_mechanism_holds() -> False` is GREEN.
+
+    Measured by the same pass: forcing that helper to return False left this
+    module at 8 passed / 2 skipped / exit 0. The two ABSENT arms simply vanished.
+    `test_the_absence_mechanism_hides_git_from_both_lookups` did NOT catch it,
+    because it interrogates the probe directly - so it stays green while the GATE
+    that consumes the probe has been decoupled from it.
+
+    So this arm pins the gate's decision to that same measurement, and the
+    property that buys is worth stating exactly, because it is what makes the
+    skip readable on EVERY lane it can fire on: THE ABSENT HALF CANNOT BE SKIPPED
+    WHILE THIS MODULE IS GREEN. Either the gate agrees with the probe, in which
+    case a skip implies the probe found git still reachable and
+    `test_the_absence_mechanism_hides_git_from_both_lookups` is RED with the name
+    of the lookup that reached it; or the gate disagrees with the probe, and this
+    arm is RED here. A reader on a host where git genuinely cannot be hidden
+    therefore sees a FAILURE naming the lookup, never a quiet pass.
+
+    Nothing here asserts anything about a PRESENT-but-BROKEN git. That is an open
+    operator call pinned open by `tests/test_conftest_git_gate.py`.
+    """
+    probe = _absence_probe()
+    measured = probe.which == "None" and probe.exec_result == "FileNotFoundError"
+    assert _mechanism_holds() == measured, (
+        "the gate that skips the ABSENT half no longer agrees with the measurement "
+        "it is supposed to be reading, so the ABSENT arms can now be skipped on a "
+        "host where git IS successfully hidden and nothing reddens: "
+        f"_mechanism_holds()={_mechanism_holds()} while WHICH={probe.which} "
+        f"EXEC={probe.exec_result}"
+    )
+
+    skipifs = [
+        mark
+        for mark in getattr(
+            test_the_site_skips_and_does_not_fail_when_git_is_absent, "pytestmark", ()
+        )
+        if mark.name == "skipif"
+    ]
+    assert len(skipifs) == 1, (
+        "the ABSENT half no longer carries exactly one skipif, so what a reader is "
+        f"told on a lane where it does not run is pinned nowhere: {skipifs}"
+    )
+    reason = str(skipifs[0].kwargs.get("reason", ""))
+    assert "measure nothing" in reason and "test_the_absence_mechanism" in reason, (
+        "the ABSENT half's skip reason no longer says that it would measure "
+        "nothing, or no longer names the arm that reports which lookup reached "
+        "git, so on any lane where it fires the skip reads as a pass: "
+        f"{reason!r}"
     )
 
 

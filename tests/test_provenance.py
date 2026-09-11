@@ -1072,3 +1072,236 @@ def test_the_schema_version_is_recorded_on_every_row():
     assert _row().schema_version == PROVENANCE_SCHEMA_VERSION
     with pytest.raises(ProvenanceError):
         validate_row(_row(schema_version=PROVENANCE_SCHEMA_VERSION + 1))
+
+
+# ---------------------------------------------------------------------------
+# The wrong-digest DECOY FAMILY. One decoy is not a family, and one decoy is
+# exactly what made every wrong-digest arm above defeatable.
+#
+# MEASURED DEFECT, 2026-09-11. Every wrong-digest arm in this module derived
+# from `_wrong_but_well_formed`, which advances CHARACTER INDEX 0 ONLY. An
+# adversarial mutation pass replaced the comparison in `core/provenance.py`
+# with `computed[:8] == source.sha256[:8]`, and then with `computed[:1] ==
+# source.sha256[:1]`, and BOTH left this module green at exit 0. A digest
+# differing only at its LAST character was graded MATCH and no arm noticed.
+# The generator's docstring asserted only that the decoy was 64 lowercase hex
+# and unequal, which is a claim about the decoy's FORMAT - the very thing a
+# recompute arm exists in order to stop relying on. A SHAPE ARM PINS FORMAT,
+# NOT INPUT.
+#
+# WHAT FIXES IT is a family whose members differ at DIFFERENT POSITIONS, so
+# that no prefix, no suffix and no windowed comparison can be right about all
+# of them at once:
+#   - `first_character`        differs at index 0 only, so all 63 later
+#                              characters still match and a comparison that
+#                              reads only the tail dies.
+#   - `last_character`         differs at index 63 only, so the first 63
+#                              characters still match and EVERY proper-prefix
+#                              comparison dies. This is the member the two
+#                              measured mutants above survived on.
+#   - `middle_character`       differs away from both ends, so a comparison
+#                              that reads only the two ends dies.
+#   - `adjacent_transposition` moves two adjacent characters and adds or
+#                              removes nothing, so every character is still
+#                              present and a sorted or multiset comparison
+#                              dies.
+#
+# THE CASE CONTRACT, checked rather than assumed. `core/provenance.py:98-101`
+# states that a digest is 64 lowercase hex characters and that uppercase is
+# REFUSED rather than normalised, and `_SHA256` enforces exactly that inside
+# `validate_row`, applied at `core/provenance.py:540`. Uppercase therefore
+# dies at VALIDATION and not at the `==` comparison in `verify_source`, and an
+# uppercase spelling is ALREADY refused by the parametrised arm
+# `test_a_digest_that_is_not_64_lowercase_hex_is_refused` above. So NO
+# case-only member appears in the family below. One would be a validation arm
+# wearing a comparison arm's name, and this file would then be crediting
+# itself with a recompute it never performed.
+# ---------------------------------------------------------------------------
+
+_HEX_ALPHABET = "0123456789abcdef"
+
+#: The window a mid-string decoy is drawn from. It excludes index 0 and index
+#: 63 so that a member named "middle" cannot quietly turn out to be an end.
+_MIDDLE_WINDOW = (24, 40)
+
+#: Index of the mid-string single-character decoy. Inside `_MIDDLE_WINDOW`.
+_MIDDLE_INDEX = 32
+
+
+def _bump_hex(character: str) -> str:
+    """The next character in the lowercase hex alphabet, wrapping at f."""
+    return _HEX_ALPHABET[(_HEX_ALPHABET.index(character) + 1) % 16]
+
+
+def _assert_well_formed_decoy(decoy: str, digest: str, label: str) -> str:
+    """Shared post-conditions, and NOT the claim.
+
+    The claim each member makes is about the POSITION of its difference, which
+    is asserted by the builder that made it. These three lines only stop a
+    malformed decoy from being graded MISMATCH for the wrong reason - a decoy
+    the format check could reject proves nothing about a recompute.
+    """
+    assert len(decoy) == 64, f"{label}: the decoy is {len(decoy)} characters, not 64"
+    assert re.fullmatch(r"[0-9a-f]{64}", decoy), f"{label}: the decoy is not 64 lowercase hex"
+    assert decoy != digest, f"{label}: the decoy equals the true digest, so it decoys nothing"
+    return decoy
+
+
+def _decoy_at(digest: str, index: int, label: str) -> str:
+    """A decoy differing from `digest` at EXACTLY `index` and nowhere else."""
+    decoy = digest[:index] + _bump_hex(digest[index]) + digest[index + 1 :]
+    _assert_well_formed_decoy(decoy, digest, label)
+    differing = [i for i in range(64) if decoy[i] != digest[i]]
+    assert differing == [index], (
+        f"{label}: a difference at index {index} and nowhere else was required, "
+        f"and the differing indices are {differing}"
+    )
+    return decoy
+
+
+def _decoy_transposed(digest: str, label: str) -> str:
+    """Two ADJACENT DIFFERING characters swapped. No character added or lost.
+
+    The pair is SEARCHED FOR inside `_MIDDLE_WINDOW` rather than hardcoded. A
+    hardcoded index is a claim about one fixture's digest, and it would go on
+    returning the digest unchanged - transposing nothing, decoying nothing -
+    the moment `ARTEFACT_BYTES` changed under it.
+    """
+    low, high = _MIDDLE_WINDOW
+    for i in range(low, high):
+        if digest[i] != digest[i + 1]:
+            decoy = digest[:i] + digest[i + 1] + digest[i] + digest[i + 2 :]
+            _assert_well_formed_decoy(decoy, digest, label)
+            assert sorted(decoy) == sorted(digest), (
+                f"{label}: a transposition must preserve every character, so the sorted "
+                "characters must be identical"
+            )
+            differing = [j for j in range(64) if decoy[j] != digest[j]]
+            assert differing == [i, i + 1], (
+                f"{label}: a transposition at {i} must differ at exactly {[i, i + 1]}, "
+                f"and the differing indices are {differing}"
+            )
+            return decoy
+    raise AssertionError(
+        f"{label}: no two adjacent characters differ inside {_MIDDLE_WINDOW}, so nothing "
+        "was transposed and this member would decoy nothing"
+    )
+
+
+#: member name -> builder taking the TRUE digest. Each member is its own
+#: parametrised case so that a failure names WHICH position the comparison
+#: stopped reading at, rather than saying only that some decoy got through.
+DECOY_FAMILY = {
+    "first_character": lambda digest: _decoy_at(digest, 0, "first_character"),
+    "last_character": lambda digest: _decoy_at(digest, 63, "last_character"),
+    "middle_character": lambda digest: _decoy_at(digest, _MIDDLE_INDEX, "middle_character"),
+    "adjacent_transposition": lambda digest: _decoy_transposed(digest, "adjacent_transposition"),
+}
+
+
+def _common_prefix_len(left: str, right: str) -> int:
+    count = 0
+    for a, b in zip(left, right):
+        if a != b:
+            break
+        count += 1
+    return count
+
+
+def _common_suffix_len(left: str, right: str) -> int:
+    return _common_prefix_len(left[::-1], right[::-1])
+
+
+@pytest.mark.parametrize("member", sorted(DECOY_FAMILY))
+def test_every_decoy_family_member_is_graded_mismatch(member: str, tmp_path):
+    """A wrong digest is MISMATCH wherever the wrongness sits in the string.
+
+    Parametrised one member per case ON PURPOSE. `last_character` failing and
+    `first_character` passing is the signature of a prefix comparison, and a
+    single combined arm would report only that something got through.
+
+    The MATCH control inside each case is load-bearing. Without it a mutant
+    that graded EVERYTHING `MISMATCH` would satisfy every assertion below.
+    """
+    written = _plant_artefact(tmp_path)
+    digest = _hex(written)
+
+    control = verify_source(_source(sha256=digest), tmp_path)
+    assert control.verdict is DigestVerdict.MATCH, (
+        f"the TRUE digest was graded {control.verdict}, so this case cannot distinguish a "
+        "working comparison from one that refuses everything"
+    )
+
+    decoy = DECOY_FAMILY[member](digest)
+    source = _source(sha256=decoy)
+
+    validate_row(_row(_record(source=source)))
+
+    check = verify_source(source, tmp_path)
+    assert check.verdict is DigestVerdict.MISMATCH, (
+        f"decoy member {member} was graded {check.verdict}; it is well-formed 64 lowercase "
+        "hex that the format check cannot reject, so only a recompute over all 64 "
+        "characters can refuse it"
+    )
+    assert check.declared == decoy
+    assert check.computed == digest
+    assert check.computed != check.declared
+
+
+def test_the_decoy_family_leaves_no_prefix_or_suffix_shortcut_alive():
+    """The STRUCTURAL claim, stated over positions instead of over verdicts.
+
+    A comparison reading k leading characters, for any k below 64, must be
+    unable to tell some family member from the true digest. Same for k
+    trailing characters. Asserting this over the family is what stops a future
+    edit from quietly collapsing the members back into one shape - the exact
+    regression this block was written to repair.
+    """
+    digest = _hex(ARTEFACT_BYTES)
+    decoys = {name: build(digest) for name, build in DECOY_FAMILY.items()}
+    assert len(set(decoys.values())) == len(decoys), "two members are the same string"
+
+    prefixes = {name: _common_prefix_len(decoy, digest) for name, decoy in decoys.items()}
+    suffixes = {name: _common_suffix_len(decoy, digest) for name, decoy in decoys.items()}
+
+    assert max(prefixes.values()) == 63, (
+        f"no member shares 63 leading characters with the true digest, so every "
+        f"proper-prefix comparison survives this family: {prefixes}"
+    )
+    assert max(suffixes.values()) == 63, (
+        f"no member shares 63 trailing characters with the true digest, so every "
+        f"proper-suffix comparison survives this family: {suffixes}"
+    )
+    for k in range(1, 64):
+        assert any(length >= k for length in prefixes.values()), (
+            f"a comparison reading the first {k} characters is not defeated by any member"
+        )
+        assert any(length >= k for length in suffixes.values()), (
+            f"a comparison reading the last {k} characters is not defeated by any member"
+        )
+    assert any(sorted(decoy) == sorted(digest) for decoy in decoys.values()), (
+        "no member is a permutation of the true digest, so a sorted or multiset "
+        "comparison survives this family"
+    )
+
+
+def test_the_legacy_index_zero_generator_still_works_and_is_still_covered():
+    """The SURVIVING-NEIGHBOUR half of the sweep.
+
+    The repair widens the family; it does not delete the shape that was there.
+    `_wrong_but_well_formed` is asserted to be index-0-only, which is both the
+    measured defect written down as an executable fact and the proof that
+    `first_character` above genuinely reproduces the old member rather than
+    replacing it with something else.
+    """
+    digest = _hex(ARTEFACT_BYTES)
+    legacy = _wrong_but_well_formed(digest)
+    differing = [i for i in range(64) if legacy[i] != digest[i]]
+    assert differing == [0], (
+        "the legacy generator is documented as advancing index 0 only, and it differs at "
+        f"{differing}; the decoy family above is built on that reading"
+    )
+    assert legacy == DECOY_FAMILY["first_character"](digest), (
+        "the family's first_character member must be the legacy decoy byte for byte, or "
+        "the old arm was replaced rather than kept"
+    )
