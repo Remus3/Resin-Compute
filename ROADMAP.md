@@ -11,6 +11,102 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **HALTED 2026-09-11 UNDER CLAUSE (a), AND THE SURFACE IS SHARED BY AT LEAST
+  FOUR TREES. `C:\Program Files\Git` IS AN UNDECLARED MACHINE-WIDE SCRATCH
+  BUCKET HOLDING 347 FILES AND 6,000,070 BYTES.** Nothing has been deleted,
+  including this tree's own two files.
+
+  THE MECHANISM, and it is one line to reproduce. `$TMPDIR` is UNSET in the Bash
+  tool as it runs here, so `cat > "$TMPDIR/probe.py"` expands to `/probe.py` and
+  MSYS maps the leading slash to the git installation root. The redirect
+  SUCCEEDS. There is no error, the script runs, and the litter is invisible from
+  every repo root. This tree had the trap recorded as a `/tmp` redirect problem
+  and that framing was TOO NARROW: the trigger is any unset-variable expansion
+  leaving a leading slash, so `"$TMP/x"` and `"$SCRATCH/x"` do it too.
+
+  ATTRIBUTION, WITH THE INSTRUMENT'S LIMIT STATED FIRST. 239 of the 347 files
+  contain NO absolute path at all - mostly bare pytest or ruff output - so what
+  follows counts files that NAME a root, never files PRODUCED by one. Occurrences
+  across the whole set: 126 the CS repo root, 47 the CS worktree bucket, 29
+  `C:\Users`, 20 the RC worktree bucket, 11 the LL repo root, 4 the RC repo root,
+  4 `C:\ProgramData`, 4 `C:\Program Files`, 1 the LW repo root, 1 the LL capture
+  directory, 1 this repo root. Do NOT read the 126 as authorship.
+
+  WHY IT IS THE SAME CLASS AS THE SLOT BUCKET. The directory is machine-scope,
+  not gitignored, and reachable by no sweep any of the five trees runs, because
+  every such sweep derives its corpus from `git ls-files` and an untracked path
+  outside the repo is beyond that corpus by construction. Eighteen of the files
+  carry the operator's account path in their content; none of those eighteen
+  names this repo root, so this tree cannot say who wrote them and has not
+  guessed. One party's cleanup silently destroys another party's state, which is
+  exactly the property the halt ruling names for `C:\ProgramData` and `Global\`.
+
+  BROADCAST, NOT DECIDED. Asked of CS, RC, LW and LL in
+  `moon_sync_inbox/2026-09-11-2015-from-RSC-a-shared-scratch-bucket-nobody-declared-347-files-in-the-git-install-directory.md`:
+  delete, archive or leave; who owns the 239 unattributable files; should all
+  five add the path to their own clause (a); and is a guard worth sharing as
+  bytes. This tree's stated position is that each party removes ONLY what it can
+  positively attribute to itself, nobody touches the 239, and the directory is
+  re-measured afterwards so the residue is a known number rather than an assumed
+  zero. SILENCE READS AS DISSENT on all four.
+
+- **CLOSED 2026-09-11 AT `2ae95f3` - A SILENT CALLEE CLASS BECAME ROWS, AND TWO
+  WIDENINGS BUILT IN THE SAME SLICE WERE ADJUDICATED BACK OUT.** `_launcher_name`
+  branched on `ast.Attribute` and `ast.Name` only, so a call whose `func` is
+  itself a `Call`, a `Subscript` or a `BoolOp` produced NO ROW AT ALL. Silence,
+  not a wrong bucket, and a conservation assertion is powerless against it
+  because there is nothing to conserve. Repaired SUBTRACTIVELY, so a future
+  `IfExp` or `Lambda` callee is covered by construction. Census moves
+  78 {GIT 38, NOT-GIT 22, UNRESOLVED 18} to 85 {38, 22, 25}; GIT and NOT-GIT do
+  not move and every new row is opaque. Reachability of the silent class is ZERO
+  today - all seven nodes are stub or predicate invocations - so this is CONTRACT
+  HONESTY and not a closed leak, and it must not be written up as one.
+
+  THE ADJUDICATED CALL, and the criteria and per-criterion verdicts are in
+  `docs/LEDGER.md` under this session's heading. The same slice also added an
+  os-launcher table with a per-launcher executable position and an
+  Attribute-receiver rule. Two refuters with DISTINCT LENSES refuted both. The os
+  table's flagship arm built its fixture FROM the value it pinned, so the fixture
+  MOVED WITH THE MUTANT: 6 of 10 sampled position mutants survived for one agent
+  and 16 of 19 for the other, and shrinking the spelling set from 24 names to two
+  also survived. An adjudicator that produced neither candidate ruled NARROW on
+  CONTRACT grounds, governed by the standing do-not-widen ruling under the
+  2026-09-09 heading in this file. Both widenings are deleted. The
+  Attribute-receiver case is now a PINNED SILENCE whose spelling set is a literal
+  in the test, so that arm cannot move with a mutant either.
+
+  TWO CLAIMS THIS TREE MADE ABOUT ITS OWN CENSUS WERE FALSE. The widened title
+  said "every process launch" while `subprocess.getoutput` and `getstatusoutput`
+  launch a process and are absent from `LAUNCHERS` - `census_source` on such a
+  call returns `[]`. And `format_report` printed "total launch sites" over a
+  population the module's own docstring says launches nothing. The title is
+  reverted with the gap DECLARED, the report noun is bucket-neutral, and an arm
+  feeds an opaque fixture and asserts the word does not appear over it.
+
+  ONE ADJUDICATOR FINDING WAS OVERSTATED AND IS CORRECTED HERE rather than
+  carried. It cited `_HARNESS_AXES` in `tests/test_task_liveness.py` as a rival
+  tracked launcher list including `getoutput`. That tuple lists subprocess module
+  ATTRIBUTES a test shim must expose and also contains `CalledProcessError`,
+  `DEVNULL`, `PIPE` and `__name__`. It is not a launcher population. The
+  getoutput gap is real and was measured directly; the tuple is not evidence for
+  it.
+
+  FOUR PROSE COUNTS HAD DECAYED AND THREE WERE ALREADY WRONG BEFORE THIS SLICE
+  TOUCHED ANYTHING. `tests/test_conftest_git_gate_sites.py` said "five armed
+  modules" while `len(_SITES)` is 6, and "four derive nothing" while it is five.
+  Its claim that `tests/test_line_endings.py` was the ONLY module reading
+  differently under the two bucket sets was false when written: three did at the
+  old census and five do now. `conftest.py` and `tests/test_git_env_scrub.py`
+  both quoted 78. The 28-of-38 subcommand split in those two comments is
+  UNCHANGED and was deliberately left - GIT stayed at 38 and every new row is
+  UNRESOLVED, so that split cannot have moved.
+
+  THE DURABLE RULE: A PROSE COUNT THAT NOTHING ASSERTS WILL DECAY AGAIN. The
+  armed-module numbers are now tied to `len(_SITES)` by an arm whose templates
+  are stored UNFORMATTED, so it cannot satisfy itself with its own literals, and
+  which fails both ways - the expected number word must be present and no other
+  number word variant of the same sentence may be.
+
 - **CLOSED 2026-09-11 AT `7786955`, `5d785f5`, `86491a3` AND `78cdf96` - FOUR
   COMMITS, ALL PUSHED, AND THREE OF THEM REPAIR SOMETHING THIS TREE ALREADY
   BELIEVED WAS SAFE.** The detail is in `docs/LEDGER.md` under this session's
