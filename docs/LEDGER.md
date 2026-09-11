@@ -14,17 +14,55 @@ now.
 
 ## 2026-09-12 - An adjudicator corrected the orchestrator's own brief, and the ledger-instance row was answered by finding that nothing has ever been written to it
 
-Files: `ROADMAP.md`, `docs/LEDGER.md`.
+Files: `tools/moon_sync_responder.py`, `tests/test_responder_degraded_write.py`
+(new), `tests/test_gate_name_bindings.py`, `tests/test_responder_gate_census.py`,
+`ROADMAP.md`, `docs/LEDGER.md`, `NEXT_SESSION_PROMPT.md`. Landed at `b128eb1`
+(docs) and `6c351b3` (code).
 
-**WHAT LANDED HERE IS THE PAPERWORK, AND THE CODE IS NAMED AS IN FLIGHT RATHER
-THAN AS SHIPPED.** The responder fix this session dispatched is UNCOMMITTED in a
-worktree at the time of writing, blocked and then unblocked through three
-sequential slices, and this entry deliberately does not claim it. What is closed
-is an ADJUDICATED CALL and a CHECK that `ROADMAP.md` had left open, both recorded
-in that file under their own headings.
+**THE CODE LANDED AFTER THIS ENTRY WAS FIRST WRITTEN AS PAPERWORK-ONLY.** It was
+drafted while the third slice was still running and said the fix was uncommitted
+in a worktree; the slice reported green, the four files were merged by absolute
+path with all four sha256 values matching the builders' reported digests, the
+whole gate was re-run at the seam, and CI went green. The correction is recorded
+rather than smoothed over, because the first wording was true when written.
 
-**STATE MEASURED THIS SESSION at `41ba7d0`, stamped as a reading.** `pytest
-tests` 2106 passed 1 skipped; `agents/pity_engine` 80 passed; `node --test` in
+**MEASURED AT THE SEAM.** `pytest tests` 2146 passed 1 skipped, against 2106
+passed 1 skipped at the `41ba7d0` fork point - plus 40 arms. `agents/pity_engine`
+80 passed. `node --test` in `shell/` 52 tests 52 pass 0 fail. licence 47, docs
+consistency 29, docs hook commands 17. `qa_companion` 18 passed 0 failed 1
+skipped 3 noted. `ruff`, `headless.runner --once --dry-run`, `mypy` and
+`precommit_gate --scan-files` over all four files exit 0. CI `ci` watched with
+`--exit-status`, exit 0. `mypy` at 34 source files includes `tools/` and
+therefore the responder, and says NOTHING about the three test files.
+
+**THE FOUR SITES.** `record_cycle` took `read_json(metrics, default=None)`, fell
+back to `rows = []` and rewrote the document, so a corrupt ledger was REPLACED by
+a one-row ledger and the call returned True; it now splits absent from unreadable,
+refuses, and leaves the bytes byte-identical. `_trim_invocations` read
+`errors="replace"` and never folded U+FFFD while `core/atomic_io.py` encodes
+UTF-8; MEASURED across three fires at 273363, 273369, 273387 bytes - plus six
+then plus eighteen, the threefold expansion observed rather than argued - and it
+now folds to ASCII `?`. The metrics cap trimmed rather than rotated; it now
+rotates to ONE bounded generation holding the newest overflow, total held at
+twice the cap, rotation written FIRST and the live file LAST so a failed rotate
+propagates False with the live ledger complete instead of degrading silently into
+a trim. Bounded deliberately - the document is re-serialized on every write, so
+an unbounded archive reproduces the quadratic-bytes defect the cap exists to
+close. And `answered_usable` mirrors `refusals_usable` per the ruling below.
+
+**THE GATE GUARDS MOVED, AND THAT IS THEM WORKING.** Two new `# GATE:` tags
+reddened `tests/test_gate_name_bindings.py` and
+`tests/test_responder_gate_census.py`. Dropping the tags was MEASURED not to be
+an escape - the census then reports both sites as untagged consult sites. Both
+floors were RAISED, never lowered, and every assertion kept its strength: the
+census floor and the adjacent-swap count remain equalities. Non-vacuity was
+proven twice - removing one tag on a scratchpad copy reddened six arms, and
+renaming one so the tag COUNT stays constant was caught by the bindings module
+alone, which is the discrimination that module exists for.
+
+**STATE ALSO MEASURED at `41ba7d0` before any of it, stamped as a reading.**
+`pytest tests` 2106 passed 1 skipped; `agents/pity_engine` 80 passed; `node
+--test` in
 `shell/` 52 tests 52 pass 0 fail; licence 47, docs consistency 29, docs hook
 commands 17; `qa_companion` 18 passed 0 failed 1 skipped 3 noted; `ruff`,
 `headless.runner --once --dry-run` and `mypy` exit 0, the last at 34 source files
