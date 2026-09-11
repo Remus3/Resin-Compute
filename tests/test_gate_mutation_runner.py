@@ -550,7 +550,7 @@ def test_the_census_is_excluded_as_a_shape_grader_and_the_path_is_the_file_it_me
 def test_the_name_bindings_module_is_excluded_and_is_the_file_it_means() -> None:
     """A WIDER shape grader than the census, and the census's confinement fails.
 
-    `tests/test_gate_name_bindings.py` binds each of the 18 `# GATE:` tags to
+    `tests/test_gate_name_bindings.py` binds each of the 20 `# GATE:` tags to
     the line immediately below it by STRING EQUALITY against a hand-typed
     anchor. The census grades an AST, so it can only false-kill a mutant that
     changes AST shape - 4 of 35. An equality on a line's literal bytes has no
