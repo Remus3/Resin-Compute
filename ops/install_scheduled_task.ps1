@@ -121,7 +121,49 @@ $xml = $xml.Replace('__PYTHONW_EXE__', $PythonwExe)
 $xml = $xml.Replace('__INSTALL_ROOT__', $InstallRoot)
 $xml = $xml.Replace('__TASK_USER__', $TaskUser)
 
-if ($xml -match '__[A-Z_]+__') {
+# THE GRAMMAR IS THE DELIMITER, NOT THE SPELLING.
+#
+# Derived by SUBTRACTION rather than by listing the Replace calls above, which
+# would only ever restate them and would omit the token nobody named. Scanning
+# ops/ResinCompute-Supervisor.xml and ops/ResinCompute-Responder.xml for the
+# delimiter pair alone - every __...__ run, whatever it spells - returns the three
+# tokens above and the responder's six, and NOTHING ELSE. In the template
+# files the delimiter is a perfect discriminator: every occurrence of it is a
+# placeholder and no other construct uses it. Subtracting what the previous
+# '__[A-Z_]+__' already caught left the EMPTY SET, so this widening fixes no
+# surviving token that exists today.
+#
+# What it does fix is the guard's REACH. This guard's subject is the string about
+# to reach Register-ScheduledTask, and its token content is set by two lists
+# maintained separately by hand - the template, which is editable data, and the
+# Replace calls above. The guard exists to catch DRIFT between them, so a
+# grammar derived from the current SPELLING of one list is exactly as tight as
+# the other already is and adds nothing. Only the DELIMITER is invariant across
+# a template edit.
+#
+# WHICH AXIS ACTUALLY LEAKED, and it is not the one this was first reported as.
+# PowerShell's -match is case-INSENSITIVE; -cmatch is the case-sensitive
+# operator. The old '__[A-Z_]+__' therefore behaved as '__[A-Za-z_]+__' at
+# runtime, so a lowercase token never leaked at all. Measured 2026-09-11 end to
+# end against both real installers with -WhatIfOnly, return codes read in
+# Python: a planted '__pythonw_exe__' threw in BOTH (rc=1), while a planted
+# '__Slot1__' cleared BOTH (rc=0) and would have been registered verbatim. The
+# axis that defeated the guard was the DIGIT, and only the digit.
+#
+# The inner class is written out rather than as \w. .NET's \w is Unicode-aware,
+# so it would also match non-ASCII text arriving through a substituted path;
+# this stays deterministic and ASCII-scoped. Spelling both cases out rather than
+# leaning on -match's case-insensitivity also closes a second gap: the graders
+# in tests/ compile this pattern with Python's re, which IS case-sensitive, so a
+# class that is not case-complete makes the grader and the installer disagree
+# about a token neither of them names.
+#
+# COST, stated rather than hidden: a checkout under a directory spelled
+# my__build__2 now trips this where it did not before. That failure is loud,
+# names the matched text and is recoverable in one read. The failure it replaces
+# is a task ARMED with a literal placeholder inside its argv, which the
+# scheduler reports as State Ready forever.
+if ($xml -match '__[A-Za-z0-9_]+__') {
     throw ('Unsubstituted placeholder left in the task XML: ' + $Matches[0])
 }
 

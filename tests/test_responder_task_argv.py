@@ -230,13 +230,20 @@ GRADED_TOKENS = (
 #: file does not do.
 UNCONTROLLED_TOKENS = ("script-will-not-import", "script-not-the-responder")
 
-#: The installer's own placeholder shape, at `ops/install_responder_task.ps1:181`,
-#: where it throws on any survivor. Same pattern, so a token this grader calls a
-#: placeholder is a token that installer would refuse to leave behind.
-_PLACEHOLDER_RE = re.compile(r"__[A-Z_]+__")
+#: The installer's own placeholder-survivor test, the `$xml -match '...'`
+#: statement in `ops/install_responder_task.ps1` that throws on any survivor on
+#: the line below it. Cited by SURROUNDING TEXT rather than by line number: this
+#: slice moved that statement, and a line number in a comment decays silently
+#: while the text it names does not. The pattern INSIDE those quotes is read
+#: rather than retyped - see `_installer_placeholder_pattern`.
+_MATCH_RE = re.compile(r"\$xml\s+-match\s+'([^']*)'")
 
+#: The token half of the installer's `.Replace(...)` calls. The class matches
+#: the DELIMITER plus a full identifier run rather than SCREAMING_SNAKE, for the
+#: same reason the installer's own guard does - see the block above
+#: `DELIMITED_SURVIVORS` at the foot of this file.
 _REPLACE_RE = re.compile(
-    r"\$xml\s*=\s*\$xml\.Replace\(\s*'(__[A-Z_]+__)'\s*,\s*(\$[A-Za-z_]\w*)\s*\)"
+    r"\$xml\s*=\s*\$xml\.Replace\(\s*'(__[A-Za-z0-9_]+__)'\s*,\s*(\$[A-Za-z_]\w*)\s*\)"
 )
 _INTERPRETER_BANNER_RE = re.compile(
     r"Write-Step\s*\(\s*'interpreter\s*:\s*'\s*\+\s*(\$[A-Za-z_]\w*)\s*\)"
@@ -325,6 +332,61 @@ def _installer_substitutions() -> dict[str, str]:
             "no placeholder substitutions found in the installer - the scan is measuring nothing"
         )
     return found
+
+
+def _installer_placeholder_pattern() -> re.Pattern[str]:
+    """What the installer CALLS a placeholder, read from the installer itself.
+
+    WHY READ RATHER THAN RETYPE. This file used to hand-type `__[A-Z_]+__` here,
+    duplicating the pattern the installer enforces with no drift guard between
+    the two - the same defect the supervisor grader closed for its own installer
+    and recorded in `test_the_placeholder_shape_is_read_from_the_installer_that
+    _enforces_it`. Two authorities and no detector means the grader can disagree
+    with the installer about what a placeholder even IS, staying green in both
+    directions. Reading deletes the second authority rather than policing it.
+
+    Three floors live in this one derivation rather than in a separate arm: the
+    statement must be found, the pattern must compile under Python's `re`
+    (PowerShell's `-match` is a .NET regex, and the two dialects agree on this
+    shape but are not the same language), and it must both accept every token
+    the installer actually substitutes and reject a bare XML word - a pattern
+    matching everything or nothing would otherwise be handed back as
+    authoritative.
+    """
+    match = _MATCH_RE.search(_installer_text())
+    if match is None:
+        raise AssertionError(
+            "the installer declares no placeholder-survivor pattern - "
+            "the placeholder derivation is measuring nothing"
+        )
+    source = match.group(1)
+    try:
+        # `re.IGNORECASE` because PowerShell's `-match` IS case-insensitive -
+        # `-cmatch` is the case-sensitive operator, and `_MATCH_RE` only matches
+        # the former, so an installer switching to `-cmatch` reddens the
+        # derivation above rather than being silently mismodelled here. Measured
+        # 2026-09-11: under the superseded `__[A-Z_]+__` this was a REAL
+        # disagreement - PowerShell threw on a planted `__pythonw_exe__` that a
+        # case-sensitive Python model said it would miss. The current class is
+        # case-complete, so the flag is a no-op today and is carried to keep the
+        # two languages agreeing if the class is ever narrowed again.
+        pattern = re.compile(source, re.IGNORECASE)
+    except re.error as exc:
+        raise AssertionError(
+            f"the installer's placeholder pattern {source!r} does not compile under Python re: {exc}"
+        ) from exc
+    substituted = sorted(_installer_substitutions())
+    rejected = [token for token in substituted if not pattern.fullmatch(token)]
+    if rejected:
+        raise AssertionError(
+            f"the installer's own pattern {source!r} does not match tokens it substitutes: {rejected}"
+        )
+    if pattern.search("WorkingDirectory"):
+        raise AssertionError(
+            f"the installer's placeholder pattern {source!r} matches ordinary XML text - "
+            "every element in the Exec block would be reported as a placeholder"
+        )
+    return pattern
 
 
 def _by_variable() -> dict[str, str]:
@@ -743,7 +805,11 @@ def grade_task_argv(xml_text: str) -> list[str]:
     # reaches `Register-ScheduledTask` verbatim, so the task runs an interpreter
     # literally named `__PYTHON_EXE__`.
     block = " ".join(part or "" for part in (command, arguments, working_directory))
-    for token in sorted(set(_PLACEHOLDER_RE.findall(block))):
+    # `group(0)` rather than `findall`: the pattern comes off the installer, and
+    # `findall` would silently return CAPTURE GROUPS instead of whole tokens if a
+    # future installer wrapped its pattern in parentheses.
+    placeholder_re = _installer_placeholder_pattern()
+    for token in sorted({found.group(0) for found in placeholder_re.finditer(block)}):
         if token not in substituted:
             complaints.append(_complaint("unsubstituted-placeholder", token))
 
@@ -1089,12 +1155,13 @@ def test_the_tracked_placeholders_are_exactly_the_ones_the_installer_substitutes
     on either side goes red rather than quietly agreeing with itself.
     """
     substituted = set(_installer_substitutions())
-    xml_tokens = set(_PLACEHOLDER_RE.findall(_real_xml_text()))
+    placeholder_re = _installer_placeholder_pattern()
+    xml_tokens = {found.group(0) for found in placeholder_re.finditer(_real_xml_text())}
     assert (xml_tokens, len(xml_tokens)) == (substituted, 6)
 
     _, command, arguments, working_directory = _exec_fields(_real_xml_text())
     block = " ".join(part or "" for part in (command, arguments, working_directory))
-    exec_tokens = set(_PLACEHOLDER_RE.findall(block))
+    exec_tokens = {found.group(0) for found in placeholder_re.finditer(block)}
     assert exec_tokens == {
         "__PYTHONW_EXE__",
         "__INSTALL_ROOT__",
@@ -1609,4 +1676,189 @@ def test_every_liveness_detector_has_a_control_on_the_responder_installer() -> N
         f"detectors that never fired against this installer "
         f"{sorted(set(LIVENESS_TOKENS) - observed)}, buckets minted that are not declared "
         f"{sorted(observed - set(LIVENESS_TOKENS))}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE PLACEHOLDER DELIMITER IS THE GRAMMAR. THE SPELLING IS NOT.
+#
+# DERIVED BY SUBTRACTION, measured this run against the tracked templates.
+# Scanning ops/ResinCompute-Responder.xml and ops/ResinCompute-Supervisor.xml
+# for the DELIMITER PAIR alone - every `__...__` run, whatever it spells -
+# returns the responder's six tokens and the supervisor's three and NOTHING
+# ELSE. In the template files the delimiter is a PERFECT discriminator: every
+# occurrence of it is a placeholder, and no other construct in either file uses
+# it. Subtracting what the old `__[A-Z_]+__` already caught from that scan left
+# the EMPTY SET.
+#
+# So the widening is NOT justified by a token that exists today. It is
+# justified by what the guard's SUBJECT is, and that is the argument this block
+# exists to record.
+#
+# The guard's subject is not the template's current token list. It is the
+# post-substitution string about to be handed to `Register-ScheduledTask`, and
+# its token content is decided by two independently hand-maintained lists: the
+# template, which is editable data, and the `.Replace(...)` calls in the
+# installer. The guard exists to detect DRIFT between those two lists. A drift
+# detector whose grammar is derived from the CURRENT state of one of them is
+# exactly as tight as the other already is, and adds nothing over enumerating
+# the `.Replace` calls - which is the thing the guard is there to avoid. Only
+# the DELIMITER can be derived as invariant across template edits, so the
+# delimiter is what is matched and the inner run is the full identifier class.
+#
+# THE COST, stated rather than hidden. The subject also contains SUBSTITUTED
+# VALUES - the install root and the interpreter path. A checkout living under a
+# directory spelled `my__build__2` would now trip the guard where it once did
+# not. That false positive is LOUD, names the matched text, and is recoverable
+# in one read. The false negative it replaces is a task ARMED with a literal
+# `__Slot1__` inside its argv, which a scheduled task reports as State Ready
+# forever. The asymmetry is what decides it.
+
+#: Tokens carrying the placeholder DELIMITER while escaping the SCREAMING_SNAKE
+#: spelling the guard used to assume. Every entry differs from every other in
+#: MORE THAN ONE position - case pattern, digit presence, and inner-underscore
+#: presence all vary - so a guard that admitted one of them by a single-axis
+#: accident still could not admit the table.
+DELIMITED_SURVIVORS = (
+    "__Slot1__",
+    "__pythonw_exe__",
+    "__taskUser2__",
+    "__WINDOW_v3__",
+)
+
+#: Strings that must NOT read as placeholders, varying in more than one way: no
+#: delimiter at all, single underscores throughout, a half-delimiter at either
+#: end, a real argv path, and a boundary value the installer legitimately
+#: SUBSTITUTES IN and must not then report back as a survivor.
+UNDELIMITED_NON_PLACEHOLDERS = (
+    "WorkingDirectory",
+    "_INSTALL_ROOT_",
+    "__INSTALL_ROOT",
+    "INSTALL_ROOT__",
+    "tools/moon_sync_responder.py",
+    "2026-09-07T19:00:00",
+)
+
+#: The grammar the guard used to carry, AS POWERSHELL ACTUALLY EVALUATED IT.
+#: Frozen here as a NON-VACUITY CONTROL and deliberately not as a second
+#: authority: nothing is graded against it, it only proves that the survivors
+#: below really did escape the old guard, so the arm cannot quietly become a
+#: table of tokens that always passed.
+#:
+#: `re.IGNORECASE` is the load-bearing half. This slice was dispatched with the
+#: premise that a token carrying "a LOWERCASE LETTER OR A DIGIT" sailed through
+#: both guards, and the lowercase half of that is FALSE. PowerShell's `-match`
+#: is case-insensitive, so `__[A-Z_]+__` behaved as `__[A-Za-z_]+__` at runtime.
+#: Measured 2026-09-11 end to end against both real installers with
+#: `-WhatIfOnly`, return codes read in Python: a planted `__pythonw_exe__` threw
+#: in BOTH (rc=1); a planted `__Slot1__` cleared BOTH (rc=0). Only the DIGIT
+#: axis ever leaked, and a case-sensitive control here would have credited the
+#: widening with closing a hole that was never open.
+_SUPERSEDED_RE = re.compile(r"__[A-Z_]+__", re.IGNORECASE)
+
+#: The sibling installer. The defect this arm defends against was SHARED by both
+#: scripts and symmetric, so the fix has to be symmetric too.
+SIBLING_INSTALLER_PS1 = REPO_ROOT / "ops" / "install_scheduled_task.ps1"
+
+
+def test_the_installer_guard_catches_a_survivor_that_is_not_screaming_snake() -> None:
+    """A surviving `__token__` is caught whatever it SPELLS, in both installers.
+
+    THE DEFECT, measured before this arm existed. Both installers tested for
+    survivors with `__[A-Z_]+__`. Because PowerShell's `-match` is
+    case-insensitive that grammar caught lowercase tokens too, so the hole was
+    narrower than first reported and exactly one axis wide: a DIGIT. Measured
+    2026-09-11 end to end with `-WhatIfOnly` against a scratchpad mirror, return
+    codes read in Python - a planted `__Slot1__` left BOTH installers exiting 0,
+    and the unsubstituted token would have gone to `Register-ScheduledTask`
+    verbatim, while a planted `__pythonw_exe__` threw in both.
+
+    The pattern under test is READ from each installer rather than retyped, so
+    this arm grades the guard that actually runs and moves with it.
+    """
+    assert len(DELIMITED_SURVIVORS) >= 4, (
+        "the survivor table is empty or too thin to vary in more than one position - "
+        "this arm would be measuring nothing"
+    )
+    assert len(UNDELIMITED_NON_PLACEHOLDERS) >= 5, (
+        "the negative table is too thin to vary in more than one way - a decoy that "
+        "varies one position pins one position"
+    )
+
+    # NON-VACUITY, and it is deliberately NOT "every survivor escaped". Under
+    # the superseded grammar as PowerShell ran it, the digit-bearing entries
+    # escaped and `__pythonw_exe__` did not; that one is carried as a CASE-AXIS
+    # decoy the widening must still accept, not as evidence for it. What has to
+    # hold is that enough of the table genuinely was leaking, or this arm is a
+    # list of tokens that always passed.
+    escaped = [token for token in DELIMITED_SURVIVORS if not _SUPERSEDED_RE.search(token)]
+    assert len(escaped) >= 3, (
+        f"only {escaped} escaped the superseded guard as PowerShell evaluated it - "
+        "the survivor table is no longer testing the widening"
+    )
+
+    sibling_match = _MATCH_RE.search(
+        SIBLING_INSTALLER_PS1.read_bytes().decode("ascii", errors="replace")
+    )
+    assert sibling_match is not None, (
+        f"{SIBLING_INSTALLER_PS1.name} declares no placeholder-survivor pattern - "
+        "the symmetry half of this arm is measuring nothing"
+    )
+    patterns = {
+        INSTALLER_PS1.name: _installer_placeholder_pattern(),
+        SIBLING_INSTALLER_PS1.name: re.compile(sibling_match.group(1)),
+    }
+
+    for name, pattern in patterns.items():
+        missed = [token for token in DELIMITED_SURVIVORS if not pattern.search(token)]
+        assert not missed, (
+            f"{name} would leave {missed} unsubstituted in the XML it hands to "
+            f"Register-ScheduledTask - its guard pattern {pattern.pattern!r} does not see them"
+        )
+        caught = [text for text in UNDELIMITED_NON_PLACEHOLDERS if pattern.search(text)]
+        assert not caught, (
+            f"{name}'s guard pattern {pattern.pattern!r} calls {caught} a placeholder, so "
+            "ordinary task text and substituted values would refuse the registration"
+        )
+
+    # SYMMETRY. One installer widened and the other left behind is the asymmetry
+    # this slice was dispatched believing it had found. Diverge them and this
+    # goes red rather than leaving one script guarded and one not.
+    sources = {name: pattern.pattern for name, pattern in patterns.items()}
+    assert len(set(sources.values())) == 1, (
+        f"the two installers disagree about what a placeholder is: {sources}"
+    )
+
+
+def test_the_responder_guard_runs_before_the_declaration_is_rewritten() -> None:
+    """Substitute, then GUARD, then relabel - the order is the whole defect.
+
+    This installer rewrites the XML declaration wholesale to say UTF-16, and the
+    pattern it uses consumes everything up to the first `>`. While that rewrite
+    ran FIRST, a placeholder left inside the declaration was destroyed before
+    the survivor guard could see it. Measured 2026-09-11 against the pre-fix
+    script with `-WhatIfOnly`, return code read in Python: a planted
+    `encoding="__ENC_TOKEN__"` exited 0 here, while the supervisor installer,
+    which has no such rewrite, exited 1 on the same plant. The same plant
+    against this script now exits 1.
+
+    Harm was nil at the time, because the rewritten declaration is DISCARDED
+    rather than carried onward - which is exactly why an order this cheap to
+    keep correct is worth pinning rather than arguing about. Nothing else in
+    either grader looks at statement order, so without this arm the order is
+    free to swap back silently.
+    """
+    text = _installer_text()
+    guard = text.find("$xml -match")
+    rewrite = text.find("-replace '^")
+    assert guard != -1, "the installer declares no placeholder guard - this arm measures nothing"
+    assert rewrite != -1, (
+        "the installer no longer rewrites the XML declaration - this arm measures nothing"
+    )
+    assert text.count("-replace '^") == 1, (
+        "more than one declaration rewrite - which one this arm orders is ambiguous"
+    )
+    assert guard < rewrite, (
+        "the declaration rewrite runs BEFORE the survivor guard, so a placeholder left "
+        "inside the XML declaration is erased before the guard can see it"
     )
