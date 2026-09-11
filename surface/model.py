@@ -216,7 +216,14 @@ def _today_panel(account: AccountState, now: datetime, **_: object) -> Panel:
     """
     game_day = domains.current_game_day(now)
     weekday = game_day.weekday()
-    open_slots = [str(slot) for slot in domains.ROTATION_SLOTS if domains.is_available(slot, weekday)]
+    # "slot 0", never a bare "0". `ROTATION_SLOTS` is (0, 1, 2), so a bare join
+    # renders the string "0" on a day when slot 0 is the only one open - and
+    # "Domain slots open: 0" is read by everybody as ZERO SLOTS OPEN, which is
+    # the exact opposite of what it means. The empty case really does say "none"
+    # two lines down, so the two readings collide on the same row. The Plan panel
+    # already words its own rotation rows "slot 0"; this makes the board agree
+    # with itself rather than state a thing and its negation in two cards.
+    open_slots = [f"slot {slot}" for slot in domains.ROTATION_SLOTS if domains.is_available(slot, weekday)]
     weekday_name = _WEEKDAY_NAMES[weekday]
 
     rows = [
@@ -304,6 +311,28 @@ def _plan_panel(account: AccountState, now: datetime, **_: object) -> Panel:
     mechanism; every material cost behind it is empty because ADR-002's licence
     gate means no cost table exists. Reporting a finish date off that would be
     the exact failure ADR-005 built this panel's contract to prevent.
+
+    THE ROTATION ROWS ARE NOT A STEP TOWARDS READY. A plan has two halves - HOW
+    MUCH a goal needs, and WHEN the thing it needs can be farmed. Only the first
+    half is behind the licence gate. The second is the three-day domain rotation
+    in `core/domains.py`, which is pure schedule mechanics naming no domain and
+    no material, and which docs/GOAL_SPEC_SEED_TEAM.md section 5.1 records as the
+    roadmap's single biggest practical omission: a plan that ignores it sends the
+    operator to spend resin on a day the domain is not dropping what they need.
+
+    So the panel answers "what is farmable today, and how long until the rest"
+    while still saying, in the same breath, that it cannot tell you how much of
+    anything you need. Both halves of that are true at once, which is precisely
+    the state PARTIAL exists to express. The rotation is derived by CALLING
+    `domains.is_available` and `domains.next_available_day` rather than by
+    reading the table - a copy of the weekday tuples here would be a second
+    source of truth that could drift out of step with the first in silence.
+
+    The weekday keys on `current_game_day`, not on the wall clock. Between
+    midnight and 04:00 server time the game day is still yesterday, so a plan
+    keyed on the calendar date would advertise the wrong rotation for four hours
+    a day - and would do it most confidently in the small hours, which is when
+    somebody is most likely to be burning the last of their resin.
     """
     waiting = (
         "The objective DAG is correct but every material cost is empty. "
@@ -321,11 +350,26 @@ def _plan_panel(account: AccountState, now: datetime, **_: object) -> Panel:
 
     subject = account.roster[0]
     nodes = expand_character_goal(subject.avatar_id, target_level=90, talent_targets={1: 8, 2: 8, 3: 8})
+
+    weekday = domains.current_game_day(now).weekday()
+    open_slots = [slot for slot in domains.ROTATION_SLOTS if domains.is_available(slot, weekday)]
+
     rows = [
         ("Goal", "level 90, talents 8/8/8"),
         ("Steps in the graph", str(len(nodes))),
         ("Known material cost", "none - see below"),
+        ("Farmable today", ", ".join(f"slot {slot}" for slot in open_slots) if open_slots else "none"),
     ]
+    for slot in domains.ROTATION_SLOTS:
+        if slot in open_slots:
+            continue
+        # Never more than six, because Sunday is in every slot's row. The bound
+        # is a consequence of the table rather than a rule imposed here, so it
+        # is asserted in the tests and not clamped in the code - a clamp would
+        # hide a broken table instead of surfacing it.
+        wait = domains.next_available_day(slot, weekday)
+        rows.append((f"Slot {slot} opens in", f"{wait} day" if wait == 1 else f"{wait} days"))
+
     return Panel(
         panel_id="plan",
         title="Plan",
@@ -336,20 +380,93 @@ def _plan_panel(account: AccountState, now: datetime, **_: object) -> Panel:
 
 
 def _teams_panel(account: AccountState, now: datetime, **_: object) -> Panel:
-    """Team composition for an event. Not started.
+    """Who is on the roster and what element each one is. Nothing that ranks.
 
-    Named on the board from day one on purpose: ADR-005 puts the shell before the
-    features so that arrival is visible, and a feature that is not yet on the
-    board cannot be watched arriving.
+    WHAT IS HELD AND WHY, because the boundary is the entire design of this
+    panel. ROADMAP's `## Later` holds the TEAM COMPOSITION SOLVER, and the reason
+    it gives is that elemental REACTION MODELLING is a large piece of domain work
+    that should not start before the resource layer is complete. That holds the
+    modelling and the solver. Elemental IDENTITY is neither of those: it is
+    already in this tree and already licence-clean, hand-authored into
+    `data/fixtures/seed_roster.json` for the five verified avatarIds and read
+    back by `ingest.static_data.element_for`.
+
+    So this panel answers the identity question - who is here, what element are
+    they, how do the elements fall out, and which of the verified five are absent
+    - and refuses the composition question. It is PARTIAL rather than READY for
+    exactly that reason: the half that would make this a real Teams answer is
+    genuinely still held, and `waiting_on` keeps saying which half. Promoting it
+    to READY would claim the held half had landed.
+
+    THE ELEMENT COMES FROM `element_for`, NEVER FROM `MappedCharacter.element`.
+    In production those are the same value - `ingest/enka_mapper.py` fills that
+    field from this very lookup - so reading the field back would buy nothing and
+    would cost the guarantee. The field is settable by any caller, so an id
+    outside the verified seed set could arrive carrying an element nobody
+    verified, and this panel would then present a guess as a fact. An unknown id
+    says it is unknown instead, which is the contract `character_name` already
+    keeps for names and for the same reason: `10000088` looked like a plausible
+    Dehya id forever.
+
+    NO COST FIGURE APPEARS HERE, and none is derived. docs/GOAL_SPEC_SEED_TEAM.md
+    section 3 stamps the roadmap's cost figures UNVERIFIED and forbids them
+    entering a calculation, so nothing on this panel touches one.
     """
+    waiting = (
+        "Elemental identity only. Reaction modelling, and the team composition "
+        "solver built on top of it, stay held until the resource layer is "
+        "complete - see ROADMAP. Nothing here ranks, scores or recommends."
+    )
+    if not account.roster:
+        # Same reasoning as the Roster panel, and it is upstream's rather than
+        # ours: Enka omits `avatarInfoList` entirely when the showcase is closed,
+        # so an empty roster means "we were not shown one" far more often than it
+        # means "this account owns nobody". A distribution over zero characters
+        # would be a confident statement about an account nobody looked at.
+        return Panel(
+            panel_id="teams",
+            title="Teams",
+            state=PanelState.NOT_WIRED,
+            waiting_on="No profile fetched yet, or the in-game showcase is closed. " + waiting,
+        )
+
+    from core.types import Element
+    from ingest.static_data import character_name, element_for, known_avatar_ids
+
+    rows: list[tuple[str, str]] = []
+    counts: dict[Element, int] = {}
+    unresolved = 0
+    for character in account.roster:
+        name = character.display_name or character_name(character.avatar_id)
+        element = element_for(character.avatar_id)
+        if element is None:
+            unresolved += 1
+            rows.append((name, "not in the verified seed set"))
+            continue
+        counts[element] = counts.get(element, 0) + 1
+        rows.append((name, element.value))
+
+    # Enum order, NOT count order. A distribution sorted by size reads as a
+    # ranking of elements, and ranking is precisely the half of this panel that
+    # is held. The order is a property of the enum rather than a choice made
+    # here, so it cannot drift into an implied preference.
+    spread = ", ".join(f"{element.value} x{counts[element]}" for element in Element if element in counts)
+    rows.append(("Elements present", spread or "none resolved"))
+
+    present = {character.avatar_id for character in account.roster}
+    absent = [character_name(a) for a in known_avatar_ids() if a not in present]
+    rows.append(("Verified seed characters absent", ", ".join(absent) if absent else "none"))
+
+    note = ""
+    if unresolved:
+        note = f"{unresolved} character(s) are outside the verified seed set, so no element is claimed for them."
     return Panel(
         panel_id="teams",
         title="Teams",
-        state=PanelState.NOT_WIRED,
-        waiting_on=(
-            "Team composition needs elemental reaction modelling, which ROADMAP "
-            "holds until the resource layer is complete."
-        ),
+        state=PanelState.PARTIAL,
+        rows=tuple(rows),
+        waiting_on=waiting,
+        note=note,
     )
 
 

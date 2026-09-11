@@ -154,9 +154,21 @@ def check_surface(report: Report) -> None:
             report.add(FAIL, "drag strip", "absent: the window would be unmovable")
 
         if body.isascii():
-            report.add(OK, "page is ascii", "")
+            report.add(OK, "page is ascii", "authored text only - the served state has no roster")
         else:
             report.add(FAIL, "page is ascii", "the rendered page left 7-bit ASCII")
+
+        # A SECOND ASCII ROW, BECAUSE THE FIRST ONE CANNOT SEE THE HAZARD.
+        # The route above serves the EMPTY state: no roster, so every byte it
+        # measures is text this repository authored, and it stayed green on
+        # both sides of a real defect. A `display_name` is a nickname another
+        # player typed and arrives from `enka.network`. `html.escape` closes
+        # the markup hole and passes every non-ASCII codepoint through
+        # untouched, so this row renders a roster carrying the glyphs the tree
+        # bans - built with `chr()`, never typed, or this file would violate
+        # the rule it is checking - plus one wide character. Survival is graded
+        # too: dropping the name would satisfy `isascii()` and be worse.
+        report.add(*_external_name_ascii_row())
 
         status, _, body = _get(f"{server.base_url}/api/dashboard")
         if status != 200:
@@ -205,6 +217,47 @@ def check_surface(report: Report) -> None:
             report.add(FAIL, "unknown route", f"status {status}")
     finally:
         server.stop()
+
+
+def _external_name_ascii_row() -> tuple[str, str, str]:
+    """Render a board whose roster name is not ASCII, and grade the page.
+
+    Returned as a row rather than added in place so the renderer import stays
+    next to the check that needs it, and so a failure here reads as a graded
+    FAIL instead of an exception - this script is never allowed to raise.
+    """
+    from datetime import UTC, datetime
+
+    from core.types import AccountState, MappedCharacter
+    from surface.model import build_dashboard
+    from surface.render import render_html
+
+    glyphs = (chr(0x2014), chr(0x2013), chr(0x2019), chr(0x00A0), chr(0x4E2D))
+    display_name = "Ayaka" + "".join(glyphs)
+    state = AccountState(uid="000000000")
+    state.roster = (
+        MappedCharacter(
+            avatar_id=10000002,
+            level=90,
+            ascension=6,
+            constellations=0,
+            display_name=display_name,
+        ),
+    )
+    try:
+        page = render_html(
+            build_dashboard(state, now=datetime(2026, 9, 6, 19, 30, tzinfo=UTC))
+        )
+    except Exception as exc:  # noqa: BLE001 - a row, never a traceback
+        return (FAIL, "external name is ascii", f"{exc.__class__.__name__}")
+
+    if not page.isascii():
+        offenders = sorted({hex(ord(ch)) for ch in page if not ch.isascii()})
+        return (FAIL, "external name is ascii", f"raw codepoints reached the page: {offenders}")
+    encoded = "Ayaka" + "".join(f"&#{ord(ch)};" for ch in glyphs)
+    if encoded not in page:
+        return (FAIL, "external name is ascii", "ascii, but the name was dropped not encoded")
+    return (OK, "external name is ascii", f"{len(glyphs)} glyphs survived as numeric refs")
 
 
 def _version_tuple(text: str) -> tuple[int, ...] | None:

@@ -223,8 +223,10 @@ def test_the_plan_panel_is_partial_and_says_the_cost_table_is_missing():
     assert "cost" in panel.waiting_on.lower()
 
 
-def test_the_teams_panel_is_not_wired_and_says_so():
-    board = build_dashboard(account(), now=NOW)
+def test_the_teams_panel_is_not_wired_when_the_roster_is_empty():
+    state = account()
+    assert state.roster == (), "this arm is about the empty-roster case specifically"
+    board = build_dashboard(state, now=NOW)
     panel = board.panel("teams")
     assert panel.state is PanelState.NOT_WIRED
     assert panel.waiting_on

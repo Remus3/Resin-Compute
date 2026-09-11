@@ -67,6 +67,51 @@ def test_the_page_is_seven_bit_ascii():
     assert page.isascii(), "the rendered page carries a non-ASCII character"
 
 
+def test_an_externally_supplied_display_name_is_folded_to_seven_bit_ascii():
+    """The OTHER half of the ASCII claim, and the half that was not graded.
+
+    `test_the_page_is_seven_bit_ascii` above renders the `board()` fixture,
+    whose roster is empty - so every byte it measures is text THIS repository
+    authored, and it cannot see a defect in how an EXTERNALLY supplied name is
+    rendered. `html.escape` closes the markup hole and passes every non-ASCII
+    codepoint straight through, so a real nickname carrying an em-dash put the
+    page outside 7-bit ASCII while that arm stayed green on both sides of it.
+    `render_json` never had the hole because it uses `ensure_ascii=True`.
+
+    The glyphs are built with `chr()` and never typed. An em-dash literal here
+    would make the file violate the very rule it exists to enforce, and
+    `tools/precommit_gate.py` would reject it.
+
+    SURVIVAL IS ASSERTED, NOT JUST ASCII-NESS. Dropping the name entirely would
+    also satisfy `isascii()` and would be a worse outcome than the bug, so the
+    numeric character references `xmlcharrefreplace` emits are pinned in order.
+    """
+    em_dash = chr(0x2014)
+    en_dash = chr(0x2013)
+    smart_quote = chr(0x2019)
+    cjk = chr(0x4E2D)
+    nbsp = chr(0x00A0)
+    glyphs = (em_dash, en_dash, smart_quote, nbsp, cjk)
+    display_name = "Ayaka" + "".join(glyphs)
+
+    state = AccountState(uid="000000000")
+    state.roster = (
+        MappedCharacter(
+            avatar_id=10000002,
+            level=90,
+            ascension=6,
+            constellations=0,
+            display_name=display_name,
+        ),
+    )
+    page = render_html(build_dashboard(state, now=NOW))
+
+    offenders = sorted({hex(ord(ch)) for ch in page if not ch.isascii()})
+    assert page.isascii(), f"externally supplied name left the page non-ASCII: {offenders}"
+    expected = "Ayaka" + "".join(f"&#{ord(ch)};" for ch in glyphs)
+    assert expected in page, "the name was dropped rather than encoded: " + expected
+
+
 def test_an_externally_supplied_display_name_is_escaped():
     """The XSS test. `display_name` originates with another player's nickname."""
     state = AccountState(uid="000000000")
