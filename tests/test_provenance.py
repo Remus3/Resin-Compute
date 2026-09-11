@@ -30,6 +30,7 @@ purpose.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -40,6 +41,8 @@ from core.provenance import (
     EVIDENCE_CLASS,
     PROVENANCE_SCHEMA_VERSION,
     DataRow,
+    DigestCheck,
+    DigestVerdict,
     EvidenceClass,
     ObservationStatus,
     ProvenanceError,
@@ -48,18 +51,24 @@ from core.provenance import (
     SamplingRef,
     SourceKind,
     SourceRef,
+    check_digests,
     check_evidence_class_totality,
     check_rows,
     coverage_notes,
     coverage_ratio,
+    digest_counts,
     evidence_class,
     independent_witnesses,
     is_absence_claim,
     read_rows,
     render_source,
+    sha256_file,
     supporting_records,
     sweep_data_dir,
     validate_row,
+    verify_record,
+    verify_row,
+    verify_source,
     witness_key,
     witness_report,
     write_rows,
@@ -790,6 +799,260 @@ def test_a_locator_must_be_relative_and_must_not_name_a_drive(label: str, locato
 def test_a_relative_locator_survives():
     """ARM TWO for the locator rule."""
     validate_row(_row(_record(source=_source(locator="evidence/roster_screen.png"))))
+
+
+# ---------------------------------------------------------------------------
+# Recompute-and-compare. THE FORMAT REGEX WAS NEVER A CHECK ON THE BYTES.
+#
+# `_SHA256` answers "does this look like a digest". It cannot answer "is this
+# the digest OF THOSE BYTES", and a receipt nobody can recompute is a number
+# rather than a receipt. Every arm below feeds REAL BYTES, computes the REAL
+# digest with hashlib, and asserts on the comparison - never on the shape.
+#
+# Bytes are written with `write_bytes` and read with `read_bytes`, in binary
+# both ways and deliberately. `write_text` emits CRLF on Windows and
+# `.gitattributes eol=lf` hides that from every diff, and a CRLF-vs-LF
+# difference CHANGES THE DIGEST - so a text-mode arm here would pass or fail by
+# platform rather than by artefact.
+#
+# No byte hashed below reaches `data/`. Every arm hashes under `tmp_path`.
+# ---------------------------------------------------------------------------
+
+ARTEFACT_BYTES = b"detail pane: level 20\ncrop of one frame\n"
+
+
+def _hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _wrong_but_well_formed(digest: str) -> str:
+    """A digest that PASSES the 64-lowercase-hex format check and is WRONG.
+
+    The first character is advanced by one within the hex alphabet, so the
+    result keeps the same length, the same case and the same alphabet. This is
+    the input the format regex cannot possibly reject, which is why it is the
+    proof that the defect was real.
+    """
+    alphabet = "0123456789abcdef"
+    swapped = alphabet[(alphabet.index(digest[0]) + 1) % 16]
+    wrong = swapped + digest[1:]
+    assert re.fullmatch(r"[0-9a-f]{64}", wrong), "the decoy must stay well-formed"
+    assert wrong != digest
+    return wrong
+
+
+def _plant_artefact(
+    root: Path,
+    locator: str = "evidence/detail_crop.png",
+    data: bytes = ARTEFACT_BYTES,
+) -> bytes:
+    target = root / locator
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+    return target.read_bytes()
+
+
+def test_real_bytes_match_their_own_recomputed_digest(tmp_path):
+    """The MATCH arm. The digest is computed from the bytes, never typed."""
+    written = _plant_artefact(tmp_path)
+    assert written == ARTEFACT_BYTES, "the fixture must round-trip byte for byte"
+    assert b"\r" not in written, "a CR in the fixture makes the digest a platform fact"
+
+    source = _source(sha256=_hex(written))
+    check = verify_source(source, tmp_path)
+    assert check.verdict is DigestVerdict.MATCH, check
+    assert check.computed == _hex(written)
+    assert check.declared == check.computed
+    assert isinstance(check, DigestCheck)
+
+
+def test_a_well_formed_wrong_digest_passes_the_format_check_and_fails_the_recompute(tmp_path):
+    """THE ARM THE ROADMAP ROW EXISTS FOR.
+
+    The declared digest is 64 lowercase hex characters, so `validate_record`
+    accepts it and always would have. It is not the digest of the artefact, and
+    only a recompute can say so. A shape arm pins FORMAT, not INPUT.
+    """
+    written = _plant_artefact(tmp_path)
+    decoy = _wrong_but_well_formed(_hex(written))
+    source = _source(sha256=decoy)
+
+    validate_row(_row(_record(source=source)))
+
+    check = verify_source(source, tmp_path)
+    assert check.verdict is DigestVerdict.MISMATCH, (
+        f"a well-formed WRONG digest was graded {check.verdict}; the format check cannot "
+        "reject it and a recompute must"
+    )
+    assert check.declared == decoy
+    assert check.computed == _hex(written)
+    assert check.computed != check.declared
+
+
+def test_an_absent_artefact_is_its_own_verdict_and_never_a_pass(tmp_path):
+    """ABSENT is a THIRD class, not a quiet match.
+
+    A verify that passed when the artefact was missing would be one more
+    degrade-to-empty site, and this tree has already found five of those.
+    """
+    source = _source(sha256=_hex(ARTEFACT_BYTES), locator="evidence/never_written.png")
+    check = verify_source(source, tmp_path)
+    assert check.verdict is DigestVerdict.ABSENT, check
+    assert check.verdict is not DigestVerdict.MATCH
+    assert check.verdict is not DigestVerdict.MISMATCH
+    assert check.computed == "", "nothing was hashed, so nothing may be reported as computed"
+
+
+def test_a_testimony_source_reports_no_digest_rather_than_a_match(tmp_path):
+    """No bytes exist, so there is nothing to recompute - and nothing to pass."""
+    source = _source(kind=SourceKind.TESTIMONY, locator="operator/statement.md", sha256="")
+    check = verify_source(source, tmp_path)
+    assert check.verdict is DigestVerdict.NO_DIGEST, check
+    assert check.verdict is not DigestVerdict.MATCH
+
+
+def test_a_parent_digest_is_unlocatable_from_the_child_alone(tmp_path):
+    """`parent_sha256` carries NO locator of its own.
+
+    It is a join key onto a parent that appears as a `SourceRef` in its own
+    right. From the child alone there is no path to the parent's bytes, and
+    that is UNLOCATABLE rather than a match by omission.
+    """
+    written = _plant_artefact(tmp_path)
+    source = _source(sha256=_hex(written), parent_sha256=SHA_FRAME)
+    checks = verify_record(_record(source=source), tmp_path)
+    fields = {check.field: check for check in checks}
+    assert set(fields) == {"sha256", "parent_sha256"}, fields
+    assert fields["sha256"].verdict is DigestVerdict.MATCH
+    assert fields["parent_sha256"].verdict is DigestVerdict.UNLOCATABLE
+    assert fields["parent_sha256"].verdict is not DigestVerdict.MATCH
+
+
+def test_a_locator_that_escapes_the_capture_root_is_refused_not_hashed(tmp_path):
+    """The join is only safe because the locator was already constrained."""
+    outside = tmp_path.parent / "outside_the_capture_root.png"
+    outside.write_bytes(ARTEFACT_BYTES)
+    escaping = SourceRef(
+        kind=SourceKind.CROP,
+        locator="../outside_the_capture_root.png",
+        sha256=_hex(ARTEFACT_BYTES),
+        captured_utc=WHEN,
+    )
+    with pytest.raises(ProvenanceError, match="escapes its capture root"):
+        verify_source(escaping, tmp_path)
+
+
+def test_a_differing_line_ending_is_a_different_digest(tmp_path):
+    """Why every arm here writes and reads in BINARY.
+
+    The same characters with CRLF endings hash differently, so a text-mode arm
+    would pass on one platform and fail on the other - a statement about the
+    host rather than about the artefact.
+    """
+    lf = b"line one\nline two\n"
+    crlf = lf.replace(b"\n", b"\r\n")
+    assert _hex(lf) != _hex(crlf)
+
+    written = _plant_artefact(tmp_path, locator="evidence/lf.txt", data=lf)
+    assert written == lf
+    matching = verify_source(_source(locator="evidence/lf.txt", sha256=_hex(lf)), tmp_path)
+    crlf_claim = verify_source(_source(locator="evidence/lf.txt", sha256=_hex(crlf)), tmp_path)
+    assert matching.verdict is DigestVerdict.MATCH
+    assert crlf_claim.verdict is DigestVerdict.MISMATCH
+
+
+def test_verify_row_reports_one_check_per_receipt(tmp_path):
+    written = _plant_artefact(tmp_path)
+    row = _row(
+        _record(record_id="rec-a", source=_source(sha256=_hex(written))),
+        _record(record_id="rec-b", source=_source(sha256=_wrong_but_well_formed(_hex(written)))),
+    )
+    verdicts = [check.verdict for check in verify_row(row, tmp_path)]
+    assert verdicts == [DigestVerdict.MATCH, DigestVerdict.MISMATCH], verdicts
+
+
+def test_check_digests_counts_before_it_complains(tmp_path):
+    """The house rule. Zero out of zero reads as a pass, so the count comes first."""
+    written = _plant_artefact(tmp_path)
+    good = _row(_record(source=_source(sha256=_hex(written))), row_id="row-good")
+    bad = _row(
+        _record(source=_source(sha256=_wrong_but_well_formed(_hex(written)))),
+        row_id="row-bad",
+    )
+    missing = _row(
+        _record(source=_source(locator="evidence/gone.png", sha256=_hex(written))),
+        row_id="row-missing",
+    )
+
+    checked, offenders = check_digests([good, bad, missing], tmp_path)
+    assert checked == 3, f"three digests were checkable, the checker counted {checked}"
+    assert len(offenders) == 2, offenders
+    joined = " | ".join(offenders)
+    assert "row-bad" in joined and "mismatch" in joined
+    assert "row-missing" in joined and "absent" in joined
+    assert "row-good" not in joined
+
+
+def test_check_digests_on_an_empty_corpus_reports_zero_and_that_is_not_a_pass(tmp_path):
+    checked, offenders = check_digests([], tmp_path)
+    assert (checked, offenders) == (0, [])
+
+
+def test_an_unverifiable_digest_is_not_in_the_denominator_and_is_still_counted(tmp_path):
+    """The population that could not be reached must be COUNTABLE, not invisible.
+
+    A corpus of nothing but testimony and parent digests would otherwise report
+    a large checked count beside an empty offender list, which reads as a pass
+    over digests nobody ever compared. So `check_digests` excludes them from its
+    denominator and `digest_counts` is where they are counted.
+    """
+    testimony = _row(
+        _record(
+            read_method=ReadMethod.OPERATOR_STATEMENT,
+            source=_source(kind=SourceKind.TESTIMONY, locator="operator/statement.md", sha256=""),
+        ),
+        row_id="row-testimony",
+    )
+    written = _plant_artefact(tmp_path)
+    with_parent = _row(
+        _record(source=_source(sha256=_hex(written), parent_sha256=SHA_FRAME)),
+        row_id="row-parent",
+    )
+
+    checked, offenders = check_digests([testimony, with_parent], tmp_path)
+    assert checked == 1, (
+        f"only one digest was reachable, so the denominator is 1 and not {checked}"
+    )
+    assert offenders == [], offenders
+
+    counts = digest_counts(verify_row(testimony, tmp_path) + verify_row(with_parent, tmp_path))
+    assert counts[DigestVerdict.NO_DIGEST] == 1
+    assert counts[DigestVerdict.UNLOCATABLE] == 1
+    assert counts[DigestVerdict.MATCH] == 1
+    assert counts[DigestVerdict.MISMATCH] == 0
+    assert counts[DigestVerdict.ABSENT] == 0
+    assert set(counts) == set(DigestVerdict), "digest_counts must be total over the verdicts"
+
+
+def test_the_module_recomputes_rather_than_only_matching_a_shape(tmp_path):
+    """Anti-regression, and it is about MECHANISM rather than about text.
+
+    A module that declares `sha256` while importing no hashing primitive can
+    only ever have checked the shape. Rather than grep for the import, this
+    changes the artefact's bytes UNDER a fixed digest and requires the verdict
+    to follow them - which no format check can do.
+    """
+    written = _plant_artefact(tmp_path)
+    source = _source(sha256=_hex(written))
+    assert verify_source(source, tmp_path).verdict is DigestVerdict.MATCH
+
+    _plant_artefact(tmp_path, data=ARTEFACT_BYTES + b"one more line\n")
+    after = verify_source(source, tmp_path)
+    assert after.verdict is DigestVerdict.MISMATCH, (
+        "the artefact changed under a fixed digest and the verdict did not follow it, "
+        "so nothing is being recomputed"
+    )
+    assert sha256_file(tmp_path / "evidence" / "detail_crop.png") == after.computed
 
 
 # ---------------------------------------------------------------------------

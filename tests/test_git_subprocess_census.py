@@ -1,0 +1,480 @@
+"""Arms for `tools/git_subprocess_census.py`, the AST enumeration of git shell-outs.
+
+WHY THIS FILE EXISTS, and what defect it is pinning.
+
+Two false-red figures were quoted in this tree - "8 red arms over 7 modules" and
+a "5-module candidate list" - and both came from NAME-BASED ONE-TERM FILTERS
+over the test corpus. The 5-module list was then measured and OVER-REPORTED:
+only three of the five shell git at all. `tests/test_ci_history_depth.py`
+executes none - its only `subprocess.run` text is a STRING LITERAL fed to a
+regex - and `tests/test_guard_worktree_blindness.py` has no subprocess call at
+all. A skip added to either would have been a FALSE SKIP with no defect behind
+it.
+
+The census is therefore graded on FIXTURE SOURCE STRINGS parsed in memory, so
+each arm pins an INPUT rather than a shape. A gate that cannot fail passes on
+both sides of a real defect, so every arm below names the source text it feeds
+and the bucket that text must land in.
+
+THE UNRESOLVED BUCKET IS THE HONEST PART. An enumeration that silently drops
+argv[0] expressions it cannot resolve has reproduced the very defect this file
+exists to kill, so there are arms for a bare Name, an f-string, a `**kwargs`
+splat, a rebound name and an empty sequence - each of which must land
+UNRESOLVED and must NOT be quietly dropped or quietly called NOT-GIT.
+"""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+import pytest
+
+from tools import git_subprocess_census as census
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# ---------------------------------------------------------------------------
+# FIXTURE SOURCES. Every one of these is parsed from a string, never read from
+# disk, so an arm cannot pass by accident because the tree happens to look a
+# certain way today.
+# ---------------------------------------------------------------------------
+
+GIT_LIST_LITERAL = "import subprocess\nsubprocess.run(['git', 'ls-files'])\n"
+
+NON_GIT_LIST_LITERAL = "import subprocess\nsubprocess.run(['python', '-c', 'pass'])\n"
+
+BARE_NAME_ARGV = (
+    "import subprocess\n"
+    "def probe(args):\n"
+    "    return subprocess.run(args, check=False)\n"
+)
+
+FSTRING_ARGV = (
+    "import subprocess\n"
+    "def probe(exe):\n"
+    "    return subprocess.run([f'{exe}', 'status'])\n"
+)
+
+MODULE_CONSTANT_ARGV = (
+    "import subprocess\n"
+    "GIT_LS = ['git', 'ls-files']\n"
+    "def probe():\n"
+    "    return subprocess.run(GIT_LS, check=True)\n"
+)
+
+LOCAL_CONSTANT_ARGV = (
+    "import subprocess\n"
+    "def probe():\n"
+    "    argv = ['git', 'rev-parse', '--git-dir']\n"
+    "    return subprocess.run(argv, check=False)\n"
+)
+
+REBOUND_NAME_ARGV = (
+    "import subprocess\n"
+    "def probe(flag):\n"
+    "    argv = ['git', 'status']\n"
+    "    if flag:\n"
+    "        argv = ['hg', 'status']\n"
+    "    return subprocess.run(argv)\n"
+)
+
+PARAMETER_SHADOWS_MODULE = (
+    "import subprocess\n"
+    "GIT_ARGV = ['git', 'log']\n"
+    "def probe(GIT_ARGV):\n"
+    "    return subprocess.run(GIT_ARGV)\n"
+)
+
+# The exact `tests/test_ci_history_depth.py` shape: the only `subprocess.run`
+# text in the module sits INSIDE a string literal handed to a regex, and no
+# process is ever launched. A name-based filter matches this file; an AST walk
+# must find nothing here at all.
+REGEX_STRING_SHAPE = (
+    "import re\n"
+    "import subprocess\n"
+    "_GIT_LOG_CALL = re.compile(r'git log')\n"
+    "def test_depth():\n"
+    "    assert _GIT_LOG_CALL.search('subprocess.run([\"git\", \"log\", \"-n\", \"1\"])')\n"
+)
+
+NOT_SUBPROCESS_RUN = "import subprocess\nother.run(['git', 'status'])\n"
+
+LITERAL_HEAD_CONCATENATION = (
+    "import subprocess\n"
+    "def probe(extra):\n"
+    "    return subprocess.run(['git', 'log'] + extra)\n"
+)
+
+EVERY_LAUNCHER = (
+    "import subprocess\n"
+    "subprocess.run(['git', 'a'])\n"
+    "subprocess.check_output(['git', 'b'])\n"
+    "subprocess.check_call(['git', 'c'])\n"
+    "subprocess.call(['git', 'd'])\n"
+    "subprocess.Popen(['git', 'e'])\n"
+)
+
+FROM_IMPORT_ALIAS = (
+    "from subprocess import check_output as grab\nout = grab(['git', 'ls-files'])\n"
+)
+
+MODULE_ALIAS = "import subprocess as sp\nsp.run(['git', 'status'])\n"
+
+SYS_EXECUTABLE_HEAD = (
+    "import subprocess\nimport sys\nsubprocess.run([sys.executable, '-m', 'pytest'])\n"
+)
+
+ABSOLUTE_GIT_EXE = (
+    "import subprocess\nsubprocess.run(['C:\\\\Program Files\\\\Git\\\\bin\\\\git.exe', 'status'])\n"
+)
+
+# A WHOLE-COMMAND STRING, as passed under `shell=True`. Only the first shell
+# word is the executable here - and that is the ONLY place a whitespace split is
+# correct. Splitting a LIST element on whitespace turns an absolute path with a
+# space in it into a false NOT-GIT, which is how the arm below was earned.
+SHELL_STRING_GIT = "import subprocess\nsubprocess.run('git log -n 1', shell=True)\n"
+
+SHELL_STRING_NOT_GIT = (
+    "import subprocess\nsubprocess.run('python -c pass', shell=True)\n"
+)
+
+SHELL_STRING_QUOTED_PATH = (
+    "import subprocess\n"
+    "subprocess.run('\"C:\\\\Program Files\\\\Git\\\\bin\\\\git.exe\" status', shell=True)\n"
+)
+
+KEYWORD_ARGS_ARGV = "import subprocess\nsubprocess.run(args=['git', 'status'])\n"
+
+KWARGS_SPLAT_ARGV = (
+    "import subprocess\n"
+    "def probe(**kw):\n"
+    "    return subprocess.run(**kw)\n"
+)
+
+EMPTY_SEQUENCE_ARGV = "import subprocess\nsubprocess.run([])\n"
+
+GATED_MODULE = (
+    "import subprocess\n"
+    "from tests.conftest import require_git_repository\n"
+    "def probe():\n"
+    "    require_git_repository()\n"
+    "    return subprocess.run(['git', 'status'])\n"
+)
+
+UNGATED_MODULE = "import subprocess\nsubprocess.run(['git', 'status'])\n"
+
+
+def _buckets(source: str) -> list[str]:
+    return [site.bucket for site in census.census_source(source, "<fixture>")]
+
+
+def _only(source: str) -> census.CallSite:
+    sites = census.census_source(source, "<fixture>")
+    assert len(sites) == 1, f"expected exactly one call site, got {sites!r}"
+    return sites[0]
+
+
+# ---------------------------------------------------------------------------
+# THE GIT BUCKET
+# ---------------------------------------------------------------------------
+
+
+def test_git_list_literal_lands_in_the_git_bucket():
+    site = _only(GIT_LIST_LITERAL)
+    assert site.bucket == census.GIT
+    assert site.callee == "subprocess.run"
+    assert site.lineno == 2
+
+
+def test_module_level_constant_bound_list_resolves_to_git():
+    site = _only(MODULE_CONSTANT_ARGV)
+    assert site.bucket == census.GIT, (
+        "a module-level constant bound to a git argv list is statically resolvable, "
+        "so leaving it UNRESOLVED under-reports the git surface"
+    )
+
+
+def test_function_local_constant_bound_list_resolves_to_git():
+    assert _only(LOCAL_CONSTANT_ARGV).bucket == census.GIT
+
+
+def test_literal_head_concatenation_resolves_to_git():
+    site = _only(LITERAL_HEAD_CONCATENATION)
+    assert site.bucket == census.GIT, (
+        "argv[0] is a literal in the left operand of the concatenation, so the tail "
+        "being dynamic does not make the head unknown"
+    )
+
+
+def test_absolute_windows_path_to_git_exe_resolves_to_git():
+    site = _only(ABSOLUTE_GIT_EXE)
+    assert site.bucket == census.GIT
+    assert "git.exe" in site.argv0
+
+
+def test_a_whole_command_shell_string_resolves_on_its_first_word():
+    assert _only(SHELL_STRING_GIT).bucket == census.GIT
+    assert _only(SHELL_STRING_NOT_GIT).bucket == census.NOT_GIT
+
+
+def test_a_quoted_absolute_path_in_a_shell_string_resolves_to_git():
+    site = _only(SHELL_STRING_QUOTED_PATH)
+    assert site.bucket == census.GIT, (
+        "a naive whitespace split cuts this at 'C:\\Program' and reports a false "
+        "NOT-GIT, which is the same class of error as the name filter this census "
+        "replaces"
+    )
+
+
+def test_keyword_args_argv_is_resolved_not_dropped():
+    site = _only(KEYWORD_ARGS_ARGV)
+    assert site.bucket == census.GIT, (
+        "`subprocess.run(args=[...])` has no positional argument; a census that only "
+        "reads call.args[0] reports this as no argv at all"
+    )
+
+
+def test_every_launcher_is_detected():
+    sites = census.census_source(EVERY_LAUNCHER, "<fixture>")
+    assert [site.callee for site in sites] == [
+        "subprocess.run",
+        "subprocess.check_output",
+        "subprocess.check_call",
+        "subprocess.call",
+        "subprocess.Popen",
+    ]
+    assert {site.bucket for site in sites} == {census.GIT}
+
+
+def test_from_import_alias_is_detected():
+    site = _only(FROM_IMPORT_ALIAS)
+    assert site.bucket == census.GIT
+    assert site.callee == "subprocess.check_output"
+
+
+def test_module_alias_is_detected():
+    assert _only(MODULE_ALIAS).bucket == census.GIT
+
+
+# ---------------------------------------------------------------------------
+# THE NOT-GIT BUCKET
+# ---------------------------------------------------------------------------
+
+
+def test_non_git_list_literal_lands_in_the_not_git_bucket():
+    site = _only(NON_GIT_LIST_LITERAL)
+    assert site.bucket == census.NOT_GIT
+
+
+def test_sys_executable_head_lands_in_the_not_git_bucket():
+    site = _only(SYS_EXECUTABLE_HEAD)
+    assert site.bucket == census.NOT_GIT, (
+        "sys.executable is the running interpreter and can never be git; it is the "
+        "only dotted name the census resolves"
+    )
+    assert site.argv0 == "sys.executable"
+
+
+# ---------------------------------------------------------------------------
+# THE UNRESOLVED BUCKET - the honest one
+# ---------------------------------------------------------------------------
+
+
+def test_bare_name_argv_is_unresolved_and_not_dropped():
+    site = _only(BARE_NAME_ARGV)
+    assert site.bucket == census.UNRESOLVED, (
+        "argv is a function parameter, so argv[0] is unknowable at parse time; "
+        "calling it NOT-GIT would under-report and dropping it would hide it"
+    )
+
+
+def test_fstring_argv_is_unresolved():
+    assert _only(FSTRING_ARGV).bucket == census.UNRESOLVED
+
+
+def test_rebound_name_is_unresolved():
+    site = _only(REBOUND_NAME_ARGV)
+    assert site.bucket == census.UNRESOLVED, (
+        "the name is bound twice, once to git and once to something else, so no "
+        "single static answer exists"
+    )
+
+
+def test_function_parameter_shadows_a_module_binding():
+    site = _only(PARAMETER_SHADOWS_MODULE)
+    assert site.bucket == census.UNRESOLVED, (
+        "the parameter shadows the module-level GIT_ARGV, so resolving through to "
+        "the module constant would be a false GIT"
+    )
+
+
+def test_kwargs_splat_is_unresolved():
+    assert _only(KWARGS_SPLAT_ARGV).bucket == census.UNRESOLVED
+
+
+def test_empty_sequence_argv_is_unresolved():
+    assert _only(EMPTY_SEQUENCE_ARGV).bucket == census.UNRESOLVED
+
+
+# ---------------------------------------------------------------------------
+# WHAT MUST NOT BE DETECTED AT ALL
+# ---------------------------------------------------------------------------
+
+
+def test_regex_string_literal_shape_yields_no_call_site():
+    sites = census.census_source(REGEX_STRING_SHAPE, "<fixture>")
+    assert sites == [], (
+        "the only subprocess.run text here is inside a string literal fed to a "
+        "regex; an AST walk never parses string contents, so a name filter matching "
+        f"this file is the defect, not the census. got {sites!r}"
+    )
+
+
+def test_a_non_subprocess_run_is_not_detected():
+    sites = census.census_source(NOT_SUBPROCESS_RUN, "<fixture>")
+    assert sites == [], (
+        "`other.run(['git'])` is some other object's method; matching it would make "
+        f"every GIT count an over-report. got {sites!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE GUARD COLUMN. UNKNOWN never means unguarded.
+# ---------------------------------------------------------------------------
+
+
+def test_guard_column_is_gated_when_the_module_references_a_gate():
+    assert _only(GATED_MODULE).guard == census.GATED
+
+
+def test_guard_column_is_unknown_and_never_says_unguarded():
+    site = _only(UNGATED_MODULE)
+    assert site.guard == census.GUARD_UNKNOWN
+    assert site.guard == "UNKNOWN", (
+        "an AST walk for a try block around the call is STRUCTURALLY BLIND to a "
+        "guard placed at the CALLER, which is where this tree puts them, so the "
+        "absent-guard verdict must be spelled UNKNOWN and never UNGUARDED"
+    )
+
+
+def test_the_census_module_never_emits_the_word_unguarded():
+    text = (REPO_ROOT / "tools" / "git_subprocess_census.py").read_text(encoding="ascii")
+    emitted = [line for line in text.splitlines() if '"UNGUARDED"' in line]
+    assert emitted == [], (
+        "a literal UNGUARDED token would let a reader treat a blind spot as a "
+        f"finding. offending lines: {emitted!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# COUNTS AND REPORT
+# ---------------------------------------------------------------------------
+
+
+def test_counts_report_all_three_buckets_even_when_two_are_empty():
+    tally = census.counts(census.census_source(GIT_LIST_LITERAL, "<fixture>"))
+    assert set(tally) == {census.GIT, census.NOT_GIT, census.UNRESOLVED}, (
+        "a two-bucket tally is the defect this row exists to kill; the zero buckets "
+        "must still be printed"
+    )
+    assert tally[census.GIT] == 1
+    assert tally[census.NOT_GIT] == 0
+    assert tally[census.UNRESOLVED] == 0
+
+
+def test_report_prints_every_unresolved_site_by_line():
+    sites = census.census_source(BARE_NAME_ARGV, "<fixture>")
+    report = census.format_report(sites)
+    assert "UNRESOLVED" in report
+    assert "<fixture>:3" in report, (
+        "an unresolved site that is counted but not listed cannot be followed up; "
+        f"report was:\n{report}"
+    )
+
+
+def test_the_census_cli_is_not_a_gate():
+    assert census.main([]) == 0, (
+        "this is a census tool; making it fail a build turns an enumeration into a "
+        "sizing decision, which is explicitly not this row"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE REAL TREE. The row makes a prediction; these arms hold it to it.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def real_sites() -> list[census.CallSite]:
+    return census.census_paths(census.DEFAULT_ROOTS, REPO_ROOT)
+
+
+def test_real_census_finds_a_known_git_site(real_sites):
+    git_files = {site.path for site in real_sites if site.bucket == census.GIT}
+    assert "tests/test_no_sibling_names.py" in git_files, (
+        "this module builds its corpus from `git ls-files`, so a census that cannot "
+        "see it is measuring nothing and every arm below it is vacuous"
+    )
+
+
+def test_the_two_predicted_modules_are_absent_from_the_git_bucket(real_sites):
+    git_files = {site.path for site in real_sites if site.bucket == census.GIT}
+    for predicted in (
+        "tests/test_ci_history_depth.py",
+        "tests/test_guard_worktree_blindness.py",
+    ):
+        assert predicted not in git_files, (
+            f"{predicted} was measured to shell no git at all; a skip added to it "
+            "would be a false skip with no defect behind it"
+        )
+
+
+def test_real_census_reaches_more_than_one_root(real_sites):
+    roots = {site.path.split("/", 1)[0] for site in real_sites}
+    assert len(roots) >= 2, (
+        "every declared root walked to nothing but tests/ would mean the path walk "
+        f"is broken rather than that the tree is clean. roots seen: {sorted(roots)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THIS SLICE'S OWN BYTES. 7-bit ASCII, LF only.
+# ---------------------------------------------------------------------------
+
+_AUTHORED = (
+    Path("tools") / "git_subprocess_census.py",
+    Path("tests") / "test_git_subprocess_census.py",
+)
+
+
+def _non_ascii_offsets(raw: bytes) -> list[int]:
+    return [index for index, byte in enumerate(raw) if byte > 0x7F]
+
+
+def test_authored_bytes_are_seven_bit_ascii_with_no_cr():
+    for relative in _AUTHORED:
+        raw = (REPO_ROOT / relative).read_bytes()
+        assert _non_ascii_offsets(raw) == [], (
+            f"{relative.as_posix()} carries non-ASCII bytes at "
+            f"{_non_ascii_offsets(raw)[:8]}"
+        )
+        assert b"\r" not in raw, (
+            f"{relative.as_posix()} carries CR; write_text emits CRLF on Windows and "
+            "eol=lf in .gitattributes hides it from every diff"
+        )
+
+
+def test_the_ascii_detector_actually_fires():
+    dashed = ("clause" + chr(0x2014) + "break").encode("utf-8")
+    assert _non_ascii_offsets(dashed), (
+        "the ASCII arm above would pass on a file full of em-dashes if the detector "
+        "never fired"
+    )
+    assert _non_ascii_offsets(b"plain ascii") == []
+
+
+def test_the_fixture_sources_parse():
+    for name, source in sorted(globals().items()):
+        if name.isupper() and isinstance(source, str) and "subprocess" in source:
+            ast.parse(source)
