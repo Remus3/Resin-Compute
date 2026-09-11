@@ -143,8 +143,8 @@ def scan_file(path: Path, relative_name: str) -> list[str]:
         return []
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
+    except OSError as exc:  # FAIL CLOSED. UnreadableCorpusFile is defined at the END of this module.
+        raise UnreadableCorpusFile(_unreadable_reason(relative_name, path, exc)) from exc
     findings = []
     for number, line in enumerate(text.splitlines(), start=1):
         if predicate(line):
@@ -291,3 +291,166 @@ def test_this_guard_file_is_pure_ascii() -> None:
     raw = Path(__file__).read_bytes()
     offenders = sorted({byte for byte in raw if byte > 127})
     assert offenders == [], "non-ASCII bytes in the guard: " + repr(offenders)
+
+
+# --- Arm 4: an unreadable corpus file FAILS, it does not sweep clean --------
+#
+# THE DEFECT THIS ARM EXISTS FOR, recorded in ROADMAP.md as the FIFTH
+# degrade-to-empty site in this tree and the first one found inside a guard.
+# `scan_file` read the corpus under `except OSError: return []`, so a tracked
+# file that could not be opened was reported as ZERO FINDINGS and Arm 1 swept
+# CLEAN over it. A guard that degrades to empty on an input it could not read
+# passes on both sides of a real defect, which is the exact failure mode this
+# module exists to prevent in somebody else's code.
+#
+# WHICH ERROR CLASSES ARE FOLDED TOGETHER, AND WHERE THE SPLIT SITS.
+# `scan_file` folds EVERY `OSError` - permission denied, a file that vanished
+# mid-sweep, a device error, a path that turned out to be a directory - into one
+# fail-closed verdict, because by then the caller has already decided the path is
+# part of the corpus, and the honest answer for all of them is identical: the
+# findings for this file are UNKNOWN, and UNKNOWN is not CLEAN.
+#
+# `scan_tree` keeps its PRE-EXISTING `is_file()` skip for a path that is simply
+# ABSENT, unchanged here. That is a different question - whether a path belongs
+# to the corpus at all - and a partial checkout must not hard-fail. It is a
+# documented boundary, not a claim that it is ideal.
+#
+# WHY THE INPUTS BELOW ARE REAL. A gate cannot fail if its fixture excludes the
+# defect, measured twice in this tree. Neither arm asserts anything about the
+# guard until it has PROVED, in its own body, that the input it feeds genuinely
+# refuses to be read. Windows file permissions are useless for this - a
+# chmod-based fixture stays readable as Administrator - so one arm feeds a
+# DIRECTORY wearing a scanned suffix, which fails at `open` on every platform
+# this tree runs on, and the other injects the error at the exact call site the
+# scanner uses and proves the injection lands there.
+
+#: `errno.EACCES`, spelled as a literal on purpose: `import errno` would have to
+#: sit in the import block at the top of this module (ruff E402) and would shift
+#: every line number below it, three of which are cited by number from other
+#: tracked files. 13 on Windows and on POSIX alike.
+_EACCES = 13
+
+
+def test_scan_file_fails_closed_on_a_genuinely_unreadable_path(tmp_path: Path) -> None:
+    """A real filesystem read failure must reach the caller, never become `[]`."""
+    victim = tmp_path / "unreadable_handoff.md"
+    victim.mkdir()
+
+    # PROVE the fixture genuinely refuses to be read BEFORE grading the guard
+    # with it. Measured on this machine: PermissionError, errno 13.
+    with pytest.raises(OSError) as direct:
+        victim.read_text(encoding="utf-8", errors="replace")
+    assert direct.value.errno is not None, "fixture failed with no errno - not a real read failure"
+
+    with pytest.raises(UnreadableCorpusFile) as caught:
+        scan_file(victim, "unreadable_handoff.md")
+
+    message = str(caught.value)
+    assert "unreadable_handoff.md" in message, "the failure does not name the path: " + message
+    assert "errno " + str(direct.value.errno) in message, "the failure hides the raw reason: " + message
+
+
+def test_scan_tree_fails_closed_rather_than_returning_the_findings_it_could_reach(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One unreadable file must sink the whole sweep, not shrink it quietly.
+
+    The planted violation is scanned FIRST, so a partial result is available at
+    the moment the second file refuses. Returning that partial list would be the
+    same defect wearing a smaller number.
+    """
+    planted = tmp_path / "planted_installer.ps1"
+    planted.write_text(_fixture_offending_ps1(), encoding="ascii")
+    locked = tmp_path / "locked_handoff.md"
+    locked.write_text(_fixture_offending_md(), encoding="ascii")
+
+    real_read_text = Path.read_text
+
+    def refuse_one_file(self: Path, *args: object, **kwargs: object) -> str:
+        if self.name == "locked_handoff.md":
+            raise PermissionError(_EACCES, "Access is denied")
+        return real_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "read_text", refuse_one_file)
+
+    # PROVE the injection lands on the read the scanner actually performs, and
+    # that it refuses ONLY the one file. An injection that refused everything, or
+    # nothing, would make the assertion below meaningless in opposite directions.
+    with pytest.raises(PermissionError):
+        locked.read_text(encoding="utf-8", errors="replace")
+    assert _INFO_CMDLET in real_read_text(locked, encoding="ascii"), "fixture lost its planted line"
+    assert _STATE_PROPERTY in planted.read_text(encoding="ascii"), "injection refused the wrong file"
+
+    with pytest.raises(UnreadableCorpusFile) as caught:
+        scan_tree(tmp_path, ["planted_installer.ps1", "locked_handoff.md"])
+
+    message = str(caught.value)
+    assert "locked_handoff.md" in message, "the failure does not name the path: " + message
+    assert "errno " + str(_EACCES) in message, "the failure hides the raw reason: " + message
+
+
+def test_scan_tree_still_skips_a_path_that_is_simply_absent(tmp_path: Path) -> None:
+    """The absent-path skip is pre-existing behaviour and is deliberately kept.
+
+    Pinned so the fail-closed change above cannot be mistaken for having turned a
+    partial checkout into a hard failure, and so a later edit that does change it
+    has to change this arm and say why. This arm passed before that change too -
+    it is a survival pin, not the defect arm.
+    """
+    (tmp_path / "planted_installer.ps1").write_text(_fixture_offending_ps1(), encoding="ascii")
+
+    findings = scan_tree(tmp_path, ["planted_installer.ps1", "never_checked_out.md"])
+
+    assert len(findings) == 1, "an absent path changed the sweep: " + repr(findings)
+    assert findings[0].startswith("planted_installer.ps1:1:")
+
+
+# --- THE FAIL-CLOSED SIGNAL -------------------------------------------------
+#
+# DEFINED HERE, BELOW ITS ONE USE SITE, AND THAT ORDERING IS DELIBERATE. Four
+# tracked prose passages cite positions in THIS module by line number -
+# `tests/test_supervisor_task_argv.py` does so three times and `ROADMAP.md`
+# once - and every one of them was accurate when this was written. Inserting a
+# class above `scan_file` would have shifted all of them by the height of the
+# class and silently made four citations off-by-N. Appending costs a reader one
+# jump; shifting costs four readers a wrong line. The name resolves out of module
+# globals when `scan_file` is called, which is always after import completes.
+
+
+class UnreadableCorpusFile(OSError):
+    """A corpus file could not be read, so this guard's verdict is UNKNOWN.
+
+    UNKNOWN IS NOT CLEAN. `scan_file` answered an unreadable file with `[]` until
+    this class existed, which made the sweep report ZERO FINDINGS for a file it
+    never opened - a guard passing on both sides of a real defect. Raising is the
+    whole point: the caller cannot accidentally treat it as a clean result.
+
+    Subclasses `OSError` because it IS one, reached through `raise ... from exc`,
+    so the original errno-bearing cause stays on the traceback for whoever is
+    debugging while the message above stays readable for whoever is not.
+    """
+
+
+def _unreadable_reason(relative_name: str, path: Path, exc: OSError) -> str:
+    """Name the path and the raw errno reason, without pasting a traceback.
+
+    The raw reason is the errno NUMBER plus the OS `strerror`, and `winerror`
+    when the platform supplies one. Measured on this machine 2026-09-11: reading
+    a directory yields PermissionError, errno 13, "Permission denied", with
+    `winerror` set to None - so the WinError clause is conditional rather than
+    assumed present on Windows.
+    """
+    reason = "errno " + str(exc.errno)
+    if exc.strerror:
+        reason += " " + exc.strerror
+    winerror = getattr(exc, "winerror", None)
+    if winerror is not None:
+        reason += " (WinError " + str(winerror) + ")"
+    return (
+        "UNREADABLE, therefore UNKNOWN, therefore FAIL: " + relative_name
+        + " could not be read at " + str(path) + " - " + type(exc).__name__ + ", " + reason
+        + ". A guard that answers zero findings for a file it could not open passes on both"
+        + " sides of a real defect, so the sweep fails here instead of reporting clean. Make"
+        + " the file readable, or drop the path from the corpus deliberately."
+    )

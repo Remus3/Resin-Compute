@@ -25,6 +25,20 @@ THREE MEASURED EPISODES ARE THE REASON, and each one is a rule below.
 3. NOT FOUND AT 1 FPS IS NOT NOT PRESENT. A negative is a claim about a SEARCH.
    `validate_row` REFUSES a `NOT_FOUND` record with no `SamplingRef`, rather
    than warning about it, because a warning nobody reads is not a rule.
+4. A DIGEST NOBODY CAN RECOMPUTE IS A NUMBER, NOT A RECEIPT. For one release
+   the only check on `sha256` was the FORMAT regex `_SHA256`, which answers
+   "does this look like a digest" and cannot answer "is this the digest OF
+   THOSE BYTES". A wrong digest that is still 64 lowercase hex characters
+   passed it and always would have. `verify_source` RECOMPUTES with `hashlib`
+   and compares, and it can do so because a locator is a path relative to a
+   capture root - enforced by `_check_locator`, not hoped - and that root is a
+   real directory the capture tools own and pass in. The root stays a
+   PARAMETER: naming one machine's path in this tree is the leak this schema
+   exists to avoid. `DigestVerdict` keeps ABSENT separate from MATCH and from
+   MISMATCH so a verify cannot pass on an artefact that is not there, and
+   `parent_sha256` reports UNLOCATABLE because it carries no locator of its own
+   - it is a join key onto a parent that appears elsewhere as a source in its
+   own right.
 
 THE PYTHON CONVENTION, restated here because this module is a contract and the
 convention is what keeps it one: a required field added to any dataclass below
@@ -50,6 +64,7 @@ tracked tree.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -631,6 +646,252 @@ def render_source(row: DataRow) -> str:
 def _short(source: SourceRef) -> str:
     digest = source.parent_sha256 or source.sha256
     return digest[:8] if digest else source.locator
+
+
+# ---------------------------------------------------------------------------
+# Recompute-and-compare. A DIGEST NOBODY CAN RECOMPUTE IS A NUMBER.
+# ---------------------------------------------------------------------------
+
+
+class DigestVerdict(StrEnum):
+    """What a recompute established about ONE declared digest.
+
+    FIVE members, and the last three exist so that "the bytes were never
+    compared" can never be spelled the same way as "the bytes agreed".
+
+    - `MATCH` - the artefact was located, hashed, and the digests are equal.
+    - `MISMATCH` - located and hashed, and the digests differ. This is the
+      verdict the format check could never reach: a wrong digest that is still
+      64 lowercase hex characters passes `_SHA256` and always would have.
+    - `ABSENT` - the locator resolved under the capture root and no readable
+      bytes are there. ITS OWN CLASS, deliberately. A verify that returned
+      `MATCH` on a missing artefact would be one more degrade-to-empty site.
+    - `NO_DIGEST` - the receipt declares none. A `TESTIMONY` source has no
+      bytes, so there is nothing to recompute and nothing to pass.
+    - `UNLOCATABLE` - a digest with no path to its bytes. This is what
+      `parent_sha256` always is when read from the child alone; see
+      `verify_record`.
+    """
+
+    MATCH = "match"
+    MISMATCH = "mismatch"
+    ABSENT = "absent"
+    NO_DIGEST = "no_digest"
+    UNLOCATABLE = "unlocatable"
+
+
+#: Verdicts where the bytes question was actually ASKED. `check_digests` uses
+#: this as its denominator: counting a digest nobody could reach as "checked"
+#: inflates the denominator, which is the same defect as zero out of zero
+#: reading as a pass.
+VERIFIABLE_VERDICTS: frozenset[DigestVerdict] = frozenset(
+    {DigestVerdict.MATCH, DigestVerdict.MISMATCH, DigestVerdict.ABSENT}
+)
+
+
+@dataclass(frozen=True)
+class DigestCheck:
+    """The result of comparing ONE declared digest against real bytes.
+
+    `computed` is empty whenever nothing was hashed, so an empty `computed`
+    beside a `MATCH` would be a contradiction rather than a default. Fields
+    after `declared` carry defaults and are last, per the convention stated in
+    the module docstring.
+    """
+
+    verdict: DigestVerdict
+    field: str
+    locator: str
+    declared: str
+    computed: str = ""
+    path: str = ""
+    detail: str = ""
+
+
+#: Read size for hashing. A frame or a video segment is far larger than a row,
+#: so the file is streamed rather than materialised.
+_HASH_CHUNK = 1 << 20
+
+
+def sha256_bytes(data: bytes) -> str:
+    """The sha256 of `data`, 64 lowercase hex characters."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: str | os.PathLike[str]) -> str:
+    """The sha256 of a file's BYTES, read in binary mode.
+
+    BINARY IS THE WHOLE POINT and is not an implementation detail. A text-mode
+    read on Windows collapses CRLF to LF, so the same file would hash
+    differently from the bytes on disk and every comparison would become a
+    statement about the host. `.gitattributes` pins `eol=lf` in this tree and
+    hides the difference from every diff, which is precisely why the hash must
+    not go through a decoder.
+    """
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        while True:
+            chunk = handle.read(_HASH_CHUNK)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def resolve_source(source: SourceRef, capture_root: str | os.PathLike[str]) -> Path:
+    """Where `source.locator` points, under `capture_root`. Raises on a bad one.
+
+    THE JOIN IS ONLY SAFE BECAUSE THE LOCATOR WAS ALREADY CONSTRAINED, so this
+    re-runs `_check_locator` rather than trusting that a caller validated first.
+    A locator naming a drive, an absolute path or a `..` segment is refused
+    here, not silently hashed from somewhere outside the root.
+    """
+    _check_locator(source.locator, f"source {source.locator!r}")
+    return Path(capture_root) / source.locator
+
+
+def verify_source(source: SourceRef, capture_root: str | os.PathLike[str]) -> DigestCheck:
+    """RECOMPUTE `source.sha256` from the bytes and compare. Never a shape check.
+
+    WHY RECOMPUTE-AND-COMPARE AND NOT A RENAME TO ADVISORY. The artefact IS
+    reachable from here: a locator is a path relative to a capture root - that
+    is enforced, not hoped, by `_check_locator` refusing a drive letter, an
+    absolute path and a `..` segment - and the root is a real directory on disk
+    that the capture tools own and pass in. The root is not hardcoded here
+    because naming one machine's path in this tree is the leak this schema
+    exists to avoid; it is a parameter for that reason and for no other.
+
+    A `TESTIMONY` source carrying a digest is REFUSED rather than graded. No
+    bytes exist, so a digest there is theatre, and `validate_record` already
+    says so.
+    """
+    if source.kind is SourceKind.TESTIMONY and source.sha256:
+        _refuse(
+            f"source {source.locator!r}: a testimony source carries a digest. No bytes exist, "
+            "so there is nothing to recompute it against"
+        )
+    if not source.sha256:
+        return DigestCheck(
+            verdict=DigestVerdict.NO_DIGEST,
+            field="sha256",
+            locator=source.locator,
+            declared="",
+            detail=f"a {source.kind.value} source declares no digest",
+        )
+
+    path = resolve_source(source, capture_root)
+    if not path.is_file():
+        return DigestCheck(
+            verdict=DigestVerdict.ABSENT,
+            field="sha256",
+            locator=source.locator,
+            declared=source.sha256,
+            path=str(path),
+            detail="no readable artefact at that locator under the capture root",
+        )
+    try:
+        computed = sha256_file(path)
+    except OSError as exc:
+        return DigestCheck(
+            verdict=DigestVerdict.ABSENT,
+            field="sha256",
+            locator=source.locator,
+            declared=source.sha256,
+            path=str(path),
+            detail=f"the artefact could not be read: {exc}",
+        )
+
+    verdict = DigestVerdict.MATCH if computed == source.sha256 else DigestVerdict.MISMATCH
+    return DigestCheck(
+        verdict=verdict,
+        field="sha256",
+        locator=source.locator,
+        declared=source.sha256,
+        computed=computed,
+        path=str(path),
+    )
+
+
+def verify_record(
+    record: ProvenanceRecord, capture_root: str | os.PathLike[str]
+) -> tuple[DigestCheck, ...]:
+    """One check for `sha256`, and one for `parent_sha256` where it is set.
+
+    `parent_sha256` IS ALWAYS `UNLOCATABLE` FROM HERE, and that is a fact about
+    the schema rather than a gap in this function. The field carries no locator
+    of its own: it is a JOIN KEY onto a parent artefact that appears elsewhere
+    as a `SourceRef` in its own right, with its own locator and its own digest.
+    Verifying it therefore means locating that parent record, which is the
+    caller's corpus and not this record. Reporting it as `UNLOCATABLE` says so
+    out loud instead of letting an unverified digest sit next to a verified one
+    looking the same.
+    """
+    checks = [verify_source(record.source, capture_root)]
+    if record.source.parent_sha256:
+        checks.append(
+            DigestCheck(
+                verdict=DigestVerdict.UNLOCATABLE,
+                field="parent_sha256",
+                locator=record.source.locator,
+                declared=record.source.parent_sha256,
+                detail=(
+                    "parent_sha256 carries no locator of its own; verify it where the parent "
+                    "artefact appears as a source in its own right"
+                ),
+            )
+        )
+    return tuple(checks)
+
+
+def verify_row(row: DataRow, capture_root: str | os.PathLike[str]) -> tuple[DigestCheck, ...]:
+    """Every digest check for every receipt on `row`, in receipt order."""
+    checks: list[DigestCheck] = []
+    for record in row.provenance:
+        checks.extend(verify_record(record, capture_root))
+    return tuple(checks)
+
+
+def digest_counts(checks: Iterable[DigestCheck]) -> Mapping[DigestVerdict, int]:
+    """How many checks landed on each verdict. TOTAL over what it was given.
+
+    This is what makes the UNVERIFIABLE population countable rather than
+    invisible. `check_digests` reports offenders and a verifiable denominator;
+    a caller that wants to know how many digests nobody could reach asks here.
+    """
+    counts: dict[DigestVerdict, int] = {verdict: 0 for verdict in DigestVerdict}
+    for check in checks:
+        counts[check.verdict] += 1
+    return MappingProxyType(counts)
+
+
+def check_digests(
+    rows: Iterable[DataRow], capture_root: str | os.PathLike[str]
+) -> tuple[int, list[str]]:
+    """`(checked, offenders)` over declared digests, per the house convention.
+
+    `checked` counts only the digests whose bytes question was actually asked -
+    `VERIFIABLE_VERDICTS`. A `NO_DIGEST` or `UNLOCATABLE` check is not in the
+    denominator, because a corpus of nothing but those would otherwise report a
+    large checked count and an empty offender list, which reads as a pass over
+    digests nobody compared. Call `digest_counts` for that population.
+    """
+    checked = 0
+    offenders: list[str] = []
+    for row in rows:
+        for check in verify_row(row, capture_root):
+            if check.verdict in VERIFIABLE_VERDICTS:
+                checked += 1
+            if check.verdict is DigestVerdict.MISMATCH:
+                offenders.append(
+                    f"{row.row_id or '<unnamed>'}: {check.field} mismatch at {check.locator}: "
+                    f"declared {check.declared}, recomputed {check.computed}"
+                )
+            elif check.verdict is DigestVerdict.ABSENT:
+                offenders.append(
+                    f"{row.row_id or '<unnamed>'}: {check.field} absent at {check.locator}: "
+                    f"{check.detail}"
+                )
+    return checked, offenders
 
 
 # ---------------------------------------------------------------------------

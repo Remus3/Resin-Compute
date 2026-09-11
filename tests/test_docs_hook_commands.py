@@ -81,6 +81,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+
 from tests.conftest import require_git_repository
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -114,13 +116,18 @@ class Citation:
     command: str
     has_long_flag: bool
     block_cites_settings: bool
+    #: Non-empty when shlex could not split this span. APPENDED at the end of
+    #: the field list with a default, per this tree's dataclass rule: a
+    #: mid-class required field breaks every existing positional construction.
+    unparse_reason: str = ""
 
     @property
     def in_scope(self) -> bool:
-        return self.has_long_flag or self.block_cites_settings
+        return self.has_long_flag or self.block_cites_settings or bool(self.unparse_reason)
 
     def __str__(self) -> str:
-        return f"{self.document}:{self.line}: {self.command}"
+        suffix = f" [UNPARSEABLE: {self.unparse_reason}]" if self.unparse_reason else ""
+        return f"{self.document}:{self.line}: {self.command}{suffix}"
 
 
 # ---------------------------------------------------------------------------
@@ -134,12 +141,14 @@ def _tokens(command: str) -> list[str]:
     `posix=False` for the reason `tests/test_session_hooks.py` records: in POSIX
     mode shlex eats a backslash as an escape, so a Windows-spelled path would
     arrive with its separators silently deleted.
+
+    RAISES `UnparseableCommand` - defined at the END of this module - rather than
+    answering `[]`. See that class for the defect the empty answer certified.
     """
     try:
         return [token.strip("\"'") for token in shlex.split(command, posix=False)]
-    except ValueError:
-        # An unbalanced quote inside a code span is prose, not a command.
-        return []
+    except ValueError as exc:
+        raise UnparseableCommand(_unparseable_reason(command, exc)) from exc
 
 
 def _normalise(command: str) -> str:
@@ -260,7 +269,7 @@ def _citations(document: str, text: str, scripts: frozenset[str]) -> list[Citati
         cites_settings = SETTINGS_CITATION in block
         for match in _CODE_SPAN.finditer(block):
             command = _normalise(match.group(1))
-            tokens = _tokens(command)
+            tokens, unparse_reason = _scope_tokens(command, scripts)
             # A COMMAND, NOT A PATH. `scripts/watch_inbox.py` on its own is a
             # pointer at a file and belongs to `tests/test_docs_consistency.py`,
             # which resolves it against the tree. It becomes this file's
@@ -278,6 +287,7 @@ def _citations(document: str, text: str, scripts: frozenset[str]) -> list[Citati
                     command=command,
                     has_long_flag=any(token.startswith("--") for token in tokens),
                     block_cites_settings=cites_settings,
+                    unparse_reason=unparse_reason,
                 )
             )
     return found
@@ -541,9 +551,175 @@ def test_the_citation_parser_ignores_a_fenced_command():
     assert not offenders
 
 
-def test_an_unbalanced_quote_in_prose_does_not_explode_the_parser():
-    """`shlex` raises on an unbalanced quote. Prose contains those."""
-    assert _tokens('python x.py "unclosed') == []
+def test_an_unbalanced_quote_in_prose_is_not_graded_and_no_longer_answers_empty():
+    """`shlex` raises on an unbalanced quote. Prose contains those.
+
+    THE FIRST ASSERTION INVERTED, and deliberately. It read
+    `assert _tokens('python x.py "unclosed') == []` and so pinned the
+    degrade-to-empty as the contract - see `UnparseableCommand` for what that
+    empty list certified. The SWEEP-level assertions below are unchanged: a
+    phrase in prose that names no declared script is still out of scope, which
+    is the survival half this arm has always carried."""
+    with pytest.raises(UnparseableCommand):
+        _tokens('python x.py "unclosed')
     checked, offenders = _check("planted.md", 'see `python "unclosed` here.', _declared_commands())
     assert checked == 0
     assert not offenders
+# ---------------------------------------------------------------------------
+# Fail-closed: an unparseable command is UNKNOWN, and UNKNOWN IS NOT CLEAN
+#
+# `_tokens` answered `[]` when shlex raised. Every caller below it looks FOR
+# something in the token list, so zero tokens meant every question came back no
+# and the span was waved through - a guard passing on both sides of a real
+# defect. These two arms pin the INPUT that causes it, not the shape of a fix.
+# ---------------------------------------------------------------------------
+
+
+def test_tokens_raises_on_an_unparseable_command_rather_than_answering_empty():
+    """The control comes FIRST: prove shlex really raises on this input, because
+    an arm whose fixture does not trigger the fault is a gate that cannot fail."""
+    command = 'python x.py --source "sessionstart'
+    with pytest.raises(ValueError) as control:
+        shlex.split(command, posix=False)
+    assert "quotation" in str(control.value), (
+        f"the probe string did not produce the expected shlex failure: {control.value}"
+    )
+
+    with pytest.raises(UnparseableCommand) as raised:
+        _tokens(command)
+    message = str(raised.value)
+    assert command in message, f"the failure does not name the command it could not parse: {message}"
+    assert str(control.value) in message, (
+        f"the raw shlex reason {str(control.value)!r} was swallowed instead of chained: {message}"
+    )
+    assert isinstance(raised.value.__cause__, ValueError), (
+        "the original shlex ValueError was not chained as __cause__, so the cause is lost"
+    )
+
+
+def test_an_unparseable_quotation_of_a_declared_script_is_reported_not_waved_through():
+    """The gate-level consequence, and the reason this is not a cosmetic fix.
+
+    A document that transcribes a declared hook command AND drops a quote is
+    stale in exactly the way this file exists to catch, and it is the one input
+    the old `except ValueError: return []` could not see."""
+    script = sorted(_declared_scripts(_declared_commands()))[0]
+    command = f'python {script} --source "sessionstart'
+    with pytest.raises(ValueError):
+        shlex.split(command, posix=False)
+    assert command not in _declared_commands(), "the probe accidentally quoted a live declaration exactly"
+
+    checked, offenders = _check("planted.md", f"a hook (`{command}`).", _declared_commands())
+    assert checked == 1, f"an unparseable quotation of a declared script was not graded at all: checked={checked}"
+    assert offenders, "an unparseable quotation of a declared hook command was waved through as clean"
+    assert "planted.md" in offenders[0], f"the report does not name the offending document: {offenders[0]}"
+    assert "quotation" in offenders[0], f"the report does not carry the raw shlex reason: {offenders[0]}"
+# ---------------------------------------------------------------------------
+# APPENDED DELIBERATELY, at the end of the module.
+#
+# `_tokens` and `_citations` are cited by symbol elsewhere in this file and in
+# the docstring at the top. Defining this class and these two helpers above
+# `_tokens` would have shifted every line below them. The names resolve out of
+# module globals when the functions are CALLED, which is always after import
+# completes, so a forward reference costs nothing but one jump for a reader.
+# ---------------------------------------------------------------------------
+
+
+class UnparseableCommand(ValueError):
+    """A command string could not be split, so this guard's verdict is UNKNOWN.
+
+    UNKNOWN IS NOT CLEAN. `_tokens` answered an unparseable command with `[]`
+    until this class existed, and EVERY caller below it asks whether the token
+    list CONTAINS something: `_declared_scripts` looks for a `.py` target,
+    `_citations` looks for a declared script and for a `--` flag, and
+    `_a_declared_command` looks for a flag. Zero tokens made every one of those
+    questions answer no, so an unbalanced quote in a transcription of a hook
+    command took the span out of scope entirely and the sweep reported clean -
+    a guard passing on both sides of the exact defect it exists to catch.
+    Measured this session: `_check` graded 0 citations for a planted document
+    quoting a declared hook script with one quote missing.
+
+    Subclasses `ValueError` because it IS one - shlex raises `ValueError` and
+    this is re-raised `from` it, so the original stays on the traceback for
+    whoever is debugging while the message stays readable for whoever is not.
+    """
+
+
+def _unparseable_reason(command: str, exc: ValueError) -> str:
+    """Name the command and the raw shlex reason, without pasting a traceback.
+
+    The raw reason is shlex's own text - measured on this machine 2026-09-11,
+    an unbalanced double quote yields exactly `No closing quotation`. It is
+    quoted through rather than paraphrased, because a paraphrase of a library
+    message goes stale the moment the library rewords it.
+    """
+    return (
+        "UNPARSEABLE, therefore UNKNOWN, therefore FAIL: shlex could not split "
+        + repr(command) + " - " + type(exc).__name__ + ", " + str(exc)
+        + ". A guard that answers an empty token list for a command it could not "
+        + "parse finds nothing in it and reports clean, on both sides of a real "
+        + "defect. Fix the quoting in the command, or exclude the span deliberately."
+    )
+
+
+def _scope_tokens(command: str, scripts: frozenset[str]) -> tuple[list[str], str]:
+    """`(tokens, reason)` for one code span. A non-empty reason means UNKNOWN.
+
+    `_citations` is the ONE caller that genuinely has to survive a bad span: a
+    document is swept span by span, and a single unbalanced backtick-quoted
+    phrase must not abort the grading of the other spans in the same tree. So
+    the exception is caught HERE, at that one call site, and nowhere else - the
+    declaration-side callers (`_declared_scripts`, `_a_declared_command`,
+    `test_at_least_one_declared_command_carries_a_long_flag`) let it propagate,
+    because an unparseable string in `.claude/settings.json` is a broken
+    declaration and must fail loudly rather than be worked around.
+
+    Surviving is not the same as reporting clean. The fallback split is
+    FAIL-OPEN ON SCOPE, deliberately in the widening direction: whitespace
+    tokens, plus any declared script that merely appears as a SUBSTRING of the
+    command, so a span whose quoting hid its script token still reaches the
+    scope test. The appended names go at the END of the list, never at index 0,
+    which is what `_citations` slices off as the interpreter. The reason then
+    makes the citation in-scope on its own, so an unknown span is graded and
+    reported instead of skipped.
+    """
+    try:
+        return _tokens(command), ""
+    except UnparseableCommand as exc:
+        widened = [token.strip("\"'") for token in command.split()]
+        widened += [script for script in sorted(scripts) if script in command and script not in widened]
+        return widened, str(exc)
+def test_the_scope_widening_reaches_a_script_the_whitespace_split_cannot_see():
+    """Non-vacuity for the fallback in `_scope_tokens`, which would otherwise be
+    an unexercised branch - defensive code that no arm can kill.
+
+    The CONTROL comes first and is the whole arm: it shows the plain whitespace
+    split really does miss this script, so the substring pass is what carries
+    the span into scope rather than decoration on top of something that already
+    worked."""
+    scripts = _declared_scripts(_declared_commands())
+    script = sorted(scripts)[0]
+    # Both halves of this string are measured, on this machine 2026-09-11. A
+    # quote that starts MID-WORD is an ordinary character to non-posix shlex, so
+    # `foo"` glues the script to a token that `.strip("\"'")` cannot clean up -
+    # strip only trims the ENDS. The unclosed single quote on the last token is
+    # what makes shlex raise at all; `foo"` alone parses without complaint.
+    command = f"""python foo"{script} --source 'sessionstart"""
+    with pytest.raises(ValueError):
+        shlex.split(command, posix=False)
+
+    plain = [token.strip("\"'") for token in command.split()]
+    assert not any(token in scripts for token in plain[1:]), (
+        f"the whitespace split already found the script, so this control proves nothing: {plain}"
+    )
+
+    widened, reason = _scope_tokens(command, scripts)
+    assert reason, "an unparseable command came back with no reason, so it would read as clean"
+    assert widened[0] != script, "the widened script landed at index 0, which `_citations` slices off"
+    assert any(token in scripts for token in widened[1:]), (
+        f"the widening did not reach the declared script: {widened}"
+    )
+
+    checked, offenders = _check("planted.md", f"a hook (`{command}`).", _declared_commands())
+    assert checked == 1, f"the widened span was not graded: checked={checked}"
+    assert offenders, "a span whose script only the widening could see was waved through"
