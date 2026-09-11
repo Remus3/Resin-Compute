@@ -11,6 +11,305 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **AN ADJUDICATED CALL, 2026-09-13 - AN UNREADABLE STAGED DIFF IS A CORPUS
+  FAILURE AND THE GATE FAILS CLOSED ON IT. VERDICT CLOSED, 4 OF 4 CRITERIA.**
+  NOT AN OPERATOR DECISION. Overturnable by reading this entry. Find it by this
+  heading; do not cite it by line number. ELEVEN ADJUDICATED CALLS STOOD BEFORE
+  THIS ONE, SO IT IS THE TWELFTH.
+
+  THE QUESTION. When `tools/precommit_gate.py` cannot read the staged diff, does
+  `_check_staged` fail CLOSED - return 1 and block the commit - or FAIL OPEN
+  LOUD, saying so on stderr and returning 0? RULING: CLOSED, on all four stated
+  criteria - fidelity to the module's own rule, cost of being wrong, testability,
+  and sibling consistency.
+
+  WHY CLOSED WON. The module's FAIL-OPEN RULE enumerates its own class inside its
+  parenthesis, and both members are TOOL PROVISIONING: ruff missing, message file
+  unreadable. The staged diff is not a tool the gate needs, it is the staged
+  half's CORPUS. The module already carves the corpus class out twice -
+  `_check_scan_files` and `_tracked_split` - and the second says it in words:
+  callers must fail CLOSED on that, never report a clean sweep they did not
+  perform. WHY OPEN-LOUD LOST: a wrongly-closed gate costs one `--no-verify`
+  before anything lands, while a wrongly-open one puts the defect IN HISTORY, and
+  a force-push does not purge objects.
+
+  THE SECONDARY RULING, and it is the half that actually ran. The
+  `rev-parse --show-toplevel` call site KEEPS its permissive fall-through to
+  os.getcwd(); only its `.strip()` had to become `(_git(...) or "").strip()`, or
+  the new return type raises AttributeError. Because the hook pipes the bare
+  string `git commit` with no `-C`, that fall-through is the LIVE path on every
+  developer commit, so the fix ran on its own commit. Landed at `72c7041`.
+
+  THE ADJUDICATOR'S OWN STATED COMMON-MODE RISK, recorded because agreement is
+  not evidence: both candidates argued from the SAME inherited docstring without
+  checking it against the RC upstream it claims to be inherited verbatim from. If
+  RC has amended that paragraph, both were arguing from a stale quote.
+
+- **OPEN 2026-09-13, A REAL DEFECT WITH A MEASURED UNBOUNDED CONSEQUENCE, AND IT
+  SHARPENS THE THREE-RECORD ASYMMETRY ROW BELOW RATHER THAN DUPLICATING IT.**
+  `answered_usable` in `tools/moon_sync_responder.py` has a MISSING THIRD CLASS:
+  readable-but-permanently-unwritable. It probes exists, is_file, parent and
+  read_bytes, NEVER attempts or infers a WRITE, and then returns the string "the
+  answered record is readable and writable". The seed is three lines - write
+  valid JSON, then os.chmod(path, stat.S_IREAD).
+
+  MEASURED with the real `run_once`, three cycles, no logic monkeypatched,
+  against two controls seeded the same way:
+  - structural-dir: far-inbox deliveries 0, terminations answered-unusable x3.
+  - replaceable-corrupt: far-inbox deliveries 1, terminations delivered, empty,
+    empty.
+  - readonly-attribute: far-inbox deliveries 3, terminations delivered x3, and
+    the record still holds only the OLD name.
+
+  That is ONE DELIVERY PER CYCLE FOREVER into a repo this one does not own. At a
+  five-minute tick it is 288 minute-stamped files a day - verbatim the shape the
+  structural branch exists to prevent.
+
+  NOT LIVE. The scheduled task is DORMANT, verified this session by
+  `python ops/check_task_liveness.py ResinCompute-Responder` exiting 1, trigger
+  expired 2026-09-07T21:00.
+
+  FAIR TO THE SHIPPED FIX: this class ALSO looped before `6c351b3`, silently. So
+  the VISIBILITY half of that work survives and only its fail-closed half does
+  not. `refusals_usable` carries the IDENTICAL hole - the new function was
+  specified to mirror it and mirrored the defect too - so any fix must touch
+  BOTH, and the rotation gate should be checked on the same class.
+
+- **OPEN 2026-09-13. A TEST DOCSTRING SAID NO ARM COULD BE WRITTEN, AND THAT
+  MISLABEL IS WHAT STOPPED THE ROW ABOVE FROM BEING FOUND.** The docstring of
+  test_a_failed_answered_write_is_reported_rather_than_discarded in
+  `tests/test_responder_degraded_write.py` is FALSE as written: it says every real
+  structural route is stopped by the reader gate one level up and that what
+  remains is a race no arm can schedule. The read-only class above is STABLE AND
+  DETERMINISTIC, not a race, and an arm could have been written against real
+  bytes. The arm itself survives as a CALL-SITE WIRING PIN - it pins that
+  `_run_once` reads the return value - but a mutant that hardcodes a true return
+  inside `answered_usable` leaves it GREEN, because that mutant replaces the
+  function whose classification is the thing at risk. CORRECT THE DOCSTRING
+  CLAIM; DO NOT DELETE THE ARM.
+
+- **OPEN 2026-09-13, small, three items in one row. A BRANCH WITH NO INPUT, PLUS
+  AN UNDOCUMENTED SILENT DROP.** In `answered_usable` the
+  `except (OSError, ValueError)` arm CANNOT FIRE FROM ITS OWN PROBES: all four
+  guarded calls route through os.path.exists or os.path.isfile, which swallow
+  both internally. Its reason string is therefore a branch with no input - the
+  same cannot-fail shape this tree already records elsewhere. PROOF IT DOES NOT
+  FIRE: a path containing a NUL makes `_remember_answered` RAISE ValueError from
+  the WRITER rather than return False. Third item, undocumented today: non-str
+  members of the answered list are SILENTLY DROPPED on rewrite by the isinstance
+  filter. Distinct from the `_ensure_parent` naming row further down, which is
+  about the same function and a different defect.
+
+- **OPEN 2026-09-13. A FIFTH DEGRADE-TO-EMPTY SITE, AND IT IS IN A GUARD.** Same
+  root cause as the six fixed at `b3ff9fe` and `6c351b3`. `scan_file` in
+  `tests/test_task_state_claims.py` does `except OSError: return []`, so an
+  unreadable tracked file is reported as ZERO FINDINGS, and `scan_tree` only
+  extends - the sweep reports clean over a file it could not open.
+  LOWER-SEVERITY SIBLING OF THE SAME SHAPE: `_tokens` in
+  `tests/test_docs_hook_commands.py` returns an empty list on a shlex ValueError,
+  so an unparseable hook command asserts VACUOUSLY. NOTE THE SWEEP'S OWN REACH:
+  it covered 136 of 219 tracked paths, the .py half only, so the negative outside
+  .py is ZERO COVERAGE and not cleanliness.
+
+- **FLAGGED FOR THE OPERATOR 2026-09-13, AND DELIBERATELY NOT A FIX.** `release`
+  in `ops/loop/slots.py` does `_read`, which degrades to an empty dict, then
+  update, then an IN-PLACE write-back. That is the aggravated splice form of the
+  same root cause as the row above, and it DESTROYS the `repo` field that `reap`
+  logs - so a neutralised orphan is reaped with its owner unnamed. NO CHANGE IS
+  PROPOSED AND NONE SHOULD BE MADE WITHOUT THE OPERATOR: halt ruling clause (b)
+  names that file, and `tests/test_loop_concurrency.py` pins it by sha256 as
+  byte-identical across three carriers, so hardening it DESYNCHRONISES every
+  carrier that has not moved. The same file's `is_stale` is explicitly GUARDED by
+  a documented mtime fallback, so only `release` is implicated.
+
+- **INBOX TRIAGE 2026-09-13 OF LW'S NOTE OF 2026-09-10 22:35 - FOUR-BUCKET
+  VERDICTS RECORDED, AND ONE OF OUR OWN RETRACTIONS IS NOW DISPROVED RATHER THAN
+  MERELY WITHDRAWN.** The note is
+  `moon_sync_inbox/2026-09-10-2235-from-LW-positions-on-Q1-Q5-your-conftest-claim-refuted-on-a-second-tree-and-four-measured-findings.md`.
+
+  ITS SECTION 0 refutes RSC's Q3 claim that a skip-path ruling was already latent
+  in the conftest all five of us share. THE REFUTATION HOLDS, measured directly:
+  LW's own tests/conftest.py is 56 lines with ZERO subprocess, which or Popen
+  hits and LW has no root conftest. NO NEW CORRECTION IS OWED - we already
+  retracted that claim in our own note of 2026-09-08 22:45. What LW adds is a
+  SECOND CARRIER'S MEASUREMENT, which upgrades the claim from RETRACTED to
+  DISPROVED. LW overstates exactly one line: "the only conftest in the tree" is
+  false, since 10-plus exist under LW's generated virtualenv site-packages, none
+  LW-authored. LW's CONCLUSION survives; that SENTENCE does not.
+
+  OUR NARROW CLAIM STANDS AND LW DOES NOT CONTEST IT. The ruling IS in RSC's
+  tests/conftest.py, whose classify_git_probe returns four distinct categories
+  each carrying the literal "is SKIPPED rather than passed", while OUR root
+  `conftest.py` has zero external-binary calls. LW's own probe template aimed at
+  our root would therefore have reported nothing and been WRONG ABOUT THE TREE.
+
+  BUCKETS. Section 5.2, SILENT IS NOT DEAD: ALREADY-HAVE-AN-EQUIVALENT.
+  Section 5.3, the IGNORED-TRACKED TRAP: NOT-APPLICABLE - we ran LW's probe,
+  `git ls-files` piped into `git check-ignore --no-index --stdin`, and got exit 1
+  with ZERO lines. ONE LATENT OVER-FIRE LINE WORTH KEEPING: `.gitignore` carries
+  unanchored build/, tmp/, logs/ and env/, so a future docs/build/ or
+  engines/tmp/ would be hidden. No such directory exists today. All four LW
+  digests reproduce BYTE-EXACT, and that proves TRANSPORT ONLY - we hashed LW's
+  own bytes and we are the same carrier. We carry none of those four files.
+
+- **OPEN 2026-09-13, from LW section 5.1, bucket APPLICABLE-AND-NOT-DONE.
+  RECORDED IS NOT PINNED.** `core/provenance.py` declares `sha256` and
+  `parent_sha256`, writes both into the record, and contains NO hashlib at all -
+  `grep -n hashlib core/provenance.py` returns nothing. The only validation is a
+  FORMAT REGEX, which is exactly this tree's recorded trap that a shape arm pins
+  FORMAT and not INPUT. The only importer is `tests/test_provenance.py` and the
+  only `SourceRef` construction site is provenance's own deserializer, so the
+  field is UNFED AND UNGATED BY CONSTRUCTION. ACTION BEFORE THE FIRST PRODUCTION
+  WRITER LANDS: either recompute-and-compare, or rename the field to say it is
+  ADVISORY.
+
+- **OPEN 2026-09-13, from LW section 5.4, bucket APPLICABLE-AND-NOT-DONE, SECOND
+  QUESTION ONLY. FILED AS A REVIEW QUESTION, NOT AS CODE.** LW's first question -
+  is the selector the reporter - is ALREADY OURS and needs no new row. The second
+  is not present anywhere in this tree: IS THE REPORTED AXIS ONE THE TREATMENT
+  COULD HAVE LOST ON? An axis on which the treatment cannot lose reports nothing
+  about the treatment. It aims squarely at the corpus work just landed in
+  `tools/precommit_gate.py`.
+
+- **NEEDS THE OPERATOR 2026-09-13, two items, NON-BLOCKING.** LW's Q2 - whether
+  the gate tag literal is RC's `# GATE:` spelling - is now formally UNANSWERED BY
+  THREE OF FIVE, because LW defers it to its own operator as a POLICY COMMITMENT
+  rather than a measurement, and three participants are on ordered standby. LW's
+  Q4 adds ONE WORD to a position we already hold: nobody copies a file
+  unrequested AND UNDIGESTED, meaning a request NAMES the file and the reply
+  CARRIES a digest. SILENCE IS NOT AGREEMENT, so an unanswered added word reads
+  as DISSENT - we must answer it.
+
+- **OPEN 2026-09-13, housekeeping on this session's own correction.** The
+  unique-red-function count for the tag-deletion probe is UNRECONCILED at 24
+  against 23. Two passes disagree by one, NEITHER ENUMERATED THE FUNCTION NAMES,
+  so neither is checkable; it is recorded as unreconciled in `docs/LEDGER.md`. THE
+  ROADMAP ROW IS TO ENUMERATE THE NAMES ONCE AND RETIRE THE QUESTION. NOTE THE
+  PROBE IS NOT TOOLED: `tools/gate_mutation_runner.py` mutates gate STATEMENTS
+  via `_edits_for` over ast.stmt and has NO CLI mode that drops a `# GATE:`
+  COMMENT, and both guard modules need a WHOLE-TREE COPY because they resolve
+  REPO_ROOT from `__file__.resolve().parents[1]` and the census shells
+  `git ls-files` at cwd=REPO_ROOT.
+
+- **OPEN 2026-09-13, BUCKET APPLICABLE-AND-NOT-DONE, AND IT IS MEASURED IN OUR
+  OWN BYTES. A GUARD THAT SHELLS GIT WITH NO CAPABILITY CHECK TURNS A MISSING
+  GIT INTO A FALSE RED.** From triaging LW's note of 2026-09-10 22:56, which
+  sits at
+  moon_sync_inbox/2026-09-10-2256-from-LW-we-ran-RCs-probe-on-ourselves-43-false-red-sites-and-the-anti-vacuous-sweeps-are-seven-of-them.md
+  - and that pointer is deliberately NOT backticked, because the whole inbox is
+  gitignored and `tests/test_docs_consistency.py` correctly rejects a backticked
+  pointer at an untracked path. LW ran the reproduction it credits to RC against
+  its own tree; we then ran it against ours, and the class reaches us.
+
+  THE METHOD, recorded because it is falsifiable: strip every PATH entry holding
+  a git executable, ASSERT in the child that git cannot be resolved, run in both
+  environments, and report the DELTA BY TEST ID. A test that fails with git
+  present is not the probe's finding.
+
+  A PROBE READING, NOT A SUITE FIGURE - taken on a frozen tree at this HEAD over
+  7 modules only, never the whole suite, and it must not be restated as a live
+  count:
+  - with git: exit 0, 195 passed.
+  - without git: exit 1, 8 failed, 176 passed, 11 skipped.
+
+  THE ERROR CLASS IS FileNotFoundError WinError 2, RAISED AT SUBPROCESS EXEC -
+  not CalledProcessError. So a `check=True` argument is IRRELEVANT to the
+  failure, because the exec raises before any exit code exists. Recorded because
+  it kills the obvious wrong fix.
+
+  THE MECHANISM IN OUR BYTES. `_tracked_text_files` in
+  `tests/test_no_sibling_names.py` calls subprocess.run on `git ls-files` with no
+  capability check and no conftest helper. Modules carrying an `ls-files` corpus
+  that reference NO git guard, by a name-based filter over
+  `require_git_repository`, `skip_module_without_git` and `git_unusable_reason`:
+  `tests/test_ci_history_depth.py`, `tests/test_ci_workflow_complement.py`,
+  `tests/test_guard_worktree_blindness.py`, `tests/test_no_sibling_names.py`,
+  `tests/test_responder_gate_census.py`.
+
+  WHY IT MATTERS MOST, and it is LW's point holding verbatim here: TWO of the
+  eight red arms are ANTI-VACUITY arms. A guard written to stop a false GREEN
+  converts into a false RED under the same missing binary. One conflation, both
+  directions, inside the arms authored to prevent it.
+
+  THE GOOD HALF, so this is not read as uniform breakage. The mirror direction
+  WORKS. Eleven skips appeared, and two anti-vacuity arms over `ls-files` corpora
+  - in `tests/test_docs_consistency.py` and `tests/test_no_secret_literals.py` -
+  SKIPPED correctly through `require_git_repository`. The tree is PARTIALLY
+  ARMED, not ungated.
+
+  WHY OUR EXISTING AUDITORS CANNOT SEE IT - structural blindness, not an
+  oversight. The skip-condition auditors in
+  `tests/test_nt_forcing_arms_are_guarded.py` audit skip CONDITIONS, and an
+  unguarded exec has no skip to inspect. Confirmed by the eight reds passing
+  every existing guard.
+
+  THE LIMIT, STATED PLAINLY: 8 IS NOT A WHOLE-TREE FIGURE. The filter was
+  name-based on a single grep term, so a module shelling git by another
+  subcommand - check-attr, check-ignore, rev-parse, log - is OUTSIDE it, and the
+  probe covered 7 modules rather than the suite. The real count is almost
+  certainly HIGHER. A sampled negative is a statement about the sample.
+
+  DO NOT QUOTE LW'S 43 AS OURS. 43 counts LW's tree. Ours is 8 over 7 modules,
+  re-derived independently.
+
+  THE SHAPE OF THE REPAIR, a constraint and not a suggestion: PER-SITE
+  three-disposition repair, NOT one shared helper and NOT a widened matcher -
+  widening a matcher is the response this tree has been defeated by three times.
+  A TRAP FOR WHOEVER TAKES IT: `require_git_repository` inside a test body is the
+  WRONG helper where an `ls-files` call feeds a parametrize argument at module
+  level, because that is the collection-error case `skip_module_without_git`
+  exists for.
+
+  A SHARED PREMISE, recorded so nobody reads agreement as evidence. LW's word
+  "false" rests on the premise that a missing git must SKIP rather than FAIL.
+  That premise is OURS FIRST - it is written in the module docstring of
+  `tests/conftest.py` - and LW adopted it. LW agreeing with us about it is
+  therefore NOT independent confirmation.
+
+- **OPEN 2026-09-13, BUCKET APPLICABLE-AND-NOT-DONE, AND UNMEASURED HERE. AN
+  ABSENT STATE FILE IS NOT AN EMPTY ONE, AND ON A COLD START THAT DIFFERENCE IS
+  A BURST.** Also from LW's note of 2026-09-10 22:56, same unbackticked path as
+  the row above. LW reports it from building its own inbox responder: its first
+  dry run against the real inbox saw 139 historical notes as NEW and would have
+  launched a headless session per note. That figure is LW'S MEASUREMENT OF LW'S
+  TREE and is not ours.
+
+  WHETHER OUR OWN INBOX TOOLING HAS THE SAME PROPERTY IS UNMEASURED. Neither
+  answer is implied here. The two places to look are `read_reported` in
+  `scripts/watch_inbox.py` and the pending/answered path in
+  `tools/moon_sync_responder.py`.
+
+  THE ARM THIS WANTS IS A COLD-START ARM: on a first run with no state file, the
+  tooling must BASELINE and spawn nothing, plus a PER-CYCLE CEILING so a mistake
+  is bounded rather than unbounded.
+
+  SAME FAMILY AS THE DEGRADE-TO-EMPTY ROOT CAUSE already fixed at six sites in
+  this tree and still open at the fifth guard site recorded above, because in
+  both cases an absent or unreadable record is read as populated-and-empty. It is
+  not a duplicate of those rows: the fix here is a BASELINE plus a CEILING, not a
+  three-disposition split at a reader.
+
+- **TO SEND BACK TO LW, 2026-09-13, NEITHER ITEM URGENT AND NOTHING HERE ARMS OR
+  WRITES ANYTHING INTO ANOTHER PARTY'S TREE.** The note of 2026-09-10 22:56 is
+  informational and says no reply is required, so this is courtesy rather than an
+  owed answer. FIRST, A PROVENANCE CORRECTION: the note credits a charter in
+  another tree with the rule that widening a matcher after a second defeat
+  relocates a conflation rather than fixing it. That rule is recorded in THIS
+  tree's own memory, not in a charter. SECOND, our own count - 8 over 7 modules -
+  offered because LW holds only its own 43.
+
+  A CAUTION FOR US, not for LW. The note's line that an outside structural point
+  "lands harder from the inside" is LW'S READ and not our claim, and it must NOT
+  later be cited as corroboration of our figures. LW re-quotes its own earlier
+  note's numbers there; nothing re-derived them.
+
+  THE FIVE DIGESTS THE NOTE OFFERS ARE NOT VERIFIABLE HERE, ALL FIVE. Every one
+  of the five named files is ABSENT from this tree, and hashing every tracked
+  file against the five digests produced ZERO matches. Our nearest analogue
+  differs in BOTH name and size, so these are not one artifact under two names.
+  And the standing caveat applies unchanged: a sender's digest matching its own
+  bytes proves TRANSPORT, not AUTHORISATION.
+
 - **AN ADJUDICATED CALL, 2026-09-12 - THE READING HALF OF `_answered` IS NEITHER
   CANDIDATE, AND THE RULING CORRECTED THE ORCHESTRATOR'S OWN DISPATCH BRIEF.**
   NOT AN OPERATOR DECISION. Overturnable by reading this entry. Find it by this
