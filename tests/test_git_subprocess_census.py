@@ -16,6 +16,15 @@ each arm pins an INPUT rather than a shape. A gate that cannot fail passes on
 both sides of a real defect, so every arm below names the source text it feeds
 and the bucket that text must land in.
 
+A DROPPED SITE IS THE WORST OUTCOME AND THE HARDEST TO SEE. A call in a
+decorator expression or a default argument is not in any statement body, and a
+walk that recurses into a scope node's `body` alone produces NO ROW for it. A
+wrong row is arguable; a missing row is invisible. So there are arms for the
+decorator and default positions on functions, nested functions, methods and
+classes, and a CONSERVATION arm over a fixture with a hand-counted number of
+launches asserting the three bucket counts SUM TO THAT NUMBER - the only shape
+that catches a future drop rather than a future misbucketing.
+
 THE UNRESOLVED BUCKET IS THE HONEST PART. An enumeration that silently drops
 argv[0] expressions it cannot resolve has reproduced the very defect this file
 exists to kill, so there are arms for a bare Name, an f-string, a `**kwargs`
@@ -163,6 +172,176 @@ GATED_MODULE = (
 )
 
 UNGATED_MODULE = "import subprocess\nsubprocess.run(['git', 'status'])\n"
+
+# ---------------------------------------------------------------------------
+# POSITIONS THAT ARE NOT A STATEMENT BODY. Each of these was DROPPED entirely -
+# no call site at all - because the walk recursed into a scope node's `body` and
+# never into its decorator_list or its argument defaults.
+# ---------------------------------------------------------------------------
+
+DECORATOR_ON_FUNCTION = (
+    "import subprocess\n"
+    "@register(subprocess.run(['git', 'rev-parse']))\n"
+    "def probe():\n"
+    "    return None\n"
+)
+
+DECORATOR_ON_CLASS = (
+    "import subprocess\n"
+    "@deco(subprocess.run(['git', 'log']))\n"
+    "class Probe:\n"
+    "    pass\n"
+)
+
+DECORATOR_ON_METHOD = (
+    "import subprocess\n"
+    "class Probe:\n"
+    "    @deco(subprocess.run(['git', 'log']))\n"
+    "    def method(self):\n"
+    "        return None\n"
+)
+
+NESTED_DECORATOR = (
+    "import subprocess\n"
+    "def outer():\n"
+    "    @register(subprocess.run(['git', 'diff']))\n"
+    "    def inner():\n"
+    "        return None\n"
+    "    return inner\n"
+)
+
+DEFAULT_ARGUMENT_ARGV = (
+    "import subprocess\n"
+    "def probe(out=subprocess.run(['git', 'log'])):\n"
+    "    return out\n"
+)
+
+KWONLY_DEFAULT_ARGV = (
+    "import subprocess\n"
+    "def probe(*, out=subprocess.run(['git', 'status'])):\n"
+    "    return out\n"
+)
+
+NESTED_DEFAULT_ARGUMENT_ARGV = (
+    "import subprocess\n"
+    "def outer():\n"
+    "    def inner(out=subprocess.run(['git', 'log'])):\n"
+    "        return out\n"
+    "    return inner\n"
+)
+
+LAMBDA_DEFAULT_ARGV = (
+    "import subprocess\n"
+    "probe = lambda out=subprocess.run(['git', 'log']): out\n"
+)
+
+# A default argument is evaluated in the ENCLOSING scope at definition time, so
+# the parameter of the very function being defined does NOT shadow the module
+# constant of the same spelling. Walking the default with the nested scope chain
+# would report a false UNRESOLVED here.
+DEFAULT_RESOLVES_IN_THE_ENCLOSING_SCOPE = (
+    "import subprocess\n"
+    "GIT_ARGV = ['git', 'log']\n"
+    "def probe(GIT_ARGV=subprocess.run(GIT_ARGV)):\n"
+    "    return GIT_ARGV\n"
+)
+
+# ---------------------------------------------------------------------------
+# SHELL=TRUE. Element 0 of the list is the command string on POSIX and the head
+# of the joined command line on Windows, so the command is the first shell word
+# of element 0 under both readings. Without shell= the same bytes name one
+# executable whose name contains spaces, which is not git.
+# ---------------------------------------------------------------------------
+
+SHELL_TRUE_LIST_HEAD_GIT = (
+    "import subprocess\n"
+    "subprocess.run(['git log -n 1'], shell=True)\n"
+)
+
+SHELL_TRUE_LIST_HEAD_NOT_GIT = (
+    "import subprocess\n"
+    "subprocess.run(['python -c pass'], shell=True)\n"
+)
+
+SHELL_TRUE_LIST_QUOTED_PATH = (
+    "import subprocess\n"
+    "subprocess.run(['\"C:\\\\Program Files\\\\Git\\\\bin\\\\git.exe\" status'], shell=True)\n"
+)
+
+NO_SHELL_LIST_HEAD_WITH_SPACE = (
+    "import subprocess\n"
+    "subprocess.run(['git log -n 1'])\n"
+)
+
+SHELL_NOT_STATICALLY_KNOWN_AMBIGUOUS = (
+    "import subprocess\n"
+    "def probe(flag):\n"
+    "    return subprocess.run(['git log -n 1'], shell=flag)\n"
+)
+
+SHELL_NOT_STATICALLY_KNOWN_UNAMBIGUOUS = (
+    "import subprocess\n"
+    "def probe(flag):\n"
+    "    return subprocess.run(['git', 'log'], shell=flag)\n"
+)
+
+# ---------------------------------------------------------------------------
+# THE UNRESOLVED FALLBACK ITSELF. `shutil.which("git")` is the most ordinary
+# dynamic git argv[0] in Python. Folding the fallback into NOT-GIT turns it into
+# a silent non-finding while every other arm keeps passing.
+# ---------------------------------------------------------------------------
+
+WHICH_CALL_ARGV_HEAD = (
+    "import shutil\n"
+    "import subprocess\n"
+    "subprocess.run([shutil.which('git'), 'log'])\n"
+)
+
+WHICH_CALL_WHOLE_ARGV = (
+    "import shutil\n"
+    "import subprocess\n"
+    "subprocess.run(shutil.which('git'))\n"
+)
+
+SUBSCRIPT_ARGV_HEAD = (
+    "import subprocess\n"
+    "def probe(paths):\n"
+    "    return subprocess.run([paths[0], 'log'])\n"
+)
+
+SUBSCRIPT_WHOLE_ARGV = (
+    "import subprocess\n"
+    "def probe(cfg):\n"
+    "    return subprocess.run(cfg['argv'])\n"
+)
+
+# ---------------------------------------------------------------------------
+# THE CONSERVATION FIXTURE. Nine launches, counted by hand, in nine different
+# positions: module statement, function decorator, module-level default, nested
+# statement, nested decorator, nested default, class decorator, method
+# decorator, method default. A walk that drops any position fails the SUM.
+# ---------------------------------------------------------------------------
+
+CONSERVATION_SOURCE = (
+    "import subprocess\n"
+    "subprocess.run(['git', 'status'])\n"
+    "@register(subprocess.run(['git', 'rev-parse']))\n"
+    "def top(out=subprocess.run(['git', 'log'])):\n"
+    "    subprocess.run(['python', '-c', 'pass'])\n"
+    "    @inner_deco(subprocess.run(argv_from_nowhere))\n"
+    "    def nested(arg=subprocess.run(['git', 'diff'])):\n"
+    "        return arg\n"
+    "    return nested\n"
+    "@class_deco(subprocess.run(['git', 'show']))\n"
+    "class Probe:\n"
+    "    @method_deco(subprocess.run(['hg', 'status']))\n"
+    "    def method(self, out=subprocess.run(['git', 'tag'])):\n"
+    "        return out\n"
+)
+
+CONSERVATION_TOTAL = 9
+CONSERVATION_EXPECTED = {"GIT": 6, "NOT-GIT": 2, "UNRESOLVED": 1}
+
 
 
 def _buckets(source: str) -> list[str]:
@@ -478,3 +657,165 @@ def test_the_fixture_sources_parse():
     for name, source in sorted(globals().items()):
         if name.isupper() and isinstance(source, str) and "subprocess" in source:
             ast.parse(source)
+
+
+# ---------------------------------------------------------------------------
+# POSITIONS THAT ARE NOT A STATEMENT BODY. A DROPPED SITE IS THE DEFECT.
+# ---------------------------------------------------------------------------
+
+
+def test_a_launch_in_a_function_decorator_is_not_dropped():
+    site = _only(DECORATOR_ON_FUNCTION)
+    assert site.bucket == census.GIT, (
+        "a decorator expression is not in any statement body, so a walk that "
+        "recurses into `body` alone emits no row at all for this git launch"
+    )
+    assert site.lineno == 2
+
+
+def test_a_launch_in_a_class_decorator_is_not_dropped():
+    assert _only(DECORATOR_ON_CLASS).bucket == census.GIT
+
+
+def test_a_launch_in_a_method_decorator_is_not_dropped():
+    assert _only(DECORATOR_ON_METHOD).bucket == census.GIT
+
+
+def test_a_launch_in_a_nested_function_decorator_is_not_dropped():
+    assert _only(NESTED_DECORATOR).bucket == census.GIT
+
+
+def test_a_launch_in_a_default_argument_is_not_dropped():
+    site = _only(DEFAULT_ARGUMENT_ARGV)
+    assert site.bucket == census.GIT, (
+        "a default argument is evaluated once at definition time and is a real "
+        "launch; dropping it makes the git surface look smaller than it is"
+    )
+
+
+def test_a_launch_in_a_keyword_only_default_is_not_dropped():
+    assert _only(KWONLY_DEFAULT_ARGV).bucket == census.GIT
+
+
+def test_a_launch_in_a_nested_default_argument_is_not_dropped():
+    assert _only(NESTED_DEFAULT_ARGUMENT_ARGV).bucket == census.GIT
+
+
+def test_a_launch_in_a_lambda_default_is_not_dropped():
+    assert _only(LAMBDA_DEFAULT_ARGV).bucket == census.GIT
+
+
+def test_a_default_argument_resolves_in_the_enclosing_scope():
+    site = _only(DEFAULT_RESOLVES_IN_THE_ENCLOSING_SCOPE)
+    assert site.bucket == census.GIT, (
+        "the default is evaluated before the parameter of the same spelling "
+        "exists, so walking it with the nested chain is a false UNRESOLVED"
+    )
+
+
+# ---------------------------------------------------------------------------
+# SHELL=TRUE
+# ---------------------------------------------------------------------------
+
+
+def test_shell_true_resolves_the_command_out_of_list_element_zero():
+    site = _only(SHELL_TRUE_LIST_HEAD_GIT)
+    assert site.bucket == census.GIT, (
+        "under shell=True element 0 carries the command - the string on POSIX, "
+        "the head of the joined command line on Windows - so this launches git"
+    )
+
+
+def test_shell_true_list_element_zero_can_still_be_not_git():
+    assert _only(SHELL_TRUE_LIST_HEAD_NOT_GIT).bucket == census.NOT_GIT
+
+
+def test_shell_true_honours_quoting_inside_list_element_zero():
+    assert _only(SHELL_TRUE_LIST_QUOTED_PATH).bucket == census.GIT
+
+
+def test_the_same_bytes_without_shell_true_are_not_git():
+    assert _only(NO_SHELL_LIST_HEAD_WITH_SPACE).bucket == census.NOT_GIT, (
+        "without shell=True 'git log -n 1' names one executable whose name "
+        "contains spaces; splitting it would cut an absolute path at its space"
+    )
+
+
+def test_an_unknowable_shell_flag_over_an_ambiguous_head_is_unresolved():
+    site = _only(SHELL_NOT_STATICALLY_KNOWN_AMBIGUOUS)
+    assert site.bucket == census.UNRESOLVED, (
+        "shell= is a parameter, and the two readings of argv[0] disagree, so "
+        "either bucket would be a guess"
+    )
+
+
+def test_an_unknowable_shell_flag_over_an_unambiguous_head_still_resolves():
+    assert _only(SHELL_NOT_STATICALLY_KNOWN_UNAMBIGUOUS).bucket == census.GIT
+
+
+# ---------------------------------------------------------------------------
+# THE UNRESOLVED FALLBACK. Flipping it to NOT-GIT must go red HERE.
+# ---------------------------------------------------------------------------
+
+
+def test_a_which_call_as_argv0_is_unresolved_and_never_not_git():
+    site = _only(WHICH_CALL_ARGV_HEAD)
+    assert site.bucket == census.UNRESOLVED, (
+        "shutil.which('git') is the most ordinary dynamic git argv[0] in Python; "
+        "an UNRESOLVED fallback folded into NOT-GIT makes it a silent non-finding"
+    )
+    assert "Call" in site.argv0
+
+
+def test_a_which_call_as_the_whole_argv_is_unresolved():
+    site = _only(WHICH_CALL_WHOLE_ARGV)
+    assert site.bucket == census.UNRESOLVED
+    assert "Call" in site.argv0
+
+
+def test_a_subscript_argv0_is_unresolved_and_never_not_git():
+    site = _only(SUBSCRIPT_ARGV_HEAD)
+    assert site.bucket == census.UNRESOLVED
+    assert "Subscript" in site.argv0
+
+
+def test_a_subscript_whole_argv_is_unresolved():
+    site = _only(SUBSCRIPT_WHOLE_ARGV)
+    assert site.bucket == census.UNRESOLVED
+    assert "Subscript" in site.argv0
+
+
+# ---------------------------------------------------------------------------
+# CONSERVATION. The only arm shape that catches a DROP.
+# ---------------------------------------------------------------------------
+
+
+def test_every_launch_in_the_conservation_fixture_is_conserved():
+    sites = census.census_source(CONSERVATION_SOURCE, "<fixture>")
+    tally = census.counts(sites)
+    assert len(sites) == CONSERVATION_TOTAL, (
+        f"{CONSERVATION_TOTAL} launches were counted by hand in this fixture and "
+        f"{len(sites)} were emitted; a missing row is invisible where a wrong row "
+        f"is arguable. emitted: "
+        f"{[(site.lineno, site.bucket, site.argv0) for site in sites]}"
+    )
+    assert sum(tally.values()) == CONSERVATION_TOTAL, (
+        "the three bucket counts must sum to the launch count; a site that is "
+        f"neither bucketed nor dropped is unaccounted for. tally: {tally}"
+    )
+    assert tally == {
+        census.GIT: CONSERVATION_EXPECTED["GIT"],
+        census.NOT_GIT: CONSERVATION_EXPECTED["NOT-GIT"],
+        census.UNRESOLVED: CONSERVATION_EXPECTED["UNRESOLVED"],
+    }, f"tally: {tally}"
+
+
+def test_the_conservation_arm_would_notice_a_drop():
+    """Non-vacuity: the fixture really does hold launches in dropped positions.
+
+    Stripping the decorator and default positions out of the fixture leaves
+    strictly fewer launches, so the SUM the arm above pins is load-bearing
+    rather than a restatement of whatever the walk happens to find.
+    """
+    body_only = "import subprocess\nsubprocess.run(['git', 'status'])\n"
+    assert len(census.census_source(body_only, "<fixture>")) < CONSERVATION_TOTAL

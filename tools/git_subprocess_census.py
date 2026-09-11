@@ -26,6 +26,30 @@ The UNRESOLVED bucket is the honest part. A census that silently folds what it
 cannot resolve into NOT-GIT, or drops it, has reproduced the very defect this
 module exists to kill: a confident number whose denominator was never checked.
 
+POSITIONS THAT ARE NOT A STATEMENT BODY.
+
+A launch can sit in a decorator expression, a default argument, an annotation or
+a class base. Every one of those is evaluated in the ENCLOSING scope at
+definition time, and none of them is reachable by recursing into a scope node's
+`body` - which is all this module used to do, so every such call was DROPPED and
+produced no row at all. A dropped row is worse than a misbucketed one: a wrong
+row is arguable, a missing row is invisible. `_outer_positions` therefore
+derives those positions by SUBTRACTING the body from `ast.iter_child_nodes`
+rather than naming them one by one, so a position nobody enumerated is walked
+anyway.
+
+SHELL=TRUE CHANGES WHAT ARGV[0] MEANS.
+
+`subprocess.run(["git log -n 1"], shell=True)` launches git. Under `shell=True`
+element 0 of a list IS the command string on POSIX - the remaining elements
+become the shell's own positional arguments - while on Windows the list is
+joined by `list2cmdline` and handed to `cmd.exe`, where the leading token is
+still the executable. Both readings put the command in the FIRST SHELL WORD of
+element 0, and that shared reading is the only thing modelled here; this module
+does NOT model either platform's full argument semantics beyond argv[0]. Where
+`shell=` is not a literal, both readings are computed and a DISAGREEMENT between
+them is recorded UNRESOLVED rather than guessed.
+
 THE GUARD COLUMN IS A BLIND SPOT, DECLARED AS ONE.
 
 Each site carries GATED or UNKNOWN. GATED means the module textually references
@@ -296,12 +320,61 @@ def _verdict_for_text(text: str, *, shell_string: bool) -> tuple[str, str]:
     return bucket, repr(text)
 
 
+def _shell_flag(call: ast.Call) -> bool | None:
+    """Whether `shell=` is literally true, literally false, or not knowable.
+
+    None is the honest third answer: a `**kwargs` splat or a computed flag can
+    carry `shell=True` at runtime, and assuming either way would decide a
+    bucket on a guess.
+    """
+    for keyword in call.keywords:
+        if keyword.arg is None:
+            return None
+        if keyword.arg != "shell":
+            continue
+        value = keyword.value
+        if isinstance(value, ast.Constant) and isinstance(value.value, (bool, int)):
+            return bool(value.value)
+        if isinstance(value, ast.Constant) and value.value is None:
+            return False
+        return None
+    return False
+
+
+def _head_verdict(text: str, *, shell: bool | None) -> tuple[str, str]:
+    """Bucket a LITERAL argv[0] taken from a sequence element.
+
+    Under `shell=True` element 0 carries the whole command, so only its first
+    shell word is the executable - `git log -n 1` is a git launch. Without
+    `shell=True` the same bytes name one executable whose name contains spaces,
+    which is not git, and splitting it would cut an absolute path with a space
+    in it at the space and report a false NOT-GIT. When `shell=` cannot be
+    resolved the two readings are compared, and a disagreement is UNRESOLVED.
+    """
+    as_shell = _is_git_executable(text, shell_string=True)
+    as_path = _is_git_executable(text, shell_string=False)
+    if shell is True:
+        return (GIT if as_shell else NOT_GIT), repr(text)
+    if shell is False:
+        return (GIT if as_path else NOT_GIT), repr(text)
+    if as_shell == as_path:
+        return (GIT if as_shell else NOT_GIT), repr(text)
+    return (
+        UNRESOLVED,
+        f"shell= not statically known and argv[0] {text!r} reads both ways",
+    )
+
+
 def _resolve_head(
-    node: ast.expr, chain: Sequence[_Bindings], seen: set[str]
+    node: ast.expr,
+    chain: Sequence[_Bindings],
+    seen: set[str],
+    *,
+    shell: bool | None,
 ) -> tuple[str, str]:
     """Classify the FIRST ELEMENT of an argv sequence."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return _verdict_for_text(node.value, shell_string=False)
+        return _head_verdict(node.value, shell=shell)
     if isinstance(node, ast.JoinedStr):
         return UNRESOLVED, "f-string argv[0]"
     if isinstance(node, ast.Starred):
@@ -315,7 +388,7 @@ def _resolve_head(
             return UNRESOLVED, f"name {node.id!r} not statically bound"
         if value is None:
             return UNRESOLVED, f"name {node.id!r} rebound or non-literal"
-        return _resolve_head(value, chain, seen)
+        return _resolve_head(value, chain, seen, shell=shell)
     dotted = _dotted(node)
     if dotted in NEVER_GIT_DOTTED:
         return NOT_GIT, dotted or ""
@@ -325,20 +398,26 @@ def _resolve_head(
 
 
 def _resolve_argv(
-    node: ast.expr, chain: Sequence[_Bindings], seen: set[str]
+    node: ast.expr,
+    chain: Sequence[_Bindings],
+    seen: set[str],
+    *,
+    shell: bool | None,
 ) -> tuple[str, str]:
     """Classify the whole argv expression handed to a launcher."""
     if isinstance(node, (ast.List, ast.Tuple)):
         if not node.elts:
             return UNRESOLVED, "empty argv sequence"
-        return _resolve_head(node.elts[0], chain, seen)
+        return _resolve_head(node.elts[0], chain, seen, shell=shell)
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        # A bare string argv is the whole-command form on Windows and under
+        # shell=True, so its first shell word is the executable either way.
         return _verdict_for_text(node.value, shell_string=True)
     if isinstance(node, ast.JoinedStr):
         return UNRESOLVED, "f-string argv"
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         # A literal head concatenated with a dynamic tail: argv[0] is knowable.
-        return _resolve_argv(node.left, chain, seen)
+        return _resolve_argv(node.left, chain, seen, shell=shell)
     if isinstance(node, ast.Name):
         if node.id in seen:
             return UNRESOLVED, f"self-referential binding {node.id!r}"
@@ -348,7 +427,7 @@ def _resolve_argv(
             return UNRESOLVED, f"name {node.id!r} not statically bound"
         if value is None:
             return UNRESOLVED, f"name {node.id!r} rebound or non-literal"
-        return _resolve_argv(value, chain, seen)
+        return _resolve_argv(value, chain, seen, shell=shell)
     dotted = _dotted(node)
     if dotted in NEVER_GIT_DOTTED:
         return NOT_GIT, dotted or ""
@@ -380,18 +459,36 @@ def _guard_of(tree: ast.AST) -> str:
     return GUARD_UNKNOWN
 
 
-def _walk_scope(
-    body: Sequence[ast.AST],
-    chain: list[_Bindings],
+def _scope_body(node: ast.AST) -> list[ast.AST]:
+    """The statements of a scope node. A lambda's body is one expression."""
+    body = getattr(node, "body", [])
+    return list(body) if isinstance(body, list) else [body]
+
+
+def _outer_positions(node: ast.AST) -> list[ast.AST]:
+    """Every child of a scope node that is NOT part of its body.
+
+    Decorator expressions, default arguments, annotations and class bases live
+    here. They are evaluated in the ENCLOSING scope, so they are walked with
+    the enclosing binding chain and never with the nested one. Subtracting the
+    body from `ast.iter_child_nodes` rather than naming these positions one by
+    one is what stops a position nobody thought of from being dropped.
+    """
+    body_ids = {id(child) for child in _scope_body(node)}
+    return [child for child in ast.iter_child_nodes(node) if id(child) not in body_ids]
+
+
+def _walk_nodes(
+    nodes: Sequence[ast.AST],
+    scopes: list[_Bindings],
     path: str,
     guard: str,
     bases: set[str],
     direct: dict[str, str],
     out: list[CallSite],
-    seed: Iterable[str] = (),
 ) -> None:
-    scopes = [*chain, _bindings_of(body, seed)]
-    for node in _iter_shallow(body):
+    """Record every launch reachable from `nodes` under one binding chain."""
+    for node in _iter_shallow(nodes):
         if isinstance(node, ast.Call):
             callee = _callee(node, bases, direct)
             if callee is None:
@@ -400,7 +497,9 @@ def _walk_scope(
             if argv is None:
                 bucket, described = UNRESOLVED, "no statically visible argv"
             else:
-                bucket, described = _resolve_argv(argv, scopes, set())
+                bucket, described = _resolve_argv(
+                    argv, scopes, set(), shell=_shell_flag(node)
+                )
             out.append(
                 CallSite(
                     path=path,
@@ -413,9 +512,9 @@ def _walk_scope(
                 )
             )
         elif isinstance(node, _SCOPE_NODES):
-            nested = node.body if isinstance(node.body, list) else [node.body]
+            _walk_nodes(_outer_positions(node), scopes, path, guard, bases, direct, out)
             _walk_scope(
-                nested,
+                _scope_body(node),
                 scopes,
                 path,
                 guard,
@@ -424,6 +523,20 @@ def _walk_scope(
                 out,
                 _parameter_names(node),
             )
+
+
+def _walk_scope(
+    body: Sequence[ast.AST],
+    chain: list[_Bindings],
+    path: str,
+    guard: str,
+    bases: set[str],
+    direct: dict[str, str],
+    out: list[CallSite],
+    seed: Iterable[str] = (),
+) -> None:
+    scopes = [*chain, _bindings_of(body, seed)]
+    _walk_nodes(body, scopes, path, guard, bases, direct, out)
 
 
 def census_source(source: str, path: str) -> list[CallSite]:

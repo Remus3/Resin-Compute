@@ -723,3 +723,84 @@ def test_the_scope_widening_reaches_a_script_the_whitespace_split_cannot_see():
     checked, offenders = _check("planted.md", f"a hook (`{command}`).", _declared_commands())
     assert checked == 1, f"the widened span was not graded: checked={checked}"
     assert offenders, "a span whose script only the widening could see was waved through"
+
+
+# ---------------------------------------------------------------------------
+# THE TERM NOTHING PINNED, and it is the load-bearing half of the fail-closed
+# repair. `Citation.in_scope` reads
+# `has_long_flag or block_cites_settings or bool(unparse_reason)`, and BOTH arms
+# in the fail-closed section above spell `--source` inside their fixture, so
+# `has_long_flag` already carried each of them into scope and the
+# `unparse_reason` term was never the reason either one passed. Measured this
+# session in a scratchpad copy of the tree: with `in_scope` reverted to
+# `has_long_flag or block_cites_settings`, this module was 20 passed, exit 0.
+# A widening no input reaches is a widening that cannot fail.
+#
+# ITS TWO SIBLINGS ARE ALREADY PINNED, each by an input that reaches one term
+# and not the other, so no arm was added for either - ceremony that duplicates
+# an existing arm makes a module longer without making it stricter.
+#
+#   `has_long_flag`        - `test_the_detector_fires_on_a_flag_that_the_declaration_dropped`
+#                            plants a PARSEABLE command carrying a long flag in a
+#                            block that does not name the settings file, so the
+#                            other two terms are both false.
+#   `block_cites_settings` - `test_a_bare_invocation_beside_the_settings_file_is_graded`
+#                            plants a PARSEABLE command with NO long flag in a
+#                            block that does name the settings file, so the other
+#                            two terms are both false.
+# ---------------------------------------------------------------------------
+
+
+def test_an_unparseable_span_with_no_long_flag_is_graded_by_the_reason_term_alone():
+    """The one shape the other two scope terms cannot carry: unparseable, no `--`
+    anywhere in it, and sitting in a block that never names the settings file.
+
+    Without the `unparse_reason` term this span is OUT OF SCOPE, so `_check`
+    grades zero citations and the sweep reports CLEAN - the degrade-to-empty
+    defect surviving in the gap the two arms above leave open. Measured: with the
+    widening, `checked=1` and the offender names the span with its UNPARSEABLE
+    reason; without it, `in_scope` is False and the span is waved through.
+
+    THE SCOPE TERM IS NAMED RATHER THAN INFERRED. The three assertions on the
+    citation below say which term does the work, because an arm that would ALSO
+    pass through `has_long_flag` has pinned nothing: reverting the widening would
+    leave it green and a future reader could not tell it apart from the
+    `has_long_flag` path."""
+    scripts = _declared_scripts(_declared_commands())
+    script = sorted(scripts)[0]
+    command = f'python {script} "unclosed'
+
+    # THE CONTROLS COME FIRST, one per property the fixture has to have. A
+    # fixture that failed any of the three would put the span in scope through
+    # some other term, and this arm would then be a gate that cannot fail.
+    with pytest.raises(ValueError) as control:
+        shlex.split(command, posix=False)
+    assert "quotation" in str(control.value), (
+        f"the probe string did not produce the expected shlex failure: {control.value}"
+    )
+    assert command not in _declared_commands(), "the probe accidentally quoted a live declaration exactly"
+    text = f"a hook (`{command}`)."
+    assert SETTINGS_CITATION not in text, (
+        "the planted block names the settings file, so trigger (b) would carry this span into scope"
+    )
+
+    cited = _citations("planted.md", text, scripts)
+    assert len(cited) == 1, f"the span was not parsed as a citation at all: {cited}"
+    only = cited[0]
+    assert not only.has_long_flag, (
+        f"`has_long_flag` is true, so this arm does not isolate the reason term: {only.command!r}"
+    )
+    assert not only.block_cites_settings, (
+        "`block_cites_settings` is true, so this arm does not isolate the reason term"
+    )
+    assert only.unparse_reason, "the span came back with no reason, so no term is left to carry it into scope"
+    assert only.in_scope, (
+        "an unparseable span carrying no long flag and no settings citation was taken OUT of scope, "
+        "so the sweep would report it clean"
+    )
+
+    checked, offenders = _check("planted.md", text, _declared_commands())
+    assert checked == 1, f"an unparseable span with no long flag was not graded at all: checked={checked}"
+    assert offenders, "an unparseable quotation carrying no long flag was waved through as clean"
+    assert "planted.md" in offenders[0], f"the report does not name the offending document: {offenders[0]}"
+    assert "quotation" in offenders[0], f"the report does not carry the raw shlex reason: {offenders[0]}"
