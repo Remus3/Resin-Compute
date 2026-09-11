@@ -11,6 +11,43 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **CLOSED 2026-09-11. THREE PANELS WENT LIVE OFF THE OPERATOR'S OWN ACCOUNT,
+  AND THE TWO CONSTANTS THIS TREE REFUSES TO RE-DERIVE WERE CONFIRMED BY THE
+  LIVE CLIENT.** With the in-game showcase opened, `avatarInfoList` arrived and
+  `surface/model.py` moved Roster NOT_WIRED to READY and Plan NOT_WIRED to
+  PARTIAL. The Plan panel now derives farmable-today from `core/domains.py`
+  rather than ignoring the rotation, graded by
+  `tests/test_surface_plan_rotation.py`. The Teams panel states elemental
+  IDENTITY only, graded by `tests/test_surface_teams.py`. The Resin panel
+  projects through `core/resin.py` `resin_at` instead of taking `now` and
+  ignoring it, graded by `tests/test_surface_resin.py`. Landed at `3c4bcb5` and
+  `2dc0965`.
+
+  TWO EXTERNAL VALIDATIONS, from a source this repository is licence-gated away
+  from holding, and NEITHER FIGURE ENTERED `data/`. The banner detail text
+  states the consolidated 5-star event-exclusive probability is 1.103%, and this
+  tree predicts 1.1034% from 55.000% consolidated Capturing Radiance and 1.600%
+  as `1 / E[wishes per 5-star]`. A talent-material tooltip names its domain as
+  Tuesday/Friday/Sunday, which is exactly `ROTATION_SLOT_WEEKDAYS[1]` in
+  `core/domains.py`. Recorded as verification, not as a data source.
+
+- **CLOSED 2026-09-11. A READ THAT DEGRADES TO EMPTY AND IS WRITTEN BACK DELETES
+  THE HISTORY IT COULD NOT READ.** Three sites in `scripts/watch_inbox.py`,
+  fixed together at `b3ff9fe` and graded by
+  `tests/test_watch_inbox_log_discard.py`. Reproduced on a copy of the live
+  record: 664 lines became 1 line of 29 bytes, taken by two bytes. NOT FIRING
+  TODAY - every in-tree writer is ASCII-closed, so all three are reachable by
+  external corruption of a runtime file only.
+
+- **OPEN 2026-09-11. THE RESIN PANEL NEEDS AN OBSERVATION AND NOTHING SUPPLIES
+  ONE AUTOMATICALLY.** Original Resin is not in the Enka payload and never will
+  be, so `surface/model.py` projects from a recorded observation. Today that
+  observation has to be typed in by hand. A capped observation saturates
+  IMMEDIATELY - `core/resin.py` `time_to_reach(200, 200)` is zero - so the
+  operator's real 200/200 reading is useful for `STALE_AFTER` and then reads as
+  unknown, correctly. Wiring a reconciliation path that records an observation
+  is the open work; it is the same gap as the income-velocity item under Next.
+
 - **HALTED AND PARKED FOR THE OPERATOR 2026-09-10 - A COUNTERPARTY ASKED FOR A
   JOINT RE-PIN, AND THE ANSWER IS THAT THERE IS NOTHING HERE TO RE-PIN.** RC
   reported a two-word sibling name SPLIT ACROSS A COMMENT-CONTINUATION WRAP in
@@ -2797,6 +2834,12 @@ version. What follows is everything the scaffold deliberately did not do.
 - **Multi-account support.** Everything is keyed by a single UID today.
 - **Team composition solver.** Elemental reaction modelling is a large piece of
   domain work and should not be started before the resource layer is complete.
+  STILL HELD, and the Teams PANEL shipping on 2026-09-11 did not touch it. This
+  entry governs the SOLVER and the reaction MODELLING; it never governed the
+  panel, and elemental IDENTITY was never gated - `data/fixtures/seed_roster.json`
+  is hand-authored and carries an element for all five seed characters, and
+  `ingest/static_data.py` ships `element_for`. What `tests/test_surface_teams.py`
+  grades is identity only: nothing ranks, scores or recommends.
 
 ## Known gaps, stated honestly
 
