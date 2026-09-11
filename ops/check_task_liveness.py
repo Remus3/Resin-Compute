@@ -100,6 +100,25 @@ EXIT_AMBIGUOUS = 4
 
 DEFAULT_TIMEOUT_SECONDS = 60
 
+# PowerShell's ConsoleHost exit codes for "the host itself never got going".
+# These are NOT this tool's exit codes - see EXIT_* above for those - and they
+# are NOT a script's exit code either, because on these two the script never
+# ran. Named because a bare 4294901760 in a conditional is unreadable and gets
+# re-derived wrongly later.
+#
+# 0xFFFF0000 is ExitCodeInitFailure. Measured 2026-09-11: powershell.exe with a
+# broken SystemRoot returns it with EMPTY stdout and a UTF-16LE stderr reading
+# "Internal Windows PowerShell error.  Loading managed Windows PowerShell
+# failed with error 8009001d" - the CLR never loaded. A control set (no PATH,
+# no APPDATA, no USERPROFILE, no COMSPEC, no windir, TEMP pointing nowhere)
+# each returned 0, while a parse error, a command-not-found and a `throw` each
+# returned 1. So this code is specific to a host that could not start, and the
+# generic account-or-TaskPath headline is FALSE for it.
+#
+# 0xFFFE0000 is the sibling ExitCodeCtrlBreak.
+_PS_HOST_EXIT_INIT_FAILURE = 4294901760  # 0xFFFF0000
+_PS_HOST_EXIT_CTRL_BREAK = 4294836224  # 0xFFFE0000
+
 # A task name is interpolated into a PowerShell single-quoted literal, so it is
 # validated rather than trusted. Letters, digits, space, and the four
 # punctuation characters real task names use.
@@ -664,6 +683,15 @@ def collect_facts(task_name: str, timeout: int | None = None, task_path: str = "
         raise ProbeError("the scheduler did not answer in time", f"{type(exc).__name__}: {exc}") from exc
     except OSError as exc:
         raise ProbeError("the scheduler could not be reached", f"{type(exc).__name__}: {exc}") from exc
+
+    if completed.returncode in (_PS_HOST_EXIT_INIT_FAILURE, _PS_HOST_EXIT_CTRL_BREAK):
+        # The host never got going, so the query was never put to the scheduler
+        # at all. Saying "refused" here, or naming an account or a TaskPath,
+        # sends the operator hunting a privilege problem that does not exist.
+        raise ProbeError(
+            "the PowerShell interpreter failed to start, so the query never reached the scheduler",
+            f"exit {completed.returncode}; stderr={completed.stderr.strip()}; stdout={completed.stdout.strip()}",
+        )
 
     if completed.returncode != 0:
         raise ProbeError(
