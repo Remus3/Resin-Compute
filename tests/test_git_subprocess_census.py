@@ -654,9 +654,23 @@ def test_the_ascii_detector_actually_fires():
 
 
 def test_the_fixture_sources_parse():
+    """Every fixture source in this module is real Python.
+
+    The filter was once `"subprocess" in source`, which silently excluded every
+    unresolvable-callee fixture below - fixtures that name no `subprocess` at
+    all - so the arm would have parsed a shrinking subset while
+    still reporting a pass. It selects on being a multi-line uppercase string
+    instead, and carries a floor so an emptied selection cannot read as green.
+    """
+    parsed = 0
     for name, source in sorted(globals().items()):
-        if name.isupper() and isinstance(source, str) and "subprocess" in source:
+        if name.isupper() and isinstance(source, str) and "\n" in source:
             ast.parse(source)
+            parsed += 1
+    assert parsed >= 50, (
+        f"only {parsed} fixture sources were selected; a selector that matches "
+        "almost nothing parses almost nothing and still exits 0"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -819,3 +833,396 @@ def test_the_conservation_arm_would_notice_a_drop():
     """
     body_only = "import subprocess\nsubprocess.run(['git', 'status'])\n"
     assert len(census.census_source(body_only, "<fixture>")) < CONSERVATION_TOTAL
+
+
+# ---------------------------------------------------------------------------
+# AN UNRESOLVABLE CALLEE. THE DEFECT IS SILENCE, NOT A WRONG BUCKET.
+#
+# `_launcher_for` branched on `ast.Attribute` and `ast.Name` only. When `call.func` is
+# ITSELF a call - `getattr(subprocess, "run")(...)`, a `functools.partial`, a
+# factory that hands back a stub shaped like `subprocess.run` - it returned None
+# and NO ROW WAS EMITTED AT ALL. A conservation assertion cannot catch that:
+# there is nothing left to conserve. The same hole is open for every other func
+# expression that is neither an Attribute nor a Name - a `ast.Subscript` lookup
+# in a dispatch table, an `ast.BoolOp` picking an injected callable over a
+# default - so the repair is SUBTRACTIVE, exactly as `_outer_positions` is:
+# anything not Attribute and not Name is unresolvable and says so.
+#
+# THIS IS A CONTRACT-HONESTY REPAIR AND NOT A LEAK FIX. Every func-is-a-Call
+# site in `DEFAULT_ROOTS` is a stub or predicate invocation and NONE launches a
+# process. What was broken is the module's claim to see every call it buckets,
+# not the tree.
+#
+# THE SIBLING WIDENING THAT WAS REJECTED, recorded so it is not re-derived. An
+# `ast.Attribute` func whose RECEIVER does not resolve - `get_runner().run(...)`
+# - was proposed for the same treatment. Measured over `DEFAULT_ROOTS`: Attribute
+# callees with an unresolvable receiver number in the high hundreds - a figure
+# that moves with every edit, so it is deliberately not pinned here - and NOT ONE
+# of them is spelled like a subprocess entry point. The count that matters is the
+# ZERO, and the arm below is what keeps measuring it. Reachability is zero, so the
+# arm exercising it would move with any mutant of the spelling set rather than
+# pin an input. That is the same ground - CONTRACT, reachability zero - on which
+# this tree has twice ruled DO NOT WIDEN. The boundary is pinned as a SILENCE by
+# the decoys below rather than left to whoever reads this next.
+# ---------------------------------------------------------------------------
+
+GETATTR_CALLEE = (
+    "import subprocess\ngetattr(subprocess, 'run')(['git', 'status'])\n"
+)
+
+PARTIAL_CALLEE = (
+    "import functools\n"
+    "import subprocess\n"
+    "functools.partial(subprocess.run)(['git', 'log'])\n"
+)
+
+# No `import subprocess` anywhere in this fixture. The row must still appear:
+# the point of an unresolvable callee is that the module cannot tell what is
+# being called, so making the row conditional on a subprocess import would
+# reintroduce the name filter this census exists to replace.
+STUB_FACTORY_CALLEE = (
+    "def probe(stub, cmd):\n"
+    "    return stub(3, '')(cmd, capture_output=True, check=True)\n"
+)
+
+SUBSCRIPT_CALLEE = (
+    "HANDLERS = {}\ndef probe(key):\n    return HANDLERS[key](['git', 'status'])\n"
+)
+
+BOOLOP_CALLEE = (
+    "def probe(spawn, prompt):\n    return (spawn or _fallback)(prompt)\n"
+)
+
+# THE TWO DECOYS. A repair that emits a row for every call whatsoever would pass
+# every arm above and destroy the census. Both of these vary more than one
+# position against the fixtures above - receiver spelling AND attribute, bare
+# name AND argument shape - and both must still yield NOTHING.
+ATTRIBUTE_CALLEE_ON_A_STRANGER = "import subprocess\nother.launch(['git', 'status'])\n"
+
+PLAIN_NAME_CALLEE = "def helper(argv):\n    return None\nhelper(['git', 'status'])\n"
+
+# THE THIRD DECOY, and the one that pins the REJECTED widening. The receiver is
+# invisible and the attribute is spelled exactly like a subprocess entry point.
+# This is the shape a sibling candidate proposed emitting a row for. It must
+# still yield NOTHING: `ast.Attribute` is the commonest func shape in any Python
+# tree, and a rule keyed on the attribute name alone would put rows on a large
+# share of every module here while reaching not one real call site.
+UNRESOLVABLE_RECEIVER_LAUNCHER_SPELLING = (
+    "def probe(factory):\n    return factory().run(['git', 'status'])\n"
+)
+
+# Every attribute spelling a reader might expect to start a process. Written out
+# as a LITERAL here rather than read off the census, because an arm whose fixture
+# is derived from the module under test moves with the mutant and pins a format
+# instead of an input.
+_SPELLINGS_A_READER_WOULD_EXPECT = frozenset(
+    {
+        "run",
+        "check_output",
+        "check_call",
+        "call",
+        "Popen",
+        "getoutput",
+        "getstatusoutput",
+        "system",
+        "popen",
+        "startfile",
+        "execv",
+        "execvp",
+        "spawnv",
+        "spawnvp",
+        "posix_spawn",
+    }
+)
+
+
+# The conservation fixture for the two shapes this census emits a row for,
+# counted by hand: three subprocess calls (2 GIT, 1 NOT-GIT) and three
+# unresolvable callees, one per node kind. Six rows, and the two decoy calls on
+# the last two lines must add nothing.
+WIDENED_CONSERVATION_SOURCE = (
+    "import functools\n"
+    "import subprocess\n"
+    "subprocess.run(['git', 'status'])\n"
+    "subprocess.Popen(['git', 'log'])\n"
+    "subprocess.run(['python', '-c', 'pass'])\n"
+    "getattr(subprocess, 'run')(['git', 'show'])\n"
+    "functools.partial(subprocess.run)(['git', 'tag'])\n"
+    "HANDLERS['k'](['git', 'diff'])\n"
+    "other.launch(['git', 'status'])\n"
+    "helper(['git', 'status'])\n"
+)
+
+WIDENED_CONSERVATION_TOTAL = 6
+WIDENED_CONSERVATION_EXPECTED = {"GIT": 2, "NOT-GIT": 1, "UNRESOLVED": 3}
+
+
+# ---------------------------------------------------------------------------
+# AN UNRESOLVABLE CALLEE MUST PRODUCE A ROW, NOT SILENCE
+# ---------------------------------------------------------------------------
+
+
+def test_a_getattr_callee_emits_an_unresolved_site_rather_than_silence():
+    site = _only(GETATTR_CALLEE)
+    assert site.bucket == census.UNRESOLVED, (
+        "getattr(subprocess, 'run')(...) launches git; the callee is a call "
+        "expression so the census cannot resolve it, and UNRESOLVED is the "
+        "bucket this module already keeps for what it cannot answer"
+    )
+
+
+def test_a_functools_partial_callee_emits_an_unresolved_site():
+    assert _only(PARTIAL_CALLEE).bucket == census.UNRESOLVED
+
+
+def test_a_stub_factory_callee_is_seen_without_any_subprocess_import():
+    site = _only(STUB_FACTORY_CALLEE)
+    assert site.bucket == census.UNRESOLVED, (
+        "no subprocess import appears in this fixture at all; gating the row on "
+        "one would be the name filter this census replaces"
+    )
+
+
+def test_a_subscript_callee_emits_an_unresolved_site():
+    assert _only(SUBSCRIPT_CALLEE).bucket == census.UNRESOLVED
+
+
+def test_a_boolop_callee_emits_an_unresolved_site():
+    assert _only(BOOLOP_CALLEE).bucket == census.UNRESOLVED
+
+
+def test_the_unresolvable_callee_row_names_the_node_kind():
+    assert _only(GETATTR_CALLEE).callee == "<unresolved:Call>"
+    assert _only(SUBSCRIPT_CALLEE).callee == "<unresolved:Subscript>"
+    assert _only(BOOLOP_CALLEE).callee == "<unresolved:BoolOp>"
+
+
+def test_the_unresolvable_callee_row_says_why_in_the_argv_column():
+    site = _only(GETATTR_CALLEE)
+    assert "callee" in site.argv0, (
+        "the row must say the CALLEE is what could not be resolved, not leave a "
+        f"reader to assume argv[0] was the problem: {site.argv0!r}"
+    )
+
+
+def test_an_attribute_callee_on_a_stranger_still_yields_nothing():
+    sites = census.census_source(ATTRIBUTE_CALLEE_ON_A_STRANGER, "<fixture>")
+    assert sites == [], (
+        "the receiver resolves and is not subprocess, so this is a POSITIVE "
+        f"not-a-launch answer; emitting a row for it would destroy the census. "
+        f"got {sites!r}"
+    )
+
+
+def test_a_plain_name_callee_still_yields_nothing():
+    sites = census.census_source(PLAIN_NAME_CALLEE, "<fixture>")
+    assert sites == [], (
+        "a bare name that was never imported from subprocess is not a launch; a "
+        f"repair that emits a row for every call whatsoever passes every "
+        f"unresolvable-callee arm above and is still wrong. got {sites!r}"
+    )
+
+
+def test_a_launcher_spelling_through_an_invisible_receiver_stays_a_silence():
+    sites = census.census_source(UNRESOLVABLE_RECEIVER_LAUNCHER_SPELLING, "<fixture>")
+    assert sites == [], (
+        "`factory().run(...)` has an unresolvable receiver and an attribute "
+        "spelled like a subprocess entry point. Emitting a row for it was "
+        "proposed and REJECTED: ast.Attribute is the commonest func shape in any "
+        f"Python tree and the rule reaches nothing here. got {sites!r}"
+    )
+
+
+def test_no_invisible_receiver_in_this_tree_is_spelled_like_a_launcher():
+    """The measurement the rejected widening was ruled out on, re-taken each run.
+
+    If a call in `DEFAULT_ROOTS` ever DOES name a subprocess entry point through
+    a receiver nobody can see, this arm goes red and the ruling is due a re-look
+    on evidence rather than on taste.
+    """
+    seen = 0
+    offenders: list[tuple[str, int, str]] = []
+    for name in census.DEFAULT_ROOTS:
+        directory = REPO_ROOT / name
+        if not directory.is_dir():
+            continue
+        for path in census._python_files(directory):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, SyntaxError):
+                continue
+            relative = path.relative_to(REPO_ROOT).as_posix()
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                if not isinstance(func, ast.Attribute):
+                    continue
+                if census._dotted(func.value) is not None:
+                    continue
+                seen += 1
+                if func.attr in _SPELLINGS_A_READER_WOULD_EXPECT:
+                    offenders.append((relative, node.lineno, func.attr))
+    assert seen > 100, (
+        f"only {seen} Attribute callees with an unresolvable receiver were found; "
+        "a walk that reaches almost none of them measures almost nothing and "
+        "still exits 0"
+    )
+    assert offenders == [], (
+        "a subprocess entry point is being reached through a receiver this "
+        "census cannot see, so the rule that was ruled out on reachability now "
+        f"has a real call site behind it: {offenders}"
+    )
+
+
+
+
+# ---------------------------------------------------------------------------
+# CONSERVATION OVER THE WIDENED SUBJECT
+# ---------------------------------------------------------------------------
+
+
+def test_the_widened_conservation_fixture_is_conserved():
+    sites = census.census_source(WIDENED_CONSERVATION_SOURCE, "<fixture>")
+    tally = census.counts(sites)
+    assert len(sites) == WIDENED_CONSERVATION_TOTAL, (
+        f"{WIDENED_CONSERVATION_TOTAL} call sites were counted by hand across "
+        f"the two shapes and {len(sites)} were emitted. emitted: "
+        f"{[(site.lineno, site.callee, site.bucket) for site in sites]}"
+    )
+    assert tally == {
+        census.GIT: WIDENED_CONSERVATION_EXPECTED["GIT"],
+        census.NOT_GIT: WIDENED_CONSERVATION_EXPECTED["NOT-GIT"],
+        census.UNRESOLVED: WIDENED_CONSERVATION_EXPECTED["UNRESOLVED"],
+    }, f"tally: {tally}"
+
+
+def test_each_shape_in_the_widened_fixture_contributes_a_row():
+    """Non-vacuity: each of the two shapes really is load-bearing here.
+
+    Deleting any one shape from the fixture leaves strictly fewer rows, so the
+    total the arm above pins is a hand count rather than a restatement of
+    whatever the walk happens to find today.
+    """
+    lines = WIDENED_CONSERVATION_SOURCE.splitlines(keepends=True)
+    full = len(census.census_source(WIDENED_CONSERVATION_SOURCE, "<fixture>"))
+    for marker in (
+        "subprocess.run(['git', 'status'])",
+        "getattr(subprocess, 'run')",
+        "HANDLERS['k']",
+    ):
+        pruned = "".join(line for line in lines if marker not in line)
+        assert len(census.census_source(pruned, "<fixture>")) < full, (
+            f"removing {marker!r} changed nothing, so that shape contributes no "
+            "row and the hand count above is measuring something else"
+        )
+
+
+def test_both_call_shapes_are_distinguishable_in_the_report():
+    sites = census.census_source(WIDENED_CONSERVATION_SOURCE, "<fixture>")
+    report = census.format_report(sites)
+    for expected in ("subprocess.run", "<unresolved:Call>", "<unresolved:Subscript>"):
+        assert expected in report, (
+            f"{expected} is counted but never named, so a reader cannot follow "
+            f"the row up. report was:\n{report}"
+        )
+
+
+def test_the_report_never_calls_an_unresolvable_callee_a_launch():
+    """The total line and every row must survive a population that launches nothing.
+
+    `total launch sites : N` was printed over a population that includes rows
+    whose callee this module could not read at all. That is a contract lie in the
+    one place a reader takes the number from, and the same word had leaked into
+    the row's own reason string. The fixture below holds NOTHING BUT opaque
+    callees, so the word cannot appear truthfully anywhere in the render.
+    """
+    source = (
+        "import functools\n"
+        "getattr(mod, 'run')(['git', 'status'])\n"
+        "HANDLERS['k'](['git', 'log'])\n"
+        "(spawn or fallback)(['git', 'diff'])\n"
+    )
+    sites = census.census_source(source, "<fixture>")
+    assert len(sites) == 3, f"fixture must be all-opaque, got {sites!r}"
+    assert {site.bucket for site in sites} == {census.UNRESOLVED}
+    report = census.format_report(sites)
+    offenders = [line for line in report.splitlines() if "launch" in line.lower()]
+    assert offenders == [], (
+        "every row here is a call this census could not resolve, so calling any "
+        f"of them a launch asserts something the UNRESOLVED bucket refuses to "
+        f"assert. offending lines: {offenders!r}"
+    )
+
+
+def test_the_launch_word_detector_actually_fires():
+    """Non-vacuity for the arm above: the scan really can see the word."""
+    faked = "total launch sites : 3\n  UNRESOLVED : 3"
+    assert [line for line in faked.splitlines() if "launch" in line.lower()], (
+        "the arm above would pass over a report full of the word if the scan "
+        "never matched it"
+    )
+
+
+def _opaque_callee_nodes(root: Path) -> list[tuple[str, int]]:
+    """Every `ast.Call` under `root` whose func is neither Attribute nor Name.
+
+    Derived from the tree by an INDEPENDENT walk - `ast.walk`, not the census's
+    own scope recursion - so the count this returns is not a restatement of the
+    thing it is used to check. A file the census would report `<unparseable>`
+    or `<unreadable>` for contributes nothing here and its row carries a
+    different callee spelling, so the two populations stay aligned.
+    """
+    found: list[tuple[str, int]] = []
+    for name in census.DEFAULT_ROOTS:
+        directory = root / name
+        if not directory.is_dir():
+            continue
+        for path in census._python_files(directory):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, SyntaxError):
+                continue
+            relative = path.relative_to(root).as_posix()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and not isinstance(
+                    node.func, (ast.Attribute, ast.Name)
+                ):
+                    found.append((relative, node.lineno))
+    return found
+
+
+def test_the_widened_conservation_arm_would_notice_a_drop(real_sites):
+    """NODE-TO-ROW CONSERVATION over the real tree, not over a fixture.
+
+    Every `ast.Call` in `DEFAULT_ROOTS` whose func is neither an `ast.Attribute`
+    nor an `ast.Name` must yield EXACTLY ONE row. This is the only arm here that
+    goes red when the opaque-callee branch is reverted: reverting it restores the
+    silence, the rows vanish, and every fixture arm above keeps passing because a
+    fixture arm cannot see a real-tree drop. The two sides are counted by
+    different walks, so agreeing is evidence rather than a tautology.
+    """
+    nodes = _opaque_callee_nodes(REPO_ROOT)
+    rows = [
+        (site.path, site.lineno)
+        for site in real_sites
+        if site.callee.startswith(census.UNRESOLVED_CALLEE_PREFIX)
+    ]
+    assert nodes, (
+        "no opaque-callee node was found anywhere in DEFAULT_ROOTS, so this arm "
+        "is comparing zero with zero and cannot fail"
+    )
+    assert sorted(rows) == sorted(nodes), (
+        f"{len(nodes)} opaque-callee call nodes were walked and {len(rows)} rows "
+        "were emitted; a node with no row is a SILENCE, which is the defect the "
+        f"opaque-callee branch exists to close. nodes not rowed: "
+        f"{sorted(set(nodes) - set(rows))}. rows with no node: "
+        f"{sorted(set(rows) - set(nodes))}"
+    )
+    assert all(site.bucket == census.UNRESOLVED for site in real_sites
+               if site.callee.startswith(census.UNRESOLVED_CALLEE_PREFIX)), (
+        "an unresolvable callee that landed in GIT or NOT-GIT would be a "
+        "confident answer over a call nobody could read"
+    )
+
+

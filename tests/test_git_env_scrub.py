@@ -64,7 +64,7 @@ THE THREE POPULATIONS THIS FILE KEEPS APART.
   asserting the scrub removes it.
 
   WHICH QUERIES THOSE ARE IS DERIVED FROM THE TREE rather than chosen. Run
-  `python -m tools.git_subprocess_census`: 78 subprocess launch sites over its
+  `python -m tools.git_subprocess_census`: 85 subprocess call sites over its
   default roots, 38 of them git, 28 of those resolving statically to a
   subcommand - ls-files 18, check-ignore 3, check-attr 2, one each of rev-parse,
   diff, init, add and commit - with 10 splatted argvs no AST walk can resolve.
