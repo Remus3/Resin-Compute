@@ -11,6 +11,158 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **CLOSED 2026-09-11 AT `7786955`, `5d785f5`, `86491a3` AND `78cdf96` - FOUR
+  COMMITS, ALL PUSHED, AND THREE OF THEM REPAIR SOMETHING THIS TREE ALREADY
+  BELIEVED WAS SAFE.** The detail is in `docs/LEDGER.md` under this session's
+  heading. What belongs here is what FLIPS and what it LEAVES OPEN.
+
+  THE SUITE WAS WRITING THE OPERATOR'S LIVE DAY LOG. Measured 2026-09-11 with an
+  in-process tracer over `builtins.open`, `io.open`, `os.replace` and
+  `os.rename`: 17492 bytes from 51 nodeids across 12 files, all of it synthetic
+  error records from the degradation arms. Fixed at the ROOT - `load_config` in
+  `core/config.py` already derived its log directory from `RC_LOG_DIR` and
+  nothing had ever set it, so one assignment at rootdir `conftest.py` import time
+  isolates both suites. `core/log_setup.py` is UNCHANGED and an operator-supplied
+  `RC_LOG_DIR` is honoured. An adversary DISCARDED the tracer and measured
+  differently, in a clone whose REPO_ROOT is `__file__`-derived: 19575 bytes
+  under a HEAD-conftest control, 0 with the fix. Guard
+  `tests/test_suite_writes_no_live_logs.py`. TWO CORRECTIONS TRAVEL WITH IT - LW
+  reporting our three figures is AGREEMENT BY LUCK, since its tracer patched only
+  `builtins.open` and missed `Path.write_text`, and the shared premise was that
+  `logging.FileHandler` never touches `pathlib`; and of the 1922-byte
+  tracer-to-disk gap, 89 bytes are CRLF translation measured as a rate with a
+  control while the remaining 1833 are UNAPPORTIONED, with child processes named
+  as a candidate rather than as an attribution.
+
+  THE PUBLISH GATE LEAKED A TOKEN CLASS, AND THREE OF FOUR RULES WERE REFUTED BY
+  MEASUREMENT BEFORE THE FOURTH LANDED. Rule 1 at HEAD leaked Slack `xoxa-`,
+  `xoxr-` and `xoxs-` through the real publish path. Rule 2 closed those three
+  and OPENED 30 segmented shapes including `xoxb-`, which had never leaked. Rule
+  3 gave up EVERY credential preceded by a word character - a regression against
+  HEAD's own publisher. Rule 4 derives the boundary from a CENSUS of the false
+  positives: all nine are preceded by a LETTER and the break set by underscore or
+  digit, so a letters-only lookbehind separates them exactly. Measured 2026-09-11
+  over 221 scanned files of 223 tracked - 9 hits without it, 0 with it, break set
+  still caught - and the cost is pinned by walking all 128 ASCII codepoints and
+  asserting the missed set is exactly the letters. A RIGHT boundary was REJECTED
+  BY MEASUREMENT: adding one lost two of three detections. Guards
+  `tests/test_no_secret_literals.py` and `tests/test_publish_next_session.py`
+  over `tools/publish_next_session.py`.
+
+  FIVE MODULES THAT SHELLED GIT WITH NO GATE NOW SKIP, and the grader was rebuilt
+  twice before it could grade: the site table's conservation went from ROWS to
+  NODES after a one-edit mutant left it green, then its matcher was replaced by
+  the census resolver in `tools/git_subprocess_census.py` after a Name-bound argv
+  and then a splatted argv each defeated it, then the exempt-arm audit was rebuilt
+  because a decorator launch is UNATTRIBUTABLE BY CONSTRUCTION. Guards
+  `tests/test_conftest_git_gate_sites.py`, `tests/test_commit_trailers.py` and
+  `tests/test_precommit_gate_corpus.py`.
+
+  A PUSH FROM A LINKED WORKTREE RAN BOTH SUITES AGAINST A SUBSTITUTED CORPUS, and
+  the scrub that fixed it was then refuted in turn. `git rev-parse
+  --local-env-vars` is git's OWN authoritative list and returns FIFTEEN names; the
+  first scrub covered five, and `GIT_CONFIG_PARAMETERS` is exported to hooks BY
+  GIT ITSELF. THE SELECTION CRITERION WAS THE DEFECT: the nine were chosen by
+  keeping only variables that changed the answer AT rc 0, but for
+  `git check-ignore -q` THE RETURNCODE IS THE ANSWER. The corrected criterion in
+  `conftest.py` treats an answer as the PAIR of returncode and stdout, the tuple
+  is now fourteen, and a runtime reconciliation arm against git's own list makes a
+  future git version a red test rather than an incident. Guard
+  `tests/test_git_env_scrub.py`.
+
+  GATES AT THE FINAL SEAM, all READINGS taken 2026-09-11 at `78cdf96`, each run
+  as its own command: licence 47; docs consistency 29; docs hook commands 21;
+  `qa_companion` 18 passed 0 failed 1 skipped 3 noted; `ruff` exit 0; `tests`
+  2625 passed 1 skipped; `agents/pity_engine` 80 passed; `node --test` in
+  `shell/` 52 of 52; the headless dry run exit 0 with 6 skips; mypy Success over
+  35 source files, ADVISORY because its roots exclude `tests/` and `conftest.py`,
+  which is where most of this session's bytes landed.
+
+- **OPEN 2026-09-11, AND IT IS A HOLE THE CENSUS CANNOT CONSERVE ITS WAY OUT
+  OF.** `tools/git_subprocess_census.py` emits NO SITE AT ALL when `call.func` is
+  itself a Call - `getattr(subprocess, "run")(...)` and
+  `functools.partial(subprocess.run)(...)` are both invisible - and its launcher
+  set is `subprocess`-only, so `os.system` is invisible for a second and
+  independent reason. THE CONSERVATION ARM CANNOT HELP HERE, and that is the
+  point worth keeping: conservation compares emitted rows against hand-counted
+  launches, and a shape that emits nothing leaves nothing to conserve. The repair
+  is a resolver that walks a Call in func position and a launcher set derived
+  rather than enumerated.
+
+- **OPEN 2026-09-11, AND THE ROW IS THAT THE EXEMPT-ARM AUDIT CHECKS NAME
+  PRESENCE RATHER THAN REACHABILITY.** A gate placed AFTER the launch is now
+  caught by statement order, which is the half that shipped. What is still
+  uncaught is a gate under `if False:` and a gate inside an uncalled nested
+  `def` - both read as GATED. Reachability is a different analysis from presence
+  and should be scoped as one, not bolted onto the name walk.
+
+- **OPEN 2026-09-11, AND IT IS THE MOST PLAUSIBLE LEAK SHAPE IN AN AGENT-WRITTEN
+  HAND-OFF.** The no-operator PROSE binding - a secret name narrated next to its
+  value with NO operator at all between them - is invisible to the name-binding
+  detector by construction, because that detector's whole premise is a mandatory
+  operator. Catching it needs a PROXIMITY-OR-ENTROPY rule, which is a different
+  detector CLASS with its own false-positive budget, and it must be sized as such
+  rather than bolted onto the existing regex.
+
+- **OPEN 2026-09-11, AND IT IS A ROSTER QUESTION RATHER THAN A MATCHER
+  QUESTION.** An off-roster secret NAME carrying a non-vendor-prefixed VALUE is
+  invisible to BOTH detector paths in `tests/test_no_secret_literals.py` by
+  construction: the prefix path needs the vendor prefix and the name path needs
+  the name on the roster. No widening of either regex reaches it. The work is
+  roster COMPLETENESS, and widening a matcher is the response this tree has been
+  defeated by three times.
+
+- **OPEN 2026-09-11, AND THE HONEST ANSWER IS THAT WE CANNOT DERIVE IT HERE.**
+  Real vendor credential body LENGTHS are NOT derivable from this tree; three
+  agents said so independently on 2026-09-11. The shared floor of 16 in the
+  publish gate is THIS TREE'S GUARD FLOOR and is not a vendor specification. Do
+  not let a later reader promote it into one - if a vendor length is ever needed,
+  it has to come from the vendor's published documentation and be cited as such.
+
+- **OPEN 2026-09-11, A RESIDUAL OF THE SCRUB AND DELIBERATELY NOT CLOSED.** The
+  `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM` carve-out is KEPT, but the ground
+  it was first justified on was wrong: an inherited value pointing at a config
+  carrying `core.excludesFile` was MEASURED on 2026-09-11 to change a corpus AT
+  rc 0. So these two are not inert, they are merely judged worth inheriting. The
+  residual is recorded rather than closed, and it is the FIFTH item in the
+  operator row below.
+
+- **OPEN 2026-09-11, AND IT IS ABOUT THE INSTRUMENT RATHER THAN ABOUT ANY
+  FINDING IT PRODUCED.** Neither write tracer used this session sees
+  `os.open` plus `os.fdopen` - the descriptor is an int, so no path ever matches -
+  and that shape is LIVE in `ops/loop/slots.py`, which writes the machine-wide
+  bucket the halt ruling names by name. Neither tracer patches DELETION or
+  TRUNCATION at all, and this tree calls `shutil.rmtree` at session finish and
+  `unlink` in nine files, measured 2026-09-11. So every "0 bytes written" reading
+  taken with either tracer is a statement about the shapes it patched.
+
+- **OPEN 2026-09-11, INBOX, BUCKET APPLICABLE-AND-NOT-DONE, two items.** The
+  fifth LW note saying the plugin has already been sent is SUPERSEDED and needs a
+  reply saying so, because silence reads as dissent. And a counterparty probe file
+  in the inbox - named in prose, since the whole inbox directory is gitignored and
+  a backticked pointer there would be a pointer at an untracked path - writes into
+  the runtime directory and passes `-q`, which doubles this tree's `pytest.ini`
+  `-q` into `-qq` and deletes the summary line. It therefore does NOT run here
+  unmodified, and adopting it means adapting it.
+
+- **OPEN 2026-09-11, AND IT IS RECORDED AS UNEXPLAINED RATHER THAN AS FLAKY.** A
+  second failure was seen ONCE in `tests/test_moon_sync_responder.py` under a
+  planted mutant and did not reproduce. The "collateral damage" explanation
+  offered for it was REFUTED by reading. A non-reproduction is not an
+  explanation, so the row stays open with no cause attached to it.
+
+- **NEEDS THE OPERATOR 2026-09-11, FIVE ITEMS, NON-BLOCKING, AND NOTHING BELOW IS
+  ANSWERED HERE.** The four carried questions all STAY OPEN and none of them was
+  touched by this session's work: the exit code owed to an interpreter that NEVER
+  STARTED; the three-record disposition asymmetry; arming the three standby
+  parties under the UNRULED no-answer rule; and the pre-first-fire action signal,
+  whose DEFECT claim was refuted and which survives only as an ENHANCEMENT
+  blocked on the first question. A FIFTH arose on 2026-09-11 and is the config
+  carve-out row above - `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM` are kept in
+  the inherited set, but an inherited value pointing at a config with
+  `core.excludesFile` was measured to change a corpus at rc 0, so the carve-out
+  is a judgement rather than an inertness finding.
+
 - **CLOSED 2026-09-11 at `390a831` AND `1c8aab2` - FIVE ROWS FLIP, AND ONE OF THEM
   FLIPS WITH ITS PREMISE CORRECTED.** Each slice ran on a disjoint write-list and
   was graded by an agent that did not write it. Every figure here was observed at
@@ -129,8 +281,21 @@ version. What follows is everything the scaffold deliberately did not do.
   accurate. IF A CALLER EVER PASSES A NON-DEFAULT TASK NAME, THIS ROW BECOMES LIVE
   AND THE VALIDATION GOES IN THEN.
 
-- **OPEN 2026-09-11, SMALL, AND THE ROW IS THAT THREE MODULES SHELL GIT WITH NO
-  GATE.** `tests/test_no_sibling_names.py`, `tests/test_ci_workflow_complement.py`
+- **CLOSED 2026-09-11 at `7786955`, AND THE POPULATION WAS FIVE RATHER THAN THE
+  THREE THIS ROW NAMED.** All five now SKIP under an unreachable git instead of
+  failing, each armed by a skip-then-RUN pair in
+  `tests/test_conftest_git_gate_sites.py` where the RUN half is the load-bearing
+  one. The three named below were gated, and `tests/test_commit_trailers.py` and
+  `tests/test_precommit_gate_corpus.py` were gated with them. One further module
+  was ruled EXEMPT by an adjudicator working from criteria written before either
+  candidate was read: the rule's population is SITES THAT SHELL GIT, and that
+  module's failing arm shells nothing - it CONSUMES the gate helper in order to
+  AUDIT it. The ruling STANDS, and its citation was RE-DERIVED rather than carried
+  forward, because the census guard column is a MODULE-LEVEL walk that would have
+  answered GATED with every gate in the file deleted. The original row text
+  follows unaltered.
+
+  `tests/test_no_sibling_names.py`, `tests/test_ci_workflow_complement.py`
   and `tests/test_responder_gate_census.py` shell git and carry no gate at the site,
   so on a host without a reachable git they FAIL rather than skip - measured, not
   inferred, with the failing counts observed per module. Gating them is a separate
@@ -148,7 +313,22 @@ version. What follows is everything the scaffold deliberately did not do.
   current arm PINS that skip as intended behaviour, so changing it is a deliberate
   decision and not a bug fix - hard-failing there would break a partial checkout.
 
-- **OPEN 2026-09-11, SMALL, AN ASYMMETRY BETWEEN TWO SIBLING INSTALLERS.**
+- **RETIRED 2026-09-11 - THIS ROW'S PREMISE IS FALSE, AND THE REAL DEFECT WAS
+  SHARED RATHER THAN ASYMMETRIC. FIXED AT `5d785f5`.** The claim below - that
+  `ops/install_responder_task.ps1` carries no unsubstituted-placeholder throw -
+  IS FALSE. That script has carried the guard since `1d80f8c` on 2026-09-07, four
+  days BEFORE this row was filed, and it fires. What was real is SHARED and
+  SYMMETRIC: PowerShell `-match` is case-INSENSITIVE, so the old character class
+  behaved as case-insensitive at runtime and lowercase never leaked. Only the
+  DIGIT axis leaked, and it leaked REGARDLESS OF CASE - measured 2026-09-11
+  against both scripts, a planted `__Slot1__` and a planted `__SLOT1__` both
+  returned 0 while `__pythonw_exe__` and `__PyThonW__` both returned 1. Second,
+  and responder-only: the UTF-16 declaration relabel ran BEFORE the guard, so a
+  token sitting inside the declaration was MASKED from it, fixed by reordering to
+  substitute, then guard, then relabel. Guards
+  `tests/test_responder_task_argv.py` and `tests/test_supervisor_task_argv.py`.
+  The false text follows, kept so the next reader sees what was refuted.
+
   `ops/install_scheduled_task.ps1` throws on an unsubstituted placeholder left in
   the task XML; `ops/install_responder_task.ps1` performs the same substitution
   family and carries NO such throw. Found while refuting a different claim, so it is
@@ -169,9 +349,13 @@ version. What follows is everything the scaffold deliberately did not do.
   ON THE OPEN EXIT-CODE CALL below, because any new verdict on that surface is a
   compatibility change to the five codes that have callers.
 
-- **DONE 2026-09-11 at `390a831` AND HARDENED AT `1c8aab2`, BUT NOT AT THE THREE
-  SITES THIS ROW NAMED - READ THE CORRECTION IN THE TOP BLOCK BEFORE ACTING ON
-  THE REST OF THIS ROW.** `tests/test_conftest_git_gate.py`
+- **NOW DONE AT THE THREE SITES TOO, 2026-09-11 at `7786955` - the row below was
+  DONE at `390a831` and HARDENED at `1c8aab2` everywhere EXCEPT the three sites it
+  named, and those three plus two more are now gated and armed. The site table's
+  conservation went from ROWS to NODES, and its matcher was replaced by the census
+  resolver in `tools/git_subprocess_census.py` after a Name-bound argv and then a
+  splatted argv each defeated the hand-written one. Nothing below is repealed; the
+  RUN half is still the load-bearing half.** `tests/test_conftest_git_gate.py`
   grades the HELPERS - `classify_git_probe`, `require_git_repository`,
   `skip_module_without_git` - and it grades them well. What no arm does is take a
   module that shells git, run it with git ABSENT, and assert the module SKIPS, then
@@ -2577,8 +2761,27 @@ version. What follows is everything the scaffold deliberately did not do.
   same environment, and the control was not clean. A mutant kill measured without
   a control cannot distinguish the mutant's failures from the environment's.
 
-- **OPEN. A FOURTH DISPOSITION, named 2026-09-09 and not in the standing list
-  of three.** With `GIT_DIR` exported, `git rev-parse --git-dir` SUCCEEDS while
+- **CLOSED 2026-09-11 at `86491a3` AND `78cdf96`, AND THE LAST SENTENCE OF THIS
+  ROW WAS THE WRONG READING.** The row's final measurement - that the pre-push
+  gate does not hit this, because `git hook run` shows an empty `GIT_DIR` - is
+  CONFIGURATION-SCOPED and was reported as universal. Verified 2026-09-11 on git
+  2.53.0.windows.3: a push from the MAIN CHECKOUT exports none, a push from a
+  LINKED WORKTREE exports it, and this machine carried 52 worktree entries that
+  day while the pre-push hook runs both suites. With it exported,
+  `python -m pytest tests` returned rc 2 with "Interrupted: 1 error during
+  collection" while the engine suite collected 80 and carried on. An AST pass over
+  the 141 tracked Python files found 41 corpus sites with exactly ONE real scrub,
+  correcting an earlier 39-with-two reading in which one claimed scrub matched
+  only because a COMMENT mentioned the variable. CS's damage narrative was
+  NARROWED rather than adopted: `git init --bare` with an EXPLICIT path does not
+  hijack, only the no-path form does, and this tree has zero such call sites, so
+  only the corpus swap can fire here. The scrub now lives in `conftest.py`, sized
+  from `git rev-parse --local-env-vars` - git's OWN list, fifteen names - with a
+  runtime reconciliation arm, and `tests/test_hook_gate.py` is now
+  configuration-scoped with both readings. Guard `tests/test_git_env_scrub.py`.
+  The original text follows.
+
+  With `GIT_DIR` exported, `git rev-parse --git-dir` SUCCEEDS while
   no `.git` sits on disk, so `tests/conftest.py` and the disk cross-check in
   `tests/test_commit_trailers.py` DISAGREE - one reports a usable repository and
   the other reports none. That state is neither ran-and-found-nothing,
