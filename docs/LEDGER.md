@@ -12,6 +12,112 @@ now.
 
 ---
 
+## 2026-09-11 - A read that degrades to empty and is written back deletes the history it could not read, and three panels went live off the operator's own account
+
+Files: `scripts/watch_inbox.py`, `tests/test_watch_inbox_log_discard.py` (new),
+`surface/model.py`, `surface/render.py`, `tests/test_surface_plan_rotation.py`
+(new), `tests/test_surface_teams.py` (new), `tests/test_surface_resin.py` (new),
+`tests/test_surface_model.py`, `tests/test_surface_render.py`,
+`scripts/qa_companion.py`, `ROADMAP.md`, `docs/INBOX_TRIAGE_2026-09-09.md`.
+Landed at `b3ff9fe`, `3c4bcb5`, `9f03062` and `2dc0965`.
+
+**MEASURED AT THE SEAMS, STAMPED AS READINGS AND NOT AS CLAIMS ABOUT NOW.**
+Fork point `577c2d6` re-measured first at 1981 collected, 1980 passed 1 skipped.
+First seam 2077 passed 1 skipped at 2078 collected; final seam 2106 passed 1
+skipped. `agents/pity_engine` 80 passed. `node --test` in `shell/` 52 tests 52
+pass 0 fail. `ruff`, `headless.runner --once --dry-run` and the three doc guards
+exit 0 - licence 47, docs consistency 29, docs hook commands 17. `qa_companion`
+18 passed 0 failed 1 skipped 3 noted, and its three NOTEs again say local
+`ruff` 0.15.12, `pytest` 9.0.3 and `mypy` 2.1.0 are ALL OLDER than the CI pins,
+so every local green in this entry is OPTIMISTIC against CI. `mypy` exit 0 at 34
+source files, which says NOTHING about most of this entry: `scripts/` and
+`surface/` are not `mypy.ini` roots.
+
+**THE DEFECT, AND IT IS A DIFFERENT ACT FROM TRIMMING.** `_log_tail` returned
+`[]` on `UnicodeDecodeError`; `log_invocation` spliced that empty with the new
+line and REWROTE the file. Reproduced on a copy of the live record: 664 lines
+became 1 line of 29 bytes, taken by two bytes. `record_reported` and the report
+prune carried the same shape through `read_json`, which returns its default for
+missing, undecodable AND corrupt-JSON alike - so `record_reported`'s own
+docstring, "Union, never a rewrite", was FALSE on exactly the path that
+mattered. Degrading a READ to empty is defensive; splicing that empty with new
+data and writing it BACK converts unreadable history into DELETED history.
+Verification: `tests/test_watch_inbox_log_discard.py`, and specifically
+`test_absent_and_unreadable_are_now_different_outcomes` and
+`test_a_second_fire_does_not_grow_the_mangled_line`.
+
+**THE TREE HAD ALREADY SOLVED HALF OF IT.** `tools/moon_sync_responder.py`
+reads its own invocation log with `errors="replace"` and APPENDS rather than
+rewriting, so it is immune by construction. The fix mirrors it, and folds
+U+FFFD to ASCII `?` because `atomic_write_text` encodes UTF-8: a retained
+U+FFFD is written as 3 bytes, re-read as ASCII gives 3 replacement characters,
+written as 9. A verifier measured four consecutive fires at exactly +29 bytes
+each, so the growth does not recur.
+
+**DECIDED, WITH REASONING, SO IT IS NOT RE-LITIGATED.** `read_reported` STILL
+degrades to empty for its READING callers, deliberately, and
+`test_read_reported_still_degrades_to_empty_for_its_reading_callers` pins that
+so nobody "finishes the fix" on the wrong half. The read inside `withdrawn()`
+is NOT a fourth site: it can only shrink a printed baseline, so it under-reports
+and can never invent a withdrawal.
+
+**THE SURFACE WENT LIVE OFF THE OPERATOR'S OWN ACCOUNT, AND TWO CONSTANTS THIS
+TREE REFUSED TO RE-DERIVE WERE CONFIRMED BY IT.** With the in-game showcase
+opened, `avatarInfoList` arrived and Roster moved NOT_WIRED to READY and Plan
+NOT_WIRED to PARTIAL. Two independent external validations, from a source this
+repository is licence-gated away from holding: the banner detail text states the
+consolidated 5-star event-exclusive probability is 1.103%, and this tree
+predicts 1.1034% from 55.000% consolidated Capturing Radiance and 1.600% as
+`1 / E[wishes per 5-star]`; and a talent-material tooltip names its domain as
+Tuesday/Friday/Sunday, which is exactly `ROTATION_SLOT_WEEKDAYS[1]`. Neither
+figure entered `data/`.
+
+**THE RESIN PANEL TOOK `now` AND IGNORED IT.** Measured at `9f03062`: the same
+account at +0h, +4h and +12h printed `20 / 200` every time, while
+`core/resin.py` `resin_at` answered 20, 50 and 110 for the same inputs. It now
+projects across six bands keyed on the OBSERVATION rather than the balance.
+A verifier swept 148 cells of observed-by-elapsed, including every boundary at
+plus and minus one second, and found zero unintended differences in state or
+withhold decision. Verification: `tests/test_surface_resin.py`.
+
+**THE HONESTY IS THE FEATURE, AND THE CAPPED CASE IS WHY.** A projection
+saturated at the cap answers the cap for EVERY possible history, so it carries
+no information; the panel therefore prints no present-tense number there, and
+says why. The operator's real observation was 200/200, which saturates
+instantly, so this is the live case and not a corner. An earlier wording claimed
+a refill span had elapsed, which is false when the balance never left the cap -
+`time_to_reach(200, 200)` is zero. The reason now branches three ways on
+observed against cap, and the below-cap arm that was already true is kept as the
+control proving the fix is not a deletion.
+
+**TWO GATES THAT COULD NOT FAIL, BOTH CLOSED.** `render_html` emitted 48
+non-ASCII bytes for an externally supplied `display_name` carrying em-dash,
+en-dash, smart quote and CJK - glyphs `CLAUDE.md` bans outright - because
+`html.escape` closes the markup hole and passes every codepoint through.
+`render_json` was already clean via `ensure_ascii` and its docstring names the
+hazard, so two renderers in one module disagreed and the HTML one was wrong. The
+ascii arm that should have caught it rendered an ASCII-ONLY fixture and
+`qa_companion` graded the EMPTY state, so both stayed green on both sides of a
+real defect. Verification:
+`test_an_externally_supplied_display_name_is_folded_to_seven_bit_ascii`, shown
+red against a neutered escaper while the incumbent arm still passed.
+
+**FILED, NOT FIXED.** The same degrade-to-empty root cause has three more sites
+in `tools/moon_sync_responder.py` - `_remember_answered`, `record_cycle`, and a
+latent threefold-growth in `_trim_invocations` - each re-read at HEAD before
+filing. Recorded in `ROADMAP.md` as applicable-and-not-done rather than fixed,
+because the adjudicated authorisation covers a bounded rotate only.
+
+**FIVE DECAYED POINTERS CORRECTED, AND THE DECAY WAS ITSELF THE FINDING.**
+`ROADMAP.md` and `docs/INBOX_TRIAGE_2026-09-09.md` both cited
+`tools/moon_sync_responder.py:1037` for the metrics trim; that line is now
+prose. Corrected against current content to :1135, :1207, :1128-1134, :1217 and
+:1868. Every substantive claim survived; only the coordinates rotted. The two
+files are therefore ONE input counted twice, and the identical wrong line number
+in both is what proves it.
+
+---
+
 ## 2026-09-10 - Grading three floors found one that was wrong, and a lane arm that looked like the point was the vacuous one
 
 Files: `tests/test_licence_posture.py`, `tests/test_machine_identity.py`,
