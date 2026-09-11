@@ -11,6 +11,84 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **OPEN 2026-09-14, AND IT IS THE WORSE-SHAPED OF THE TWO BECAUSE IT MAKES A
+  PUSH-BLOCKING VERDICT NON-REPEATABLE.** Two arms in
+  `tests/test_task_liveness.py` -
+  test_the_real_probe_reports_the_end_boundary_value_and_not_just_the_key and the
+  `_real_task_names` arm - COLLAPSE TWO DIFFERENT FACTS INTO ONE: "the census
+  machinery is broken" and "powershell could not start on this machine just now".
+  There is no retry and no distinct class for a HOST-START FAILURE, so a
+  push-blocking verdict becomes a function of FREE MEMORY ON THE BOX.
+
+  THE MECHANISM, measured. PowerShell's ConsoleHost returned 4294901760, which is
+  0xFFFF0000, its ExitCodeInitFailure, with EMPTY stdout and a UTF-16LE stderr
+  reading "Loading managed Windows PowerShell failed with error 8009001d". The CLR
+  never loaded and the script never ran, which is why the arm saw status FAILED
+  with an EMPTY values list. `collect_facts` and `ProbeError` in
+  `ops/check_task_liveness.py` are the probe side of it, and
+  `DEFAULT_TIMEOUT_SECONDS` is NOT implicated - nothing timed out.
+
+  THE TRIGGER, established by CORRELATION PLUS INDEPENDENT EVIDENCE rather than by
+  replay. The Windows Resource-Exhaustion-Detector logged low-virtual-memory
+  events at 23:28:33 and at 23:34:36 naming a python.exe holding about 10.4 GB,
+  and the refused hook run took 474.67s, so it SPANS BOTH EVENTS. A later run of
+  the SAME commit through a REAL pre-push hook into a scratch bare repository gave
+  2150 passed, 2 skipped in 97.77s, exit 0 - a PROBE READING at one commit on one
+  machine, not a live baseline. So the ORCHESTRATOR'S OWN HYPOTHESIS, that the
+  hook's environment was to blame, is REFUTED BY COUNTER-EXAMPLE, and the 4.9x
+  time difference is the LOAD SIGNATURE.
+
+  WHAT THE ARMS GET RIGHT, and nobody is to soften them. They were deliberately
+  built so that FAILED MUST FAIL and only NONE may skip, to kill a vacuous skip.
+  That intent is CORRECT. The defect is the MISSING DISTINCTION, not the
+  strictness. SOFTENING AN ARM WHOSE INTENT IS RIGHT is the response this tree has
+  been defeated by three times, so the repair is a DISTINCT CLASS for a host-start
+  failure, never a relaxed assertion.
+
+  THE CONSEQUENCE TO RECORD. A green pre-push on this machine is NOT REPEATABLE
+  EVIDENCE, and the next docs-only push may be refused for the same reason. The
+  refused run read 2 failed, 2148 passed, 2 skipped - again a PROBE READING at one
+  commit on one machine, and the COLLECTED TOTAL WAS 2152 IN EVERY RUN, so nothing
+  was silently dropped. Two pushes earlier the same evening passed because the
+  machine had memory then. The latency is NOT NEW - it has existed since the
+  real-probe arms landed - and nothing in this session's commits caused it: the
+  refused commit was ROADMAP.md only, plus 299 insertions and zero deletions,
+  which cannot make a scheduler probe fail.
+
+  ADJACENT AND DELIBERATELY NOT MERGED INTO IT. The older row that already names
+  `_real_task_names` is about a VACUOUS SKIP across `tests/`, ranked by an AST
+  sweep; this row is about a NON-REPEATABLE PUSH-BLOCKING VERDICT and names its
+  mechanism. Find that one by its SAME ROOT CAUSE IN SEVEN MORE PLACES heading,
+  and do not cite it by line number.
+
+- **OPEN 2026-09-14, small, AND PARTLY BEING FIXED AS THIS IS WRITTEN - SO IT IS
+  FILED AS THE CLASS AND NOT AS THE INSTANCE.** `collect_facts` in
+  `ops/check_task_liveness.py` mapped EVERY non-zero return code to ONE reason:
+  that the scheduler refused the query and may need a different account or a
+  different TaskPath. For the ConsoleHost init-failure class that headline is
+  FALSE - nothing refused anything, and neither an account nor a TaskPath is
+  involved. The truth sat only in the DETAIL string.
+
+  A concurrent slice is adding a branch for 0xFFFF0000 and its sibling
+  0xFFFE0000, which is ExitCodeCtrlBreak. THE CLASS is the durable finding: a
+  probe that collapses every failure mode into one OPERATOR-FACING reason sends a
+  reader hunting a cause that does not exist. WHAT REMAINS OPEN AFTER THAT BRANCH
+  LANDS IS THE QUESTION AND NOT THE INSTANCE - whether any other non-zero code
+  from this probe also deserves its own class. That is UNMEASURED.
+
+  THE REPRODUCTION, recorded because it is what makes the class checkable.
+  Invoking powershell.exe with a BAD SystemRoot returns 0xFFFF0000
+  DETERMINISTICALLY. A control set returned 0 in every case: no PATH, no APPDATA,
+  no USERPROFILE, no COMSPEC, no windir, and TEMP pointing at a nonexistent
+  directory. A parse error, a command-not-found and a `throw` all returned 1.
+
+  A TRANSFERABLE TRAP, recorded here because it is cheap to lose. UNDER GIT BASH
+  `$?` IS 8-BIT, so an exit of 4294901760 reads as 0 in a shell - only Python's
+  returncode carries the full 32 bits, so THIS EXIT CODE CANNOT BE CHASED THROUGH
+  A SHELL AT ALL. Measured the same evening and the same family: a COMPOUND
+  command's exit code is its LAST element, so a trailing echo reported 0 and made
+  a REFUSED PUSH LOOK SUCCESSFUL. Redirect each command to its own file.
+
 - **AN ADJUDICATED CALL, 2026-09-13 - AN UNREADABLE STAGED DIFF IS A CORPUS
   FAILURE AND THE GATE FAILS CLOSED ON IT. VERDICT CLOSED, 4 OF 4 CRITERIA.**
   NOT AN OPERATOR DECISION. Overturnable by reading this entry. Find it by this
@@ -225,6 +303,26 @@ version. What follows is everything the scaffold deliberately did not do.
   `tests/test_ci_history_depth.py`, `tests/test_ci_workflow_complement.py`,
   `tests/test_guard_worktree_blindness.py`, `tests/test_no_sibling_names.py`,
   `tests/test_responder_gate_census.py`.
+
+  CORRECTED 2026-09-14 - THAT LIST OF FIVE IS THE FILTER'S POPULATION AND NOT THE
+  REPAIR'S. The row above warned its own filter was name-based on one grep term
+  and would over-report as well as under-report; an AST probe run the next day
+  confirmed the over-report, so the warning is now a measurement. Only THREE of
+  the five shell git at all: `tests/test_ci_workflow_complement.py` via `_git_z`
+  plus two inline `git check-ignore` calls, `tests/test_no_sibling_names.py` via
+  `_tracked_text_files`, and `tests/test_responder_gate_census.py` via
+  `_tracked_python_files`. The other two have NOTHING TO REPAIR, and a skip added
+  to either would be a FALSE SKIP with no defect behind it - which is the same
+  over-fire error in the opposite direction. `tests/test_ci_history_depth.py`
+  executes no git: its only occurrence of the text subprocess.run is a STRING
+  LITERAL fed to a regex assertion. `tests/test_guard_worktree_blindness.py`
+  contains no `subprocess` call whatsoever - it calls into
+  `tests/test_licence_posture.py` and `tests/test_loop_concurrency.py`, neither of
+  which shells git, and its own `ls-files` occurrences are prose inside a census
+  table. THREE IS A FLOOR AND NOT A COUNT: the AST filter matches a literal
+  argv[0], so a git call assembled from a variable, or a spawn through anything
+  other than `subprocess`, is outside it. The runtime reading of eight red arms is
+  a DIFFERENT POPULATION from either filter and still stands as recorded.
 
   WHY IT MATTERS MOST, and it is LW's point holding verbatim here: TWO of the
   eight red arms are ANTI-VACUITY arms. A guard written to stop a false GREEN
