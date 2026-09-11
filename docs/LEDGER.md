@@ -12,6 +12,77 @@ now.
 
 ---
 
+## 2026-09-12 - An adjudicator corrected the orchestrator's own brief, and the ledger-instance row was answered by finding that nothing has ever been written to it
+
+Files: `ROADMAP.md`, `docs/LEDGER.md`.
+
+**WHAT LANDED HERE IS THE PAPERWORK, AND THE CODE IS NAMED AS IN FLIGHT RATHER
+THAN AS SHIPPED.** The responder fix this session dispatched is UNCOMMITTED in a
+worktree at the time of writing, blocked and then unblocked through three
+sequential slices, and this entry deliberately does not claim it. What is closed
+is an ADJUDICATED CALL and a CHECK that `ROADMAP.md` had left open, both recorded
+in that file under their own headings.
+
+**STATE MEASURED THIS SESSION at `41ba7d0`, stamped as a reading.** `pytest
+tests` 2106 passed 1 skipped; `agents/pity_engine` 80 passed; `node --test` in
+`shell/` 52 tests 52 pass 0 fail; licence 47, docs consistency 29, docs hook
+commands 17; `qa_companion` 18 passed 0 failed 1 skipped 3 noted; `ruff`,
+`headless.runner --once --dry-run` and `mypy` exit 0, the last at 34 source files
+and therefore silent about `scripts/`, `surface/`, `headless/`, `ops/` and
+`tests/`. Responder task exit 1 DORMANT, sole trigger expired 2026-09-07T21:00.
+Inbox 157 files, 0 unread. `git ls-files` 218 paths, 135 `.py`.
+
+**THE ADJUDICATED CALL CAUGHT A DEFECT IN THE DISPATCH BRIEF, NOT IN THE CODE,
+AND THAT IS THE ENTRY.** The brief instructed the builder to make
+`_remember_answered` fail closed on every unreadable class of the answered
+record, by analogy with the `read_reported` fix that landed at `b3ff9fe`. The
+analogy is false, and reading the cited docstring rather than summarising it is
+what showed why: that split turns on the DIRECTION and CONSEQUENCE of the
+degrade, not on the reader-versus-writer role. `_remember_answered` is THE ONLY
+THING THAT HEALS a replaceable answered record, so a writer that refuses turns
+the reader's degrade from ONE duplicate into ONE DELIVERY PER CYCLE FOREVER,
+into another repository's tree, `deliver` never overwriting a name and
+`_reply_name` being minute-resolution. Measured over three cycles per case,
+counted as files in the destination inbox: replaceable 3 before and 1 after,
+structural 3 before and 0 after, absent 1 then `empty`. The ruling is NEITHER
+candidate - mirror `refusals_usable`'s replaceable-versus-structural split - and
+it is recorded in `ROADMAP.md` under its own heading.
+
+**THE GAP THAT MADE IT INVISIBLE.** No tracked arm anywhere drives MULTIPLE
+cycles over a poisoned ANSWERED record; all eight existing multi-cycle `_drive`
+arms target `DEFAULT_REFUSALS`. A single-cycle arm structurally cannot see a
+per-cycle-forever loop, so the suite was green about a question it never asked.
+
+**THE LEDGER-INSTANCE CHECK: NO DIVERGENCE, and the reason is not convergence.**
+All five `record_cycle` call sites pass `DEFAULT_METRICS` verbatim; six total
+references exist in non-test code, so there is no second binding to diverge, and
+no `add_argument` sets the path. ZERO M1-M6 ROWS HAVE EVER BEEN WRITTEN LIVE -
+`_run_once` returns at its empty-queue gate before the first `record_cycle`, the
+three JSON records are ABSENT from `ops/runtime/`, and the only live record is
+`responder_invocations.log` at 48 lines which decomposes exactly into 19
+start-plus-`empty` pairs plus 10 bare starts. A census over four roots walked
+211694 directories and found 197 instances of those four basenames with exactly
+ONE live, every `responder_metrics.json` under a pytest tmp dir and zero under
+`C:\ProgramData`.
+
+**AND EVERY LINE NUMBER THAT ROW CARRIED WAS STALE, FIVE FOR FIVE, WITH TWO
+MUTUALLY INCONSISTENT NUMBERS FOR ONE DEFINITION.** `ROADMAP.md` cited
+`record_cycle` at both `:969` and `:1102`; it is at `:1067`. The five call sites
+were cited at 1615, 1634, 1665, 1700 and 1738; they are at 1728, 1748, 1785,
+1822 and 1871. The repair was to CITE BY NAME rather than to write five fresh
+numbers that will rot the same way - this tree has now measured decayed doc
+pointers three sessions running.
+
+**THE PROCESS FINDING, recorded because the shape recurs.** `SendMessage` is
+disabled in this session, so a brief discovered to be wrong while its builder was
+still running COULD NOT BE CORRECTED IN FLIGHT. The correction had to land as a
+follow-on slice into the same worktree, which then hit a real seam collision on
+two gate-guard files it did not own and STOPPED rather than editing them. Three
+sequential slices where one was planned. An orchestrator that cannot reach a
+running agent should assume a wrong brief costs a whole slice, and should
+therefore adjudicate the contested half BEFORE dispatch rather than in parallel
+with it.
+
 ## 2026-09-11 - A read that degrades to empty and is written back deletes the history it could not read, and three panels went live off the operator's own account
 
 Files: `scripts/watch_inbox.py`, `tests/test_watch_inbox_log_discard.py` (new),

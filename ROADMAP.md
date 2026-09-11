@@ -11,6 +11,107 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **AN ADJUDICATED CALL, 2026-09-12 - THE READING HALF OF `_answered` IS NEITHER
+  CANDIDATE, AND THE RULING CORRECTED THE ORCHESTRATOR'S OWN DISPATCH BRIEF.**
+  NOT AN OPERATOR DECISION. Overturnable by reading this entry. Find it by this
+  heading; do not cite it by line number.
+
+  THE QUESTION. `_answered` in `tools/moon_sync_responder.py` calls
+  `read_json(path, default=None)` and returns an empty set for absent,
+  undecodable and corrupt-JSON alike. Its reader inside `_run_once` feeds
+  `pending`, whose third argument is the set of notes already answered, so an
+  unreadable record makes every note look UNANSWERED and the responder answers
+  one it has already answered. Answering DELIVERS A FILE INTO ANOTHER PARTY'S
+  REPOSITORY TREE.
+
+  CANDIDATE KEEP was to leave the reader degrading, citing `read_reported` in
+  `scripts/watch_inbox.py`. CANDIDATE CLOSED was for the reader to fail closed
+  and decline the cycle. THE DECISION IS NEITHER.
+
+  WHY KEEP LOST. Its precedent citation does not survive reading the actual
+  docstring it cites. `read_reported`'s split turns on the DIRECTION and
+  CONSEQUENCE of the degrade - it "can never invent one, so it fails in the safe
+  direction", and its only caller prints - NOT on the reader-versus-writer role.
+  `_answered` INVENTS WORK and its caller DELIVERS, so it is not in that class.
+
+  WHY CLOSED LOST. `read_json` cannot separate absent from corrupt, and ABSENT
+  IS THE STATE ON DISK RIGHT NOW - the answered record under the ops runtime
+  directory does not exist, and it is deliberately NOT backticked here because
+  `tests/test_docs_consistency.py` correctly rejects a pointer at an untracked
+  runtime path, which is how this sentence was caught - so a blanket close
+  deadlocks a cold start, and it re-litigates the
+  replaceable-versus-structural split settled 2026-09-08.
+
+  THE RULING, and it is the text a later session must implement rather than
+  either candidate: `answered_usable(path) -> (bool, why)` mirroring
+  `refusals_usable` in the same module. DEGRADE on the four REPLACEABLE
+  poisonings - corrupt text, empty file, wrong-type document, valid JSON of the
+  wrong shape - because the next write HEALS them and the cost is bounded at one
+  duplicate. FAIL CLOSED on the STRUCTURAL classes, where the write cannot land
+  either and the duplicate loop is therefore UNBOUNDED. Treat ABSENT as
+  truthfully empty. And STOP DISCARDING `_remember_answered`'s bool at its call
+  site, because a failed answered-write currently reaches neither the cycle
+  result, nor `record_cycle`, nor the invocation log, which is what would make
+  the duplicate loop SILENT.
+
+  THE CORRECTION TO THE ORCHESTRATOR, worth the ink because it is the reason
+  adjudication is not ceremony. The dispatch brief for this session's builder
+  said to make `_remember_answered` FAIL CLOSED on every unreadable class. That
+  is WRONG and would have shipped a worse defect than the one being fixed:
+  `_remember_answered` is THE ONLY THING THAT HEALS a replaceable record, so a
+  writer that refuses converts the reader's degrade from ONE duplicate into ONE
+  DELIVERY PER CYCLE FOREVER. `deliver` never overwrites an existing name and
+  `_reply_name` is minute-resolution, so the duplicates ACCUMULATE as distinct
+  files in somebody else's repository - the same arithmetic as the measured
+  288-a-day bounce defect.
+
+  MEASURED, three cycles per case, counted as files in the destination inbox: a
+  replaceable record delivered 3 before and 1 after; a structural record - a
+  non-empty directory at the path - delivered 3 before and 0 after; an absent
+  record delivers 1 and then terminates `empty`.
+
+  THE GAP IN THE EXISTING SUITE, which is why a single-cycle arm could not have
+  caught this: NO tracked arm drives MULTIPLE cycles over a poisoned ANSWERED
+  record. All eight existing multi-cycle `_drive` arms target `DEFAULT_REFUSALS`.
+
+  REACHABILITY, measured not assumed. `python ops/check_task_liveness.py
+  ResinCompute-Responder` exits 1 DORMANT, its sole trigger expired
+  2026-09-07T21:00, `ARMED_BY_DEFAULT` is False and the armed gate returns
+  before delivery. Every in-tree writer is ASCII-closed through
+  `atomic_write_json`, so NO in-tree writer can emit a non-ASCII or torn
+  record - these paths are reachable by EXTERNAL corruption only.
+
+  COMMON-MODE RISK the adjudicator named: both candidates assumed the writer fix
+  was orthogonal to the reader. It is not, and that assumption is exactly what
+  the brief got wrong. Secondary shared input neither candidate tests: the repos
+  config under the ops directory - untracked, per-host, and deliberately not
+  backticked for the same reason as above - is what makes a re-answer land
+  outside this repo root at all.
+
+  WHAT WOULD OVERTURN THIS: an operator ruling that absent and corrupt need not
+  be separated, which would hand it to CANDIDATE CLOSED; or evidence that a
+  sibling's inbox de-duplicates replies by content, which would collapse the
+  irreversibility criterion and hand it to CANDIDATE KEEP.
+
+- **OPEN 2026-09-12, AND IT IS A JUDGEMENT RATHER THAN A MEASUREMENT, WHICH IS
+  WHY IT IS FILED INSTEAD OF FIXED. TWO RECORDS IN ONE MODULE NOW ANSWER THE
+  SAME POISONING OPPOSITELY.** `record_cycle` fails closed on ALL unreadable
+  classes of the metrics ledger, replaceable included; `answered_usable` degrades
+  on the replaceable classes and fails closed only on the structural ones. The
+  defence is what the bytes are FOR - a metrics row is irreplaceable evidence of
+  a cycle that cannot be re-run, while an answered name is a suppression key
+  whose only job is to stop a second delivery - and that reasoning is written at
+  the site. But it is an argument, not a measurement, and a third record,
+  `refusals_usable`, is fail-open on corrupt content and is an OUTSTANDING
+  OPERATOR DECISION. Three records, three dispositions. A later session should
+  rule on the SET rather than harmonise a pair of them.
+
+- **OPEN 2026-09-12, small and shared-surface.** `answered_usable` calls
+  `_ensure_parent`, so a name that reads as a predicate CREATES A DIRECTORY.
+  Inherited deliberately by mirroring `refusals_usable`, which does the same.
+  The fix is a rename across BOTH, which touches the fenced-off
+  `refusals_usable` and therefore waits on the operator decision above.
+
 - **CLOSED 2026-09-11. THREE PANELS WENT LIVE OFF THE OPERATOR'S OWN ACCOUNT,
   AND THE TWO CONSTANTS THIS TREE REFUSES TO RE-DERIVE WERE CONFIRMED BY THE
   LIVE CLIENT.** With the in-game showcase opened, `avatarInfoList` arrived and
@@ -96,7 +197,9 @@ version. What follows is everything the scaffold deliberately did not do.
     `sorted(_answered(path) | {name})`. A degraded read makes the union start
     from empty, so every previously answered note is erased and the call still
     returns True. Same shape as `record_reported`, which this tree just fixed.
-  - `record_cycle` at `tools/moon_sync_responder.py:1102` takes
+  - `record_cycle` in `tools/moon_sync_responder.py` - CITED BY NAME, because
+    this row carried `:1102` and the block below carried `:969` for the SAME
+    definition and BOTH were wrong; measured 2026-09-11 it is at `:1067` - takes
     `read_json(metrics, default=None)` and falls back to `rows = []`, so a
     corrupt ledger is replaced by a one-row ledger and the call returns True.
     THIS IS A DIFFERENT DEFECT FROM THE TRIM AT `:1135` and is not covered by
@@ -1369,14 +1472,43 @@ version. What follows is everything the scaffold deliberately did not do.
      `tools/moon_sync_responder.py:1207` is correct as it stands, its lines not
      being evidence rows.
 
-  2. WHICH LEDGER INSTANCE IS LIVE HAS NOT BEEN CHECKED HERE, and this row asks
-     for a CHECK rather than naming a defect. `record_cycle` at
-     `tools/moon_sync_responder.py:969` takes the ledger path as a PARAMETER
-     from five call sites - lines 1615, 1634, 1665, 1700 and 1738. RC shipped
-     two plausible bindings for its own live agreement and BOTH produced an
-     identical failure, trial rows going 30 to 0, for two different reasons. No
-     divergence has been measured in this tree. Deriving identity from the
-     artifact being protected is the shape to reach for IF the check finds one.
+  2. CHECKED AND ANSWERED 2026-09-11 - NO DIVERGENCE. The row asked for a CHECK
+     rather than naming a defect, and the check was run. `record_cycle` takes
+     the ledger path as a PARAMETER from five call sites, and all five pass the
+     module global `DEFAULT_METRICS` verbatim. `grep -rn "DEFAULT_METRICS"` over
+     `tools ops headless scripts engines core agents` returns SIX hits: the
+     definition and those five arguments. THERE IS NO SECOND BINDING TO DIVERGE.
+     No argparse flag sets it - none of the eight `add_argument` calls names a
+     metrics or runtime path - and the registered task sets no environment, so
+     it inherits `REPO_ROOT/ops/runtime`. A sibling repo shipped two plausible
+     bindings and BOTH failed; that failure mode is not reachable here.
+
+     EVERY LINE NUMBER THIS ROW ORIGINALLY CARRIED WAS STALE, five for five,
+     which is why they are gone rather than corrected. It cited the definition
+     at `:969` and the call sites at 1615, 1634, 1665, 1700 and 1738; measured
+     at 41ba7d0 they are `:1067` and 1728, 1748, 1785, 1822, 1871 - deltas of
+     +98 and +113 to +133. All five calls are inside ONE function, `_run_once`.
+
+     AND THE LOAD-BEARING FINDING, which is not what the row went looking for:
+     ZERO M1-M6 ROWS HAVE EVER BEEN WRITTEN LIVE. `responder_metrics.json`,
+     `responder_answered.json` and `responder_refusals.json` are ABSENT from
+     `ops/runtime/`; the only live record is `responder_invocations.log` at 48
+     lines. A whole-disk census over four roots, 211694 directories walked,
+     found 197 instances of those four basenames and exactly ONE live - every
+     `responder_metrics.json` sits under a pytest tmp dir, and ZERO sit under
+     `C:\ProgramData`. The mechanism is measured: `_run_once` returns at its
+     empty-queue gate BEFORE the first `record_cycle`, and the invocation log
+     decomposes exactly - 19 start-plus-`empty` pairs at five-minute boundaries
+     is 38 lines, plus 10 bare `start` lines, is 48. The log's transition minute
+     matches `fe53f31`, the commit that added terminal-outcome logging.
+
+     RESIDUAL, stated so the negative is not read as wider than it is: the 10
+     bare `start` lines have unrecoverable terminations, and five of them are
+     off-boundary, so the live 48 is not provably 48 task fires - the `rsp`
+     fixture docstring records that the suite once wrote real lines into this
+     exact live log, and a leaked fixture line is indistinguishable from a
+     manual dry run. The census covered four roots and says nothing about other
+     drives, network paths, or any sibling tree.
 
   3. NOTHING GUARDS THE SENDER SIDE AGAINST EDITING A NOTE AFTER DELIVERY.
      MEASURED: the watcher reports 3 entries under WITHDRAWN after being shown
