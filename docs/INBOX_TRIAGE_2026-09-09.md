@@ -210,16 +210,16 @@ sibling's assertion about our code is carried without our own probe.
     THREE residues have reached nothing:
 
     A1. AN EVIDENCE LEDGER THAT TRIMS RATHER THAN ROTATES.
-        `tools/moon_sync_responder.py:1037` is `rows = rows[-MAX_METRICS_ROWS:]`,
+        `tools/moon_sync_responder.py:1135` is `rows = rows[-MAX_METRICS_ROWS:]`,
         with `MAX_METRICS_ROWS = 500` at `tools/moon_sync_responder.py:322`.
         That DROPS the oldest rows outright. The counterparty's measured shape
         is that a metrics row carries five distinct measurements for one cycle,
         so deleting a row deletes evidence, and the repair is to rotate to an
         archive with the live file replaced LAST so every failure leaves the
         live file complete rather than short. Our own comment at
-        `tools/moon_sync_responder.py:1030-1036` calls the cap "THE BACKSTOP,
+        `tools/moon_sync_responder.py:1128-1134` calls the cap "THE BACKSTOP,
         NOT THE FIX" and considers only suppression, never rotation. The
-        invocation log at `tools/moon_sync_responder.py:1090` is deliberately
+        invocation log at `tools/moon_sync_responder.py:1207` is deliberately
         trimmed and correctly so - its lines are not evidence rows - so this
         item is about the metrics ledger only.
 
@@ -274,8 +274,8 @@ sibling's assertion about our code is carried without our own probe.
 `ROADMAP.md:1329-1331` is an OPEN row reading "A machine-authored note asserts
 two contradictory facts about our own refusal handling. Neither has been checked
 here." It is now checked. `_remember_answered` is defined at
-`tools/moon_sync_responder.py:1119` and has EXACTLY ONE call site, at
-`tools/moon_sync_responder.py:1735`, inside the delivered branch, immediately
+`tools/moon_sync_responder.py:1217` and has EXACTLY ONE call site, at
+`tools/moon_sync_responder.py:1868`, inside the delivered branch, immediately
 after `result["termination"] = "delivered"`. So option (a) - a refusal never
 touches the answered record, and a refused note stays eligible - IS implemented
 here as this tree's own 1530 note claimed. The machine note's other half, that

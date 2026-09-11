@@ -49,6 +49,38 @@ version. What follows is everything the scaffold deliberately did not do.
   plus indentation, and it pre-replaces the two common comment markers. Six
   other split shapes that NEITHER side can see are now recorded at the site.
 
+- **OPEN 2026-09-10, APPLICABLE-AND-NOT-DONE. THE DEGRADE-TO-EMPTY-THEN-REWRITE
+  ROOT CAUSE HAS THREE MORE SITES IN `tools/moon_sync_responder.py`, FOUND BY A
+  VERIFIER AFTER THE FIX LANDED IN `scripts/watch_inbox.py`.** The shape is a
+  read that returns empty on decode or parse failure, spliced with new data and
+  written BACK, which converts unreadable history into DELETED history. Each
+  line below was re-read at HEAD before filing, and none is fixed.
+  - `_remember_answered` at `tools/moon_sync_responder.py:1217` writes
+    `sorted(_answered(path) | {name})`. A degraded read makes the union start
+    from empty, so every previously answered note is erased and the call still
+    returns True. Same shape as `record_reported`, which this tree just fixed.
+  - `record_cycle` at `tools/moon_sync_responder.py:1102` takes
+    `read_json(metrics, default=None)` and falls back to `rows = []`, so a
+    corrupt ledger is replaced by a one-row ledger and the call returns True.
+    THIS IS A DIFFERENT DEFECT FROM THE TRIM AT `:1135` and is not covered by
+    the bounded-rotate authorisation.
+  - `_trim_invocations` at `tools/moon_sync_responder.py:1204` reads
+    `encoding="ascii", errors="replace"` but never folds U+FFFD, while
+    `core/atomic_io.py` encodes UTF-8. One bad byte is written as three, re-read
+    as ASCII becomes three replacement characters, and is written as nine:
+    THREEFOLD GROWTH PER FIRE. Size-gated at 262144 bytes, so latent rather than
+    firing. `scripts/watch_inbox.py` avoids this by folding U+FFFD to ASCII `?`,
+    and an arm pins byte-stability across four fires.
+
+  NOT A REGRESSION AND NOT FIRING TODAY: every in-tree writer is ASCII-closed,
+  so all three are reachable by EXTERNAL corruption of a runtime file only.
+  RECORDED SEPARATELY, NOT FILED AS A DEFECT: `refusals_usable` at
+  `tools/moon_sync_responder.py:1264` deliberately does NOT fail closed on
+  corrupt content. That is now inconsistent with the rule
+  `scripts/watch_inbox.py` adopted, and the divergence is defensible on cost
+  rather than accidental. A later session should rule on it rather than
+  silently harmonising either side.
+
 - **OPERATOR RULING 2026-09-10 - THE SESSION SCRATCHPAD IS IN SCOPE, AND
   CLAUSE (a) DOES NOT REACH IT. NOT AN ADJUDICATED CALL - THE OPERATOR RULED
   DIRECTLY, SO THE TEN STAND AT TEN.** The halt boundary's clause (a) covers
@@ -1289,7 +1321,7 @@ version. What follows is everything the scaffold deliberately did not do.
   precondition of that slice.
 
   1. THE EVIDENCE LEDGER TRIMS RATHER THAN ROTATES.
-     `tools/moon_sync_responder.py:1037` is `rows = rows[-MAX_METRICS_ROWS:]`,
+     `tools/moon_sync_responder.py:1135` is `rows = rows[-MAX_METRICS_ROWS:]`,
      the constant at `tools/moon_sync_responder.py:322`. That DROPS the oldest
      rows outright, and a metrics row carries five distinct measurements for one
      cycle, so deleting a row deletes evidence. Our own comment above it calls
@@ -1297,7 +1329,7 @@ version. What follows is everything the scaffold deliberately did not do.
      never rotation. The repair shape offered by RC is to rotate to an archive
      with the live file replaced LAST, so every failure leaves the live file
      complete rather than short. SCOPED: the invocation log trimmed at
-     `tools/moon_sync_responder.py:1090` is correct as it stands, its lines not
+     `tools/moon_sync_responder.py:1207` is correct as it stands, its lines not
      being evidence rows.
 
   2. WHICH LEDGER INSTANCE IS LIVE HAS NOT BEEN CHECKED HERE, and this row asks
@@ -2705,8 +2737,8 @@ version. What follows is everything the scaffold deliberately did not do.
   5. **CLOSED 2026-09-09 by the inbox triage, and the machine note's first
      half is the true one.** It asserted two contradictory facts about our own
      refusal handling. `_remember_answered` is defined at
-     `tools/moon_sync_responder.py:1119` and has EXACTLY ONE call site, at
-     `tools/moon_sync_responder.py:1735`, inside the delivered branch and
+     `tools/moon_sync_responder.py:1217` and has EXACTLY ONE call site, at
+     `tools/moon_sync_responder.py:1868`, inside the delivered branch and
      immediately after the termination is set to delivered. So a refusal never
      touches the answered record and a refused note stays eligible - option (a),
      which is what this tree's own 2026-09-08-1530 note claimed. The note's
