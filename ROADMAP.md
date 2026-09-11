@@ -106,6 +106,18 @@ version. What follows is everything the scaffold deliberately did not do.
   OPERATOR DECISION. Three records, three dispositions. A later session should
   rule on the SET rather than harmonise a pair of them.
 
+- **OPEN 2026-09-12, FLAGGED BY THE BUILDER THAT COULD NOT FIX IT WITHOUT
+  RE-RUNNING AN EXPERIMENT.** In `tests/test_responder_gate_census.py` the prose
+  around the `advF-garbage` finding says "those 18 cases assert only ..." and
+  "leaves all 18 of them PASSING". The parametrized block is now 20 cases, so
+  the 18 READS AS A LIVE COUNT while being a DATED measurement from 2026-09-09.
+  Fifteen other 18/19 references in that file were deliberately left alone and
+  are correct as they stand - quoted mutant expressions naming the specific wrong
+  conjunct tried that day, and dated experiment results - but this pair is
+  ambiguous between the two kinds. Repairing it properly means re-running the
+  `advF-garbage` mutant, which was outside the slice's write-list budget. Either
+  re-run it and stamp the result, or reword so the number is unmistakably dated.
+
 - **OPEN 2026-09-12, small and shared-surface.** `answered_usable` calls
   `_ensure_parent`, so a name that reads as a predicate CREATES A DIRECTORY.
   Inherited deliberately by mirroring `refusals_usable`, which does the same.
@@ -187,9 +199,24 @@ version. What follows is everything the scaffold deliberately did not do.
   plus indentation, and it pre-replaces the two common comment markers. Six
   other split shapes that NEITHER side can see are now recorded at the site.
 
-- **OPEN 2026-09-10, APPLICABLE-AND-NOT-DONE. THE DEGRADE-TO-EMPTY-THEN-REWRITE
-  ROOT CAUSE HAS THREE MORE SITES IN `tools/moon_sync_responder.py`, FOUND BY A
-  VERIFIER AFTER THE FIX LANDED IN `scripts/watch_inbox.py`.** The shape is a
+- **CLOSED 2026-09-12 at `6c351b3`, ALL THREE SITES PLUS THE AUTHORISED ROTATE -
+  BUT THE MIDDLE ONE DID NOT LAND AS THIS ROW SPECIFIED IT, AND THE DIFFERENCE
+  IS THE POINT.** `record_cycle` now splits absent from unreadable and refuses
+  the write, leaving the bytes byte-identical. `_trim_invocations` folds U+FFFD
+  to ASCII `?`, the threefold growth MEASURED across three fires at 273363,
+  273369 and 273387 bytes - plus six then plus eighteen - before the fix. The
+  metrics cap rotates to ONE bounded generation, written FIRST with the live file
+  LAST. `_remember_answered` did NOT become fail-closed: that instruction was
+  REFUTED by the adjudicated call recorded above, because it is the only thing
+  that heals a replaceable record, and `answered_usable` mirrors
+  `refusals_usable` instead. Graded by `tests/test_responder_degraded_write.py`;
+  the two new `# GATE:` tags moved `tests/test_gate_name_bindings.py` and
+  `tests/test_responder_gate_census.py`, both floors RAISED and every assertion
+  keeping its strength. Seam re-run 2146 passed 1 skipped, and CI `ci` green.
+  The original row follows, unedited, because the specification it got wrong is
+  the record worth keeping.
+
+  THE SHAPE IS a
   read that returns empty on decode or parse failure, spliced with new data and
   written BACK, which converts unreadable history into DELETED history. Each
   line below was re-read at HEAD before filing, and none is fixed.

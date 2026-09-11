@@ -17,43 +17,32 @@ docs/LEDGER.md, git log. Before any character build read
 docs/GOAL_SPEC_SEED_TEAM.md. Before a data source read docs/LICENSE_NOTES.md.
 Before re-litigating read docs/adr/README.md.
 
-*** FIRST ACTION THIS SESSION - THERE IS UNCOMMITTED WORK IN A WORKTREE ***
-A three-slice responder fix was built last session and NEVER MERGED. It is
-uncommitted, and it was GREEN on its own suite but RED on two gate-guard files
-when the session ended. The last slice was still running at /done time, so its
-outcome is UNKNOWN TO THIS PROMPT - re-measure, do not assume.
+*** ONE THING WAS NOT RUN LAST SESSION AND IS LABELLED UNVERIFIED ***
+The responder fix MERGED and CI is green, but the independent VERIFIER and the
+ADVERSARY passes with distinct lenses did NOT run - /done arrived while the last
+slice was still working. The seam gate was re-run by the main thread, which is a
+ground-truth re-check and NOT a substitute for a refuter. If you spend one slice
+this session, spend it there, on the commit 6c351b3, with these lenses:
+  - correctness: does answered_usable's replaceable-versus-structural split hold
+    on the edge cases, and is the new `answered-unusable` termination reachable
+    by any path other than a monkeypatch?
+  - does-it-reproduce: re-run the cited numbers in a clean shell - the three-fire
+    byte series, the 3-to-1 and 3-to-0 delivery counts, the six-arms-red
+    non-vacuity probe - and read the exit codes rather than the claims.
+  - scope and siblings: the degrade-to-empty root cause was fixed at three sites
+    here and three in scripts/watch_inbox.py. Sweep for a FOURTH anywhere in the
+    tree and default to REFUTED if you cannot show the sweep was exhaustive.
+  ONE ARM SHAPE TO ATTACK FIRST: four of the five rotate arms went red by
+  `AttributeError: no attribute '_rotation_path'` - RED BY ABSENT API, not by
+  measurement. Only the fifth is behaviour-only. An arm that grades its own
+  scaffolding is the shape this tree has been bitten by.
+  AND ONE ADMITTED LIMITATION, from the builder itself:
+  test_a_failed_answered_write_is_reported_rather_than_discarded injects its
+  False by monkeypatching the call site, because every real structural route is
+  now stopped by the reader gate one level up. Stated at the site rather than
+  papered over. Decide whether that arm is worth what it costs.
 
-  Worktree: C:\Resin Compute\.claude\worktrees\agent-a394cb6133a3bc0f4
-  Branch:   worktree-agent-a394cb6133a3bc0f4
-  Forked at 41ba7d05fd09fc32875e325f62ef38b83424fb9c
-
-  Verify the worktree still exists, then measure IN IT, each command separately:
-    git status --porcelain
-    python -m pytest tests
-  Last observed there: 11 failed, 2135 passed, 1 skipped, exit 1. All 11
-  failures were in tests/test_gate_name_bindings.py and
-  tests/test_responder_gate_census.py - the guards that a NEW `# GATE:` tag is
-  BUILT to redden. A slice was dispatched to fix exactly those two files and had
-  not reported.
-
-  sha256 as last seen (WILL HAVE MOVED if that slice landed):
-    tools/moon_sync_responder.py
-      8baea0a779eeee0daeb74e55d0f607a75a1ab25387501097ee7a9e593e4a30e0
-    tests/test_responder_degraded_write.py
-      5f1da072ae866ecf9667db48041d46ed1d835c7e96bbe7480cff0b624a477fff
-
-  IF THE SUITE IS GREEN IN THERE: verify independently, then merge to main and
-  commit. IF IT IS STILL RED: the two guards need the two new gate anchors
-  `answered-usable` and `answered-recorded`, the census `_FLOOR` equality
-  bumped 18 -> 20 and its mutant-count literal 19 -> 21, plus the prose that
-  restates those numbers. DROPPING THE TAGS IS NOT AN ESCAPE - measured, the
-  census then reports both sites as UNTAGGED CONSULT SITES.
-  DO NOT WEAKEN AN ASSERTION TO MAKE IT PASS. Three vacuous floors have already
-  been found and fixed in this tree; a bumped floor is the obvious way to make
-  this green and wrong. Prove non-vacuity: rename one tag on a SCRATCHPAD COPY
-  and confirm both guards go red.
-
-WHAT THAT WORKTREE CONTAINS, all four items, none of it on main:
+WHAT LANDED AT 6c351b3, all four items, DO NOT REDO:
   - record_cycle fails closed on an unreadable metrics ledger, bytes left
     byte-identical, returns False.
   - _trim_invocations folds U+FFFD to ASCII '?'. Pre-fix growth MEASURED at
@@ -67,11 +56,6 @@ WHAT THAT WORKTREE CONTAINS, all four items, none of it on main:
     2026-09-12 adjudicated call. Replaceable poisonings DEGRADE and heal;
     structural ones FAIL CLOSED with a new termination `answered-unusable`;
     absent is truthfully empty. _remember_answered's bool is no longer discarded.
-
-  ONE ARM SHAPE TO CHECK BEFORE TRUSTING IT: four of the five rotate arms went
-  red by `AttributeError: no attribute '_rotation_path'` - RED BY ABSENT API,
-  not by measurement. Only the fifth is behaviour-only. An arm that grades its
-  own symbol rather than the defect is the shape this tree has been bitten by.
 
 DO NOT RE-DERIVE GACHA CONSTANTS. docs/SPEC_SCAFFOLD.md section 3, ADR-003.
 50/50 is 55.000% consolidated since 5.0. Weapon soft-pity saturates at pull 77
@@ -139,31 +123,34 @@ at the end of a chain.
 DO NOT PASS -q ON THE COMMAND LINE. pytest.ini sets it; a second makes it -qq
 and the summary line disappears entirely.
 
-STATE AS OBSERVED 2026-09-12 at 41ba7d0 ON MAIN, a reading not a promise.
+STATE AS OBSERVED 2026-09-12 at 6c351b3 ON MAIN, a reading not a promise.
 RE-MEASURE.
-  pytest tests   2106 passed 1 skipped. COLLECTED AND PASSED ARE DIFFERENT
+  pytest tests   2146 passed 1 skipped, up from 2106 at the 41ba7d0 fork point.
+  COLLECTED AND PASSED ARE DIFFERENT
   POPULATIONS. agents/pity_engine 80 passed. node --test 52 tests 52 pass 0
   fail. licence 47, docs consistency 29, docs hook commands 17. qa 18 passed
   0 failed 1 skipped 3 noted. ruff / headless / mypy exit 0.
   mypy ADVISORY. Its 34 source files say NOTHING about scripts/, surface/,
   headless/, ops/ or tests/. Never cite its Success about those.
-  git ls-files 218 paths. git ls-files -- '*.py' 135. BOTH DECAY.
+  git ls-files 219 paths. git ls-files -- '*.py' 136. BOTH DECAY.
   CHECK EVERY SESSION, FIRST: gh run list --limit 5
-  CI at 41ba7d0: docs-guards GREEN. ci did NOT fire on that push and that is
-  CORRECT - ci.yml carries paths-ignore '**/*.md' and docs-guards fires on
-  exactly what ci declines.
+  CI: `ci` GREEN at 6c351b3, watched with `gh run watch --exit-status`, exit 0.
+  docs-guards GREEN at b128eb1, and `ci` did NOT fire on THAT push - that is
+  CORRECT, ci.yml carries paths-ignore '**/*.md' and docs-guards fires on
+  exactly what ci declines. b128eb1 was docs-only; 6c351b3 carried code.
   LOCAL GREEN IS OPTIMISTIC. qa_companion NOTEs local ruff 0.15.12 / pytest
   9.0.3 / mypy 2.1.0 are ALL OLDER than the CI pins, and the interpreter here is
   3.14 while CI runs 3.11.
 
-WHAT LANDED 2026-09-12, DO NOT REDO. Docs only - the code is in the worktree.
-  - The 2026-09-12 ADJUDICATED CALL on the reading half of _answered, in
-    ROADMAP.md under its own heading, plus the correction it made to the
-    orchestrator's brief.
-  - ROADMAP item 2 of the four-item block, WHICH LEDGER INSTANCE IS LIVE, is
-    now CHECKED AND ANSWERED: NO DIVERGENCE.
-  - Two new open rows: the three-record disposition asymmetry, and
-    answered_usable's _ensure_parent side effect.
+WHAT LANDED 2026-09-12, DO NOT REDO.
+  b128eb1 docs - the ADJUDICATED CALL on the reading half of _answered, the
+          correction it made to the orchestrator's own brief, the answered
+          ledger-instance CHECK, and five stale line numbers removed.
+  6c351b3 code - all four responder items, plus the two gate guards moved.
+  Two new open rows from the ruling: the three-record disposition asymmetry, and
+  answered_usable's _ensure_parent side effect. One from the guard slice: a
+  dated 18 in the census prose that now reads as a live count.
+  NOT DONE: the independent verifier and the adversary lenses. See the top.
 
 THE LEDGER-INSTANCE ANSWER, so nobody re-runs it. NO DIVERGENCE, and the reason
 is NOT convergence. All five record_cycle call sites pass DEFAULT_METRICS
@@ -190,7 +177,15 @@ is at :1067. The five call sites were cited 1615/1634/1665/1700/1738; they are
 have now decayed in three consecutive sessions.
 
 OPEN ROWS. RE-PROBE EACH BEFORE SPENDING A SLICE.
-  - The worktree merge at the top of this prompt. Highest priority.
+  - The verifier and adversary passes at the top of this prompt. Highest
+    priority, because it is a done-claim nothing has tried to refute.
+  - THE CENSUS PROSE says "those 18 cases" and "all 18 of them PASSING" where the
+    parametrized block is now 20. It is a DATED 2026-09-09 finding reading as a
+    live count. Fifteen other 18/19 references in that file are correct as they
+    stand - quoted mutant expressions and dated results - so do not sweep them.
+    Repairing this pair properly means re-running the advF-garbage mutant.
+  - THREE RECORDS, THREE DISPOSITIONS, and it belongs to the operator. See
+    decision 3 above.
   - The Resin panel has no automatic observation source. Original Resin is not
     in the Enka payload and never will be. Today an observation is typed in by
     hand. Same gap as the income-velocity item under Next.
