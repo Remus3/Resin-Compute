@@ -155,6 +155,59 @@ if (-not (Test-Path -LiteralPath $xmlPath)) {
 
 $xml = Get-Content -LiteralPath $xmlPath -Raw
 
+$xml = $xml.Replace('__PYTHONW_EXE__', $PythonwExe)
+$xml = $xml.Replace('__INSTALL_ROOT__', $InstallRoot)
+$xml = $xml.Replace('__TASK_USER__', $TaskUser)
+$xml = $xml.Replace('__START_BOUNDARY__', $startBoundary)
+$xml = $xml.Replace('__END_BOUNDARY__', $endBoundary)
+$xml = $xml.Replace('__REPEAT_DURATION__', $repeatDuration)
+
+# THE GRAMMAR IS THE DELIMITER, NOT THE SPELLING.
+#
+# Derived by SUBTRACTION rather than by listing the Replace calls above, which
+# would only ever restate them and would omit the token nobody named. Scanning
+# ops/ResinCompute-Responder.xml and ops/ResinCompute-Supervisor.xml for the
+# delimiter pair alone - every __...__ run, whatever it spells - returns the six
+# tokens above and the supervisor's three, and NOTHING ELSE. In the template
+# files the delimiter is a perfect discriminator: every occurrence of it is a
+# placeholder and no other construct uses it. Subtracting what the previous
+# '__[A-Z_]+__' already caught left the EMPTY SET, so this widening fixes no
+# surviving token that exists today.
+#
+# What it does fix is the guard's REACH. This guard's subject is the string about
+# to reach Register-ScheduledTask, and its token content is set by two lists
+# maintained separately by hand - the template, which is editable data, and the
+# Replace calls above. The guard exists to catch DRIFT between them, so a
+# grammar derived from the current SPELLING of one list is exactly as tight as
+# the other already is and adds nothing. Only the DELIMITER is invariant across
+# a template edit.
+#
+# WHICH AXIS ACTUALLY LEAKED, and it is not the one this was first reported as.
+# PowerShell's -match is case-INSENSITIVE; -cmatch is the case-sensitive
+# operator. The old '__[A-Z_]+__' therefore behaved as '__[A-Za-z_]+__' at
+# runtime, so a lowercase token never leaked at all. Measured 2026-09-11 end to
+# end against both real installers with -WhatIfOnly, return codes read in
+# Python: a planted '__pythonw_exe__' threw in BOTH (rc=1), while a planted
+# '__Slot1__' cleared BOTH (rc=0) and would have been registered verbatim. The
+# axis that defeated the guard was the DIGIT, and only the digit.
+#
+# The inner class is written out rather than as \w. .NET's \w is Unicode-aware,
+# so it would also match non-ASCII text arriving through a substituted path;
+# this stays deterministic and ASCII-scoped. Spelling both cases out rather than
+# leaning on -match's case-insensitivity also closes a second gap: the graders
+# in tests/ compile this pattern with Python's re, which IS case-sensitive, so a
+# class that is not case-complete makes the grader and the installer disagree
+# about a token neither of them names.
+#
+# COST, stated rather than hidden: a checkout under a directory spelled
+# my__build__2 now trips this where it did not before. That failure is loud,
+# names the matched text and is recoverable in one read. The failure it replaces
+# is a task ARMED with a literal placeholder inside its argv, which the
+# scheduler reports as State Ready forever.
+if ($xml -match '__[A-Za-z0-9_]+__') {
+    throw ('a placeholder was left unsubstituted: ' + $Matches[0])
+}
+
 # THE DECLARATION MUST SAY UTF-16, AND THE FILE ON DISK MUST STAY ASCII.
 #
 # Register-ScheduledTask takes the XML as a .NET STRING, which is UTF-16 in
@@ -170,17 +223,17 @@ $xml = Get-Content -LiteralPath $xmlPath -Raw
 #
 # The file stays 7-bit ASCII per the repo rule; only the string handed to the
 # API is relabelled.
-$xml = $xml -replace '^\s*<\?xml[^>]*\?>', '<?xml version="1.0" encoding="UTF-16"?>' 
-$xml = $xml.Replace('__PYTHONW_EXE__', $PythonwExe)
-$xml = $xml.Replace('__INSTALL_ROOT__', $InstallRoot)
-$xml = $xml.Replace('__TASK_USER__', $TaskUser)
-$xml = $xml.Replace('__START_BOUNDARY__', $startBoundary)
-$xml = $xml.Replace('__END_BOUNDARY__', $endBoundary)
-$xml = $xml.Replace('__REPEAT_DURATION__', $repeatDuration)
-
-if ($xml -match '__[A-Z_]+__') {
-    throw ('a placeholder was left unsubstituted: ' + $Matches[0])
-}
+#
+# THIS RUNS AFTER THE GUARD, AND THE ORDER IS LOAD BEARING. It used to run
+# first, and because the pattern below consumes the whole declaration, a
+# placeholder left INSIDE the declaration was rewritten away before the guard
+# could see it. Measured 2026-09-11: a planted encoding="__ENC_TOKEN__" left
+# this script exiting 0, while the supervisor installer, which has no such
+# rewrite, exited 1 on the same plant. Substitute, then guard, then relabel.
+# The relabel is unchanged by the move: its pattern is anchored at the start of
+# the string and no placeholder sits in the declaration, so it matches the same
+# text either way.
+$xml = $xml -replace '^\s*<\?xml[^>]*\?>', '<?xml version="1.0" encoding="UTF-16"?>'
 
 Write-Step ('install root : ' + $InstallRoot)
 Write-Step ('interpreter  : ' + $PythonwExe)
