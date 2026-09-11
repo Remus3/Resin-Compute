@@ -2,12 +2,34 @@
 
 WHAT IS GUARDED, AND WHY IT IS NOT A SHAPE.
 
-`conftest.py` at the repository root removes nine git environment variables at
-IMPORT. Every arm below FEEDS ONE OF THEM AS A REAL INPUT to a child process and
-then measures the answer a corpus builder would get. Nothing here asserts that a
-fixture exists, that a tuple has nine entries, or that a name appears in a file.
-A shape arm pins format and not input, and this tree has shipped four of those
-in one day that stayed green against a mutant which broke the property.
+`conftest.py` at the repository root removes a table of git environment
+variables at IMPORT. Every row arm below FEEDS ONE OF THEM AS A REAL INPUT to a
+child process and then measures the answer a corpus builder would get. No row
+asserts that a fixture exists, that a tuple has a given length, or that a name
+appears in a file. A shape arm pins format and not input, and this tree has
+shipped four of those in one day that stayed green against a mutant which broke
+the property.
+
+THE ONE THING HERE THAT IS NOT AN INPUT MEASUREMENT is the conservation check
+against `git rev-parse --local-env-vars`, and it is deliberate. The row table can
+only measure names somebody thought of, and the first version of this file
+measured five of the fifteen names GIT ITSELF calls repo-local while seven of the
+rest had never been considered anywhere. That failure is invisible to any number
+of green rows, so the population is read FROM GIT at runtime and reconciled
+against the conftest's two tables. It carries its own non-vacuity arm, which
+feeds it a git list with an invented name in it and a scrub tuple with a real
+name taken out.
+
+THE CRITERION THE ROWS APPLY, because the next person widening this set will
+need it and the first pass got it wrong. AN ANSWER IS THE PAIR (returncode,
+stdout), AND A RETURNCODE CHANGE IS AN ANSWER CHANGE WHEREVER THE RETURNCODE IS
+THE ANSWER. `git check-ignore -q` prints nothing and reports through its exit
+code alone; `tests/test_agent_roster.py` returns `completed.returncode == 0` as
+its corpus. The original scrub set was chosen by keeping only variables that
+changed an answer AT EXIT 0, which is structurally blind to that whole family,
+and GIT_CONFIG_PARAMETERS - which git exports to hooks itself - was discarded by
+exactly that filter. Three rows in the table below change nothing but an exit
+code. The full statement lives beside the tuple in `conftest.py`.
 
 THE DEFECT, MEASURED ON git 2.53.0.windows.3. A `pre-push` hook run from a
 LINKED WORKTREE inherits `GIT_DIR=<main>/.git/worktrees/<name>`; the same hook
@@ -21,22 +43,33 @@ error to notice, only a different answer.
 
 THE THREE POPULATIONS THIS FILE KEEPS APART.
 
-  THE CLEAN CORPUS is what `git ls-files` says about this repository with the
-  nine variables absent. `test_the_clean_corpus_clears_its_floor_and_its_anchors`
-  is the floor: empty it and that arm reddens before any comparison below can be
-  satisfied vacuously.
+  THE CLEAN CORPUS is what `git ls-files` says about this repository with every
+  scrubbed variable absent.
+  `test_the_clean_corpus_clears_its_floor_and_its_anchors` is the floor: empty it
+  and that arm reddens before any comparison below can be satisfied vacuously.
+  `test_gits_own_local_env_var_list_is_a_real_population` is the matching floor
+  under the conservation check, for the same reason.
 
   THE FOREIGN CORPUS is a throwaway repository holding one file. It exists so
   that "the answer changed" is a difference a reader can see rather than an
   inequality between two opaque blobs.
 
-  THE PER-VARIABLE ANSWERS are five different git queries, because the nine
+  THE PER-VARIABLE ANSWERS are eight different git queries, because the scrubbed
   variables do not all reach the same one. `GIT_DIR` swaps `ls-files`;
   `GIT_WORK_TREE` leaves `ls-files` alone and moves `check-ignore`;
-  `GIT_OBJECT_DIRECTORY` reaches only `ls-tree`. A table that probed `ls-files`
-  for all nine would have six rows that measure nothing and would still be
-  green, so each row carries the query its variable was MEASURED to change, and
-  each row asserts that change before asserting the scrub removes it.
+  `GIT_OBJECT_DIRECTORY` reaches only `ls-tree`; `GIT_GRAFT_FILE` reaches only
+  `git log`. A table that probed `ls-files` for every name would have most of its
+  rows measuring nothing and would still be green, so each row carries the query
+  its variable was MEASURED to change, and each row asserts that change before
+  asserting the scrub removes it.
+
+  WHICH QUERIES THOSE ARE IS DERIVED FROM THE TREE rather than chosen. Run
+  `python -m tools.git_subprocess_census`: 78 subprocess launch sites over its
+  default roots, 38 of them git, 28 of those resolving statically to a
+  subcommand - ls-files 18, check-ignore 3, check-attr 2, one each of rev-parse,
+  diff, init, add and commit - with 10 splatted argvs no AST walk can resolve.
+  `ls-tree` has ZERO call sites here and the first version of this table probed
+  it for two rows anyway.
 
 WHY THE CHILD PROCESS. The scrub runs when the root conftest is IMPORTED, so by
 the time any test body executes it has already happened. Setting a variable
@@ -61,10 +94,12 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 import pytest
 
+import conftest as root_conftest
 from tests.conftest import require_git_repository
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -79,11 +114,23 @@ _SCRUBBED = (
     "GIT_WORK_TREE",
     "GIT_COMMON_DIR",
     "GIT_OBJECT_DIRECTORY",
+    "GIT_CONFIG",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_GRAFT_FILE",
+    "GIT_SHALLOW_FILE",
     "GIT_LITERAL_PATHSPECS",
     "GIT_NOGLOB_PATHSPECS",
     "GIT_GLOB_PATHSPECS",
     "GIT_ICASE_PATHSPECS",
 )
+
+#: Names that ride along with a scrubbed one in a row's exported environment but
+#: are NOT themselves scrubbed. `GIT_CONFIG_KEY_0` and `GIT_CONFIG_VALUE_0` are
+#: meaningless to git without `GIT_CONFIG_COUNT`, which is why removing the
+#: count alone is sufficient - the `GIT_CONFIG_COUNT` row below MEASURES that by
+#: leaving these two exported across its scrubbed half.
+_COMPANIONS = ("GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0")
 
 #: The subprocess deadline. Long enough that a cold `git` on Windows is never
 #: the reason an arm reddens, short enough that a hung child cannot hold the
@@ -167,11 +214,17 @@ def _base_env() -> dict[str, str]:
     """This process's environment with every scrubbed name removed.
 
     Taken from `os.environ` rather than from a captured snapshot, and filtered
-    anyway. The root conftest has already removed these nine, so the filter is
-    normally a no-op - but an arm elsewhere in the suite is free to set one
-    mid-run, and a child that inherited it would grade a tree nobody chose.
+    anyway. The root conftest has already removed the scrubbed names, so the
+    filter is normally a no-op - but an arm elsewhere in the suite is free to set
+    one mid-run, and a child that inherited it would grade a tree nobody chose.
+
+    `_COMPANIONS` is filtered here as well even though the conftest does not
+    remove it. A baseline computed with `GIT_CONFIG_VALUE_0` ambient would not be
+    this repository's clean answer, and every comparison in this file is against
+    that baseline.
     """
-    return {k: v for k, v in os.environ.items() if k not in _SCRUBBED}
+    drop = set(_SCRUBBED) | set(_COMPANIONS)
+    return {k: v for k, v in os.environ.items() if k not in drop}
 
 
 def _git(argv: list[str], env: dict[str, str], stdin: str | None = None) -> tuple[int, str]:
@@ -319,7 +372,7 @@ def test_the_clean_corpus_clears_its_floor_and_its_anchors() -> None:
     returncode, stdout = _clean_answer(["git", "ls-files", "-z"])
     corpus = _paths(stdout)
     assert returncode == 0, (
-        f"`git ls-files` exited {returncode} with the nine scrubbed names absent, so "
+        f"`git ls-files` exited {returncode} with every scrubbed name absent, so "
         "nothing below is entitled to compare corpora"
     )
     assert len(corpus) >= 50, (
@@ -332,6 +385,172 @@ def test_the_clean_corpus_clears_its_floor_and_its_anchors() -> None:
             f"{anchor} is not in the clean enumeration, so whatever was enumerated is "
             "not the tree whose conftest carries the scrub"
         )
+
+
+# ---------------------------------------------------------------------------
+# CONSERVATION AGAINST GIT'S OWN LIST. The scrub set is not allowed to be a
+# list someone remembered.
+# ---------------------------------------------------------------------------
+#
+# `git rev-parse --local-env-vars` is git's OWN enumeration of the variables
+# that are repo-local. The first version of the conftest's tuple covered five of
+# the fifteen it names on git 2.53.0.windows.3, and SEVEN of the remaining ten
+# were never considered anywhere - GIT_CONFIG, GIT_CONFIG_PARAMETERS,
+# GIT_IMPLICIT_WORK_TREE, GIT_GRAFT_FILE, GIT_NO_REPLACE_OBJECTS,
+# GIT_REPLACE_REF_BASE and GIT_SHALLOW_FILE.
+#
+# AN EXPLICIT TUPLE PLUS THIS RECONCILIATION, NOT A DYNAMIC SCRUB. Popping
+# whatever git happens to name would be unreviewable: the set would change under
+# a git upgrade with no diff anywhere, and it could remove a name a fixture in
+# this tree depends on - `tests/test_hook_gate.py` builds a throwaway repository
+# whose whole point is a controlled git environment. So the tuple stays written
+# down and reviewed, and the RECONCILIATION is what makes a git that gains a
+# variable arrive as a red test rather than as an incident.
+
+
+def _local_env_vars_text() -> str:
+    """Git's own list, read from git at runtime."""
+    returncode, stdout = _git(["git", "rev-parse", "--local-env-vars"], _base_env())
+    assert returncode == 0, (
+        f"`git rev-parse --local-env-vars` exited {returncode}, so this file has no "
+        "population to reconcile against and must not report a green conservation check"
+    )
+    return stdout
+
+
+def _parse_local_env_vars(text: str) -> tuple[str, ...]:
+    """One name per line, blanks dropped. Kept separate so it can be fed a
+    SYNTHETIC list by the arm that proves this reconciliation can say no."""
+    return tuple(line.strip() for line in text.splitlines() if line.strip())
+
+
+def _unhandled_local_env_vars(
+    text: str,
+    scrubbed: Sequence[str] = _SCRUBBED,
+    kept: Iterable[str] = (),
+) -> tuple[str, ...]:
+    """Names git calls repo-local that appear in NEITHER table, in git's order.
+
+    `scrubbed` and `kept` are parameters rather than module reads so that the
+    non-vacuity arm can hand this function a shrunken table and a git list
+    carrying an invented name, and watch it answer.
+    """
+    handled = set(scrubbed) | set(kept)
+    return tuple(name for name in _parse_local_env_vars(text) if name not in handled)
+
+
+def test_gits_own_local_env_var_list_is_a_real_population() -> None:
+    """THE FLOOR under the reconciliation below.
+
+    An empty or truncated `--local-env-vars` makes every conservation check
+    below vacuously true, and a vacuous pass is indistinguishable from a real
+    one in a summary line. The anchors are the two names whose substitution this
+    whole file was written for, so a list that lost either is not the list this
+    tree is entitled to reconcile against.
+    """
+    names = _parse_local_env_vars(_local_env_vars_text())
+    assert len(names) >= 10, (
+        f"`git rev-parse --local-env-vars` named {len(names)} variables on this git. "
+        "Below that this is not git's repo-local enumeration and the conservation "
+        f"check would pass over almost nothing: {names}"
+    )
+    for anchor in ("GIT_DIR", "GIT_INDEX_FILE"):
+        assert anchor in names, (
+            f"{anchor} is not in git's own repo-local list, so whatever came back is "
+            f"not the population this file reconciles against: {names}"
+        )
+
+
+def test_every_name_git_calls_repo_local_is_scrubbed_or_deliberately_kept() -> None:
+    """THE CONSERVATION ASSERTION. This is the arm the widening exists for.
+
+    Every name in git's own list must appear in `_GIT_ENV_SCRUBBED` or in
+    `_GIT_LOCAL_ENV_KEPT`. A name in neither is a variable nobody decided about:
+    either a git upgrade introduced it, or a name was dropped from the tuple by
+    hand. Both are the same defect from a reader's point of view - a repo-local
+    pointer that can substitute a corpus and that no one has measured.
+
+    IT READS THE CONFTEST'S OWN TABLES, not this file's copies. A scrub list that
+    drifted from what the conftest actually pops would otherwise be reconciled
+    against itself.
+    """
+    unhandled = _unhandled_local_env_vars(
+        _local_env_vars_text(),
+        scrubbed=root_conftest._GIT_ENV_SCRUBBED,
+        kept=root_conftest._GIT_LOCAL_ENV_KEPT,
+    )
+    assert unhandled == (), (
+        "git calls these variables repo-local and the root conftest neither scrubs "
+        f"them nor records a reason for keeping them: {unhandled}. Measure what each "
+        "one does to the queries in this file - reading a RETURNCODE CHANGE AS AN "
+        "ANSWER CHANGE wherever the returncode is the answer - then add it to "
+        "`_GIT_ENV_SCRUBBED` with a row here, or to `_GIT_LOCAL_ENV_KEPT` with the "
+        "measurement that says it is inert"
+    )
+
+
+def test_the_conservation_check_can_say_no() -> None:
+    """NON-VACUITY, in both directions that matter, and this is the arm that
+    stops the one above from being a shape.
+
+    A reconciliation that returned `()` unconditionally - a typo in the set
+    difference, a table read that silently came back empty - would satisfy the
+    arm above forever. Two synthetic inputs are fed in here:
+
+      A GIT THAT GAINED A VARIABLE. Git's real output plus one invented name.
+      The check must report exactly that name.
+
+      A TABLE THAT LOST A VARIABLE. Git's real output against a scrub tuple with
+      `GIT_DIR` removed. The check must report `GIT_DIR`.
+    """
+    real = _local_env_vars_text()
+    kept = tuple(root_conftest._GIT_LOCAL_ENV_KEPT)
+
+    gained = _unhandled_local_env_vars(
+        real + "GIT_FUTURE_LOCAL_THING\n",
+        scrubbed=root_conftest._GIT_ENV_SCRUBBED,
+        kept=kept,
+    )
+    assert gained == ("GIT_FUTURE_LOCAL_THING",), (
+        "a name git does not name today was added to its list and the reconciliation "
+        f"did not report it, so it cannot notice a git upgrade at all: {gained}"
+    )
+
+    shrunk = tuple(n for n in root_conftest._GIT_ENV_SCRUBBED if n != "GIT_DIR")
+    assert len(shrunk) == len(root_conftest._GIT_ENV_SCRUBBED) - 1, (
+        "GIT_DIR is no longer in the conftest's scrub tuple, so this arm removed "
+        "nothing and measured nothing"
+    )
+    lost = _unhandled_local_env_vars(real, scrubbed=shrunk, kept=kept)
+    assert lost == ("GIT_DIR",), (
+        "GIT_DIR was taken out of the scrub tuple and the reconciliation still "
+        f"reported nothing unhandled: {lost}"
+    )
+
+
+def test_every_kept_name_is_one_git_actually_calls_repo_local() -> None:
+    """The other direction: `_GIT_LOCAL_ENV_KEPT` may not carry a stale name.
+
+    An entry for a variable git does not name is a recorded decision about
+    nothing, and it would silently absorb a real name that happened to share the
+    spelling later. `_GIT_ENV_SCRUBBED` is deliberately NOT checked this way -
+    the four pathspec flags are scrubbed on this tree's own measurement and git
+    does not call them repo-local.
+    """
+    names = set(_parse_local_env_vars(_local_env_vars_text()))
+    stale = tuple(sorted(set(root_conftest._GIT_LOCAL_ENV_KEPT) - names))
+    assert stale == (), (
+        "the root conftest records a keep-decision for variables git does not call "
+        f"repo-local: {stale}. Either git dropped them or the name is misspelt"
+    )
+
+
+def test_the_conftest_tuple_and_this_files_copy_are_the_same_list() -> None:
+    """The row table below is built from this file's `_SCRUBBED`, and the scrub
+    is performed from the conftest's. If the two drift, every row could be
+    green about a name the conftest never pops.
+    """
+    assert tuple(_SCRUBBED) == tuple(root_conftest._GIT_ENV_SCRUBBED)
 
 
 # ---------------------------------------------------------------------------
@@ -438,15 +657,42 @@ _LS_TREE = ["git", "ls-tree", "-r", "--name-only", "HEAD"]
 _CHECK_IGNORE = ["git", "check-ignore", "-v", "--stdin"]
 _CHECK_IGNORE_STDIN = "logs/probe.log\ntests/conftest.py\n"
 
+#: THE RETURNCODE IS THE ANSWER HERE, and that is the point of the row that uses
+#: it. `check-ignore -q` prints nothing at all: 0 means ignored and 1 means not.
+#: `tests/test_agent_roster.py` returns exactly this comparison as its corpus and
+#: `tests/test_ci_workflow_complement.py` asserts on this exit code in both
+#: halves of its ignore guard. The first version of the conftest's scrub list was
+#: built by keeping only variables that changed an answer AT EXIT 0, which is
+#: structurally blind to every query of this shape - and GIT_CONFIG_PARAMETERS,
+#: which git exports to hooks itself, was discarded by exactly that filter.
+_CHECK_IGNORE_Q = ["git", "check-ignore", "-q", "--no-index", "core/probe_not_ignored.json"]
+
+#: `tests/test_commit_trailers.py`'s own two queries. The first is its corpus -
+#: every commit in the history - and the second is the gate it gives up on.
+_LOG_HISTORY = ["git", "log", "--format=%H"]
+_IS_SHALLOW = ["git", "rev-parse", "--is-shallow-repository"]
+
+#: `git config --list`, which is where an inherited `GIT_CONFIG` lands. It is
+#: not a corpus builder in this tree's census, but `tests/test_hook_gate.py`
+#: reads `git config --get core.hooksPath` and asserts it is EMPTY, and an
+#: empty answer is exactly what a substituted config file gives away for free.
+_CONFIG_LIST = ["git", "config", "--list"]
+
 #: (variable, value kind, git argv, stdin). The value kind says how to build a
-#: hostile value from the throwaway repository, because four of the nine take a
-#: path and five take a flag.
+#: hostile environment for the row, because the fourteen names take paths,
+#: flags, a config file, a config-parameter string and a history-truncating
+#: file between them.
 _ROWS: tuple[tuple[str, str, list[str], str], ...] = (
     ("GIT_DIR", "git-dir", _LS_FILES, ""),
     ("GIT_INDEX_FILE", "index", _LS_FILES, ""),
     ("GIT_WORK_TREE", "work-tree", _CHECK_IGNORE, _CHECK_IGNORE_STDIN),
     ("GIT_COMMON_DIR", "git-dir", _LS_TREE, ""),
     ("GIT_OBJECT_DIRECTORY", "objects", _LS_TREE, ""),
+    ("GIT_CONFIG", "config-file", _CONFIG_LIST, ""),
+    ("GIT_CONFIG_PARAMETERS", "config-parameters", _CHECK_IGNORE_Q, ""),
+    ("GIT_CONFIG_COUNT", "config-count", _CHECK_IGNORE_Q, ""),
+    ("GIT_GRAFT_FILE", "history-file", _LOG_HISTORY, ""),
+    ("GIT_SHALLOW_FILE", "history-file", _IS_SHALLOW, ""),
     ("GIT_LITERAL_PATHSPECS", "flag", _LS_FILES_GLOB, ""),
     ("GIT_NOGLOB_PATHSPECS", "flag", _LS_FILES_GLOB, ""),
     ("GIT_GLOB_PATHSPECS", "flag", _CHECK_IGNORE, _CHECK_IGNORE_STDIN),
@@ -454,14 +700,75 @@ _ROWS: tuple[tuple[str, str, list[str], str], ...] = (
 )
 
 
-def _row_value(kind: str, foreign: Path) -> str:
+@pytest.fixture(scope="session")
+def hostile_artifacts(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
+    """The files a hostile value has to point AT, built once.
+
+    THE GRAFT AND SHALLOW FILES CARRY THIS REPOSITORY'S OWN HEAD. A graft file
+    naming HEAD with no parents makes git report a one-commit history at EXIT 0,
+    which is the whole finding: `tests/test_commit_trailers.py` would grade one
+    commit and report green over a history it never read. Planted with
+    `write_bytes` because `Path.write_text` translates LF to CRLF on Windows and
+    git reads these files line by line.
+
+    THE EXCLUDES FILE IGNORES `core/`, which is what makes the `check-ignore -q`
+    rows flip: `core/probe_not_ignored.json` is NOT ignored by this repository's
+    own `.gitignore`, so rc 1 is the clean answer and rc 0 is the substituted
+    one.
+    """
+    require_git_repository()
+    root = tmp_path_factory.mktemp("git_env_scrub_hostile")
+
+    excludes = root / "hostile-excludes.txt"
+    excludes.write_bytes(b"core/\ndata/cache/\ntests/\n")
+
+    config = root / "hostile.gitconfig"
+    config.write_bytes(
+        ("[core]\n\texcludesFile = " + excludes.as_posix() + "\n").encode("ascii")
+    )
+
+    returncode, stdout = _clean_answer(["git", "rev-parse", "HEAD"])
+    head = stdout.strip()
+    assert returncode == 0 and len(head) >= 40, (
+        f"`git rev-parse HEAD` exited {returncode} with {head!r}, so the graft and "
+        "shallow rows cannot be built and would silently feed an inert file"
+    )
+    history = root / "truncate-history.txt"
+    history.write_bytes((head + "\n").encode("ascii"))
+
     return {
+        "excludes": excludes.as_posix(),
+        "config": str(config),
+        "history": str(history),
+    }
+
+
+def _row_exports(name: str, kind: str, foreign: Path, hostile: dict[str, str]) -> dict[str, str]:
+    """The whole environment a row exports, not just one value.
+
+    `GIT_CONFIG_COUNT` is the reason this returns a mapping. Git reads the count
+    FIRST and ignores `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` without it, so
+    the row exports all three and the scrubbed half leaves the key and value
+    behind. That half is the measurement behind the conftest's claim that
+    scrubbing the count alone is sufficient - not a restatement of it.
+    """
+    if kind == "config-count":
+        return {
+            name: "1",
+            "GIT_CONFIG_KEY_0": "core.excludesfile",
+            "GIT_CONFIG_VALUE_0": hostile["excludes"],
+        }
+    value = {
         "git-dir": str(foreign / ".git"),
         "index": str(foreign / ".git" / "index"),
         "objects": str(foreign / ".git" / "objects"),
         "work-tree": str(foreign),
         "flag": "1",
+        "config-file": hostile["config"],
+        "config-parameters": "'core.excludesfile'='" + hostile["excludes"] + "'",
+        "history-file": hostile["history"],
     }[kind]
+    return {name: value}
 
 
 def test_the_table_covers_every_name_the_root_conftest_removes() -> None:
@@ -482,6 +789,7 @@ def test_the_table_covers_every_name_the_root_conftest_removes() -> None:
 def test_every_variable_measured_to_swap_an_answer_is_scrubbed(
     probe_script: Path,
     foreign_repo: Path,
+    hostile_artifacts: dict[str, str],
     tmp_path: Path,
     name: str,
     kind: str,
@@ -497,15 +805,22 @@ def test_every_variable_measured_to_swap_an_answer_is_scrubbed(
 
     SCRUBBED, the same query must answer exactly what this process gets with
     nothing inherited.
+
+    BOTH HALVES COMPARE THE PAIR (returncode, stdout), and that is the corrected
+    criterion rather than a stylistic choice. Three rows here - the two config
+    rows and `GIT_WORK_TREE` - change nothing but the exit code, because the
+    query they reach reports its answer THROUGH the exit code. A comparison that
+    looked only at stdout would find those rows inert and a filter built on one
+    would never have added them.
     """
-    value = _row_value(kind, foreign_repo)
+    exported = _row_exports(name, kind, foreign_repo, hostile_artifacts)
     baseline_returncode, baseline_stdout = _clean_answer(argv, stdin or None)
 
     loose = _run_probe(
-        probe_script, argv, exported={name: value}, import_conftest=False, stdin=stdin
+        probe_script, argv, exported=exported, import_conftest=False, stdin=stdin
     )
     assert (loose["returncode"], loose["stdout"]) != (baseline_returncode, baseline_stdout), (
-        f"exporting {name}={value!r} did not change `{' '.join(argv)}` on this git, so "
+        f"exporting {exported!r} did not change `{' '.join(argv)}` on this git, so "
         "this row feeds an input with no power and its scrub half proves nothing. "
         "Re-derive the query this variable actually reaches, or drop the row from the "
         "conftest's tuple as well as from here"
@@ -514,7 +829,7 @@ def test_every_variable_measured_to_swap_an_answer_is_scrubbed(
     scrubbed = _run_probe(
         probe_script,
         argv,
-        exported={name: value},
+        exported=exported,
         import_conftest=True,
         stdin=stdin,
         log_dir=tmp_path / "logs",
