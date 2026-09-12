@@ -60,8 +60,9 @@ repair, because the call was gated on `path.is_file()` - so the COLD START, the
 state every first run is in, was never probed at all.
 
 THE FIX, AND ITS SIBLING SWEEP. `_dir_accepts_new_file(directory)` creates a
-uniquely named zero-byte file with `open("xb")` and removes it in a `finally`,
-and `_ensure_dir` now returns it instead of returning True after a `mkdir`. That
+uniquely named zero-byte file with `open("xb")`, removes it, and reports the
+REMOVAL's failure as the verdict too; `_ensure_dir` now returns that instead of
+returning True after a `mkdir`. That
 places the repair at the ONE function both gates already call - `_ensure_parent`,
 before any `is_file` branch - so the absent and present cases are both covered by
 construction rather than by two parallel branches.
@@ -80,16 +81,63 @@ bool as permission to do so. Not one caller merely wants the directory to exist.
 question - a present record held read-only at the FILE level, which on Windows
 makes `os.replace` onto it fail even where the directory is fine.
 
-THE PROBE FILE IS NOT STATE, AND NO READER CAN SELECT IT. It is created empty,
-never written to, and removed in a `finally` on every exit, so it is a permission
-question asked of the filesystem rather than bytes a later reader is meant to
-find - which is why it correctly does not go through `core/atomic_io.py`. The
-name is `.rsc-responder-dirprobe.<pid>.<hex>.tmp` and it was checked against the
-two reader-side selection rules in this module: `pending` takes only children
-whose name lower-cases to a `.md` suffix AND which carry a `-from-<CODE>-` sender
-token, and this name has neither; `hops_used` counts any file whose TEXT holds
-`RESPONDER_TAG`, and a zero-byte file's text can hold nothing. The leading dot and
-`.tmp` suffix also keep it clear of `core/atomic_io._temp_path`'s own temp name.
+THE PROBE FILE IS NOT STATE. It is created empty and never written to, so it is a
+permission question asked of the filesystem rather than bytes a later reader is
+meant to find - which is why it correctly does not go through
+`core/atomic_io.py`. The name is `.rsc-responder-dirprobe.<pid>.<hex>.tmp`.
+
+THIS ROW ORIGINALLY ALSO SAID THE FILE IS "removed in a `finally` on every exit"
+AND THAT "NO READER CAN SELECT IT". AN ADVERSARY REFUTED BOTH HALVES WITH
+MEASUREMENTS, AND THE CORRECTED TEXT IS BELOW. The row is amended rather than
+appended to, because the false sentence was the load-bearing one.
+
+  the removal     A `finally` does not run under `taskkill /F`, this repo's own
+                  sanctioned kill. Measured: a process spawned holding an open
+                  probe, `taskkill //F //PID 33784` reported SUCCESS, and
+                  `.rsc-responder-dirprobe.33784.deadbeef.tmp` was still there.
+                  The worse leak needed no kill at all - the `finally` swallowed
+                  with `except OSError: pass`, so a Windows `PermissionError`
+                  from a concurrent open handle (an antivirus scanner or the
+                  search indexer on a just-created file, the ORDINARY case) left
+                  the file AND returned True. A directory that would not release
+                  its own probe was reported healthy. Repaired: a failed removal
+                  is now the verdict, and `test_a_probe_whose_file_cannot_be_
+                  REMOVED_is_not_a_healthy_directory` was RED on
+                  `assert True is False` first.
+
+  the litter      There was NO REAPER ANYWHERE. `ops/loop/slots.py:reap` reaps
+                  only the ProgramData slot bucket, `core.provenance
+                  .sweep_data_dir` only `data/*.jsonl`, and the files land under
+                  `ops/runtime/`, gitignored at `.gitignore:31`, so no tracked
+                  guard could ever see them - one file per kill, unbounded.
+                  `_sweep_stale_dir_probes` now reclaims leftovers of this prefix
+                  on every probe of the same directory. STALENESS IS AGE PLUS
+                  PREFIX AND DELIBERATELY NOT PID LIVENESS: reading the pid out
+                  of the filename would reproduce `reap`'s own defect, and
+                  Windows recycles pids. A probe lives microseconds (182.1 us
+                  for the whole call), so 300 s is four orders of magnitude of
+                  headroom. IF THE STALENESS CALL IS WRONG IT DESTROYS NOTHING -
+                  the file is zero bytes, no reader opens it, and the owner
+                  removes it with `missing_ok=True`, so an early reclaim is
+                  invisible and changes no verdict. That is the whole difference
+                  from `reap`, which reclaims a claim somebody holds.
+
+  the selection   The original proof was run on the WRONG POPULATION. It checked
+                  `pending` and `hops_used`, and both enumerate the INBOX - a
+                  directory the probe never enters. The probe enters `RUNTIME_DIR`
+                  and `RUNTIME_DIR/responder/held`, and nowhere else. Re-derived
+                  against that population: those two inbox walks are still this
+                  module's only enumerators, so no PRODUCTION reader reaches a
+                  probe. Four test-side enumerators do walk the probed
+                  directories - `DEFAULT_STAGING.glob("held/*")` at
+                  `tests/test_moon_sync_responder.py` 866 and 1170 and
+                  `tests/test_responder_refusal_gates.py:182`, and the
+                  exactly-N-entries shape `siblings == [DEFAULT_INVOCATIONS.name]`
+                  at `tests/test_responder_invocation_trim.py:251`. All four are
+                  safe, and measured rather than argued: the probe is created and
+                  removed entirely inside one single-threaded call that returns
+                  before any of them runs, and a cold `_ensure_dir` plus six
+                  further probes of one directory left `[]` behind on this run.
 
 THE DIRECTION OF ERROR IS CONSERVATIVE, DELIBERATELY. A false-closed verdict is a
 bounded, visible decline that names itself in the log. A false-open verdict is the
