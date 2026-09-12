@@ -34,6 +34,7 @@ import json
 import os
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -2573,4 +2574,102 @@ def test_a_record_whose_directory_refuses_a_new_file_is_reported_unusable(
 
     assert _account_can_create(denied), (
         "the denial was NOT removed - every later run on this machine inherits it"
+    )
+def test_a_probe_whose_file_cannot_be_REMOVED_is_not_a_healthy_directory(
+    rsp, tmp_path, monkeypatch
+):
+    """The removal is half the probe, and swallowing its failure inverted it.
+
+    The first version asked one question - can a new file be CREATED here - and
+    then removed the evidence in a `finally` that swallowed `OSError`. On
+    Windows a concurrent open handle on a just-created file is the ORDINARY
+    case, not a rarity: an antivirus scanner or the search indexer holds one for
+    a few milliseconds and `unlink` raises `PermissionError` for as long as it
+    does. The measured result was the worst available pair - the leaked file
+    stayed AND the function returned True, so a directory that will not let its
+    own probe be removed was reported healthy and the litter was invisible.
+
+    A directory that cannot be tidied is not a directory this module should keep
+    writing into, so the removal's failure is now the verdict. The direction of
+    error stays conservative, as `_dir_accepts_new_file` documents: a refusal is
+    bounded and names itself in the log.
+    """
+    directory = tmp_path / "leaky"
+    directory.mkdir()
+
+    real_unlink = Path.unlink
+
+    def refusing_unlink(self, *args, **kwargs):
+        if self.name.startswith(rsp._DIR_PROBE_PREFIX):
+            raise PermissionError(13, "the file is in use by another process")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", refusing_unlink)
+    verdict = rsp._dir_accepts_new_file(directory)
+    monkeypatch.undo()
+
+    leaked = sorted(p.name for p in directory.glob(f"{rsp._DIR_PROBE_PREFIX}*"))
+    assert leaked, (
+        "the bed is wrong: no probe file was left behind, so this run never "
+        "reached the class under test"
+    )
+    assert verdict is False, (
+        "a directory that refused to give up its own probe file was reported "
+        "healthy, and the probe leaked one file into it at the same time"
+    )
+
+
+def test_a_STALE_probe_is_reclaimed_and_a_live_one_and_its_neighbours_are_NOT(
+    rsp, tmp_path
+):
+    """Both halves of the sweep, because the first alone passes by deleting.
+
+    A leak that survives `taskkill /F` cannot be prevented by a `finally` - that
+    is this repo's own sanctioned kill and it runs no Python on the way out - so
+    the litter has to be RECLAIMED rather than merely avoided. STALENESS IS AGE
+    AND PREFIX, AND DELIBERATELY NOT PID LIVENESS: `ops/loop/slots.py:reap`
+    already carries the defect of reclaiming by a field it never checks against
+    the owner, and a pid parsed out of a filename is worse still because Windows
+    recycles pids. A probe lives for microseconds inside one call, so anything
+    of this prefix older than `_DIR_PROBE_STALE_SECONDS` cannot be one in
+    flight.
+
+    THE SECOND ARM IS THE ONE THAT MATTERS. A sweep scores full marks on "the
+    bad file is gone" by deleting the directory, so the neighbours are AGED PAST
+    THE THRESHOLD TOO - a real record and a `core/atomic_io` temp of the shape
+    `.<name>.<pid>.<hex>.tmp`, which is one character class away from the probe.
+    Age alone must not be enough to select them, and neither must the `.tmp`
+    suffix.
+    """
+    directory = tmp_path / "littered"
+    directory.mkdir()
+
+    stale = directory / f"{rsp._DIR_PROBE_PREFIX}424242.deadbeef.tmp"
+    live = directory / f"{rsp._DIR_PROBE_PREFIX}{os.getpid()}.feedface.tmp"
+    record = directory / "responder_answered.json"
+    atomic_temp = directory / ".responder_answered.json.4242.abcdef12.tmp"
+    for leftover in (stale, live, record, atomic_temp):
+        leftover.write_bytes(b"")
+
+    old = time.time() - rsp._DIR_PROBE_STALE_SECONDS - 60.0
+    for aged in (stale, record, atomic_temp):
+        os.utime(aged, (old, old))
+
+    assert rsp._dir_accepts_new_file(directory) is True, (
+        "the bed is wrong: this directory accepts files, so the probe must pass"
+    )
+
+    survivors = sorted(p.name for p in directory.iterdir())
+    assert stale.name not in survivors, (
+        f"a stale probe survived the sweep, so the litter is unbounded: {survivors}"
+    )
+    assert live.name in survivors, (
+        "the sweep reclaimed a probe young enough to be in flight in another "
+        "process - that is `reap()`'s defect, reproduced"
+    )
+    assert record.name in survivors, (
+        f"the sweep ate a real record that was merely old: {survivors}"
+    )
+    assert atomic_temp.name in survivors, (
+        f"the sweep ate a `core/atomic_io` temp that was merely old: {survivors}"
     )
