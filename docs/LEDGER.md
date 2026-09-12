@@ -12,6 +12,94 @@ now.
 
 ---
 
+## 2026-09-12 - Fifty-eight worktrees to zero on a blob-reachability test, two arms recovered from trees that were about to be destroyed, and seven outbound notes that had reached nobody
+
+FIVE commits on `main`: `bb704a5`, `7987aee`, `6216a82`, `bd9f48f`, `33ab1c6`.
+All pushed. Both suites green at each seam, each gate run as its own command.
+
+THE WORKTREE CENSUS, and the disposition test is the reusable part. Fifty-eight
+worktrees and fifty branches stood. ZERO branches were ahead of `main`, so there
+was nothing to merge and nothing to push from any of them - measured with
+`git rev-list --count main..<branch>` over all forty-nine non-main branches.
+
+The obvious test, "does this dirty file differ from main", IS THE WRONG TEST and
+would have destroyed work. A file that differs from main is USUALLY AN OLDER
+VERSION rather than a novel one: fifty-one worktrees held a file differing from
+main, but only fifteen held a blob main's history had never contained. The test
+actually used was BLOB REACHABILITY - `git hash-object` of each working file
+against the blob set of `git rev-list --objects main`. Forty-two worktrees whose
+every dirty blob was already reachable were removed on that measurement.
+
+ADJUDICATION AND ITS REFUTATION. An adjudicator ruled fourteen of the remaining
+fifteen SUPERSEDED and one LOST-WORK, with the tie-break stated to it in advance:
+rule LOST-WORK when you cannot tell, because a wrong SUPERSEDED destroys work
+permanently and a wrong LOST-WORK costs one review. An adversary sent at the
+destroy-list with the single lens "is anything actually lost" REFUTED one ruling
+and produced the surviving mutant to prove it. So TWO were recovered and thirteen
+pruned. Of three claimed relocations the adversary opened, ONE was confirmed, one
+was refuted outright and one was refuted in part - a pointer to a file and line
+is not proof the arm is there. Agreement between two worktrees holding the same
+path was checked for byte-identity FIRST, and one such pair proved to be a single
+artifact counted twice.
+
+ARM ONE, `bb704a5`, `tests/test_conftest_reason_fixture.py`. The detail chain
+never had the strip of its CHOSEN stream pinned anywhere, because no fixture in
+the tree carried a trailing newline. Measured: the mutant
+`detail = stderr if stderr.strip() else (stdout.strip() or "no output")` passed
+2700 tests. The merger re-killed it independently after the merge - mutant red,
+revert green, tree clean.
+
+ARM TWO, `7987aee`, `tests/test_git_subprocess_census.py`. The sweep borrowed its
+instrument from the module under test, calling `census._dotted`, and its only
+coupling guard was `assert seen > 100`, which RISES under a narrowing. The first
+independent re-derivation was ASCII-ONLY while Python identifiers are not, which
+INVERTED the arm's polarity - red against a correct resolver, green against an
+ASCII-narrowed one, on identical input. Repaired to `str.isidentifier()`. The
+merger re-killed both narrowings by hand after the merge. Floors raised from
+5000/1000/500 to 39000/37000/1300 against a measurement of 71347/68845/2502,
+because at the old values dropping four of five corpus roots stayed green.
+Two limits are DISCLOSED AND NOT CLOSED: the wider NFKC identifier classes, and
+`len(parts) > 4`, which is green against any re-derivation whatever because the
+corpus holds zero 5-segment chains.
+
+THE DELIVERY DEFECT, and it is the one with consequences outside this tree. RC
+reported our joint re-pin answer as never received. We HAD answered on
+2026-09-10 and the answer never left our own directory. Measured across all four
+sibling trees: zero copies. The backlog was SEVEN notes, everything from
+`2026-09-09-2200` onward, the last note to reach RC being stamped
+`2026-09-09-2100`. A NOTE WRITTEN INTO OUR OWN INBOX IS INDISTINGUISHABLE FROM A
+NOTE WE SENT, because the watcher classifies by filename. SILENCE READS AS
+DISSENT, so four counterparties were entitled to count seven of our positions as
+dissent. Delivered on operator instruction: twelve copies to their addressees,
+routed by each note's own `## TO <CODE>` heading rather than broadcast, plus a
+correction to RC and a finding to LL. Post-delivery sweep: zero of thirty-seven
+outbound notes reach nobody.
+
+A FIGURE THIS SESSION GOT WRONG AND CORRECTED. The first count of the backlog was
+NINE. Nine was "not present in RC", and two of those had legitimately reached
+their own addressee elsewhere. Against the right population, "present in ZERO
+sibling inboxes", the answer is SEVEN. State which population you counted.
+
+THE LAST WORKTREE. `C:/rsc-wt-atomic` was a worktree of this repo living OUTSIDE
+this repo root, halted under clause (a) and pruned only on an explicit operator
+ruling, after re-verifying against the MOVED `main` rather than the measurement
+taken two hours earlier. Census closed at 58 to 0, 50 branches to 1.
+
+A HUNG SHELL, and it was ours. A background task had been blocked for two hours
+on a stray `cat > "$TMPDIR/cmp.py"` with `TMPDIR` unset, reading stdin forever.
+Stopped. The long-lived processes on the machine were OTHER trees' services and
+another session's run, and were left alone.
+
+MEASURED THIS RUN, as a historical reading and not a claim about now: `tests`
+2715 passed 2 skipped, `agents/pity_engine` 80 passed, ruff clean, mypy 36 source
+files, `tools/precommit_gate.py` exit 0. The pre-push hook reported THREE skips
+where the local run reported two, the third being the scheduled-task EndBoundary
+census finding no non-empty boundary on this machine - so the skip count is
+environment-dependent and neither number is the count.
+
+---
+
+
 ## 2026-09-12 - Two gates promised a write they had only ever read, the first repair probed the wrong object, and the cold start was never probed at all
 
 TWO commits in an isolated worktree; not pushed from here. Three files changed
