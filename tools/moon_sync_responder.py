@@ -94,6 +94,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, NamedTuple
+from uuid import uuid4
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -664,6 +665,168 @@ def _read_text(path: Path) -> str:
         return ""
 
 
+#: Prefix for the transient directory-writability probe, and the SELECTOR the
+#: sweep below keys on. The earlier note here claimed no reader in this module
+#: can select it and proved it against `pending` and `hops_used` - both of which
+#: enumerate the INBOX, a directory THE PROBE NEVER ENTERS. That proof was run
+#: on the wrong population and is therefore not repeated.
+#:
+#: The probe enters exactly two directories, and they are the ones its callers
+#: write into: `RUNTIME_DIR`, for the rotation file, the metrics row, the
+#: invocation log and both records, and `RUNTIME_DIR/responder/held`. Re-derived
+#: against THAT population: this module's only two enumerators are the `pending`
+#: and `hops_used` walks of the inbox, so no production reader here reaches a
+#: probe at all. The leading dot and the `.tmp` suffix additionally keep the
+#: name clear of `core/atomic_io._temp_path`, whose own temp is
+#: `.<target name>.<pid>.<hex>.tmp` - a different prefix, which is what lets the
+#: sweep tell them apart.
+_DIR_PROBE_PREFIX = ".rsc-responder-dirprobe."
+
+#: How old a leftover probe must be before the sweep may reclaim it.
+#:
+#: STALENESS IS AGE PLUS PREFIX, AND DELIBERATELY NOT PID LIVENESS. A pid is
+#: sitting right there in the filename and reading it would be the obvious move,
+#: which is precisely the shape of the defect this tree already has on record:
+#: `ops/loop/slots.py:reap` unlinks a lock without consulting the owner field it
+#: logs, so it reclaims a lock a sibling holds. Parsing a pid out of a name is
+#: worse than that, because Windows recycles pids - a probe left by a dead 4242
+#: is indistinguishable from one a live 4242 created a moment ago.
+#:
+#: Age answers the question without asking the wrong one. A probe exists between
+#: an `open` and an `unlink` in a single function with nothing between them;
+#: the whole call was measured at 182.1 us. Five minutes is four orders of
+#: magnitude of headroom, so a file of this prefix older than this cannot be one
+#: in flight anywhere.
+#:
+#: WHAT HAPPENS IF THAT IS WRONG, stated rather than assumed, because the point
+#: of the `reap` comparison is that a wrong reclaim there DESTROYS A CLAIM
+#: SOMEBODY HOLDS. Here it destroys nothing. The probe file is zero bytes, no
+#: reader in this tree opens it, and its owner removes it with `missing_ok=True`
+#: - so an early reclaim is invisible to the owner and changes no verdict, since
+#: the verdict was decided by the `"xb"` create that already returned. The
+#: failure mode of being wrong is that a file is deleted slightly early, and the
+#: file means nothing to anyone.
+_DIR_PROBE_STALE_SECONDS = 300.0
+
+
+def _sweep_stale_dir_probes(directory: Path) -> int:
+    """Reclaim leftover probe files in `directory`. Never raises.
+
+    WHY A SWEEP AND NOT A BETTER `finally`. Two leaks are not preventable from
+    inside the probe: `taskkill /F` is this repo's sanctioned kill and runs no
+    Python on the way out, and a concurrent open handle makes `unlink` raise for
+    as long as it is held. Litter that cannot be prevented has to be reclaimed,
+    and nothing else in this tree reclaims it - the whole-tree search for this
+    prefix finds this module and the ledger entry, and the files land under
+    `ops/runtime/`, gitignored at `.gitignore:31`, where no tracked guard looks.
+
+    WHERE IT RUNS: here, on every probe, in the directory being probed and in no
+    other. That is the whole wiring. It needs no scheduled task and no new entry
+    point, it cannot reach a path the probe itself would not have written into,
+    and it runs at the one moment the module has just proved the directory
+    accepts a file - so a sweep never fires against a directory it cannot touch.
+    The bound it buys is `_DIR_PROBE_STALE_SECONDS` of litter per probed
+    directory rather than one file per kill, forever.
+    """
+    now = time.time()
+    reclaimed = 0
+    try:
+        leftovers = list(directory.glob(f"{_DIR_PROBE_PREFIX}*.tmp"))
+    except (OSError, ValueError):
+        return 0
+    for leftover in leftovers:
+        try:
+            if now - leftover.stat().st_mtime < _DIR_PROBE_STALE_SECONDS:
+                continue
+            leftover.unlink()
+        except OSError:
+            continue
+        reclaimed += 1
+    return reclaimed
+
+
+def _dir_accepts_new_file(directory: Path) -> bool:
+    """Whether a NEW FILE can be created in `directory`. Never raises.
+
+    THE DIRECTORY IS THE OBJECT THAT GOVERNS THE WRITE, on both platforms, and
+    naming the wrong object is what made the earlier repair miss. Every state
+    write here goes through `core/atomic_io.atomic_write_text`, which builds its
+    temp path with `_temp_path` - `target.with_name(".<name>.<pid>.<hex>.tmp")`,
+    a SIBLING of the target - creates that file, and renames it over the target.
+    The right exercised is therefore CREATE A FILE IN THIS DIRECTORY, and it is
+    exercised whether or not the target already exists. Probing the target
+    answers a different question, and a probe gated on the target EXISTING does
+    not run at all on a cold start, which is the state every first run is in.
+
+    Measured in this tree with the parent directory denied `(WD,AD)`: an absent
+    record and a present-and-writable record both passed the old gates, and
+    `_remember_answered` returned False in both cases.
+
+    `"xb"` IS THE PROBE, AND ITS FILE IS NOT STATE. `core/atomic_io.py` is the
+    only sanctioned path for writing STATE - bytes some later reader is meant to
+    find. This file is created empty and never written to, so it is a permission
+    question asked of the filesystem rather than a record of anything, and the
+    atomic-write rule has nothing to say about it. `O_EXCL` semantics mean it
+    can never clobber an existing file, and the `uuid4` component means two
+    responders racing cannot collide.
+
+    THE EARLIER VERSION OF THIS SENTENCE CLAIMED THE FILE IS ALWAYS REMOVED AND
+    THAT NO READER CAN SELECT IT. Both halves were false and the first was the
+    dangerous one, so it is written here as measured rather than as intended.
+    The removal is attempted on the ordinary path and is NOT swallowed: a
+    `finally` does not run under `taskkill /F`, which is this repo's sanctioned
+    kill, and on Windows a concurrent open handle on a just-created file - an
+    antivirus scanner or the search indexer, the ordinary case rather than a
+    rare one - makes `unlink` raise `PermissionError` while it is held. So two
+    real leaks exist and neither can be prevented from inside this function.
+    They are handled rather than denied:
+
+      the verdict     a removal that fails is now the ANSWER, not an aside. A
+                      directory that will not give up its own probe is not one
+                      this module should keep writing into, and the old code
+                      returned True while leaving the file behind - the worst
+                      pair available.
+      the litter      `_sweep_stale_dir_probes` reclaims leftovers of this
+                      prefix on every probe of the same directory, so the
+                      bound is age rather than unbounded-forever. Nothing else
+                      in this tree reaps them: `ops/loop/slots.py:reap` reaps
+                      only the ProgramData slot bucket, `core.provenance
+                      .sweep_data_dir` only `data/*.jsonl`, and the litter lands
+                      under `ops/runtime/`, which `.gitignore:31` hides from
+                      every tracked guard.
+      the selection   no PRODUCTION reader in this module can select one. The
+                      two enumerators here, at the `pending` and `hops_used`
+                      sites, both walk the INBOX, and the probe never enters it
+                      - it enters `RUNTIME_DIR` and `RUNTIME_DIR/responder/held`
+                      and nowhere else. The earlier proof named those same two
+                      enumerators, which is why it proved nothing: it was run on
+                      a population the probe does not visit.
+
+    THE DIRECTION OF ERROR IS CONSERVATIVE, DELIBERATELY. If the probe fails for
+    a reason that would not have stopped the real write, the caller declines the
+    cycle: a bounded, visible refusal that names itself in the log. The opposite
+    error is the measured unbounded one - deliver, fail to record, and re-select
+    the same note every tick into a repository this one does not own.
+
+    `ValueError` is in the tuple for `_ensure_dir`'s reason: a path carrying a
+    NUL byte raises it out of `open` rather than `OSError`.
+    """
+    probe = directory / f"{_DIR_PROBE_PREFIX}{os.getpid()}.{uuid4().hex[:8]}.tmp"
+    try:
+        with probe.open("xb"):
+            pass
+    except (OSError, ValueError):
+        return False
+    try:
+        probe.unlink(missing_ok=True)
+    except OSError:
+        removed = False
+    else:
+        removed = True
+    _sweep_stale_dir_probes(directory)
+    return removed
+
+
 def _ensure_dir(directory: Path) -> bool:
     """Make `directory`, reporting failure rather than raising. Never raises.
 
@@ -683,17 +846,71 @@ def _ensure_dir(directory: Path) -> bool:
     `ValueError` is in the tuple for the reason `log_invocation` records: a path
     carrying a NUL byte raises it out of `mkdir` rather than `OSError`, so an
     `OSError`-only guard does not catch the case it was written for.
+
+    `mkdir` ALONE DOES NOT ANSWER THIS FUNCTION'S OWN SENTENCE, and that is the
+    second defect found here. `exist_ok=True` on a directory that ALREADY EXISTS
+    attempts nothing at all, so it returns success for a directory that refuses
+    every file anyone tries to put in it. Every one of this function's callers
+    - the rotation file, the metrics row, the invocation log, both records, the
+    held-file directory - creates a FILE inside immediately afterwards and reads
+    this bool as permission to do so. So the mkdir is kept for the structural
+    classes it was written for and `_dir_accepts_new_file` is asked for the one
+    the callers actually depend on.
     """
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except (OSError, ValueError):
         return False
-    return True
+    return _dir_accepts_new_file(directory)
 
 
 def _ensure_parent(path: Path) -> bool:
     """`_ensure_dir` for the directory `path` will be written into."""
     return _ensure_dir(path.parent)
+
+
+def _writable_in_place(path: Path) -> bool:
+    """Whether an EXISTING file at `path` can still be written. Never raises.
+
+    THE MISSING THIRD CLASS, and the one that made two gates lie. `exists`,
+    `is_file`, the parent check and `read_bytes` are four READS, and no
+    arrangement of them can answer a question about writing. Both record gates
+    asked exactly those four and then returned the sentence "readable and
+    writable", so a record that is readable and PERMANENTLY UNWRITABLE passed
+    them. The seed is three lines: write valid JSON, then
+    `os.chmod(path, stat.S_IREAD)`.
+
+    IT IS NOT THE STRUCTURAL CLASS AND IT IS NOT THE REPLACEABLE ONE. The
+    structural classes - a directory at the path, a file at the parent - are
+    caught by shape. The replaceable ones - corrupt text, an empty file, a
+    wrong-type document - are deliberately left open because the next write
+    HEALS them. This class reads clean and never heals, so the write the gate
+    promised is one the caller can never make.
+
+    `"r+b"` IS THE PROBE BECAUSE IT WRITES NOTHING. It opens for update without
+    creating and without truncating, so the bytes on disk are untouched whether
+    it succeeds or fails; the file is not a state write and does not go through
+    `core/atomic_io.py`, because nothing is being written. A probe that wrote a
+    byte to find out whether it could write a byte would corrupt the record it
+    was asked to classify.
+
+    IT IS CONSERVATIVE ON POSIX, DELIBERATELY. `atomic_write_json` lands by
+    `os.replace`, which on POSIX is governed by the DIRECTORY's permission
+    rather than the target's, so a mode-0o444 file there is still replaceable
+    and this probe will decline it anyway. That errs toward `NOT ANSWERING`,
+    which is bounded and visible in the log. The opposite error is the measured
+    one - deliver, fail to record, and repeat every tick into a repository this
+    one does not own - so the conservative direction is the correct direction
+    for a gate whose false-open cost is unbounded.
+
+    `ValueError` is in the tuple for `_ensure_dir`'s reason: a path carrying a
+    NUL byte raises it out of `open` rather than `OSError`.
+    """
+    try:
+        with path.open("r+b"):
+            return True
+    except (OSError, ValueError):
+        return False
 
 
 def pending(
@@ -1457,13 +1674,26 @@ def answered_usable(path: Path) -> tuple[bool, str]:
     except (OSError, ValueError) as exc:
         return False, f"the answered record cannot be inspected ({exc.__class__.__name__})"
     if not _ensure_parent(path):
-        return False, "the answered record's directory cannot be created, so no reply can be recorded"
+        # COVERS THE COLD START TOO. This runs before any `is_file` gate, so an
+        # ABSENT record in a directory that refuses a new file is refused here -
+        # which is the case a target-only probe can never see. See
+        # `_dir_accepts_new_file`.
+        return False, (
+            "the answered record's directory cannot be created or written into, "
+            "so no reply can be recorded"
+        )
     try:
         if path.is_file():
             path.read_bytes()
     except (OSError, ValueError):
         return False, "the answered record cannot be read, so no reply can be recorded"
-    return True, "the answered record is readable and writable"
+    # The third class - see `_writable_in_place`. Everything above this line is
+    # a READ, and the sentence this function returns promises a WRITE.
+    if path.is_file() and not _writable_in_place(path):
+        return False, "the answered record cannot be written, so no reply can be recorded"
+    return True, (
+        "the answered record's directory accepts a new file, so the record can be replaced"
+    )
 
 
 def _remember_answered(path: Path, name: str) -> bool:
@@ -1557,13 +1787,24 @@ def refusals_usable(path: Path) -> tuple[bool, str]:
     except (OSError, ValueError) as exc:
         return False, f"the refusal record cannot be inspected ({exc.__class__.__name__})"
     if not _ensure_parent(path):
-        return False, "the refusal record's directory cannot be created, so no refusal can be recorded"
+        return False, (
+            "the refusal record's directory cannot be created or written into, "
+            "so no refusal can be recorded"
+        )
     try:
         if path.is_file():
             path.read_bytes()
     except (OSError, ValueError):
         return False, "the refusal record cannot be read, so no refusal can be recorded"
-    return True, "the refusal record is readable and writable"
+    # The third class - see `_writable_in_place`. Mirrored onto this record with
+    # the same reasoning, because the hole was mirrored into it in the first
+    # place: `answered_usable` was specified to copy this function's split and
+    # copied its four-reads-and-a-promise along with it.
+    if path.is_file() and not _writable_in_place(path):
+        return False, "the refusal record cannot be written, so no refusal can be recorded"
+    return True, (
+        "the refusal record's directory accepts a new file, so the record can be replaced"
+    )
 
 
 def _refusals_doc(path: Path) -> tuple[dict, str, list[str]]:

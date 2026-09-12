@@ -32,6 +32,9 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import stat
+import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -2260,4 +2263,413 @@ def test_a_crashing_cycle_carries_the_caller_label_to_the_log(rsp, tmp_path):
     assert "crashed" in outcomes, f"the crash was not recorded at all: {lines}"
     assert {ln.split("\t")[1] for ln in lines} == {rsp.SOURCE_SUITE}, (
         f"the crash line named a different caller from the start line: {lines}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE MISSING THIRD CLASS: READABLE-BUT-UNWRITABLE.
+#
+# `answered_usable` and `refusals_usable` both END with the sentence "the
+# record is readable and writable", and neither ever asked the second half.
+# They probe `exists`, `is_file`, the parent and `read_bytes` - four reads, and
+# no write anywhere. A record that is perfectly readable and permanently
+# unwritable therefore passed both gates.
+#
+# THE CONSEQUENCE IS THE UNBOUNDED ONE, not a cosmetic mislabel. `_run_once`
+# uses the answered gate to decide whether a reply it is about to DELIVER can
+# be suppressed afterwards. Pass the gate, deliver, fail to record - and the
+# next cycle selects the same note, because the suppression key never landed.
+# `_reply_name` stamps to the minute and `deliver` never overwrites an existing
+# name, so that is one new file per tick in a repository this one does not own.
+# Measured against the real `run_once` over three cycles: 3 deliveries, 3
+# "delivered" terminations, and a record still holding only the OLD name.
+#
+# THE SEED IS THREE LINES - write valid JSON, then `os.chmod(path,
+# stat.S_IREAD)`. It is not a race and not a corruption: the bytes parse, the
+# read succeeds, and every write fails forever.
+# ---------------------------------------------------------------------------
+
+
+def _seed_readonly(path: Path, payload: dict) -> None:
+    """A record whose bytes are valid and whose write permission is gone."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    os.chmod(path, stat.S_IREAD)
+
+
+def _readonly_is_expressible(tmp_path: Path) -> bool:
+    """Whether THIS account on THIS filesystem can hold a file read-only.
+
+    Asked on a TWIN rather than on the record under test, and asked through
+    `os.access` rather than through the mechanism the fix uses, so the arm is
+    not grading a probe with a copy of itself. A process running as root on
+    POSIX bypasses the mode bits outright, and an arm that asserted anyway
+    would be asserting about an environment that cannot hold the state it
+    names.
+    """
+    twin = tmp_path / "readonly_twin.json"
+    _seed_readonly(twin, {"version": 1})
+    try:
+        return not os.access(twin, os.W_OK)
+    finally:
+        os.chmod(twin, stat.S_IWRITE | stat.S_IREAD)
+
+
+_USABLE_PROBES = [
+    ("answered_usable", "responder_answered.json", {"version": 1, "answered": ["a.md"]}),
+    ("refusals_usable", "responder_refusals.json", {"version": 2, "refusals": {}}),
+]
+
+
+@pytest.mark.parametrize("probe,record_name,payload", _USABLE_PROBES, ids=["answered", "refusals"])
+def test_a_readable_but_unwritable_record_is_reported_unusable(
+    rsp, tmp_path, probe, record_name, payload
+):
+    """THE REGRESSION. Both probes, because the hole was mirrored into both.
+
+    `refusals_usable` was written first and `answered_usable` was specified to
+    mirror it; the mirroring copied the defect along with the split, so a fix
+    to one alone leaves the other delivering bounces it cannot record.
+
+    THE READABLE HALF IS ASSERTED TOO, and it is not decoration: it is what
+    separates this class from the structural classes the gates already catch.
+    An implementation that refused this record for being UNREADABLE would pass
+    the usability assertion while classifying it for the wrong reason.
+    """
+    if not _readonly_is_expressible(tmp_path):
+        pytest.skip("this account cannot hold a file read-only, so the class cannot be seeded")
+
+    record = tmp_path / "readonly" / record_name
+    _seed_readonly(record, payload)
+    try:
+        assert json.loads(record.read_bytes().decode("utf-8")) == payload, (
+            "the bed is wrong: the record must be READABLE for this to be the class "
+            "under test"
+        )
+
+        usable, why = getattr(rsp, probe)(record)
+
+        assert usable is False, (
+            f"{probe} called a permanently unwritable record usable, so the responder "
+            "delivers a reply it can never suppress - one new file per cycle, forever, "
+            "in a repository this one does not own"
+        )
+        assert why and "record" in why, why
+        assert str(tmp_path) not in why, f"the reason leaked a filesystem path: {why}"
+    finally:
+        os.chmod(record, stat.S_IWRITE | stat.S_IREAD)
+
+
+@pytest.mark.parametrize("probe,record_name,payload", _USABLE_PROBES, ids=["answered", "refusals"])
+def test_an_ordinary_writable_record_survives_the_writability_probe(
+    rsp, tmp_path, probe, record_name, payload
+):
+    """THE NON-VACUITY ARM. A gate that refuses everything has not been fixed.
+
+    The cheapest way to pass the arm above is to return False unconditionally,
+    which would decline every cycle forever and read in the log exactly like the
+    channel being quiet. This is the survivor half of the sweep: the LEGITIMATE
+    neighbours must still pass - an ordinary present, readable, writable record,
+    and an ABSENT one, which is the cold start every first run is in.
+
+    CORRECTED, and the correction is part of the same repair as the arm below.
+    As first shipped this arm asserted "absent implies usable" with NO
+    qualification, and that unqualified sentence IS the defect the gate had: it
+    is a claim about the record, when the object that decides is the DIRECTORY.
+    `atomic_write_json` lands by creating a TEMP FILE BESIDE the target and
+    renaming it, so an absent record in a directory that refuses a new file is
+    not usable at all. The survivor claim is therefore narrowed to what it can
+    support, and the narrowing is ASSERTED rather than merely written down: the
+    bed proves the directory accepts a file before the absent record is called
+    usable. The arm is kept, not deleted - it is still the half that stops an
+    unconditional False from passing.
+    """
+    present = tmp_path / "ordinary" / record_name
+    present.parent.mkdir(parents=True, exist_ok=True)
+    present.write_text(json.dumps(payload), encoding="utf-8")
+
+    usable, why = getattr(rsp, probe)(present)
+    assert usable is True, f"{probe} refused an ordinary writable record: {why}"
+
+    # NO LITTER. A directory probe that creates a file must remove it, and the
+    # record's own directory is where a leftover would sit.
+    left = sorted(q.name for q in present.parent.iterdir())
+    assert left == [record_name], f"the probe left something behind: {left}"
+
+    cold = tmp_path / "cold"
+    cold.mkdir()
+    assert _account_can_create(cold), (
+        "the bed is wrong: this arm may only claim a cold start is usable in a "
+        "directory that actually accepts a new file"
+    )
+    absent = cold / record_name
+    usable, why = getattr(rsp, probe)(absent)
+    assert usable is True, f"{probe} refused a cold start, so no first reply ever lands: {why}"
+    assert list(cold.iterdir()) == [], (
+        f"the probe left something behind in a cold directory: {list(cold.iterdir())}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE OBJECT THAT GOVERNS THE WRITE IS THE DIRECTORY, NOT THE RECORD.
+#
+# The first repair asked `path.open("r+b")` on the RECORD, gated on
+# `path.is_file()`. Measured counter-example, this tree, with the record's
+# parent directory denied WD and AD for this account:
+#
+#   absent record  : answered_usable -> (True, "...readable and writable")
+#                    refusals_usable -> (True, ...)
+#                    _remember_answered -> False
+#   PRESENT record, itself perfectly writable, same denied directory:
+#                    answered_usable -> (True, ...)
+#                    _remember_answered -> False
+#
+# `core/atomic_io._temp_path` is the whole reason: it returns
+# `target.with_name(".<name>.<pid>.<hex>.tmp")` - a SIBLING of the target, in
+# the parent directory - and `atomic_write_text` creates that temp and then
+# renames it over the target. So the right being exercised is CREATE A FILE IN
+# THIS DIRECTORY, on both platforms, and it is exercised whether or not the
+# target already exists. A probe of the target answers a different question,
+# and gating it on `is_file()` means the cold start - the state every first run
+# is in - was never probed at all.
+#
+# The consequence is the original unbounded one: the answered path delivers and
+# THEN records, so a failed record re-selects the same note next tick and
+# `_reply_name` stamps to the minute - one new file per tick, forever, in a
+# repository this one does not own.
+# ---------------------------------------------------------------------------
+
+_ACCOUNT = os.environ.get("USERNAME") or os.environ.get("USER") or ""
+
+
+def _account_can_create(directory: Path) -> bool:
+    """Whether this account can create a FILE in `directory` right now.
+
+    Asked through `os.open` with `O_CREAT | O_EXCL` rather than through the
+    `Path.open("xb")` the fix uses. The kernel right is necessarily the same one
+    - that is what makes it the bed rather than a different question - but the
+    call path is a different module, so a defect in the fix's own call path
+    cannot make the bed quietly agree with it.
+    """
+    probe = directory / "bed_check.probe"
+    try:
+        handle = os.open(probe, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except OSError:
+        return False
+    os.close(handle)
+    try:
+        probe.unlink()
+    except OSError:
+        pass
+    return True
+
+
+def _deny_file_creation(directory: Path) -> bool:
+    """Take this account's right to create a file in `directory`. Did it bite?
+
+    WINDOWS `chmod` CANNOT EXPRESS THIS. `os.chmod` on Windows sets only the
+    readonly bit and only meaningfully on a FILE; on a directory it changes
+    nothing about whether a file may be created inside. `icacls /deny` with
+    `(WD,AD)` - add-file and add-subdirectory - is the expression that works,
+    and it lands on the directory only, so an existing file inside keeps its own
+    permissions and stays writable. That is the point of the PRESENT case: the
+    record is writable and the write still cannot land.
+
+    On POSIX the same denial is a mode with no write bit on the directory.
+
+    The return value is MEASURED, not assumed. A process with the privilege to
+    ignore the denial - root on POSIX, or an account whose other rights override
+    - is an environment that cannot hold the state this class names, and the
+    caller must skip rather than assert about it.
+    """
+    if os.name == "nt":
+        if not _ACCOUNT:
+            return False
+        subprocess.run(
+            ["icacls", str(directory), "/deny", _ACCOUNT + ":(WD,AD)"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    else:
+        try:
+            os.chmod(directory, stat.S_IRUSR | stat.S_IXUSR)
+        except OSError:
+            return False
+    return not _account_can_create(directory)
+
+
+def _restore_file_creation(directory: Path) -> None:
+    """Undo `_deny_file_creation`. MUST run, or the ACL outlives the test run.
+
+    An `icacls /deny` ACE is PERSISTED on the directory, so a test that sets one
+    and dies without removing it leaves a denial behind for every later run on
+    this machine. `/remove:d` drops deny ACEs for the account and is a no-op
+    when none is there, so this is safe on the skip path too.
+    """
+    if os.name == "nt":
+        if _ACCOUNT:
+            subprocess.run(
+                ["icacls", str(directory), "/remove:d", _ACCOUNT],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+    else:
+        try:
+            os.chmod(directory, stat.S_IRWXU)
+        except OSError:
+            pass
+
+
+@pytest.mark.parametrize("probe,record_name,payload", _USABLE_PROBES, ids=["answered", "refusals"])
+@pytest.mark.parametrize("seed", ["absent", "present"])
+def test_a_record_whose_directory_refuses_a_new_file_is_reported_unusable(
+    rsp, tmp_path, probe, record_name, payload, seed
+):
+    """THE REGRESSION. Both records, and BOTH the cold start and the warm one.
+
+    ABSENT is not the easy half, it is the half the first repair could not reach
+    at all: its call was gated on `path.is_file()`, so a missing record skipped
+    the probe entirely and the gate returned True for a directory in which
+    `atomic_write_json` cannot place its temp file.
+
+    PRESENT is the half that names the wrong object. The record here is opened
+    `r+b` successfully by the bed - it IS writable - and the write still cannot
+    land, because the write is a create-beside-and-rename and the create is what
+    the directory refuses.
+    """
+    denied = tmp_path / "denied"
+    denied.mkdir()
+    record = denied / record_name
+    if seed == "present":
+        record.write_text(json.dumps(payload), encoding="utf-8")
+
+    if not _deny_file_creation(denied):
+        _restore_file_creation(denied)
+        pytest.skip(
+            "this account cannot be denied file creation in a directory here, so the "
+            "class cannot be seeded"
+        )
+    try:
+        if seed == "present":
+            assert json.loads(record.read_bytes().decode("utf-8")) == payload, (
+                "the bed is wrong: the record must be READABLE for this to be the class "
+                "under test"
+            )
+            with record.open("r+b"):
+                pass  # the RECORD is writable. The DIRECTORY is what refuses.
+
+        usable, why = getattr(rsp, probe)(record)
+
+        assert usable is False, (
+            f"{probe} called a {seed} record usable in a directory that cannot accept "
+            "a new file, so the responder delivers a reply it can never suppress - one "
+            "new file per cycle, forever, in a repository this one does not own"
+        )
+        assert why and "record" in why, why
+        assert str(tmp_path) not in why, f"the reason leaked a filesystem path: {why}"
+    finally:
+        _restore_file_creation(denied)
+
+    assert _account_can_create(denied), (
+        "the denial was NOT removed - every later run on this machine inherits it"
+    )
+def test_a_probe_whose_file_cannot_be_REMOVED_is_not_a_healthy_directory(
+    rsp, tmp_path, monkeypatch
+):
+    """The removal is half the probe, and swallowing its failure inverted it.
+
+    The first version asked one question - can a new file be CREATED here - and
+    then removed the evidence in a `finally` that swallowed `OSError`. On
+    Windows a concurrent open handle on a just-created file is the ORDINARY
+    case, not a rarity: an antivirus scanner or the search indexer holds one for
+    a few milliseconds and `unlink` raises `PermissionError` for as long as it
+    does. The measured result was the worst available pair - the leaked file
+    stayed AND the function returned True, so a directory that will not let its
+    own probe be removed was reported healthy and the litter was invisible.
+
+    A directory that cannot be tidied is not a directory this module should keep
+    writing into, so the removal's failure is now the verdict. The direction of
+    error stays conservative, as `_dir_accepts_new_file` documents: a refusal is
+    bounded and names itself in the log.
+    """
+    directory = tmp_path / "leaky"
+    directory.mkdir()
+
+    real_unlink = Path.unlink
+
+    def refusing_unlink(self, *args, **kwargs):
+        if self.name.startswith(rsp._DIR_PROBE_PREFIX):
+            raise PermissionError(13, "the file is in use by another process")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", refusing_unlink)
+    verdict = rsp._dir_accepts_new_file(directory)
+    monkeypatch.undo()
+
+    leaked = sorted(p.name for p in directory.glob(f"{rsp._DIR_PROBE_PREFIX}*"))
+    assert leaked, (
+        "the bed is wrong: no probe file was left behind, so this run never "
+        "reached the class under test"
+    )
+    assert verdict is False, (
+        "a directory that refused to give up its own probe file was reported "
+        "healthy, and the probe leaked one file into it at the same time"
+    )
+
+
+def test_a_STALE_probe_is_reclaimed_and_a_live_one_and_its_neighbours_are_NOT(
+    rsp, tmp_path
+):
+    """Both halves of the sweep, because the first alone passes by deleting.
+
+    A leak that survives `taskkill /F` cannot be prevented by a `finally` - that
+    is this repo's own sanctioned kill and it runs no Python on the way out - so
+    the litter has to be RECLAIMED rather than merely avoided. STALENESS IS AGE
+    AND PREFIX, AND DELIBERATELY NOT PID LIVENESS: `ops/loop/slots.py:reap`
+    already carries the defect of reclaiming by a field it never checks against
+    the owner, and a pid parsed out of a filename is worse still because Windows
+    recycles pids. A probe lives for microseconds inside one call, so anything
+    of this prefix older than `_DIR_PROBE_STALE_SECONDS` cannot be one in
+    flight.
+
+    THE SECOND ARM IS THE ONE THAT MATTERS. A sweep scores full marks on "the
+    bad file is gone" by deleting the directory, so the neighbours are AGED PAST
+    THE THRESHOLD TOO - a real record and a `core/atomic_io` temp of the shape
+    `.<name>.<pid>.<hex>.tmp`, which is one character class away from the probe.
+    Age alone must not be enough to select them, and neither must the `.tmp`
+    suffix.
+    """
+    directory = tmp_path / "littered"
+    directory.mkdir()
+
+    stale = directory / f"{rsp._DIR_PROBE_PREFIX}424242.deadbeef.tmp"
+    live = directory / f"{rsp._DIR_PROBE_PREFIX}{os.getpid()}.feedface.tmp"
+    record = directory / "responder_answered.json"
+    atomic_temp = directory / ".responder_answered.json.4242.abcdef12.tmp"
+    for leftover in (stale, live, record, atomic_temp):
+        leftover.write_bytes(b"")
+
+    old = time.time() - rsp._DIR_PROBE_STALE_SECONDS - 60.0
+    for aged in (stale, record, atomic_temp):
+        os.utime(aged, (old, old))
+
+    assert rsp._dir_accepts_new_file(directory) is True, (
+        "the bed is wrong: this directory accepts files, so the probe must pass"
+    )
+
+    survivors = sorted(p.name for p in directory.iterdir())
+    assert stale.name not in survivors, (
+        f"a stale probe survived the sweep, so the litter is unbounded: {survivors}"
+    )
+    assert live.name in survivors, (
+        "the sweep reclaimed a probe young enough to be in flight in another "
+        "process - that is `reap()`'s defect, reproduced"
+    )
+    assert record.name in survivors, (
+        f"the sweep ate a real record that was merely old: {survivors}"
+    )
+    assert atomic_temp.name in survivors, (
+        f"the sweep ate a `core/atomic_io` temp that was merely old: {survivors}"
     )
