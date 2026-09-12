@@ -35,8 +35,10 @@ UNRESOLVED and must NOT be quietly dropped or quietly called NOT-GIT.
 from __future__ import annotations
 
 import ast
+import keyword
 import os
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -2104,3 +2106,342 @@ def test_every_registered_shape_lands_in_exactly_one_list():
             "not reported, so the covered list is overstating the reach. "
             f"source: {source!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# INDEPENDENT AGREEMENT ARM OVER THE INSTRUMENT THIS FILE BORROWS
+# ---------------------------------------------------------------------------
+#
+# `test_no_invisible_receiver_in_this_tree_is_spelled_like_a_launcher` above
+# reaches into the module under test for its own instrument: it decides which
+# receivers are invisible by calling `census._dotted`. A sweep that borrows its
+# instrument from the module it is testing inherits that module's blind spots
+# and then cannot see a defect the instrument itself introduced. Its only
+# coupling guard is `assert seen > 100`, which goes red if `_dotted` is GUTTED
+# and stays GREEN if `_dotted` grows a NARROWER blind spot - a narrowing makes
+# MORE receivers look unresolvable, so `seen` RISES and the threshold is
+# satisfied harder. The arms below close that by re-deriving the same answer
+# through a mechanism that shares no code with `census._dotted`, then asserting
+# the two agree over the real corpus.
+
+
+def _dotted_receiver_independently(node: ast.AST) -> str | None:
+    """Re-derive a dotted receiver name WITHOUT calling `census._dotted`.
+
+    A DIFFERENT MECHANISM ON PURPOSE. `census._dotted` walks the `ast.Attribute`
+    chain node by node and asks whether the base is an `ast.Name`. This one
+    round-trips the node back to SOURCE with `ast.unparse` and asks whether that
+    source is a plain dotted identifier. A re-implementation that copied the
+    module's loop would agree by being blind in the same places, which is worse
+    than no arm at all because it reads as coverage.
+
+    IT ASKS PYTHON WHAT AN IDENTIFIER IS rather than spelling one out. The first
+    version of this function used a character-class regex,
+    `[A-Za-z_][A-Za-z0-9_]*`, and that was a DEFECT and not a stylistic choice:
+    Python identifiers are not ASCII, so over every receiver named with a
+    non-ASCII letter the regex answered None while `census._dotted` correctly
+    answered the name. That made this half STRICTLY WEAKER than the module it
+    grades over that class, which INVERTS the arm. Measured against a two-line
+    probe file whose receiver carried one non-ASCII letter: the CORRECT resolver
+    went RED with 3 disagreements, and a resolver narrowed by
+    `if not all(part.isascii() for part in parts): return None` went GREEN - the
+    narrowing was rewarded with a pass, which is the exact agree-by-being-blind
+    failure this whole section exists to prevent. `str.isidentifier` is the
+    language's own answer and carries no such class. The arm
+    `test_the_independent_re_derivation_is_not_weaker_over_non_ascii_identifiers`
+    is the regression guard, and it builds its non-ASCII letter with `chr` so
+    that the test does not itself violate this tree's 7-bit ASCII rule.
+
+    The one place the two mechanisms genuinely differ, handled here rather than
+    copied from anywhere: `ast.unparse` renders the `None`, `True` and `False`
+    constants as bare identifiers, so a `None.foo` receiver would round-trip to
+    text `str.isidentifier` accepts while `census._dotted` correctly refuses it
+    - that node is an `ast.Constant`, not an `ast.Name`. The keyword filter is
+    that difference.
+
+    WHAT THIS CANNOT SEE, stated because the shape of a sweep decides the shape
+    of its finding and an absence then reads as a fact:
+
+    - It is a sweep over nodes, so it says nothing about what `census` DOES with
+      a resolved name. A `_dotted` that returns the right string and a caller
+      that then ignores it is invisible here.
+    - It compares two resolvers against each other, so a defect they would BOTH
+      have to share - a spelling Python's own parser reports differently than
+      either expects - is outside its reach by construction. It can see a
+      divergence, never a jointly-wrong answer.
+    - Its corpus is `census.DEFAULT_ROOTS` under `REPO_ROOT` on disk, so a node
+      shape that appears nowhere in this tree today is not exercised, and a
+      green run is a statement about the tree as it stands and not about the
+      resolver in general. MEASURED THIS RUN so the hole has a size rather than
+      a shrug: over 71347 compared nodes the resolved chains run 56576 of one
+      segment, 11419 of two, 822 of three, 28 of four, and ZERO of five or more.
+      A narrowing keyed on chain DEPTH past four - `if len(parts) > 4: return
+      None`, injected into `census._dotted` by an adversary - is therefore GREEN
+      here, and would be green against ANY re-derivation whatever. That is a
+      statement about the corpus rather than a defect in this half, and it is
+      DISCLOSED rather than patched, because manufacturing a five-segment chain
+      to feed the sweep would test the fixture and not the tree.
+    - The non-ASCII identifier class is covered IN MEMORY, by the arm named
+      above, and not by the disk corpus. This tree's own ASCII rule is why: a
+      file carrying a non-ASCII identifier cannot be committed here, so the disk
+      corpus holds zero of them and a green whole-corpus run says NOTHING about
+      that class on its own. The class was at zero by coincidence of the rule,
+      never by a property of either resolver.
+    - Files that fail to parse or to decode are skipped silently, exactly as the
+      module's own walk skips them, so a receiver inside an unparseable file is
+      counted by neither half.
+    """
+    try:
+        text = ast.unparse(node)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    parts = text.split(".")
+    if not all(part.isidentifier() for part in parts):
+        return None
+    if any(keyword.iskeyword(part) for part in parts):
+        return None
+    return text
+
+
+def _receiver_nodes(tree: ast.AST) -> list[ast.AST]:
+    """Every node either resolver may be handed, deduplicated by identity.
+
+    A superset of the module's own call sites: the whole `ast.Attribute` and
+    `ast.Name` population, plus the `func.value` of every attribute call, which
+    is the exact node `tools/git_subprocess_census.py` hands to `_dotted` and
+    which is often neither an Attribute nor a Name.
+    """
+    collected: dict[int, ast.AST] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Attribute, ast.Name)):
+            collected[id(node)] = node
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            collected[id(node.func.value)] = node.func.value
+    return list(collected.values())
+
+
+def _receiver_agreement(
+    resolver: Callable[[ast.AST], str | None],
+) -> tuple[int, int, list[str]]:
+    """Compare `resolver` against the independent re-derivation over the tree.
+
+    Returns `(compared, resolved_by_resolver, disagreements)`. `resolver` is a
+    parameter rather than a hardcoded `census._dotted` so that the non-vacuity
+    arm can hand this walk a DELIBERATELY NARROWED resolver and prove the
+    comparison actually fires.
+    """
+    compared = 0
+    resolved = 0
+    disagreements: list[str] = []
+    for name in census.DEFAULT_ROOTS:
+        directory = REPO_ROOT / name
+        if not directory.is_dir():
+            continue
+        for path in census._python_files(directory):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, SyntaxError):
+                continue
+            relative = path.relative_to(REPO_ROOT).as_posix()
+            for node in _receiver_nodes(tree):
+                compared += 1
+                theirs = resolver(node)
+                mine = _dotted_receiver_independently(node)
+                if theirs is not None:
+                    resolved += 1
+                if theirs != mine:
+                    lineno = getattr(node, "lineno", 0)
+                    disagreements.append(
+                        f"{relative}:{lineno} {type(node).__name__} "
+                        f"module={theirs!r} independent={mine!r}"
+                    )
+    return compared, resolved, disagreements
+
+
+# The three floors below are the non-vacuity guard on the agreement arm: they
+# exist so that "zero disagreements" cannot be a statement about an emptied
+# corpus. The values they replaced - 5000, 1000 and 500 - could not do that job.
+# Measured this run over `census.DEFAULT_ROOTS`: compared 71347, resolved 68845,
+# unresolved 2502, so the old floors carried 14.3x, 68.8x and 5.0x headroom and
+# DROPPING FOUR OF THE FIVE ROOTS still satisfied all three. Only the unresolved
+# floor had any bite at all.
+#
+# The rule chosen, stated so it can be re-derived rather than guessed at: each
+# floor is about 55 percent of the value measured this run, rounded to a round
+# number. That makes all three bind on the loss of the DOMINANT root - dropping
+# `tests` leaves compared 16286, resolved 15860, unresolved 426, and every one
+# of those is under its floor - while still tolerating a tree that sheds 45
+# percent of its receiver nodes to ordinary churn.
+#
+# WHAT THESE FLOORS STILL CANNOT CATCH, because a floor tight enough to catch it
+# is a floor that fires on ordinary editing: the loss of any root other than
+# `tests`. Dropping `tools`, the second largest, leaves compared 61265, resolved
+# 59013 and unresolved 2252, all comfortably green. Binding on that would need a
+# floor within 1 percent of the measured value, which would go red the week
+# someone deletes a module. The `_POPULATION_FLOOR` sweep above is the guard
+# that notices a root leaving; these three are the guard that notices the corpus
+# COLLAPSING.
+_COMPARED_FLOOR = 39000
+_RESOLVED_FLOOR = 37000
+_UNRESOLVED_FLOOR = 1300
+
+
+def test_the_census_dotted_resolver_agrees_with_an_independent_re_derivation():
+    """The coupling guard the `seen > 100` threshold cannot be.
+
+    A narrowing of `census._dotted` - any node shape it resolves today and stops
+    resolving tomorrow - turns this RED, because the independent half still
+    resolves it and the two answers stop matching. The threshold arm above
+    cannot do that: a narrowing RAISES its count.
+    """
+    compared, resolved, disagreements = _receiver_agreement(census._dotted)
+    assert disagreements == [], (
+        f"{len(disagreements)} receiver nodes where `census._dotted` and an "
+        "independent re-derivation disagree. Either the module's resolver moved "
+        "or the re-derivation did, and the census's reachability rulings rest "
+        f"on this resolver. first 20: {disagreements[:20]}"
+    )
+    assert compared > _COMPARED_FLOOR, (
+        f"only {compared} receiver nodes were compared, under a floor of "
+        f"{_COMPARED_FLOOR}; a walk that reaches almost none of them agrees "
+        "about almost nothing and still exits 0"
+    )
+    assert resolved > _RESOLVED_FLOOR, (
+        f"only {resolved} of {compared} compared nodes resolved to a dotted "
+        f"name, under a floor of {_RESOLVED_FLOOR}. An agreement arm over a "
+        "population where the resolver answers None throughout agrees vacuously"
+    )
+    assert compared - resolved > _UNRESOLVED_FLOOR, (
+        f"only {compared - resolved} of {compared} compared nodes were "
+        f"unresolvable, under a floor of {_UNRESOLVED_FLOOR}. Both answers must "
+        "be exercised or the arm is testing one half of the resolver only"
+    )
+
+
+def test_the_agreement_arm_goes_red_under_a_narrowed_resolver():
+    """Non-vacuity. The comparison must FIRE, not merely be present.
+
+    A re-implemented grader can be WEAKER than the module it grades, and one
+    that is agrees by being blind in the same place. Measured in this tree: a
+    re-implementation emitted silence where the module emits an UNRESOLVED row,
+    and the two matched for exactly that reason. So two real narrowings are
+    applied to `census._dotted` HERE, in memory and without touching the module,
+    and each must be visible to the independent half.
+    """
+
+    def drops_dotted_chains(node: ast.AST) -> str | None:
+        answer = census._dotted(node)
+        if answer is not None and "." in answer:
+            return None
+        return answer
+
+    def drops_bare_names(node: ast.AST) -> str | None:
+        answer = census._dotted(node)
+        if answer is not None and "." not in answer:
+            return None
+        return answer
+
+    _, _, chain_disagreements = _receiver_agreement(drops_dotted_chains)
+    assert chain_disagreements, (
+        "a resolver narrowed to refuse every multi-segment dotted chain was "
+        "indistinguishable from the real one, so the independent half is blind "
+        "to that narrowing and this whole section proves nothing"
+    )
+
+    _, _, name_disagreements = _receiver_agreement(drops_bare_names)
+    assert name_disagreements, (
+        "a resolver narrowed to refuse every bare `ast.Name` receiver was "
+        "indistinguishable from the real one, so the independent half is blind "
+        "to that narrowing"
+    )
+
+
+def _non_ascii_receiver_probe_source() -> str:
+    """Two lines of valid Python whose receiver carries a non-ASCII letter.
+
+    The letter is BUILT WITH `chr` and never typed. This tree is strict 7-bit
+    ASCII in all authored text and `tools/precommit_gate.py` enforces it, so a
+    test that needs a non-ASCII identifier as DATA has to construct it or the
+    test file itself becomes a violation of the rule the test is about.
+    """
+    name = "caf" + chr(0x00E9)
+    return name + " = object()\n" + name + ".attr\n"
+
+
+def test_the_independent_re_derivation_is_not_weaker_over_non_ascii_identifiers():
+    """The class that inverted this arm, held in memory because disk cannot.
+
+    Python identifiers are not ASCII. The first `_dotted_receiver_independently`
+    filtered with an ASCII character class and so answered None for every
+    receiver `census._dotted` resolves by a non-ASCII name - STRICTLY WEAKER
+    than the module it grades, over exactly one class, and the arm's polarity
+    inverted there: the correct resolver looked like the defect and a resolver
+    narrowed to refuse non-ASCII names looked correct.
+
+    That class is at ZERO in the on-disk corpus, and this tree's own ASCII rule
+    is the whole reason. It is a coincidence of the corpus and not a property of
+    either resolver, so a whole-corpus green run cannot stand in for this arm and
+    the probe cannot be shipped as a file - committing one would trip the gate.
+    It is built in memory instead.
+    """
+    tree = ast.parse(_non_ascii_receiver_probe_source())
+    nodes = [
+        node
+        for node in _receiver_nodes(tree)
+        if not isinstance(node, ast.Name) or node.id != "object"
+    ]
+    assert len(nodes) == 3, (
+        "the probe no longer yields the three receiver nodes it was built for "
+        f"- got {[(type(n).__name__, ast.unparse(n)) for n in nodes]}. A probe "
+        "that stopped containing the shape proves nothing about it"
+    )
+
+    for node in nodes:
+        theirs = census._dotted(node)
+        assert theirs is not None, (
+            "`census._dotted` no longer resolves a receiver named with a "
+            f"non-ASCII letter: {type(node).__name__} at offset "
+            f"{getattr(node, 'lineno', 0)}. If that is deliberate this arm is "
+            "the wrong shape; if it is not, the census just lost a class of "
+            "receiver it used to see"
+        )
+        mine = _dotted_receiver_independently(node)
+        assert mine == theirs, (
+            "the independent re-derivation is WEAKER than the module it grades "
+            f"over non-ASCII identifiers: module={theirs!r} independent={mine!r}"
+            ". That is the defect this arm exists for - a grader blind where "
+            "the module can see rewards a narrowing with a pass"
+        )
+
+
+def test_the_non_ascii_arm_would_notice_an_ascii_only_re_derivation():
+    """Non-vacuity for the arm above. The comparison must be able to FIRE.
+
+    Re-applies the exact filter that was removed - an ASCII character class over
+    each segment - and asserts it disagrees with `census._dotted` on the probe.
+    Without this, an arm that compared two halves which had BOTH silently
+    regained an ASCII filter would agree and read as coverage.
+    """
+    tree = ast.parse(_non_ascii_receiver_probe_source())
+    nodes = [
+        node
+        for node in _receiver_nodes(tree)
+        if not isinstance(node, ast.Name) or node.id != "object"
+    ]
+
+    def ascii_only(node: ast.AST) -> str | None:
+        answer = _dotted_receiver_independently(node)
+        if answer is not None and not answer.isascii():
+            return None
+        return answer
+
+    divergent = [
+        (ast.unparse(node), census._dotted(node), ascii_only(node))
+        for node in nodes
+        if census._dotted(node) != ascii_only(node)
+    ]
+    assert len(divergent) == 3, (
+        "an ASCII-only re-derivation was NOT distinguishable from "
+        "`census._dotted` on a non-ASCII receiver, so the arm above cannot see "
+        f"the narrowing it was written for. divergences: {divergent}"
+    )
