@@ -696,6 +696,50 @@ def _ensure_parent(path: Path) -> bool:
     return _ensure_dir(path.parent)
 
 
+def _writable_in_place(path: Path) -> bool:
+    """Whether an EXISTING file at `path` can still be written. Never raises.
+
+    THE MISSING THIRD CLASS, and the one that made two gates lie. `exists`,
+    `is_file`, the parent check and `read_bytes` are four READS, and no
+    arrangement of them can answer a question about writing. Both record gates
+    asked exactly those four and then returned the sentence "readable and
+    writable", so a record that is readable and PERMANENTLY UNWRITABLE passed
+    them. The seed is three lines: write valid JSON, then
+    `os.chmod(path, stat.S_IREAD)`.
+
+    IT IS NOT THE STRUCTURAL CLASS AND IT IS NOT THE REPLACEABLE ONE. The
+    structural classes - a directory at the path, a file at the parent - are
+    caught by shape. The replaceable ones - corrupt text, an empty file, a
+    wrong-type document - are deliberately left open because the next write
+    HEALS them. This class reads clean and never heals, so the write the gate
+    promised is one the caller can never make.
+
+    `"r+b"` IS THE PROBE BECAUSE IT WRITES NOTHING. It opens for update without
+    creating and without truncating, so the bytes on disk are untouched whether
+    it succeeds or fails; the file is not a state write and does not go through
+    `core/atomic_io.py`, because nothing is being written. A probe that wrote a
+    byte to find out whether it could write a byte would corrupt the record it
+    was asked to classify.
+
+    IT IS CONSERVATIVE ON POSIX, DELIBERATELY. `atomic_write_json` lands by
+    `os.replace`, which on POSIX is governed by the DIRECTORY's permission
+    rather than the target's, so a mode-0o444 file there is still replaceable
+    and this probe will decline it anyway. That errs toward `NOT ANSWERING`,
+    which is bounded and visible in the log. The opposite error is the measured
+    one - deliver, fail to record, and repeat every tick into a repository this
+    one does not own - so the conservative direction is the correct direction
+    for a gate whose false-open cost is unbounded.
+
+    `ValueError` is in the tuple for `_ensure_dir`'s reason: a path carrying a
+    NUL byte raises it out of `open` rather than `OSError`.
+    """
+    try:
+        with path.open("r+b"):
+            return True
+    except (OSError, ValueError):
+        return False
+
+
 def pending(
     inbox: Path,
     opted_in: tuple[str, ...],
@@ -1463,6 +1507,10 @@ def answered_usable(path: Path) -> tuple[bool, str]:
             path.read_bytes()
     except (OSError, ValueError):
         return False, "the answered record cannot be read, so no reply can be recorded"
+    # The third class - see `_writable_in_place`. Everything above this line is
+    # a READ, and the sentence this function returns promises a WRITE.
+    if path.is_file() and not _writable_in_place(path):
+        return False, "the answered record cannot be written, so no reply can be recorded"
     return True, "the answered record is readable and writable"
 
 
@@ -1563,6 +1611,12 @@ def refusals_usable(path: Path) -> tuple[bool, str]:
             path.read_bytes()
     except (OSError, ValueError):
         return False, "the refusal record cannot be read, so no refusal can be recorded"
+    # The third class - see `_writable_in_place`. Mirrored onto this record with
+    # the same reasoning, because the hole was mirrored into it in the first
+    # place: `answered_usable` was specified to copy this function's split and
+    # copied its four-reads-and-a-promise along with it.
+    if path.is_file() and not _writable_in_place(path):
+        return False, "the refusal record cannot be written, so no refusal can be recorded"
     return True, "the refusal record is readable and writable"
 
 
