@@ -12,6 +12,76 @@ now.
 
 ---
 
+## 2026-09-12 - Two gates promised a write they had only ever read, and the class they missed loops one file per cycle into a repo this one does not own
+
+One commit in an isolated worktree; not pushed from here. Two files changed:
+`tools/moon_sync_responder.py` and `tests/test_moon_sync_responder.py`.
+
+WHAT WAS ACTUALLY WRONG, re-verified against the live file before the fix rather
+than taken from the row that reported it. `answered_usable` and `refusals_usable`
+each probe `exists`, `is_file`, the parent and `read_bytes` - FOUR READS - and
+then return the sentence "the record is readable and writable". No arrangement of
+reads can answer a question about writing, so a record that is READABLE AND
+PERMANENTLY UNWRITABLE passed both gates. The seed is three lines: write valid
+JSON, then `os.chmod(path, stat.S_IREAD)`.
+
+WHY IT IS NOT A COSMETIC MISLABEL. `_run_once` uses the answered gate at
+`GATE:answered-usable` to decide whether a reply it is ABOUT TO DELIVER can be
+suppressed afterwards. Pass the gate, deliver, fail to record, and the next cycle
+selects the same note because the suppression key never landed. `_reply_name`
+stamps to the minute and `deliver` never overwrites an existing name, so it is one
+new file per tick in a repository this one does not own. Not live: the scheduled
+task was verified DORMANT when the row was opened.
+
+THE SIBLING SWEEP, AND ITS POPULATION. Two sites, and exactly two. The corpus was
+every occurrence of the string "readable and writable" in
+`tools/moon_sync_responder.py` - lines 1466 and 1566 before the fix, the two
+`*_usable` functions and nothing else. The neighbouring read gates were checked
+and are NOT the same class: `_listed_record` and `_rotate_metrics` claim only
+READABILITY and leave writability to `atomic_write_json`'s own return, which their
+callers propagate. Both sites were fixed together through one shared helper,
+`_writable_in_place`.
+
+THE PROBE WRITES NOTHING. `path.open("r+b")` opens for update without creating and
+without truncating, so the bytes are untouched whether it succeeds or fails. It is
+therefore not a state write and correctly does not go through `core/atomic_io.py`.
+A probe that wrote a byte to learn whether it could write a byte would corrupt the
+record it was asked to classify.
+
+IT IS CONSERVATIVE ON POSIX, DELIBERATELY, AND THAT IS STATED IN THE CODE.
+`atomic_write_json` lands by `os.replace`, which on POSIX is governed by the
+DIRECTORY's permission rather than the target's, so a mode-0o444 file there is
+still replaceable and this probe declines it anyway. That errs toward a visible,
+bounded `NOT ANSWERING`. The opposite error is the measured unbounded one.
+
+THE ARM WAS RED FIRST, AND FOR THE RIGHT REASON. Both parametrizations failed on
+`assert True is False` - the probes CALLING THE UNWRITABLE RECORD USABLE - rather
+than on a missing attribute or a bad bed. The arm asserts the READABLE half too,
+so an implementation that refused the record for being unreadable would be
+classifying it for the wrong reason and is not accepted. Its non-vacuity partner
+asserts the legitimate neighbours SURVIVE: an ordinary writable record and an
+ABSENT one, the cold start every first run is in. The bed guards its own
+premise - it seeds a TWIN and asks `os.access`, a different syscall family from
+the fix's `open`, and SKIPS where the account cannot hold a file read-only at all,
+because a process running as root on POSIX bypasses the mode bits and an arm that
+asserted anyway would be asserting about an environment that cannot hold the state
+it names.
+
+COUNTS, MEASURED 2026-09-12 IN THIS WORKTREE, historical readings and not claims
+about now. `python -m pytest tests`: 2704 passed, 2 skipped, exit 0.
+`python -m pytest agents/pity_engine`: 80 passed, exit 0. `python -m ruff check .`:
+all checks passed, exit 0. `python -m mypy`: success, 36 source files, exit 0 -
+and that figure covers `tools/`, so it is evidence about the module changed here
+and about nothing in `tests/`. `python tools/precommit_gate.py`: exit 0. Each gate
+was run as its own command, because a chained run reports only its last.
+
+UNVERIFIED, STATED AS SUCH. The three-cycles-against-real-`run_once` figures in
+the row that opened this - 3 deliveries, 3 delivered terminations, the record
+holding only the old name - were NOT re-measured here. They are the opening row's
+reading, carried as its claim rather than re-derived as this slice's.
+
+---
+
 ## 2026-09-11 - A narrow scope rested on a prose premise nothing guarded, the first guard ran one way, and the row closes on terms other than its own wording
 
 One commit, pushed: `c514ca7`. Two files, 879 insertions and 1 deletion. Both

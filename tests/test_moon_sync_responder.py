@@ -32,6 +32,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -2261,3 +2262,121 @@ def test_a_crashing_cycle_carries_the_caller_label_to_the_log(rsp, tmp_path):
     assert {ln.split("\t")[1] for ln in lines} == {rsp.SOURCE_SUITE}, (
         f"the crash line named a different caller from the start line: {lines}"
     )
+
+
+# ---------------------------------------------------------------------------
+# THE MISSING THIRD CLASS: READABLE-BUT-UNWRITABLE.
+#
+# `answered_usable` and `refusals_usable` both END with the sentence "the
+# record is readable and writable", and neither ever asked the second half.
+# They probe `exists`, `is_file`, the parent and `read_bytes` - four reads, and
+# no write anywhere. A record that is perfectly readable and permanently
+# unwritable therefore passed both gates.
+#
+# THE CONSEQUENCE IS THE UNBOUNDED ONE, not a cosmetic mislabel. `_run_once`
+# uses the answered gate to decide whether a reply it is about to DELIVER can
+# be suppressed afterwards. Pass the gate, deliver, fail to record - and the
+# next cycle selects the same note, because the suppression key never landed.
+# `_reply_name` stamps to the minute and `deliver` never overwrites an existing
+# name, so that is one new file per tick in a repository this one does not own.
+# Measured against the real `run_once` over three cycles: 3 deliveries, 3
+# "delivered" terminations, and a record still holding only the OLD name.
+#
+# THE SEED IS THREE LINES - write valid JSON, then `os.chmod(path,
+# stat.S_IREAD)`. It is not a race and not a corruption: the bytes parse, the
+# read succeeds, and every write fails forever.
+# ---------------------------------------------------------------------------
+
+
+def _seed_readonly(path: Path, payload: dict) -> None:
+    """A record whose bytes are valid and whose write permission is gone."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    os.chmod(path, stat.S_IREAD)
+
+
+def _readonly_is_expressible(tmp_path: Path) -> bool:
+    """Whether THIS account on THIS filesystem can hold a file read-only.
+
+    Asked on a TWIN rather than on the record under test, and asked through
+    `os.access` rather than through the mechanism the fix uses, so the arm is
+    not grading a probe with a copy of itself. A process running as root on
+    POSIX bypasses the mode bits outright, and an arm that asserted anyway
+    would be asserting about an environment that cannot hold the state it
+    names.
+    """
+    twin = tmp_path / "readonly_twin.json"
+    _seed_readonly(twin, {"version": 1})
+    try:
+        return not os.access(twin, os.W_OK)
+    finally:
+        os.chmod(twin, stat.S_IWRITE | stat.S_IREAD)
+
+
+_USABLE_PROBES = [
+    ("answered_usable", "responder_answered.json", {"version": 1, "answered": ["a.md"]}),
+    ("refusals_usable", "responder_refusals.json", {"version": 2, "refusals": {}}),
+]
+
+
+@pytest.mark.parametrize("probe,record_name,payload", _USABLE_PROBES, ids=["answered", "refusals"])
+def test_a_readable_but_unwritable_record_is_reported_unusable(
+    rsp, tmp_path, probe, record_name, payload
+):
+    """THE REGRESSION. Both probes, because the hole was mirrored into both.
+
+    `refusals_usable` was written first and `answered_usable` was specified to
+    mirror it; the mirroring copied the defect along with the split, so a fix
+    to one alone leaves the other delivering bounces it cannot record.
+
+    THE READABLE HALF IS ASSERTED TOO, and it is not decoration: it is what
+    separates this class from the structural classes the gates already catch.
+    An implementation that refused this record for being UNREADABLE would pass
+    the usability assertion while classifying it for the wrong reason.
+    """
+    if not _readonly_is_expressible(tmp_path):
+        pytest.skip("this account cannot hold a file read-only, so the class cannot be seeded")
+
+    record = tmp_path / "readonly" / record_name
+    _seed_readonly(record, payload)
+    try:
+        assert json.loads(record.read_bytes().decode("utf-8")) == payload, (
+            "the bed is wrong: the record must be READABLE for this to be the class "
+            "under test"
+        )
+
+        usable, why = getattr(rsp, probe)(record)
+
+        assert usable is False, (
+            f"{probe} called a permanently unwritable record usable, so the responder "
+            "delivers a reply it can never suppress - one new file per cycle, forever, "
+            "in a repository this one does not own"
+        )
+        assert why and "record" in why, why
+        assert str(tmp_path) not in why, f"the reason leaked a filesystem path: {why}"
+    finally:
+        os.chmod(record, stat.S_IWRITE | stat.S_IREAD)
+
+
+@pytest.mark.parametrize("probe,record_name,payload", _USABLE_PROBES, ids=["answered", "refusals"])
+def test_an_ordinary_writable_record_survives_the_writability_probe(
+    rsp, tmp_path, probe, record_name, payload
+):
+    """THE NON-VACUITY ARM. A gate that refuses everything has not been fixed.
+
+    The cheapest way to pass the arm above is to return False unconditionally,
+    which would decline every cycle forever and read in the log exactly like the
+    channel being quiet. This is the survivor half of the sweep: the LEGITIMATE
+    neighbours must still pass - an ordinary present, readable, writable record,
+    and an ABSENT one, which is the cold start every first run is in.
+    """
+    present = tmp_path / "ordinary" / record_name
+    present.parent.mkdir(parents=True, exist_ok=True)
+    present.write_text(json.dumps(payload), encoding="utf-8")
+
+    usable, why = getattr(rsp, probe)(present)
+    assert usable is True, f"{probe} refused an ordinary writable record: {why}"
+
+    absent = tmp_path / "cold" / record_name
+    usable, why = getattr(rsp, probe)(absent)
+    assert usable is True, f"{probe} refused a cold start, so no first reply ever lands: {why}"
