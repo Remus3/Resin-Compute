@@ -871,35 +871,113 @@ version. What follows is everything the scaffold deliberately did not do.
   checking it against the RC upstream it claims to be inherited verbatim from. If
   RC has amended that paragraph, both were arguing from a stale quote.
 
-- **OPEN 2026-09-13, A REAL DEFECT WITH A MEASURED UNBOUNDED CONSEQUENCE, AND IT
-  SHARPENS THE THREE-RECORD ASYMMETRY ROW BELOW RATHER THAN DUPLICATING IT.**
-  `answered_usable` in `tools/moon_sync_responder.py` has a MISSING THIRD CLASS:
-  readable-but-permanently-unwritable. It probes exists, is_file, parent and
-  read_bytes, NEVER attempts or infers a WRITE, and then returns the string "the
-  answered record is readable and writable". The seed is three lines - write
-  valid JSON, then os.chmod(path, stat.S_IREAD).
+- **CLOSED 2026-09-12 AT `6216a82`, AND ON OTHER TERMS THAN ITS OWN WORDING. THE
+  ROW NAMED THE RECORD, AND THE OBJECT THAT GOVERNS THE WRITE IS THE DIRECTORY.**
+  The defect as described was real and reproduced. The first fix was wrong about
+  WHAT to probe, and a second pass was wrong about what it LEFT BEHIND. Three
+  commits, two of them written only because an adversary refuted the one before.
 
-  MEASURED with the real `run_once`, three cycles, no logic monkeypatched,
-  against two controls seeded the same way:
-  - structural-dir: far-inbox deliveries 0, terminations answered-unusable x3.
-  - replaceable-corrupt: far-inbox deliveries 1, terminations delivered, empty,
-    empty.
-  - readonly-attribute: far-inbox deliveries 3, terminations delivered x3, and
-    the record still holds only the OLD name.
+  `411ba14` added `_writable_in_place`, opening the record `r+b`. REFUTED on
+  scope-and-siblings: `atomic_write_json` creates a TMP FILE IN THE PARENT and
+  then replaces, so the governing permission is the DIRECTORY's, on both
+  platforms, and the probe interrogated an object that does not decide the
+  question. Measured with the parent denied `(WD,AD)` by icacls: both an absent
+  record and a PRESENT writable record returned `(True, "the answered record is
+  readable and writable")` while `_remember_answered` returned False. The
+  `is_file()` guard also left the cold-start absent-record case unprobed. That
+  fix's own non-vacuity arm ASSERTED the absent case was usable, so the arm
+  encoded the defect.
 
-  That is ONE DELIVERY PER CYCLE FOREVER into a repo this one does not own. At a
-  five-minute tick it is 288 minute-stamped files a day - verbatim the shape the
-  structural branch exists to prevent.
+  `14017bd` replaced it with `_dir_accepts_new_file`: create with `"xb"`, unlink
+  in a `finally`, returned from `_ensure_dir`. `_ensure_dir` and `_ensure_parent`
+  were ruled the same class BY CALLER ENUMERATION rather than by docstring - all
+  six call sites create a file immediately after and read the bool as permission,
+  so `mkdir(exist_ok=True)` on an existing directory attempts nothing and answers
+  a question it never asked. REFUTED on resource lifetime: `finally` does not run
+  under `taskkill /F`, which is this repo's own sanctioned kill, and the `except
+  OSError: pass` swallowed a Windows unlink PermissionError and RETURNED TRUE
+  ANYWAY, so a directory that would not release the probe was reported healthy.
+  No reaper anywhere in the tree removes that prefix, and the litter lands in
+  `ops/runtime/`, gitignored at `.gitignore:31`, so no tracked guard can see it.
+  The no-selection proof in that commit was run on the WRONG POPULATION: it
+  checked `pending` and `hops_used`, which enumerate `inbox`, a directory the
+  probe never enters.
 
-  NOT LIVE. The scheduled task is DORMANT, verified this session by
-  `python ops/check_task_liveness.py ResinCompute-Responder` exiting 1, trigger
-  expired 2026-09-07T21:00.
+  `152f61e` made the removal part of the verdict rather than a side effect, added
+  `_sweep_stale_dir_probes` with `_DIR_PROBE_STALE_SECONDS = 300.0`, and rewrote
+  the in-code sentence, which had been false in both halves. Staleness is age
+  plus prefix and deliberately NOT pid liveness: reading the pid out of the name
+  would reproduce the `reap()` defect this tree already has on record, and Windows
+  recycles pids. Being wrong destroys nothing - the file is zero bytes, no reader
+  opens it, and the verdict was already decided by the `"xb"` create.
 
-  FAIR TO THE SHIPPED FIX: this class ALSO looped before `6c351b3`, silently. So
-  the VISIBILITY half of that work survives and only its fail-closed half does
-  not. `refusals_usable` carries the IDENTICAL hole - the new function was
-  specified to mirror it and mirrored the defect too - so any fix must touch
-  BOTH, and the rotation gate should be checked on the same class.
+  VERIFIED AT THE SEAM BY THE MERGER, not taken from the slice report, on merged
+  `main`: a healthy directory returns True and leaves `[]`; with unlink forced to
+  raise, the verdict is False where it was True, and the leaked file is present;
+  after ageing that file past the threshold, the next probe leaves `[]`. The live
+  gap the extension declared open was closed by the adversary driving `run_once`
+  against a denied directory and observing `answered_usable -> (False, "the
+  answered record's directory cannot be created or written into, so no reply can
+  be recorded")` with `TERMINATION: answered-unusable | delivered: False`. Cost
+  measured at 182.1 us per call, about 1.1 ms per cycle over the six sites.
+
+  NOT CLOSED BY THIS ROW: the three-cycle `run_once` figures in the original
+  wording were never re-measured, and no slice re-ran the `taskkill /F` leak
+  measurement - the repair is structural and takes that claim as given.
+
+- **OPEN 2026-09-12. A RECOVERED ARM'S INDEPENDENT HALF WAS WEAKER THAN THE
+  MODULE IT GRADES, AND TWO OF ITS LIMITS ARE DISCLOSED RATHER THAN CLOSED.**
+  `tests/test_git_subprocess_census.py` borrowed its instrument from the module
+  under test - `census._dotted` - so a NARROWING of that instrument was invisible;
+  the only coupling guard, `assert seen > 100`, RISES under a narrowing. The
+  recovered agreement arm landed at `7987aee`. Its first independent half used an
+  ASCII-ONLY regex while Python identifiers are not ASCII, which INVERTED the
+  arm's polarity: measured red against a CORRECT resolver and green against an
+  ASCII-narrowed one, on identical input. Repaired to `str.isidentifier()`.
+  Residue, all disclosed in the resolver docstring and none of it closed:
+  the in-memory arms exercise ONE Latin-1 letter and say nothing about the wider
+  NFKC-normalizing classes; `len(parts) > 4` stays green against any
+  re-derivation whatever because the corpus holds zero 5-segment chains
+  (histogram this run 1:56576, 2:11419, 3:822, 4:28, 5:0), so that is a statement
+  about this tree and not about the resolver; and of the three floors only the
+  loss of the dominant `tests` root binds all three - binding on the loss of
+  `tools` would need a floor within 1 percent of measured, which would fire on
+  ordinary module deletion.
+
+- **OPEN 2026-09-12, AND IT IS A ROW BECAUSE THE CORRECT HOME WAS OFF THE
+  SLICE'S WRITE-LIST.** The counterfeit-minimality control recovered alongside
+  the reason-fixture arm was NOT recovered. It asserts that each counterfeit
+  delimiter retains the surrounding prose and detail, so it kills a mutated
+  FIXTURE ROW that mangles the whole sentence and thereby makes a rejection row
+  pass for the wrong reason. Its subject `WRONG_DELIMITER_SHAPES` lives in
+  `tests/test_conftest_git_gate.py`, whose `accepts` arm grades `actual ==
+  expected` and does not cover neighbour survival. Reported by the slice rather
+  than edited, deliberately.
+
+- **CLOSED 2026-09-12 - THE WORKTREE POPULATION WENT 58 TO 1, AND THE DISPOSITION
+  TEST WAS BLOB REACHABILITY RATHER THAN A DIFF.** Fifty-eight worktrees and
+  fifty branches stood. Zero branches were ahead of `main`, so there was nothing
+  to merge and nothing to push from any of them. Forty-two were removed on a
+  MEASURED disposition: every uncommitted blob in them already existed somewhere
+  in `main`'s history, tested by `git hash-object` against `git rev-list
+  --objects main`, which is a stronger test than "the file differs from main"
+  because a differing file is usually an OLDER version rather than a novel one.
+  Fifteen held at least one blob main's history had never contained. An
+  adjudicator ruled fourteen SUPERSEDED and one LOST-WORK; an adversary then
+  REFUTED one of the fourteen with a surviving mutant, so TWO were recovered and
+  the remaining thirteen pruned. AGREEMENT WAS NOT TREATED AS EVIDENCE: two
+  worktrees holding the same path were checked for byte-identity first, and one
+  such pair proved to be a single artifact counted twice.
+
+- **OPEN 2026-09-12 UNDER CLAUSE (a), AND IT IS ONE DIRECTORY RATHER THAN A
+  CLASS.** `C:/rsc-wt-atomic` is a worktree OF THIS REPO living OUTSIDE this repo
+  root, at detached HEAD `3533965`. Its dirty content is fully captured in
+  `main`'s history by the same blob-reachability test above, so it is prunable on
+  the merits. Removing it writes outside this tree, which clause (a) reserves to
+  the operator. It is the last worktree standing besides `main` itself. The
+  command is `git worktree remove --force C:/rsc-wt-atomic`. NOT DONE, and
+  deliberately not done.
+
 
 - **OPEN 2026-09-13. A TEST DOCSTRING SAID NO ARM COULD BE WRITTEN, AND THAT
   MISLABEL IS WHAT STOPPED THE ROW ABOVE FROM BEING FOUND.** The docstring of
