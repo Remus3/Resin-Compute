@@ -35,8 +35,11 @@ UNRESOLVED and must NOT be quietly dropped or quietly called NOT-GIT.
 from __future__ import annotations
 
 import ast
+import keyword
 import os
+import re
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -2104,3 +2107,193 @@ def test_every_registered_shape_lands_in_exactly_one_list():
             "not reported, so the covered list is overstating the reach. "
             f"source: {source!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# INDEPENDENT AGREEMENT ARM OVER THE INSTRUMENT THIS FILE BORROWS
+# ---------------------------------------------------------------------------
+#
+# `test_no_invisible_receiver_in_this_tree_is_spelled_like_a_launcher` above
+# reaches into the module under test for its own instrument: it decides which
+# receivers are invisible by calling `census._dotted`. A sweep that borrows its
+# instrument from the module it is testing inherits that module's blind spots
+# and then cannot see a defect the instrument itself introduced. Its only
+# coupling guard is `assert seen > 100`, which goes red if `_dotted` is GUTTED
+# and stays GREEN if `_dotted` grows a NARROWER blind spot - a narrowing makes
+# MORE receivers look unresolvable, so `seen` RISES and the threshold is
+# satisfied harder. The arms below close that by re-deriving the same answer
+# through a mechanism that shares no code with `census._dotted`, then asserting
+# the two agree over the real corpus.
+
+
+_DOTTED_TEXT = re.compile("[A-Za-z_][A-Za-z0-9_]*([.][A-Za-z_][A-Za-z0-9_]*)*")
+
+
+def _dotted_receiver_independently(node: ast.AST) -> str | None:
+    """Re-derive a dotted receiver name WITHOUT calling `census._dotted`.
+
+    A DIFFERENT MECHANISM ON PURPOSE. `census._dotted` walks the `ast.Attribute`
+    chain node by node and asks whether the base is an `ast.Name`. This one
+    round-trips the node back to SOURCE with `ast.unparse` and asks whether that
+    source is a plain dotted identifier. A re-implementation that copied the
+    module's loop would agree by being blind in the same places, which is worse
+    than no arm at all because it reads as coverage.
+
+    The one place the two mechanisms genuinely differ, handled here rather than
+    copied from anywhere: `ast.unparse` renders the `None`, `True` and `False`
+    constants as bare identifiers, so a `None.foo` receiver would round-trip to
+    text this pattern accepts while `census._dotted` correctly refuses it - that
+    node is an `ast.Constant`, not an `ast.Name`. The keyword filter is that
+    difference.
+
+    WHAT THIS CANNOT SEE, stated because the shape of a sweep decides the shape
+    of its finding and an absence then reads as a fact:
+
+    - It is a sweep over nodes, so it says nothing about what `census` DOES with
+      a resolved name. A `_dotted` that returns the right string and a caller
+      that then ignores it is invisible here.
+    - It compares two resolvers against each other, so a defect they would BOTH
+      have to share - a spelling Python's own parser reports differently than
+      either expects - is outside its reach by construction. It can see a
+      divergence, never a jointly-wrong answer.
+    - Its corpus is `census.DEFAULT_ROOTS` under `REPO_ROOT` on disk, so a node
+      shape that appears nowhere in this tree today is not exercised, and a
+      green run is a statement about the tree as it stands and not about the
+      resolver in general.
+    - Files that fail to parse or to decode are skipped silently, exactly as the
+      module's own walk skips them, so a receiver inside an unparseable file is
+      counted by neither half.
+    """
+    try:
+        text = ast.unparse(node)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    if _DOTTED_TEXT.fullmatch(text) is None:
+        return None
+    if any(keyword.iskeyword(part) for part in text.split(".")):
+        return None
+    return text
+
+
+def _receiver_nodes(tree: ast.AST) -> list[ast.AST]:
+    """Every node either resolver may be handed, deduplicated by identity.
+
+    A superset of the module's own call sites: the whole `ast.Attribute` and
+    `ast.Name` population, plus the `func.value` of every attribute call, which
+    is the exact node `tools/git_subprocess_census.py` hands to `_dotted` and
+    which is often neither an Attribute nor a Name.
+    """
+    collected: dict[int, ast.AST] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Attribute, ast.Name)):
+            collected[id(node)] = node
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            collected[id(node.func.value)] = node.func.value
+    return list(collected.values())
+
+
+def _receiver_agreement(
+    resolver: Callable[[ast.AST], str | None],
+) -> tuple[int, int, list[str]]:
+    """Compare `resolver` against the independent re-derivation over the tree.
+
+    Returns `(compared, resolved_by_resolver, disagreements)`. `resolver` is a
+    parameter rather than a hardcoded `census._dotted` so that the non-vacuity
+    arm can hand this walk a DELIBERATELY NARROWED resolver and prove the
+    comparison actually fires.
+    """
+    compared = 0
+    resolved = 0
+    disagreements: list[str] = []
+    for name in census.DEFAULT_ROOTS:
+        directory = REPO_ROOT / name
+        if not directory.is_dir():
+            continue
+        for path in census._python_files(directory):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, SyntaxError):
+                continue
+            relative = path.relative_to(REPO_ROOT).as_posix()
+            for node in _receiver_nodes(tree):
+                compared += 1
+                theirs = resolver(node)
+                mine = _dotted_receiver_independently(node)
+                if theirs is not None:
+                    resolved += 1
+                if theirs != mine:
+                    lineno = getattr(node, "lineno", 0)
+                    disagreements.append(
+                        f"{relative}:{lineno} {type(node).__name__} "
+                        f"module={theirs!r} independent={mine!r}"
+                    )
+    return compared, resolved, disagreements
+
+
+def test_the_census_dotted_resolver_agrees_with_an_independent_re_derivation():
+    """The coupling guard the `seen > 100` threshold cannot be.
+
+    A narrowing of `census._dotted` - any node shape it resolves today and stops
+    resolving tomorrow - turns this RED, because the independent half still
+    resolves it and the two answers stop matching. The threshold arm above
+    cannot do that: a narrowing RAISES its count.
+    """
+    compared, resolved, disagreements = _receiver_agreement(census._dotted)
+    assert disagreements == [], (
+        f"{len(disagreements)} receiver nodes where `census._dotted` and an "
+        "independent re-derivation disagree. Either the module's resolver moved "
+        "or the re-derivation did, and the census's reachability rulings rest "
+        f"on this resolver. first 20: {disagreements[:20]}"
+    )
+    assert compared > 5000, (
+        f"only {compared} receiver nodes were compared; a walk that reaches "
+        "almost none of them agrees about almost nothing and still exits 0"
+    )
+    assert resolved > 1000, (
+        f"only {resolved} of {compared} compared nodes resolved to a dotted "
+        "name. An agreement arm over a population where the resolver answers "
+        "None throughout agrees vacuously"
+    )
+    assert compared - resolved > 500, (
+        f"only {compared - resolved} of {compared} compared nodes were "
+        "unresolvable. Both answers must be exercised or the arm is testing "
+        "one half of the resolver only"
+    )
+
+
+def test_the_agreement_arm_goes_red_under_a_narrowed_resolver():
+    """Non-vacuity. The comparison must FIRE, not merely be present.
+
+    A re-implemented grader can be WEAKER than the module it grades, and one
+    that is agrees by being blind in the same place. Measured in this tree: a
+    re-implementation emitted silence where the module emits an UNRESOLVED row,
+    and the two matched for exactly that reason. So two real narrowings are
+    applied to `census._dotted` HERE, in memory and without touching the module,
+    and each must be visible to the independent half.
+    """
+
+    def drops_dotted_chains(node: ast.AST) -> str | None:
+        answer = census._dotted(node)
+        if answer is not None and "." in answer:
+            return None
+        return answer
+
+    def drops_bare_names(node: ast.AST) -> str | None:
+        answer = census._dotted(node)
+        if answer is not None and "." not in answer:
+            return None
+        return answer
+
+    _, _, chain_disagreements = _receiver_agreement(drops_dotted_chains)
+    assert chain_disagreements, (
+        "a resolver narrowed to refuse every multi-segment dotted chain was "
+        "indistinguishable from the real one, so the independent half is blind "
+        "to that narrowing and this whole section proves nothing"
+    )
+
+    _, _, name_disagreements = _receiver_agreement(drops_bare_names)
+    assert name_disagreements, (
+        "a resolver narrowed to refuse every bare `ast.Name` receiver was "
+        "indistinguishable from the real one, so the independent half is blind "
+        "to that narrowing"
+    )
