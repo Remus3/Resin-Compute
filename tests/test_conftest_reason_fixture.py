@@ -46,6 +46,19 @@ this file adds is narrower, and real:
   - those same outcomes on the EXIT-128 branch. The sibling arm drives exit 9
     only, so it says nothing about the 128 reason's detail. The `no output`
     fallback is pinned below on BOTH branches;
+  - the STRIP OF THE STREAM THE CHAIN CHOOSES. Every other arm here, and every
+    arm in the sibling module, feeds a stderr that is ALREADY clean, and the
+    blank-stderr arm below pins only the STDOUT half of the strip. So
+    `stderr if stderr.strip() else (stdout.strip() or "no output")` - a mutation
+    that TESTS with `.strip()` and then interpolates the RAW stream - left the
+    whole `tests` suite green, measured 2026-09-12 by applying it. git ends its
+    messages with a newline, so that mutation puts one inside a reason that
+    `require_git_repository` hands to `pytest.skip()`, where it breaks the
+    one-line short summary a reader scans to find out why a guard did not run.
+    `test_the_detail_chain_strips_the_stream_it_chooses` below is the only arm
+    measured in this tree that carries a trailing newline on a NON-BLANK stream
+    INTO the detail chain, and it kills that mutation. The exit-0 arm below
+    carries one too, but exit 0 returns before the chain is reached;
   - the FOUR CATEGORY TOKENS as literal spellings typed into THIS file -
     `usable`, `not-runnable`, `not-a-repository`, `did-not-answer`. The sibling
     checks the tokens against `conftest.GIT_PROBE_*` (its lines 282-285), which
@@ -292,6 +305,46 @@ def test_the_detail_chain_falls_back_to_stdout_when_stderr_is_blank(blank_stderr
 
     expected = _not_a_repository("text from stdout")
     assert reason == expected, _drift(expected, reason)
+
+
+
+def test_the_detail_chain_strips_the_stream_it_chooses() -> None:
+    """The CHOSEN stream is stripped, not merely TESTED with `.strip()`.
+
+    git terminates its own messages with a newline, so a real exit-128 stderr
+    reaches the classifier with a trailing one. Measured 2026-09-12, no other arm
+    in this file or its sibling feeds such a stream INTO the detail chain: the
+    exit-0 arm above feeds one and returns before the chain, and the blank-stderr
+    arms feed whitespace only. A gate cannot fail if its fixture excludes the
+    defect, so the fixture here carries the newline deliberately.
+
+    The mutation this arm exists to kill keeps the `.strip()` as a TEST and drops
+    it from the VALUE: `stderr if stderr.strip() else (stdout.strip() or
+    "no output")`. It agrees with the real chain on every already-clean stderr,
+    on every blank stderr, and on both-streams-blank, so it survives every other
+    arm in this file. Measured 2026-09-12: applied to `tests/conftest.py` it left
+    the whole `tests` suite green.
+
+    The consequence is not cosmetic. `require_git_repository()` passes this text
+    to `pytest.skip()`, and a newline inside it splits the one-line short summary
+    that tells a reader why a guard was skipped rather than passed.
+
+    Both halves are asserted. The `==` pins the WHOLE rendered reason, so the arm
+    is about the value produced from a specific input rather than about its shape;
+    the newline assertion names the defect directly for whoever reads the failure.
+    """
+    clean_detail = "fatal: not a git repository (or any of the parent directories): .git"
+
+    _, reason = conftest.classify_git_probe(128, "", clean_detail + "\n", None)
+
+    expected = _not_a_repository(clean_detail)
+    assert reason == expected, _drift(expected, reason)
+    assert reason is not None
+    assert "\n" not in reason, (
+        "the chosen stream reached the reason unstripped, so git's trailing newline is now "
+        "inside a string that `pytest.skip()` renders as a one-line summary: "
+        f"{reason!r}"
+    )
 
 
 @pytest.mark.parametrize("returncode", [128, 7])
