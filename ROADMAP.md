@@ -11,6 +11,65 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **OPEN 2026-09-12, OPERATOR-ORIGINATED, LANED FOR FLEET CONSENSUS AND
+  DELIBERATELY NOT STARTED. THE REFUTE / FIX / REFUTE-THE-FIX LOOP IS NOW THE
+  DOMINANT COST OF A SESSION.** The operator's words: "it seems like we keep
+  getting refuted a lot and that takes another large chunk of time to fix, and
+  then that fix needs a fix, can we find a better-faster-efficient-correct way to
+  handle the tools and commands", to be "laned via the sync box for consensus
+  with LL/RC/RSC/CS".
+
+  THIS SESSION IS THE WORKED EXAMPLE, and the figures are measured here rather
+  than felt. One responder defect took THREE builder passes and TWO adversary
+  passes: fix one probed the record when the parent directory governs the write;
+  fix two leaked the probe file it created and still reported healthy. A
+  recovered test arm shipped POLARITY INVERTED - red against a correct resolver,
+  green against a narrowed one. An adjudicator ruled fourteen files safe to
+  DESTROY and one of those rulings was refuted with a surviving mutant, so a live
+  arm was one command from deletion. EVERY REFUTATION WAS CORRECT. That is the
+  problem: the adversarial pass is load-bearing and cannot be dropped, so the
+  lever has to be the tools and commands that let these classes exist long enough
+  to need refuting.
+
+  SCOPE, when it starts: the agent and sub-agent contract, orchestration and
+  dispatch, pre-push, commit, merge, the test tiers, and the slash commands that
+  drive them. NOT any repo's features.
+
+  THE QUESTION THAT GATES THE WHOLE LANE, and it is a measurement rather than a
+  design: WHICH REFUTATIONS COULD A TOOL HAVE PREVENTED, AND WHICH ARE
+  IRREDUCIBLE? Our starting taxonomy, offered to the fleet as a position to be
+  attacked rather than a conclusion: (a) PREVENTABLE BY A GATE - a grader that
+  cannot fail, a fixture that excludes its own defect, a re-implemented
+  instrument weaker than what it grades, a pipeline that discards the producer's
+  exit code; (b) PREVENTABLE BY A CONTRACT - a dispatch brief missing a measured
+  trap, an undeclared write-list, a candidate that moved mid-verdict; (c)
+  IRREDUCIBLE - "you probed the wrong object", "your independent half is not
+  independent". IF MOST OF OUR REFUTATIONS ARE (c), THE LANE IS THEATRE AND WE
+  SHOULD SAY SO AND STOP.
+
+  ASKED OF CS, RC, LW AND LL in
+  `moon_sync_inbox/2026-09-12-1400-from-RSC-PROPOSAL-the-refute-fix-refute-loop-is-eating-the-sessions-and-we-want-consensus-on-the-tooling-tier.md`,
+  delivered to all four this session: refuted-count and correctness over a stated
+  N, a bucketing of each into (a)/(b)/(c) with the taxonomy itself open to
+  dispute, the FIX-NEEDED-ITS-OWN-FIX ratio, and the one tool change each would
+  make. LW was included although the operator's list named LL, RC, RSC and CS -
+  LW is an active counterparty in this fleet and excluding it would have made the
+  count three-of-five.
+
+  NOT STARTED, and nothing is built here pending the counts. NEXT SESSION OPENS
+  ON THIS. If the counts have not arrived, do OUR OWN measurement first and
+  publish it, so there is one honest data point rather than four assumed ones.
+  AGREEMENT IS NOT EVIDENCE: if two trees report the same figure, the next
+  question is what shared input produced it.
+
+  BLOCKED-ADJACENT, and the operator has still not ruled: the NO-ANSWER RULE.
+  Participants have been on ORDERED STANDBY and unable to reply, which makes a
+  bilateral agreement unreachable. The proposal states SILENCE READS AS DISSENT
+  as the standing rule but asks a standby party for one line so the item can be
+  PARKED against that tree rather than counted as dissent. That shape is still
+  UNRULED and is not policy.
+
+
 - **OPEN 2026-09-12 - SEVEN OUTBOUND NOTES REACHED NOBODY FOR UP TO THREE DAYS,
   AND NOTHING IN THIS TREE COULD HAVE TOLD US.** RC reported the joint re-pin as
   "AWAITING RSC, relayed 2026-09-10, no reply yet". We HAD answered on 2026-09-10.
