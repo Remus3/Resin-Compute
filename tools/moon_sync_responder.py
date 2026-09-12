@@ -94,6 +94,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, NamedTuple
+from uuid import uuid4
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -664,6 +665,66 @@ def _read_text(path: Path) -> str:
         return ""
 
 
+#: Prefix for the transient directory-writability probe. It is chosen so that
+#: NO READER IN THIS MODULE CAN SELECT IT. `pending` at the note-selection site
+#: takes only children whose name lower-cases to a `.md` suffix AND which carry
+#: a `-from-<CODE>-` sender token, and this name has neither. `hops_used` counts
+#: any file whose TEXT holds `RESPONDER_TAG`, and the probe file is created with
+#: zero bytes and never written to, so its text cannot hold anything. The
+#: leading dot and the `.tmp` suffix also keep it clear of
+#: `core/atomic_io._temp_path`, whose own temp is `.<target name>.<pid>.<hex>.tmp`.
+_DIR_PROBE_PREFIX = ".rsc-responder-dirprobe."
+
+
+def _dir_accepts_new_file(directory: Path) -> bool:
+    """Whether a NEW FILE can be created in `directory`. Never raises.
+
+    THE DIRECTORY IS THE OBJECT THAT GOVERNS THE WRITE, on both platforms, and
+    naming the wrong object is what made the earlier repair miss. Every state
+    write here goes through `core/atomic_io.atomic_write_text`, which builds its
+    temp path with `_temp_path` - `target.with_name(".<name>.<pid>.<hex>.tmp")`,
+    a SIBLING of the target - creates that file, and renames it over the target.
+    The right exercised is therefore CREATE A FILE IN THIS DIRECTORY, and it is
+    exercised whether or not the target already exists. Probing the target
+    answers a different question, and a probe gated on the target EXISTING does
+    not run at all on a cold start, which is the state every first run is in.
+
+    Measured in this tree with the parent directory denied `(WD,AD)`: an absent
+    record and a present-and-writable record both passed the old gates, and
+    `_remember_answered` returned False in both cases.
+
+    `"xb"` IS THE PROBE, AND ITS FILE IS NOT STATE. `core/atomic_io.py` is the
+    only sanctioned path for writing STATE - bytes some later reader is meant to
+    find. This file is created empty, is never written to, is removed in a
+    `finally` on every exit, and carries a name no reader in this module can
+    select (see `_DIR_PROBE_PREFIX`). It is a permission question asked of the
+    filesystem, not a record of anything, so the atomic-write rule has nothing
+    to say about it. `O_EXCL` semantics mean it can never clobber an existing
+    file, and the `uuid4` component means two responders racing cannot collide.
+
+    THE DIRECTION OF ERROR IS CONSERVATIVE, DELIBERATELY. If the probe fails for
+    a reason that would not have stopped the real write, the caller declines the
+    cycle: a bounded, visible refusal that names itself in the log. The opposite
+    error is the measured unbounded one - deliver, fail to record, and re-select
+    the same note every tick into a repository this one does not own.
+
+    `ValueError` is in the tuple for `_ensure_dir`'s reason: a path carrying a
+    NUL byte raises it out of `open` rather than `OSError`.
+    """
+    probe = directory / f"{_DIR_PROBE_PREFIX}{os.getpid()}.{uuid4().hex[:8]}.tmp"
+    try:
+        with probe.open("xb"):
+            pass
+    except (OSError, ValueError):
+        return False
+    finally:
+        try:
+            probe.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return True
+
+
 def _ensure_dir(directory: Path) -> bool:
     """Make `directory`, reporting failure rather than raising. Never raises.
 
@@ -683,12 +744,22 @@ def _ensure_dir(directory: Path) -> bool:
     `ValueError` is in the tuple for the reason `log_invocation` records: a path
     carrying a NUL byte raises it out of `mkdir` rather than `OSError`, so an
     `OSError`-only guard does not catch the case it was written for.
+
+    `mkdir` ALONE DOES NOT ANSWER THIS FUNCTION'S OWN SENTENCE, and that is the
+    second defect found here. `exist_ok=True` on a directory that ALREADY EXISTS
+    attempts nothing at all, so it returns success for a directory that refuses
+    every file anyone tries to put in it. Every one of this function's callers
+    - the rotation file, the metrics row, the invocation log, both records, the
+    held-file directory - creates a FILE inside immediately afterwards and reads
+    this bool as permission to do so. So the mkdir is kept for the structural
+    classes it was written for and `_dir_accepts_new_file` is asked for the one
+    the callers actually depend on.
     """
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except (OSError, ValueError):
         return False
-    return True
+    return _dir_accepts_new_file(directory)
 
 
 def _ensure_parent(path: Path) -> bool:
@@ -1501,7 +1572,14 @@ def answered_usable(path: Path) -> tuple[bool, str]:
     except (OSError, ValueError) as exc:
         return False, f"the answered record cannot be inspected ({exc.__class__.__name__})"
     if not _ensure_parent(path):
-        return False, "the answered record's directory cannot be created, so no reply can be recorded"
+        # COVERS THE COLD START TOO. This runs before any `is_file` gate, so an
+        # ABSENT record in a directory that refuses a new file is refused here -
+        # which is the case a target-only probe can never see. See
+        # `_dir_accepts_new_file`.
+        return False, (
+            "the answered record's directory cannot be created or written into, "
+            "so no reply can be recorded"
+        )
     try:
         if path.is_file():
             path.read_bytes()
@@ -1511,7 +1589,9 @@ def answered_usable(path: Path) -> tuple[bool, str]:
     # a READ, and the sentence this function returns promises a WRITE.
     if path.is_file() and not _writable_in_place(path):
         return False, "the answered record cannot be written, so no reply can be recorded"
-    return True, "the answered record is readable and writable"
+    return True, (
+        "the answered record's directory accepts a new file, so the record can be replaced"
+    )
 
 
 def _remember_answered(path: Path, name: str) -> bool:
@@ -1605,7 +1685,10 @@ def refusals_usable(path: Path) -> tuple[bool, str]:
     except (OSError, ValueError) as exc:
         return False, f"the refusal record cannot be inspected ({exc.__class__.__name__})"
     if not _ensure_parent(path):
-        return False, "the refusal record's directory cannot be created, so no refusal can be recorded"
+        return False, (
+            "the refusal record's directory cannot be created or written into, "
+            "so no refusal can be recorded"
+        )
     try:
         if path.is_file():
             path.read_bytes()
@@ -1617,7 +1700,9 @@ def refusals_usable(path: Path) -> tuple[bool, str]:
     # copied its four-reads-and-a-promise along with it.
     if path.is_file() and not _writable_in_place(path):
         return False, "the refusal record cannot be written, so no refusal can be recorded"
-    return True, "the refusal record is readable and writable"
+    return True, (
+        "the refusal record's directory accepts a new file, so the record can be replaced"
+    )
 
 
 def _refusals_doc(path: Path) -> tuple[dict, str, list[str]]:

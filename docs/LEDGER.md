@@ -12,73 +12,133 @@ now.
 
 ---
 
-## 2026-09-12 - Two gates promised a write they had only ever read, and the class they missed loops one file per cycle into a repo this one does not own
+## 2026-09-12 - Two gates promised a write they had only ever read, the first repair probed the wrong object, and the cold start was never probed at all
 
-One commit in an isolated worktree; not pushed from here. Two files changed:
-`tools/moon_sync_responder.py` and `tests/test_moon_sync_responder.py`.
+TWO commits in an isolated worktree; not pushed from here. Three files changed
+across them: `tools/moon_sync_responder.py`, `tests/test_moon_sync_responder.py`
+and this file. THIS ROW WAS AMENDED BY THE SECOND COMMIT, and the amendment is
+the point of the row: as first written it claimed the class was closed, and an
+independent adversary refuted that claim with a measured counter-example. The
+original text is preserved in `411ba14`'s version of this file; what follows is
+what is true after the second commit.
 
-WHAT WAS ACTUALLY WRONG, re-verified against the live file before the fix rather
-than taken from the row that reported it. `answered_usable` and `refusals_usable`
-each probe `exists`, `is_file`, the parent and `read_bytes` - FOUR READS - and
-then return the sentence "the record is readable and writable". No arrangement of
-reads can answer a question about writing, so a record that is READABLE AND
-PERMANENTLY UNWRITABLE passed both gates. The seed is three lines: write valid
-JSON, then `os.chmod(path, stat.S_IREAD)`.
+WHAT WAS ACTUALLY WRONG. `answered_usable` and `refusals_usable` each probe
+`exists`, `is_file`, the parent and `read_bytes` - FOUR READS - and then return
+the sentence "the record is readable and writable". No arrangement of reads can
+answer a question about writing, so a record that is readable and permanently
+unwritable passed both gates.
 
-WHY IT IS NOT A COSMETIC MISLABEL. `_run_once` uses the answered gate at
-`GATE:answered-usable` to decide whether a reply it is ABOUT TO DELIVER can be
-suppressed afterwards. Pass the gate, deliver, fail to record, and the next cycle
-selects the same note because the suppression key never landed. `_reply_name`
-stamps to the minute and `deliver` never overwrites an existing name, so it is one
-new file per tick in a repository this one does not own. Not live: the scheduled
-task was verified DORMANT when the row was opened.
+WHY IT IS NOT A COSMETIC MISLABEL. `_run_once` uses the answered gate to decide
+whether a reply it is ABOUT TO DELIVER can be suppressed afterwards - deliver at
+about line 2202, `GATE:answered-recorded` at about line 2224. Pass the gate,
+deliver, fail to record, and the next cycle selects the same note because the
+suppression key never landed. `_reply_name` stamps to the minute and `deliver`
+never overwrites an existing name, so it is one new file per tick in a repository
+this one does not own. Not live: the scheduled task was verified DORMANT when the
+row was opened.
 
-THE SIBLING SWEEP, AND ITS POPULATION. Two sites, and exactly two. The corpus was
-every occurrence of the string "readable and writable" in
-`tools/moon_sync_responder.py` - lines 1466 and 1566 before the fix, the two
-`*_usable` functions and nothing else. The neighbouring read gates were checked
-and are NOT the same class: `_listed_record` and `_rotate_metrics` claim only
-READABILITY and leave writability to `atomic_write_json`'s own return, which their
-callers propagate. Both sites were fixed together through one shared helper,
-`_writable_in_place`.
+THE FIRST REPAIR NAMED THE WRONG OBJECT, and this is the reusable finding.
+`411ba14` added `_writable_in_place(path)`, which opens `path.open("r+b")` on the
+RECORD, and called it gated on `path.is_file()`. The object that GOVERNS the
+write is not the record. Every state write here goes through
+`core/atomic_io.atomic_write_text`, whose `_temp_path` returns
+`target.with_name(".<name>.<pid>.<hex>.tmp")` - a SIBLING of the target, in the
+PARENT DIRECTORY - which it creates and then renames over the target. The right
+exercised is CREATE A FILE IN THIS DIRECTORY, on both platforms, and it is
+exercised whether or not the target already exists.
 
-THE PROBE WRITES NOTHING. `path.open("r+b")` opens for update without creating and
-without truncating, so the bytes are untouched whether it succeeds or fails. It is
-therefore not a state write and correctly does not go through `core/atomic_io.py`.
-A probe that wrote a byte to learn whether it could write a byte would corrupt the
-record it was asked to classify.
+THE COUNTER-EXAMPLE, measured in the worktree with the record's parent directory
+denied `(WD,AD)` for this account via `icacls`:
 
-IT IS CONSERVATIVE ON POSIX, DELIBERATELY, AND THAT IS STATED IN THE CODE.
-`atomic_write_json` lands by `os.replace`, which on POSIX is governed by the
-DIRECTORY's permission rather than the target's, so a mode-0o444 file there is
-still replaceable and this probe declines it anyway. That errs toward a visible,
-bounded `NOT ANSWERING`. The opposite error is the measured unbounded one.
+- absent record: `answered_usable -> (True, "...readable and writable")`,
+  `refusals_usable -> (True, ...)`, and `_remember_answered -> False`.
+- PRESENT and itself-writable record in that same denied directory: same two
+  Trues, same `_remember_answered -> False`.
 
-THE ARM WAS RED FIRST, AND FOR THE RIGHT REASON. Both parametrizations failed on
-`assert True is False` - the probes CALLING THE UNWRITABLE RECORD USABLE - rather
-than on a missing attribute or a bad bed. The arm asserts the READABLE half too,
-so an implementation that refused the record for being unreadable would be
-classifying it for the wrong reason and is not accepted. Its non-vacuity partner
-asserts the legitimate neighbours SURVIVE: an ordinary writable record and an
-ABSENT one, the cold start every first run is in. The bed guards its own
-premise - it seeds a TWIN and asks `os.access`, a different syscall family from
-the fix's `open`, and SKIPS where the account cannot hold a file read-only at all,
-because a process running as root on POSIX bypasses the mode bits and an arm that
-asserted anyway would be asserting about an environment that cannot hold the state
-it names.
+Both halves were open. The absent half could not even be reached by the first
+repair, because the call was gated on `path.is_file()` - so the COLD START, the
+state every first run is in, was never probed at all.
 
-COUNTS, MEASURED 2026-09-12 IN THIS WORKTREE, historical readings and not claims
-about now. `python -m pytest tests`: 2704 passed, 2 skipped, exit 0.
-`python -m pytest agents/pity_engine`: 80 passed, exit 0. `python -m ruff check .`:
-all checks passed, exit 0. `python -m mypy`: success, 36 source files, exit 0 -
-and that figure covers `tools/`, so it is evidence about the module changed here
-and about nothing in `tests/`. `python tools/precommit_gate.py`: exit 0. Each gate
-was run as its own command, because a chained run reports only its last.
+THE FIX, AND ITS SIBLING SWEEP. `_dir_accepts_new_file(directory)` creates a
+uniquely named zero-byte file with `open("xb")` and removes it in a `finally`,
+and `_ensure_dir` now returns it instead of returning True after a `mkdir`. That
+places the repair at the ONE function both gates already call - `_ensure_parent`,
+before any `is_file` branch - so the absent and present cases are both covered by
+construction rather than by two parallel branches.
+
+`_ensure_dir` AND `_ensure_parent` WERE THE SAME CLASS, and the verdict was taken
+by enumerating callers rather than by reading the docstring. `_ensure_dir`'s own
+sentence says the directory "will be written into", but `mkdir(exist_ok=True)` on
+an EXISTING directory attempts nothing, so it returned success for a directory
+that refuses every file. All six call sites - the rotation file at about 1231, the
+metrics row at about 1325, the invocation log at about 1363, the two records at
+about 1503 and 1607, `_remember_refusal`'s record at about 1668, and the held-file
+directory at about 1882 - create a FILE inside immediately afterwards and read the
+bool as permission to do so. Not one caller merely wants the directory to exist.
+
+`_writable_in_place` IS KEPT, NOT REPLACED. It answers a different and still-real
+question - a present record held read-only at the FILE level, which on Windows
+makes `os.replace` onto it fail even where the directory is fine.
+
+THE PROBE FILE IS NOT STATE, AND NO READER CAN SELECT IT. It is created empty,
+never written to, and removed in a `finally` on every exit, so it is a permission
+question asked of the filesystem rather than bytes a later reader is meant to
+find - which is why it correctly does not go through `core/atomic_io.py`. The
+name is `.rsc-responder-dirprobe.<pid>.<hex>.tmp` and it was checked against the
+two reader-side selection rules in this module: `pending` takes only children
+whose name lower-cases to a `.md` suffix AND which carry a `-from-<CODE>-` sender
+token, and this name has neither; `hops_used` counts any file whose TEXT holds
+`RESPONDER_TAG`, and a zero-byte file's text can hold nothing. The leading dot and
+`.tmp` suffix also keep it clear of `core/atomic_io._temp_path`'s own temp name.
+
+THE DIRECTION OF ERROR IS CONSERVATIVE, DELIBERATELY. A false-closed verdict is a
+bounded, visible decline that names itself in the log. A false-open verdict is the
+unbounded loop this row exists to close.
+
+THE RETURNED SENTENCE NOW DESCRIBES WHAT WAS PROBED. Both gates returned "the
+record is readable and writable" while probing neither writability nor, later, the
+record. They now return "the ... record's directory accepts a new file, so the
+record can be replaced", and the `_ensure_parent` refusal reads "cannot be created
+or written into" rather than "cannot be created".
+
+THE NEW ARMS WERE RED FIRST, AND FOR THE RIGHT REASON. All four parametrizations -
+absent and present, crossed with both records - failed on `assert True is False`,
+the gates calling a record usable in a directory that cannot accept a new file,
+rather than on a missing attribute or a bad bed. The bed asserts its own premise
+in the present case by opening the record `r+b` successfully, which is what makes
+it a statement about the DIRECTORY.
+
+THE NON-VACUITY ARM SHIPPED BY `411ba14` ENCODED THE DEFECT, AND WAS CORRECTED
+RATHER THAN DELETED. It asserted "absent implies usable" with no qualification -
+a claim about the record, when the deciding object is the directory. It is kept,
+because it is still the half that stops an unconditional False from passing, and
+narrowed: the bed now PROVES the directory accepts a file before the absent record
+is called usable, and two litter assertions pin that the probe leaves nothing
+behind in either directory.
+
+THE DENIAL IS PLATFORM-EXPRESSED AND IS REMOVED IN TEARDOWN. Windows `os.chmod`
+sets only a file's readonly bit and does nothing useful to a directory, so the
+Windows expression is `icacls /deny "<account>:(WD,AD)"`, undone with
+`icacls /remove:d`. On POSIX it is a directory mode with no write bit. The helper
+MEASURES whether the denial bit rather than assuming it, and the arm skips with a
+reason worded to be correct on both lanes where it cannot. Removal is asserted
+after the `finally`, because a persisted deny ACE would outlive the run and break
+every later one on the machine.
+
+COUNTS, MEASURED 2026-09-12 IN THIS WORKTREE AFTER THE SECOND COMMIT'S EDITS,
+historical readings and not claims about now. `python -m pytest tests`: 2708
+passed, 2 skipped, exit 0. `python -m pytest agents/pity_engine`: 80 passed,
+exit 0. `python -m ruff check .`: all checks passed, exit 0. `python -m mypy`:
+success, 36 source files, exit 0 - and that figure covers `tools/`, so it is
+evidence about the module changed here and about nothing in `tests/`.
+`python tools/precommit_gate.py`: exit 0. Each gate was run as its own command,
+because a chained run reports only its last.
 
 UNVERIFIED, STATED AS SUCH. The three-cycles-against-real-`run_once` figures in
 the row that opened this - 3 deliveries, 3 delivered terminations, the record
-holding only the old name - were NOT re-measured here. They are the opening row's
-reading, carried as its claim rather than re-derived as this slice's.
+holding only the old name - were NOT re-measured in either commit. They are the
+opening row's reading. Nor was the new probe exercised against a live `run_once`
+under a denied directory; the arms exercise the two gates directly.
 
 ---
 
