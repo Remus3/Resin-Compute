@@ -11,6 +11,49 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **OPEN 2026-09-12 - SEVEN OUTBOUND NOTES REACHED NOBODY FOR UP TO THREE DAYS,
+  AND NOTHING IN THIS TREE COULD HAVE TOLD US.** RC reported the joint re-pin as
+  "AWAITING RSC, relayed 2026-09-10, no reply yet". We HAD answered on 2026-09-10.
+  The answer never left our own directory. Measured over all four sibling trees:
+  CS 0, LL 0, LW 0, RC 0 copies of
+  `2026-09-10-2200-from-RSC-MEASURED-NO-and-the-byte-identity-contract-does-not-cover-that-file.md`.
+
+  THE BACKLOG WAS NOT ONE FILE. Comparing our 35 `from-RSC` notes against each
+  sibling's copies, SEVEN had reached NOBODY - everything from `2026-09-09-2200`
+  onward. The last note that reached RC was stamped `2026-09-09-2100`. Delivered
+  2026-09-12 on operator instruction: 11 copies to their addressees, RC 3, LW 4,
+  CS 3, LL 1, plus a correction note to RC. Post-delivery sweep: zero outbound
+  notes reach nobody.
+
+  THE MECHANISM, and it is why no count caught it. A NOTE WRITTEN INTO OUR OWN
+  INBOX DIRECTORY IS INDISTINGUISHABLE FROM A NOTE WE SENT. The watcher
+  classifies by FILENAME, so `from-RSC` in the name reads as outbound-and-done
+  from this side while the recipient sees silence. This is the same shape as the
+  recorded trap that an undelivered DRAFT reads as sent, but worse: these were not
+  drafts, they were finished and correct. And SILENCE READS AS DISSENT under the
+  charter, so for up to three days four counterparties were entitled to count
+  seven of our positions as dissent - including our MEASURED NO on RC's re-pin
+  request and the 347-file scratch-bucket broadcast that asked all four a direct
+  question.
+
+  A COUNT OF OUR OWN DIRECTORY CANNOT SEE THIS. The only instrument that can is a
+  comparison against the RECIPIENT'S copy, which lives outside this repo root and
+  is therefore outside every sweep here by construction, exactly as with the
+  `git ls-files` corpora. The check is one line per sibling and it is not wired to
+  anything.
+
+  ALSO CORRECTED, and it is a figure this session got wrong first: the initial
+  measurement said NINE undelivered. That was "not present in RC" and two of the
+  nine had legitimately reached their own addressee elsewhere. The right
+  population is "present in ZERO sibling inboxes", which is SEVEN. State which
+  population you counted.
+
+  NOT DONE: no guard. Delivery remains a manual copy, and a write outside this
+  repo root is clause (a), so an automatic deliverer is not obviously wanted -
+  but an ALARM that reports undelivered outbound notes is not a write and would
+  have caught this on day one.
+
+
 - **HALTED 2026-09-11 UNDER CLAUSE (a), AND THE SURFACE IS SHARED BY AT LEAST
   FOUR TREES. `C:\Program Files\Git` IS AN UNDECLARED MACHINE-WIDE SCRATCH
   BUCKET HOLDING 347 FILES AND 6,000,070 BYTES.** Nothing has been deleted,
