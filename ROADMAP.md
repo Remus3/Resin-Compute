@@ -11,9 +11,219 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **OPEN 2026-09-12, OPERATOR-ORIGINATED, LANED FOR FLEET CONSENSUS AND
-  DELIBERATELY NOT STARTED. THE REFUTE / FIX / REFUTE-THE-FIX LOOP IS NOW THE
-  DOMINANT COST OF A SESSION.** The operator's words: "it seems like we keep
+- **OPEN 2026-09-12, THE TOOLING-TIER LANE, AND THE STATE IS NOW ADJUDICATED
+  RATHER THAN PROPOSED. FIVE COUNTS ARE IN, THE LEADING CANDIDATE WAS RETRACTED
+  BY ITS OWN AUTHOR, AND THE ONE TREE THAT DID NOT GRADE ITS OWN ROWS REPORTS A
+  THIRD OF WHAT THE OTHER FOUR DO.** This row replaces the "NOT STARTED / do our
+  own measurement first" instruction in the operator-originated lane row above,
+  which is discharged.
+
+  THE COUNTS. RC 80.3 percent of 173 events, CS 83.3 percent of 120, RSC 78.5
+  percent of 65, LW 73.8 percent of 126 as first published and 82.3 percent after
+  LW re-scored under its own PIN v1.2. LL reports 135 events over 64 entries and
+  that only 42 of them are reachable by any program, which is a DIFFERENT OBJECT
+  from the (a)+(b) figure the other four reported and is comparable only against
+  bucket (a) alone - ours is 41 of 65 there. LL is also the only tree whose rows
+  were graded by adjudicators who had not written them, and that re-grading moved
+  twelve events and FLIPPED LL's largest bucket to real defects in the
+  deliverable, 60 of 135. AGREEMENT IS NOT EVIDENCE and the shared input is now
+  measured rather than argued: four of the five counts are self-graded and the
+  one that is not is the one that disagrees.
+
+  WHAT IS SETTLED. Our three-bucket taxonomy lost an adjudication with frozen
+  criteria to RC's two-axis shape, on decision-usefulness, exactly-one-cell
+  coverage, cross-tree portability and self-application. RC has withdrawn its
+  fourth bucket, live-exercise, accepting LW's argument that it names a DISCOVERY
+  channel and not a PREVENTION mechanism. Our own published stop-condition GAUGE
+  is refuted - an (a)+(b) share returns BUILD on a corpus where the gates were
+  already present and the defects shipped anyway - and the replacement is LL's
+  OPS-87 criterion 3, adopted here: replay a proposed check against the tree AS
+  IT STOOD when a historical finding was filed, report would-have-CAUGHT against
+  would-have-MISSED, and build only what shows a CAUGHT.
+
+  WHAT IS RETRACTED. RC's pre-dispatch re-grounding gate, which led the lane this
+  morning, is MEASURED-REFUTED by RC: 18 of 20 sampled rows refused with zero
+  genuinely stale rows among them, roughly 91 benign false positives across 11
+  mechanisms, and refusal correlating with CITATION DENSITY rather than with
+  staleness. Do not re-pitch it here. Its structural cause is the reusable part:
+  every resolver is a PRESENCE check over tokens the row names, and this defect
+  class is an ABSENCE.
+
+  WHAT UNBLOCKS THE LANE, in order. (i) A BACK-TEST WITH A CAUGHT COLUMN for
+  whatever is proposed here, per the criterion above; no candidate in the fleet
+  has one except RC's, and RC's came back negative. (ii) The pin re-score, which
+  is its own row below. (iii) Nothing else. THREE TREES INDEPENDENTLY NAMED THE
+  SAME Q4 ANSWER at three levels of refinement - LW a non-vacuity gate, RSC
+  wiring `tools/gate_mutation_runner.py` to the staged diff, CS a per-arm kill
+  proof with an OBSERVABILITY CONTROL that files NO-APPLY when the anchor was not
+  really replaced - and that agreement is NOT evidence either, for the same six
+  shared inputs. CS's is the most developed and CS has withdrawn its own 30.0
+  percent reach figure for it as un-back-tested.
+
+  NOT BUILT, AND DELIBERATELY. `tools/gate_mutation_runner.py` exists with a full
+  CLI, its docstring line 1 reads "HAND-RUN, not a gate", and it has ZERO
+  references in `.githooks/` or `.github/workflows/`. It fires only when a human
+  types it. Our claim that it reaches 25 of our 65 is an ARGUMENT about what a
+  tool would have caught, not a measurement of a tool that ran, so under our own
+  adopted rule it does not qualify yet. CLOSES WHEN a back-test replays it
+  against reconstructed tree states and reports a non-zero CAUGHT column, or when
+  the CAUGHT column comes back zero and the candidate is refused on the record.
+  LL's trap applies to whoever runs it: LL's naive back-test at the parent commit
+  caught 0 of 17 and that was an INSTRUMENT DEFECT, because a new module, its
+  registration and its ledger entry land in ONE commit so the broken tree was
+  never committed; rebuilt from the fix commit's own additions it caught 9 of 9.
+
+  NO LONGER BLOCKED-ADJACENT ON CS. The operator ruling parking CS as
+  STANDBY-NOT-DISSENT is MOOT - CS has answered in full and states it is not on
+  standby. The NO-ANSWER RULE itself remains UNRULED as a general shape and is
+  not policy.
+
+- **OPEN 2026-09-12 - `CLAUDE.md` NAMES THREE `git ls-files`-DERIVED GUARDS BY
+  FILE AND LINE, AND ONE OF THE THREE CITATIONS IS CORRECT. OUR OWN DOCS POINTER
+  GUARD CANNOT SEE IT BY CONSTRUCTION.** Probed this session at HEAD `90e5e1f`:
+  `tools/precommit_gate.py:398` is a BLANK line and the `git ls-files` call is at
+  line 414, off by 16; `tests/test_no_sibling_names.py:86` is a regex fragment
+  and the call is at line 117, off by 31; `tests/test_docs_consistency.py:171` is
+  correct.
+
+  WHY NOTHING CAUGHT IT. `_backticked_paths()` in `tests/test_docs_consistency.py`
+  DROPS a `path:NNN` token entirely. Fed the three citations directly it returned
+  one unrelated path and none of the three. So the guard that polices document
+  pointers is blind to the exact citation form the most-read file in this tree
+  uses for its own authoritative claims.
+
+  THE CLASS, because the class is worth more than the instance. These citations
+  were not true-when-written and then decayed by drift. They are ATTRIBUTED and
+  PRECISE, and precision is why nobody rechecks them - a bare
+  `tools/precommit_gate.py` would have aged fine. That is LW's RECORD TRUST
+  reading rather than RC's RECORD DECAY reading, and this tree supplies the
+  specimen.
+
+  NOT DONE. The two citations are not repaired and the guard is not widened.
+  CLOSES WHEN the two line numbers are corrected AND `_backticked_paths()` (or a
+  sibling arm) resolves a `path:NNN` token, with a planted wrong line number
+  proving the arm can fail. Repairing the citations alone re-opens the same hole
+  on the next edit.
+
+- **OPEN 2026-09-12 - THREE LEDGER HEADINGS ARE DATED TWO DAYS IN THE FUTURE AND
+  THE FILE IS NOT IN DATE ORDER, SO NO WINDOW CAN BE DRAWN BY DATE.**
+  `docs/LEDGER.md` lines 1021, 1066 and 1094 are headed `## 2026-09-14` for
+  commits dated 2026-09-10 and 2026-09-11, against today's 2026-09-12 and against
+  HEAD's own committer date. THERE IS NO MOMENT AT WHICH THAT RECORD WAS TRUE: it
+  is WRONG WHEN WRITTEN, not decayed. Cite those headings by content and not by
+  line number once anything is appended above them.
+
+  THE SECOND HALF IS THE ONE WITH CONSEQUENCES. The file is not in date order at
+  any scale - line 1021 is 09-14, line 2779 is 09-08, line 5182 is 09-09 - so
+  anyone re-deriving our measurement window BY DATE gets a different set of
+  entries than the commit range `26c14d9..90e5e1f` gives. Our published count
+  drew its boundary as a commit range for exactly this reason and said so.
+
+  NOT DONE. No heading was corrected and no ordering arm exists. CLOSES WHEN the
+  three headings carry the date they were actually written AND an arm asserts
+  that no ledger heading is dated after the committer date of HEAD. The ordering
+  defect is a separate and larger question - a newest-first file that is not
+  sorted is a known recorded trap here - and may be recorded as accepted rather
+  than repaired, but it must be recorded either way.
+
+- **OPEN 2026-09-12 - THE ONE CITATION ARM OUR OWN MEASUREMENT SAYS IS SAFE TO
+  BUILD IS STILL NOT BUILT, AND IT IS THE ONLY ARM IN THIS EXCHANGE WITH NO
+  MEASURED FALSE-POSITIVE CLASS.** Measured here over the 45 tracked markdown
+  files: narrow population 1443 citation occurrences over 190 unique paths with
+  15 absences; wide population 1634 occurrences with 163 absences, 10.0 percent.
+  Classifying the 15 narrow absences - RUNTIME-CREATED 8, PARSE ARTIFACT 2, TO-DO
+  2, ASSERTED-ABSENT 1, RELATIVE-ROOT 1, FOREIGN 0, HISTORICAL 0, GENUINELY
+  MISLEADING 0 clear and 1 borderline - puts the false-positive rate of a
+  mechanical path resolver in this tree at 93.3 to 100 percent narrow and 99.4
+  percent wide. A bare path resolver MUST NOT be built here.
+
+  THE ARM THAT SURVIVED. Resolve `path:LINE` citations only: does the file exist,
+  does it have that many lines, and DOES THAT LINE STILL CONTAIN WHAT THE PROSE
+  SAYS. It had 2 real defects in this tree at measurement time and produced NO
+  false-positive class, because a line-number citation is a claim precise enough
+  to be wrong. The `CLAUDE.md` row above is a third defect the third clause
+  catches and the first two clauses do not.
+
+  WHAT RC'S DATA SAYS ABOUT IT, carried as RC's and not re-derived here. RC
+  measured the same class - full `path:line`, hard classes only - as the ONE
+  mechanically sound resolver among its five: 0 of 44 in its sample, 9 of 891
+  across its dispatch corpus at 1.0 percent. RC then found all nine were
+  DELIBERATELY BASELINED with written reasons, and concluded that in RC's tree a
+  dispatch-time gate buys nothing its commit-time guard already buys. THAT IS A
+  CLAIM ABOUT RC'S TREE. Ours has no such baseline and has a live defect in
+  `CLAUDE.md`. Do not inherit RC's conclusion here without re-deriving it.
+
+  NOT BUILT, pending the pin and pending a CAUGHT column. CLOSES WHEN the arm
+  exists, a planted wrong line number reddens it, and a back-test reports how many
+  of this tree's historical citation defects it would have caught.
+
+- **OPEN 2026-09-12 - TEN OF THE 32 COMMITS IN OUR MEASUREMENT WINDOW ARE NAMED
+  NOWHERE IN THE LEDGER, AND FIVE OF THOSE TEN ARE THE REFUTED OR SUPERSEDED
+  PASSES. EVERY LEDGER-DERIVED COUNT THIS TREE PUBLISHES IS A FLOOR.** Measured
+  over `26c14d9..90e5e1f`. The missing five are `038fd4a`, `c145f8a`, `ffb8f7c`,
+  `14017bd` and `152f61e`; the other five absences are docs-only appends. The
+  ledger names the SURVIVING pass by SHA and describes the refuted one in prose,
+  so it is COMPLETE from entry to commit - all 29 SHAs named across the ten
+  entries resolve - and INCOMPLETE from commit to entry, which is the direction a
+  refutation census cares about. Five of our seven re-pass commits cannot be found
+  in the ledger by SHA at all.
+
+  THE GENERAL FORM, which is why this is a row and not a note. The corpus is
+  authored by the party being measured and the refuted pass is the thing it is
+  least likely to name. That is a floor on OUR number before it is a claim about
+  anyone's.
+
+  LW REPRODUCED IT AND THE NAIVE FIGURE IS A TRAP, carried as LW's. Raw, 90.2
+  percent of LW's window commits are named nowhere in LW's ledger; controlled for
+  a mid-window history rewrite, 59.8 percent; decomposed, 45.7 percent are docs
+  and wrap commits a ledger structurally CANNOT cite, leaving 14.1 percent of
+  substantive commits genuinely unnamed, several of which carry the ledger entry
+  number in the commit subject. Anyone re-running this check must control for
+  their own rewrites first. OUR OWN 10 OF 32 HAS NOT BEEN DECOMPOSED THAT WAY.
+
+  NOT DONE. Nothing names the refuted pass and no arm measures the gap. CLOSES
+  WHEN the ten are decomposed into structurally-uncitable against genuinely
+  unnamed, AND either the ledger convention changes to name the refuted pass by
+  SHA or the omission is recorded as accepted with the floor stated wherever a
+  count is published.
+
+- **OPEN 2026-09-12, AND IT IS A COMMITMENT WE MADE IN PUBLIC AND HAVE NOT PAID.
+  PERSIST THE PER-EVENT ROWS AND RE-SCORE OURS UNDER LW'S PIN v1.2.** We endorsed
+  LL's ask and LW's ask in our delivered note - pin `fix_of_a_fix`, `correct` and
+  the prevention/discovery split, then have each tree RE-SCORE ITS OWN EXISTING
+  ROWS - and we added EVENT GRANULARITY to the pin list, because our own total
+  moves between roughly 61 and 75 under defensible alternative rules. LW has since
+  shipped the pin and paid the re-score first.
+
+  WHAT THE RE-SCORE COSTS AND WHY IT IS CHEAP HERE. LW's rows were tracked, so the
+  re-score cost six passes over one file and no ledger re-reading; RC's per-event
+  rows were NOT persisted and a re-score costs RC a fresh extraction over 42
+  entries. OUR ROWS ARE IN THE SAME POSITION AS RC'S - the delivered note carries
+  aggregates and named instances, not 65 per-event rows. Persisting them is the
+  cheapest change available and it is the difference between paying once and
+  paying twice.
+
+  WHAT MOVING LOOKS LIKE, so the cost is not underestimated. 118 of LW's 126 rows
+  moved materially under re-scoring, LW's gate-or-contract share moved 73.8 to
+  82.3 percent and its inherited-from-a-durable-record share 18.3 to 62.9 percent,
+  and LW withdrew a published figure outright. EXPECT OUR NUMBERS TO MOVE TOO.
+
+  DO NOT ADOPT v1.2 SIGHT-UNSEEN - that is LW's own instruction about its own
+  artifact. LW's four scorers found one FATAL and thirteen material
+  underspecifications in v1 before a number came out, the fatal one being a
+  `fix_chain` field that never stated which direction it counts, which returned
+  DISJOINT sets from the same 28 rows. Report what is found wrong rather than
+  resolving it silently.
+
+  NOT DONE. No rows persisted, no re-score run. CLOSES WHEN the 65 per-event rows
+  exist as a tracked artifact AND are scored under the pin, with every
+  underspecification found reported back rather than resolved locally.
+
+
+- **OPEN 2026-09-12, OPERATOR-ORIGINATED. THE REFUTE / FIX / REFUTE-THE-FIX
+  LOOP IS NOW THE DOMINANT COST OF A SESSION. THIS ROW NOW HOLDS ONLY THE
+  OPERATOR ORIGIN, THE SCOPE AND THE ORIGINAL TAXONOMY; THE LIVE STATE MOVED TO
+  THE ADJUDICATED LANE ROW AT THE TOP OF THIS SECTION.** The operator's words: "it seems like we keep
   getting refuted a lot and that takes another large chunk of time to fix, and
   then that fix needs a fix, can we find a better-faster-efficient-correct way to
   handle the tools and commands", to be "laned via the sync box for consensus
@@ -56,18 +266,25 @@ version. What follows is everything the scaffold deliberately did not do.
   LW is an active counterparty in this fleet and excluding it would have made the
   count three-of-five.
 
-  NOT STARTED, and nothing is built here pending the counts. NEXT SESSION OPENS
-  ON THIS. If the counts have not arrived, do OUR OWN measurement first and
-  publish it, so there is one honest data point rather than four assumed ones.
-  AGREEMENT IS NOT EVIDENCE: if two trees report the same figure, the next
-  question is what shared input produced it.
+  DISCHARGED 2026-09-12. The instruction this row carried - "do OUR OWN
+  measurement first and publish it, so there is one honest data point rather than
+  four assumed ones" - HAS BEEN PAID. Our measurement was made over
+  `26c14d9..90e5e1f`, published, and delivered to all four sibling inboxes with
+  the recipient copies hash-verified. All four counterparties have answered. The
+  live state, the adjudicated rulings, the retraction of the leading candidate
+  and what now unblocks the lane live in the ADJUDICATED LANE ROW at the top of
+  this section; do not re-derive them from this row.
 
-  BLOCKED-ADJACENT, and the operator has still not ruled: the NO-ANSWER RULE.
-  Participants have been on ORDERED STANDBY and unable to reply, which makes a
-  bilateral agreement unreachable. The proposal states SILENCE READS AS DISSENT
-  as the standing rule but asks a standby party for one line so the item can be
-  PARKED against that tree rather than counted as dissent. That shape is still
-  UNRULED and is not policy.
+  THE STOP CONDITION IN THE PARAGRAPH ABOVE IS REFUTED AND MUST NOT BE APPLIED AS
+  WRITTEN. "If most of our refutations are (c), the lane is theatre" reads the
+  wrong quantity: an (a)+(b) share returns BUILD on a corpus where the gates were
+  already present and the defects shipped anyway. The hatch is kept and the gauge
+  is replaced by a back-tested CAUGHT column. See the adjudicated lane row.
+
+  THE CS PARAGRAPH THAT STOOD HERE IS DEAD. CS has answered in full and states it
+  is not on standby, so the operator ruling parking CS as STANDBY-NOT-DISSENT is
+  MOOT. The NO-ANSWER RULE itself remains UNRULED as a general shape and is not
+  policy.
 
 
 - **OPEN 2026-09-12 - SEVEN OUTBOUND NOTES REACHED NOBODY FOR UP TO THREE DAYS,
@@ -151,6 +368,44 @@ version. What follows is everything the scaffold deliberately did not do.
   positively attribute to itself, nobody touches the 239, and the directory is
   re-measured afterwards so the residue is a known number rather than an assumed
   zero. SILENCE READS AS DISSENT on all four.
+
+- **CORRECTION 2026-09-12 TO THE OPEN CLAUSE (a) ROW ABOVE - RC RE-MEASURED THE
+  MACHINE-SCOPE SCRATCH BUCKET AND ALL THREE OF OUR HEADLINE FIGURES MOVED.**
+  These are RC's numbers, carried as RC's and NOT re-derived here. Against our
+  347 files and 6,000,070 bytes with an oldest mtime of 2026-04-19, RC measures
+  361 files and 4,592,570 bytes; RC's byte total under our own stated filter
+  applied verbatim is 6,410,422, so our figure sits between RC's two and RC could
+  not reconstruct our filter. RC states our oldest-mtime file is the git
+  uninstaller pair, which is DISTRIBUTION CONTENT rather than litter, and puts
+  the oldest genuine litter file at 2026-06-29 - about 2.5 months, not 5.
+
+  THE OPERATIONALLY IMPORTANT DIFFERENCE. A 175KB file landed in that bucket
+  AFTER our measurement, carrying another tree's module paths. **The surface is
+  LIVE, and our row reads as a finding about the past.**
+
+  A CORRECTION IN THE OPPOSITE DIRECTION TO OUR OWN WIDENING. We widened the
+  framing from a `/tmp` redirect to any unset expansion leaving a leading slash.
+  RC measures `/tmp` as a separate usertemp mount here, so the defensive idiom
+  `${TMPDIR:-/tmp}` is SAFE and is not part of the defect. The trigger is the bare
+  unset expansion only. NOBODY SHOULD REPAIR A CORRECTLY-DEFAULTED IDIOM on the
+  strength of our wider wording.
+
+  AND A METHOD FINDING THAT CUTS BOTH WAYS. RC attributes 18 of 361 files to
+  itself with per-file evidence and claims none of the remaining 343, of which 233
+  carry no absolute path at all. RC tried mtime correlation against its own
+  commits, got 33 percent within five minutes, ran a NULL CONTROL at the same
+  commit density and got 15.3 percent, and DISCARDED ITS OWN METHOD. One file in
+  the bucket names RC's repository root and was written by another tree - NAMING A
+  ROOT IS NOT AUTHORSHIP, which is the limit we stated about our own instrument
+  and which RC confirms bites in its direction too. Our row's occurrence table
+  must not be read as attribution.
+
+  NOTHING HAS BEEN DELETED, MOVED OR ARCHIVED, here or in RC. The halt under
+  clause (a) stands. CLOSES only on an operator ruling; RC's position, offered for
+  the operator and not agreed, is archive-then-delete with neither half done
+  unilaterally, no participant claiming files it cannot positively evidence, and
+  no enumeration of that directory added to any halt rule because a general
+  outside-the-repo-root rule already covers it.
 
 - **CLOSED 2026-09-11 AT `2ae95f3` - A SILENT CALLEE CLASS BECAME ROWS, AND TWO
   WIDENINGS BUILT IN THE SAME SLICE WERE ADJUDICATED BACK OUT.** `_launcher_name`
