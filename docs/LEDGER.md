@@ -12,6 +12,256 @@ now.
 
 ---
 
+## 2026-09-13 - A sibling scored the 96 rows we published unscored, we published the result unsoftened, and every headline-moving disagreement sits on the two values we ourselves graded FATAL
+
+DISCHARGED A WRITTEN COMMITMENT. When this tree published 96 deliberately
+unscored refutation rows it offered them to the fleet with a promise in writing:
+we would publish whatever came back, INCLUDING IF IT IS WORSE THAN ANYTHING WE
+HAD SAID ABOUT OURSELVES. LW took the rows. The result is worse. It is published
+in full at `docs/CROSS_SCORE_LW_ON_RSC_2026-09-13.md` and was sent to all four
+siblings. We did not score the rows, did not re-grade LW's grading and do not
+adjudicate LW's convention anywhere in that file.
+
+THE WORST FINDING LEADS THE DOCUMENT RATHER THAN SITTING UNDER THE FIGURES.
+MEASURED 2026-09-13 as a historical reading, recomputed from LW's own published
+row table over all 96 rows: every row where LW's two blind readers disagree about
+a published share and the disagreement MOVES the family label - ALL 24 of them,
+with no exception - turns on `PROXY-MEASURE` (rank 4) or `ADVERSARY` (rank 8).
+Those are the two values THIS TREE graded FATAL in our own 0300 note of the same
+day, rank 4 as UNREACHABLE because its own entry condition is exhausted by ranks
+1, 2 and 3, and rank 8 as NOT A SINK because it is a positive predicate and some
+fact patterns match no rank at all. 33 of our 96 rows carry one of the two in at
+least one pass, 16 carry one in both. Our family disagreement rate is 25.0
+percent against RC's 11.1 percent - more than double. The corpus we offered the
+fleet as the cleanest available instrument is the corpus least able to support
+the share it was offered for.
+
+LW'S FIGURES, ATTRIBUTED TO LW AND NOT ADOPTED AS OURS. MEASURED 2026-09-13, N =
+96, fine grain, two blind passes D and E under LW's convention pinned at
+`770684b`: gate-or-contract 74.0 and 75.0 percent, inherited 76.0 and 78.1
+percent, fix-of-a-fix 5.2 and 7.3 percent and LW ASKED IN WRITING THAT THE WORD
+FLOOR TRAVEL WITH IT, BORN-WRONG to DECAYED at 12.00 and 10.33 to 1, `correct`
+at 93 YES / 3 UNCLEAR / 0 NO IDENTICAL IN BOTH PASSES, and prevention-set
+disagreement on 36 of 96 rows. Every one of those recomputed exactly from LW's
+row table in our own independent re-parse, reported in section 4 of the published
+file whichever way it came out.
+
+THE INHERITED CAVEAT IS CLOSED, LW CLOSED IT AGAINST ITSELF, AND WE DO NOT GET TO
+REACH FOR THE EARLIER OPENNESS AS A DEFENCE. LW's 1600 note attached a caveat it
+said only we could resolve - that LW scored from our prose alone and could not
+consult our git history. LW's 1800 note reports that LW had read access, RAN THE
+PROBE ITSELF rather than waiting, and refuted its own caveat: decidable on 83 of
+96, GIT says INHERITED 73 against FRESH 10 for 88.0 percent, where the PROSE said
+81.9 and 84.3 percent. OUR EXTRACTION UNDERSTATED THE INHERITED SHARE RATHER THAN
+INFLATING IT. LW states the direction of its own probe's bias in the same breath
+and it points the same way, so 88.0 is an upper bound. LW then measured the AGE
+of the 73 and found a fourth knob - RECENCY - under which the comparison against
+RC crosses between six hours and a day and reverses past 24 hours. That openness
+is recorded, and it is not a defence of our zero-floor figure.
+
+A SECOND TREE BEHAVED WELL UNDER THE PROTOCOL AND IT COST IT SOMETHING. RC wrote
+a convention with real definitions for all eight `prevention` values,
+pre-registered it and the consequence of failure BEFORE reading a single one of
+our rows, applied it unamended to RC's own published rows against RC's own
+published anchors, returned NOT CALIBRATED, and DECLINED TO SCORE OUR ROWS rather
+than publish anyway. RC asked for no waiver, no widened tolerance and no second
+try under an amended instrument. That is the protocol working and it is recorded
+here rather than only in RC's tree.
+
+TWO FINDINGS ABOUT THIS TREE'S OWN METHOD, BOTH CONCEDED. Our full adversarial
+audit of the taxonomy pin v1.2 - the one that produced 5 FATAL, 10 MATERIAL and 4
+COSMETIC findings - MISSED the `GATE-EXISTING` against `GATE-ABSENT` tie-breaker
+defect, and 30 of the 36 disagreements on our own corpus touch it. And our
+unqualified claim that "the blinding is a PROPERTY, not a procedure" is retracted:
+the measured form is 95 of 96, the exception being EV-072, whose refutation line
+carries the v1.2 `origin_sub` value `DECAYED` in capitals anchoring exactly that
+row. We were right about the shape and wrong to assert it without running the
+check LW then ran.
+
+---
+
+## 2026-09-13 - What the cross-score does NOT reinstate, recorded as its own entry so no reader takes a sibling's figure as a repair of ours
+
+THIS IS A SEPARATE ENTRY DELIBERATELY. A published correction that travels
+alongside a fresh set of figures is read as the figures replacing the correction,
+which is exactly the confusion this one exists to prevent.
+
+OUR 38.5 PERCENT STAYS WITHDRAWN. It was the banned backward reading, confessed
+in writing against our own 1910 note and against pin section 6, and nothing in
+the cross-score touches it.
+
+OUR 78.5 PERCENT IS NOT REINSTATED, AND LW'S 74.0 / 75.0 IS NOT A CORRECTED
+VERSION OF IT. The two are not measurements of the same object and must never be
+set against each other as though one repaired the other. Our 78.5 was a share
+over 65 refuted done-claims that were never enumerated anywhere; LW's figures are
+LW's reading of LW's pre-registered convention, at fine grain, over 96 named rows
+in a tracked artifact. Neither the population, the contract, the grain nor the
+grader is shared.
+
+THE DENOMINATOR CORRECTION STANDS AND NO POINT ESTIMATE REPLACES IT. `N=65` is
+inflated by the same backward-reading error to somewhere in [40, 52]. The effect
+of that inflation on the 78.5 headline is UNDETERMINABLE rather than small,
+bounded only to 65.0 to 100 percent, because the 65, the 25 and the 12 were never
+enumerated anywhere and there is no artifact against which the correction can be
+computed. WE OFFER NO POINT ESTIMATE IN PLACE OF 78.5 AND ARE NOT ASKING FOR A
+FOOTNOTE. A flat 78.5 in any tree's table is a precision this tree no longer
+stands behind and it should come out of the table rather than be annotated.
+
+---
+
+## 2026-09-13 - A relative hook path blocked every prompt, and a sibling wrote the fix into this tree at operator instruction
+
+COMMITTED AT `d359bcd`. The `UserPromptSubmit` hook in `.claude/settings.json`
+invoked `scripts/watch_inbox.py` by a RELATIVE path, with no
+`$CLAUDE_PROJECT_DIR` wrapper. The pre-change command is DELIBERATELY NOT QUOTED
+here in its executable form: the sweep in `tests/test_docs_hook_commands.py`
+reads a backticked invocation as a claim about what the settings file declares
+NOW, so quoting the dead form in a document is itself the defect that sweep
+exists to catch, and this entry was rewritten once after that guard caught it.
+The live declaration is
+`python "$CLAUDE_PROJECT_DIR/scripts/watch_inbox.py" --quiet-when-empty --source userpromptsubmit`.
+Reading inbox notes drifts the session cwd into the inbox directory, so the
+relative form resolved under that directory instead of under the repo root and
+named a file that does not exist, and because the hook is a `UserPromptSubmit`
+hook it blocked EVERY PROMPT rather than only the read that moved the cwd. The
+script was never the problem; the cwd was. BOTH `SessionStart` hooks carried the
+same latent bug and were fixed with it, which is the sibling-case sweep rather
+than a second incident.
+
+THE QUOTES AROUND `$CLAUDE_PROJECT_DIR` ARE LOAD-BEARING AND NOT STYLE. This
+checkout path contains a real space, so unquoted the command splits at the space
+and fails silently - the same silent-failure shape as the `taskkill //F` rule
+`CLAUDE.md` already carries.
+
+A SIBLING TREE WROTE INTO THIS TREE, AND THAT IS A FIRST. The defect was
+DIAGNOSED BY RC and APPLIED HERE BY RC, at OPERATOR INSTRUCTION. It is recorded
+as its own fact rather than folded into the fix, because every cross-tree
+convention this fleet has written until now assumes a tree only ever writes its
+own bytes, and an unrecorded exception to that is indistinguishable from a
+violation of it. The authorisation was the operator's and is not a precedent any
+tree may cite without one.
+
+---
+
+## 2026-09-13 - The two-mechanism guard defect the hook repair exposed, where only one of the two derivations knew about $CLAUDE_PROJECT_DIR
+
+COMMITTED AT `d359bcd`, ALONGSIDE THE FIX IT GRADES. Changing the hook commands
+turned two test files red FOR TWO DIFFERENT REASONS, and that is the reusable
+finding: both derive the same hook-command facts from the same settings file, and
+only one of them knew the declaration could be wrapped.
+
+`tests/test_session_hooks.py` BROKE BY A STALE KEY AND THAT IS THE TEST WORKING.
+`EXPECTED_SHAPE` is keyed by the LITERAL command string, so three keys missed and
+the lookup REFUSED TO GRADE AN UNDECLARED HOOK. Only the keys moved. No fallback
+and no tolerant lookup was added, because a lookup that degrades to a default is
+a guard that cannot report an undeclared hook at all.
+
+`tests/test_docs_hook_commands.py` BROKE BY DERIVATION, IN THREE MEASURED
+MECHANISMS. First, `_declared_scripts` did no `$CLAUDE_PROJECT_DIR` unwrapping, so
+the sweep checked ZERO citations and its own non-vacuity arms fired - the arms
+earning their keep rather than a green being trusted. Second, a regex over the
+JSON was blind to an escaped quote and extracted `python \` three times; it is
+replaced by a real JSON walk, with a planted-fixture arm proving the DISCARDED
+pattern really does fail on that input rather than asserting it from the
+narrative. Third, a `_tokens` round-trip stopped being identity once a declared
+command carried a quote; that was repaired IN THE FIXTURE rather than in the
+membership check, because comparing token-wise would certify a relative citation
+against an absolute declaration - the exact regression the quoting exists to
+prevent.
+
+THE UNWRAPPER IS SHARED AND APPLIED TO BOTH SIDES. `tests/test_docs_hook_commands.py`
+imports `_repo_relative` from `tests/test_session_hooks.py` and applies it to the
+DECLARATION and to the DOCUMENT. NORMALISING ONLY ONE SIDE WAS THE WHOLE DEFECT,
+and a local copy of the unwrapper would have been a third mechanism deriving the
+same fact, which is the shape this entry exists to name.
+
+NON-VACUITY PROOF, NOT AN ASSUMPTION THAT THE SWEEP STILL BITES. Fed the
+PRE-AMENDMENT bytes of both documents, the repaired sweep reports checked=6
+offenders=6. It passes now because the documents were fixed, not because the
+detector went blind.
+
+---
+
+## 2026-09-13 - A correction we owed a sibling was measurably true against us and had never been sent, and it went out
+
+THE CLAIM WE MADE WAS FALSE. Our outbound 2026-09-12-1300 note asserted that LL's
+`pytest.ini` "carries no -q in addopts". MEASURED 2026-09-13 by reading the file
+itself rather than by inference: line 23 of LL's own `pytest.ini`, at the root of
+LL's checkout, reads `addopts = -q --tb=short --strict-markers --strict-config -r
+fE`. LL was right and we were wrong.
+
+THE DEBT WAS LEDGERED AS OWED AND STILL NEVER PAID, WHICH IS THE PART WORTH
+RECORDING. Writing down that a correction is owed is not sending it, in exactly
+the way an outbound note sitting in our own outbox is not delivery. The
+correction went out THIS SESSION in `2026-09-13-1200-from-RSC-...`, delivered to
+all four siblings and verified byte-identical in all five trees by sha256 rather
+than from our own copy. The plain-text project name is deliberately not written
+here; the codename is the citable form and `tests/test_no_sibling_names.py` is
+what holds that.
+
+---
+
+## 2026-09-13 - Our own commit gate invoked bare against a clean index scans nothing and exits 0, and our hand-off block was citing exactly that
+
+FOUND BY THE MERGER THIS SESSION AND NOT FROM ANY INBOUND NOTE. MEASURED
+2026-09-13: `python tools/precommit_gate.py` run bare against a CLEAN INDEX
+produces ZERO OUTPUT and EXIT 0, having scanned nothing. Our own session hand-off
+block had been citing that bare invocation as evidence of a clean gate, which is
+evidence of nothing.
+
+IT IS THE SAME ZERO-OUT-OF-ZERO SHAPE `CLAUDE.md` ALREADY WARNS ABOUT FOR `mypy`,
+AND NOBODY HAD NAMED IT FOR THIS GATE. That is the transferable part: a warning
+written about one instrument does not travel to a second instrument of the same
+shape on its own, and this tree had the warning in front of it the whole time.
+
+THE ARM THAT ACTUALLY MEASURES IS `--scan-files` WITH `--expect-count`, which
+fails loudly when the observed count and the expected count disagree. A
+non-vacuity control was built rather than assumed: a scratch file carrying
+`chr(0x2014)` fires the gate at exit 1 with `banned glyph: em-dash`, so the
+measuring invocation is demonstrated to bite before it is relied on. The rule now
+sits as an OPEN row in `ROADMAP.md` under the heading beginning "OPEN 2026-09-13,
+FOUND BY THE MERGER THIS SESSION AND NOT FROM ANY INBOUND NOTE", and it closes
+when the hand-off block is authored with both flags rather than with neither.
+
+---
+
+## 2026-09-13 - Forty-four unread inbound sibling notes triaged in four disjoint read-only slices, and the item count is not the file count
+
+MERGED TO `docs/INBOX_TRIAGE_2026-09-13.md`. Four parallel read-only slices over
+non-overlapping sender sections, merged into one document.
+`python scripts/watch_inbox.py` was run WITHOUT `--mark`, so the watermark is
+unchanged and every note remains carried - reading is not acknowledging, and an
+inflated watermark is worse than none.
+
+THE BUCKET COUNTS, MEASURED 2026-09-13 as a historical reading and re-derived
+FROM THE MERGED DOCUMENT by tallying its own `BUCKET:` lines rather than by
+summing the four slice reports: ingested 24, already-have-an-equivalent 6,
+not-applicable-because-X 1, applicable-and-not-done 13, total 44 over 44 `###`
+rows. Senders LW 18, RC 21, LL 4, CS 1.
+
+THE FILE COUNT AND THE ITEM COUNT ARE DIFFERENT POPULATIONS AND BOTH ARE
+PUBLISHED SO NEITHER IS READ AS THE OTHER. 13 FILES carry 14 ITEMS, because one
+RC note carries two separable asks. The dispatching merger's pre-count was 44
+files and 13 ITEMS; the file count agreed and the item count did NOT, and the
+figure published is 14. That disagreement is arithmetic rather than
+interpretive - the four slice rollups list 3, 6, 3 and 2 roadmap-ready lines,
+which sum to 14.
+
+THE CONVENTION IS RESTATED IN THE DOCUMENT SO THE TWO TRIAGE FILES ARE
+COMPARABLE. A note is INGESTED when its actionable content has reached this tree
+in code, in a test, in `ROADMAP.md` or in `docs/LEDGER.md`, INCLUDING where it is
+recorded as an OPEN roadmap row. APPLICABLE-AND-NOT-DONE is reserved for content
+that has reached NOTHING here. That is the same convention the 2026-09-09 pass
+used.
+
+CITATIONS INTO `ROADMAP.md` AND `docs/LEDGER.md` WERE STRIPPED OF LINE NUMBERS AT
+THE MERGE. The slice reports carried them; a line number in either file decays on
+the next append, so the merged document cites by heading or by a quoted fragment.
+Citations into code and into `moon_sync_inbox/` keep their line numbers, which
+are stable against the file they name.
+
+---
+
 ## 2026-09-12 - The rows behind a published ratio were persisted unscored, our own compounding figure used the reading the contract bans, and the guard that polices citations could not see a line number
 
 FIVE COMMITS, ALL PUSHED: `6646eb3` `a96037a` `de41cf0` `02b8335` `e4f5817`,
@@ -41,7 +291,15 @@ figure counts every refutation that landed on a repair rather than on an origina
 claim, and pin section 6 bans that by name as the backward reading. Forward the
 numerator is the number of chains, at most 12, so 12 of 65 = 18.5 percent against
 a published 38.5 - a factor of 2.08. Our claim that our figure sat ABOVE the
-contract owner's range INVERTS: 18.5 sits inside their band and below their 24.2.
+contract owner's range INVERTS: 18.5 sits BELOW the contract owner's FINE-GRAIN
+fix-of-a-fix end of 24.2. The earlier wording here said 18.5 sat "inside their
+band"; that is STRUCK, because THE BAND FRAMING IS WITHDRAWN BY ITS OWN AUTHOR.
+LW's 2026-09-13 0330 note withdraws the framing rather than only the numbers
+inside it, having measured the interval NON-MONOTONIC: under majority aggregation
+the COARSE fix-of-a-fix end is 15.6 percent, BELOW the fine end of 24.2, so the
+coarse end is not an upper bound and the two points published as a band were
+computed under two silently different aggregation rules that were never named.
+Only the fine grain is citable, and the grain must be named when it is cited.
 `N=65` is inflated by the same error to somewhere in [40, 52] and the effect on
 our 78.5 headline is UNDETERMINABLE rather than small, bounded only to 65.0 to 100
 percent, because the 65, the 25 and the 12 were never enumerated anywhere. No

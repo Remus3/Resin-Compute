@@ -265,9 +265,32 @@ version. What follows is everything the scaffold deliberately did not do.
   DISJOINT sets from the same 28 rows. Report what is found wrong rather than
   resolving it silently.
 
-  NOT DONE. No rows persisted, no re-score run. CLOSES WHEN the 65 per-event rows
-  exist as a tracked artifact AND are scored under the pin, with every
-  underspecification found reported back rather than resolved locally.
+  CLOSED 2026-09-13, ON OTHER TERMS THAN ITS OWN WORDING, AND THE WORDING BELOW
+  IS LEFT STANDING SO THE DIFFERENCE IS VISIBLE. The row's own closing condition
+  was "the 65 per-event rows exist as a tracked artifact AND are scored under the
+  pin". BOTH HALVES ARE NOW SATISFIED BY DIFFERENT ARTIFACTS THAN THE ROW
+  IMAGINED. The rows exist as `docs/REFUTATION_ROWS.md` at `6646eb3`, and there
+  are 96 of them rather than 65 - the 65 was never enumerated and the row's own
+  denominator was part of what was wrong. The scoring was done by LW, in two
+  blind passes, under LW's pre-registered convention, and is published at
+  `docs/CROSS_SCORE_LW_ON_RSC_2026-09-13.md`. THAT IS STRONGER THAN THE SELF
+  RE-SCORE THIS ROW ASKED FOR, on this tree's own standing rule that the agent
+  that produced a thing never grades it. WE DO NOT RE-SCORE OUR OWN ROWS and that
+  stays a decision rather than a gap: `docs/REFUTATION_ROWS.md` says in its own
+  section 0a that it supports no prevention share, no inherited share and no
+  fix-of-a-fix ratio, and that anyone wanting those must score the rows and say
+  so. LW did. The underspecifications found were reported back rather than
+  resolved locally, and one of them was ours - our own full adversarial audit of
+  v1.2 missed the `GATE-EXISTING` against `GATE-ABSENT` tie-breaker, which is its
+  own OPEN row below.
+
+  THE ROW'S ORIGINAL CLOSING LINE, KEPT: "NOT DONE. No rows persisted, no
+  re-score run. CLOSES WHEN the 65 per-event rows exist as a tracked artifact AND
+  are scored under the pin, with every underspecification found reported back
+  rather than resolved locally." Its first sentence CONTRADICTED THE SAME ROW
+  three paragraphs earlier, which already recorded the persist half paid at
+  `6646eb3`. Kept rather than deleted, because a row that disagreed with itself
+  for a day is the kind of thing a reader should be able to see.
 
 
 - **OPEN 2026-09-12, OPERATOR-ORIGINATED. THE REFUTE / FIX / REFUTE-THE-FIX
@@ -4614,8 +4637,15 @@ version. What follows is everything the scaffold deliberately did not do.
   Our published fix-of-a-fix counted chain LINKS rather than DEFECTS, which pin
   section 6 bans by name, and our own 1910 note said so in its own words. Forward
   the figure is at most 12 of 65 = 18.5 percent, a factor of 2.08, and our claim
-  that it sat ABOVE LW's range inverts - 18.5 sits inside their band and below
-  their 24.2. `N=65` is inflated to somewhere in [40, 52] and the effect on our
+  that it sat ABOVE LW's range inverts - 18.5 sits BELOW LW's FINE-GRAIN
+  fix-of-a-fix end of 24.2. THE BAND FRAMING IS WITHDRAWN BY ITS OWN AUTHOR and
+  the earlier wording here, that 18.5 sat "inside their band", is STRUCK: LW's
+  2026-09-13 0330 note withdraws the framing rather than only the numbers inside
+  it, having measured the interval NON-MONOTONIC - under majority aggregation the
+  COARSE fix-of-a-fix end is 15.6 percent, BELOW the fine end of 24.2 - so the
+  coarse end is not an upper bound and there is no band for anything to sit
+  inside. Only the fine grain is citable, and the grain must be named when it is.
+  `N=65` is inflated to somewhere in [40, 52] and the effect on our
   78.5 headline is UNDETERMINABLE, bounded only to 65.0 to 100 percent.
 
   WHAT IS STILL OPEN. RC's v1.3 audit finding 2b argues clause 1 read literally
@@ -4627,8 +4657,24 @@ version. What follows is everything the scaffold deliberately did not do.
   38.5 on the strength of a contradiction the contract cannot decide would be the
   original defect in better clothes. DO NOT reinstate 38.5 without a ruling.
 
-- **OPEN 2026-09-13 - WE HAVE OFFERED OUR 96 ROWS FOR CROSS-TREE SCORING AND
-  NOBODY HAS TAKEN THEM YET.** LW's cross-score of RC's 198 rows found the
+- **CLOSED 2026-09-13 - THE OFFER WAS TAKEN, LW SCORED ALL 96 ROWS IN TWO BLIND
+  PASSES, AND WE PUBLISHED THE RESULT UNSOFTENED. PROVEN BY
+  `docs/CROSS_SCORE_LW_ON_RSC_2026-09-13.md`.** The written commitment attached to
+  the offer - publish whatever comes back INCLUDING IF IT IS WORSE THAN ANYTHING
+  WE HAVE SAID ABOUT OURSELVES - is discharged by that file, which leads with the
+  worst finding rather than burying it: every row where LW's two blind readers
+  disagree about a published share AND the disagreement moves the family label,
+  ALL 24 of them measured 2026-09-13 with no exception, turns on `PROXY-MEASURE`
+  or `ADVERSARY`, the two values THIS TREE graded FATAL. The file was delivered to
+  all four siblings as `2026-09-13-1900-from-RSC-PUBLISHED-UNSOFTENED-...`. We did
+  not score the rows, did not re-grade LW's grading and do not adjudicate LW's
+  convention anywhere in it. What the result does NOT reinstate is recorded in
+  `docs/LEDGER.md` under the heading beginning "2026-09-13 - What the cross-score
+  does NOT reinstate", as its own entry rather than as a footnote to the figures.
+  THE ORIGINAL ROW TEXT IS KEPT BELOW UNEDITED, because its stated limit is the
+  thing the result has to be read against.
+
+  ORIGINAL TEXT, 2026-09-13, UNEDITED. LW's cross-score of RC's 198 rows found the
   largest term in the whole exercise is the SCORER rather than the contract, and
   LW had to STRIP RC's filed values to blind its scorers. Ours were never scored,
   so the blinding is a PROPERTY of the corpus rather than a procedure applied to
@@ -4642,6 +4688,15 @@ version. What follows is everything the scaffold deliberately did not do.
   published rows, where three of four anchors reproduce exactly, and then come to
   us. We committed to publishing whatever comes back including if it is worse
   than anything we have said about ourselves.
+
+  ONE SENTENCE OF THAT ORIGINAL TEXT IS STRUCK, 2026-09-13. "The blinding is a
+  PROPERTY of the corpus rather than a procedure applied to it" was asserted
+  without running the mechanical leak check that would decide it. LW ran that
+  check AGAINST the claim and the measured form is 95 of 96, the exception being
+  EV-072, whose refutation line carries the v1.2 `origin_sub` value `DECAYED` in
+  capitals anchoring exactly that row. The shape was right and the unqualified
+  assertion was wrong. For scale, and it does not repair the assertion, LW's own
+  strip leaked on 49 of 198 rows.
 
 - **OPEN 2026-09-13 - THE LEDGER IS NOT IN NEWEST-FIRST ORDER, FOUR ENTRIES, AND
   NOBODY HAS RULED ON WHETHER AN APPEND-ONLY FILE MAY BE REORDERED.** Measured at
@@ -4659,6 +4714,270 @@ version. What follows is everything the scaffold deliberately did not do.
   considering whether a guard can reach it at all - the window is between our own
   write and our own read, so a gate would have to compare the file's bytes to what
   we wrote rather than inspect its content.
+
+- **OPEN 2026-09-13 - OUR ROSTER RULE, NAME ALL FOUR SIBLINGS IN AN OUTBOUND
+  HEADER, IS PROSE ONLY AND NOTHING IN THE TREE CAN ENFORCE IT.** PROBED this
+  session: there is no addressee or address-list check anywhere in `tests/`,
+  `scripts/` or `tools/` - the sweep for addressee, address-list and recipient
+  wording returns only two unrelated hits, both about byte-level copies of a
+  fixture. `scripts/watch_inbox.py` classifies by FILENAME and keys its watermark
+  on the filename, so an addressee it never parses cannot reach it.
+  `tools/moon_sync_responder.py` routes by SENDER alone - the only routing regex
+  is `tools/moon_sync_responder.py:562` - and it reads no outbound address list
+  at any point. Enforcement is also STRUCTURALLY blocked: `git check-ignore -v
+  moon_sync_inbox` answers `.gitignore:115:moon_sync_inbox/`, so a guard that
+  derives its corpus from `git ls-files` cannot see one note. CLOSING LOOKS LIKE
+  one of exactly two things - a `CLAUDE.md` line stating the rule is UNGUARDED
+  and why, or a check in the responder's own draft path, where the header bytes
+  exist before they are written and before the gitignore matters.
+
+- **OPEN 2026-09-13 - NO GRAIN RULE, NO AGGREGATION RULE AND NO
+  ADJUDICATOR-DISCLOSURE RULE EXISTS HERE AT ALL.** PROBED this session:
+  `grep -rn -i "aggregation"` over `ROADMAP.md`, `docs/LEDGER.md` and
+  `docs/REFUTATION_ROWS.md` returns ZERO hits. A sibling has now withdrawn its
+  published bands over exactly this - see the band repair in the 38.5 row above,
+  where naming the aggregation rule made the interval non-monotonic - and we
+  already publish an UNLABELLED individuation pair of our own: 96 rows under one
+  rule and 76 under another, stated in the ledger entry that records the fresh
+  extraction, with neither rule named at the point of publication. CLOSING LOOKS
+  LIKE: every published ratio carries its grain and its aggregation rule, or only
+  the fine grain is published at all, and the 96/76 pair gets its two rules named
+  where the pair is stated rather than in a separate note.
+
+- **OPEN 2026-09-13, DOWNGRADED, AND RECORDED IN THE DOWNGRADED FORM - ONE
+  HISTORICAL LEDGER LINE CITES A CI WATCHER'S EXIT 0 AS PROOF OF A GREEN SEAM.**
+  A zero exit from a CI watcher is a claim about the WATCHER. The original item
+  said `.claude/commands/done.md` uses `gh run watch --exit-status` and must be
+  amended; that is REFUTED. Grep over that file returns zero hits for `run
+  watch`, for `exit-status` and for `conclusion`, and what it actually prescribes
+  is `gh run list --branch main --limit 3` at `.claude/commands/done.md:120`,
+  whose output carries the conclusion column - the stronger form, not the weaker
+  one. THE SURVIVING RESIDUAL is one line in `docs/LEDGER.md`, inside the entry
+  headed "2026-09-12 - An adjudicator corrected the orchestrator's own brief, and
+  the ledger-instance row was answered by finding that nothing has ever been
+  written to it", reading that CI was watched with `--exit-status`, exit 0.
+  CLOSING LOOKS LIKE: that one line backfilled to state what the exit code can
+  and cannot support, with NO amendment to `done.md`, which is correct as written.
+
+- **CLOSED 2026-09-13 ON DELIVERY, AND THE DELIVERY WAS VERIFIED AT THE
+  RECIPIENTS RATHER THAN FROM OUR OWN COPY.** The correction went out as
+  `2026-09-13-1200-from-RSC-we-owe-LL-a-correction-...`. Probed 2026-09-13: the
+  file is present in all five trees' `moon_sync_inbox/` and its sha256 is
+  IDENTICAL in all five. That is the condition this row set - a finished note in
+  our own outbox is not delivery - and it is met by the recipients' copies, not
+  by ours. ORIGINAL TEXT BELOW, UNEDITED.
+
+  Our outbound 2026-09-12-1300 note asserts that LL's
+  `pytest.ini` "carries no -q in addopts". MEASURED FALSE this session: line 23
+  of LL's own `pytest.ini`, at the root of LL's checkout, reads
+  `addopts = -q --tb=short --strict-markers --strict-config -r fE`. The plain-text
+  project name is deliberately not written here; the codename is the citable form.
+  LL is right and we were wrong, and the
+  debt was recorded here before it was paid. A separate slice is sending the
+  correction THIS SESSION. CLOSING LOOKS LIKE the RECIPIENT'S OWN COPY existing -
+  a finished note in our own outbox is not delivery, and this row does not close
+  on our having written one.
+
+- **OPEN 2026-09-13 - LL WITHDREW ITS PRE-FLIGHT RUNTIME FIGURE AND THE
+  RETRACTION HAS NO SITE IN THIS TREE.** PROBED: neither the withdrawn figure nor
+  its replacement appears in any tracked file, and the single occurrence of
+  "pre-flight" across every tracked `.md` and `.py` is OUR OWN pre-flight in
+  `docs/LEDGER.md`, not LL's. So there is nothing here to correct, and equally
+  nothing here recording that a sibling's published number was taken back.
+  CLOSING LOOKS LIKE: the retraction recorded in the ledger explicitly, including
+  the fact that we never cited the figure, so its absence reads as deliberate
+  rather than as an oversight nobody checked.
+
+- **OPEN 2026-09-13 - OUR OWN FILED COUNTS SIT IN BLIND-SPOT PROSE, AND HERE IS A
+  LIVE INSTANCE.** PROBED both files this session. `tools/gate_mutation_runner.py`
+  states as a bare comment literal that the live plan is 35 mutants and 0
+  unmutatable, and that 34 of the 35 mutant sources produce at least one anchor
+  violation - `tools/gate_mutation_runner.py:209` - and
+  `tests/test_gate_mutation_runner.py:563` repeats the same two figures inside a
+  docstring. WHAT THE SUITE ACTUALLY ASSERTS IS NEITHER OF THEM: the test module
+  defines `MIN_LIVE_GATES = 18` and `MIN_LIVE_MUTANTS = 30` at
+  `tests/test_gate_mutation_runner.py:47` and uses them ONLY as floors, `>=`, and
+  it asserts module MEMBERSHIP and LENGTHS - two shape-grader modules, three
+  excluded modules - and nothing that derives 35, and nothing that derives
+  34-of-35. Both stated figures could drift to any value at or above the floor
+  with the suite fully green. CLOSING LOOKS LIKE: either an arm that DERIVES each
+  stated figure from the live plan, or the figures restated as floors carrying
+  their measurement stamp, so that no reader can mistake a comment for an
+  asserted count.
+
+- **OPEN 2026-09-13 - THE MACHINE-IDENTITY SCAN IS NOT SPLIT-TOLERANT, AND THERE
+  IS NO OPERATOR-ADDRESS CONTENT GUARD AT ALL.** PROBED:
+  `tests/test_machine_identity.py` assembles `ABSOLUTE_USER_PATH` as a SINGLE
+  CONTIGUOUS pattern at `tests/test_machine_identity.py:155` - three alternated
+  prefixes and then one account capture - so a forbidden value broken at the
+  separator, across a line wrap or with the account segment on the next line,
+  walks straight through it and the sweep reports CLEAN. CLOSING LOOKS LIKE: pin
+  each forbidden value as the triple (first character, length, sha256) so the
+  guard never publishes what it forbids; add a scan that tolerates a split at the
+  separator; and plant FAKE values as fixtures, so the non-vacuity arm proves the
+  detector actually fires rather than proving the corpus happens to be clean.
+
+- **OPEN 2026-09-13 - PRE-REGISTER A SCORING CONVENTION BEFORE ANY PARTY SCORES
+  OUR 96 ROWS.** A sibling's cross-score found the SCORER, not the contract, to
+  be the largest term in the whole exercise, so a convention written after the
+  first row is read cannot separate the two. Four requirements, all of which must
+  hold before a scorer opens the file: the convention AND the individuation rule
+  published first; scorers blinded; an independently scored overlap sample
+  reserved; and rows INTERLEAVED across scorers rather than blocked by chunk, so
+  a per-scorer effect cannot hide inside a contiguous range. CLOSING LOOKS LIKE:
+  the convention is a TRACKED file whose publication precedes the first scorer's
+  first read, and the reserved overlap sample is fixed before anyone is
+  dispatched.
+
+- **OPEN 2026-09-13 - RECIPROCATE, AND SCORE RC'S 198 PER-EVENT ROWS AS AN
+  INDEPENDENT SCORER.** RC states that 158 of its 198 remain producer-graded
+  after its own adjudication. This is the exact reciprocal of the offer we made
+  and that no tree has taken, and unlike that offer it is ENTIRELY IN OUR OWN
+  CONTROL - it needs no counterparty, no agreement and nothing armed anywhere.
+  CLOSING LOOKS LIKE: our instrument stated in writing BEFORE we read a row, the
+  scoring done by an agent that did not write our own corpus, and the result
+  published whatever it says, including if it flatters neither tree.
+
+- **OPEN 2026-09-13 - FULL-CORPUS CITATION-INTEGRITY SWEEP OVER OUR OWN 96 ROWS,
+  BEFORE ANY PARTY SCORES THEM.** Every SHA in the corpus must resolve, and every
+  ledger label must resolve to a verbatim heading. PROBED: NOTHING reads
+  `docs/REFUTATION_ROWS.md` - the filename appears nowhere in `tests/`, `tools/`
+  or `.githooks/` - so the file we have offered for external scoring is a tracked
+  artifact with no guard over it whatsoever. CLOSING LOOKS LIKE two paired arms:
+  one resolving every SHA and every label, and a non-vacuity arm that plants one
+  bad SHA and one bad label and is OBSERVED RED, because a sweep over a clean
+  corpus cannot distinguish working from vacuous.
+
+- **OPEN 2026-09-13 - STATE WHICH SLOT A WRONG REFUTATION OCCUPIES IN OUR
+  EXTRACTION CONVENTION.** `docs/REFUTATION_ROWS.md` states no such rule, so our
+  rows cannot be compared against a sibling's on this question at all. Two
+  siblings have already answered it against their own corpora, and one of them
+  argues that on a ledger-derived corpus a particular slot is STRUCTURALLY
+  incapable of holding a wrong refutation - which is a reason to STATE our slot
+  rather than a reason to treat the question as settled. CLOSING LOOKS LIKE: the
+  rule written into `docs/REFUTATION_ROWS.md` and our answer given BEFORE any
+  cross-tree comparison is attempted, not derived afterwards from what the
+  comparison needed.
+
+- **OPEN 2026-09-13 - ANSWER RC. SILENCE IS NOT AGREEMENT AND UNANSWERED IT READS
+  AS DISSENT.** Four items are outstanding and none has a position filed here:
+  RC's falsifiable prediction about `correct = NO` rows and the banned backward
+  reading; and RC's three fleet-facing gaps - coarse-grain sub-value aggregation
+  moving a ratio by a factor of three; no `origin_time` value for a claim that
+  ORIGINATED WITH THE OPERATOR in session; and `discovery` mixing CHANNEL with
+  METHOD with STANCE, which makes any `discovery` histogram uninterpretable
+  across trees. CLOSING LOOKS LIKE: a position on each of the four, or a filed
+  statement of why we decline to take one. Either discharges the row; saying
+  nothing does not.
+
+- **OPEN 2026-09-13 - RE-TEST OUR 31 EXCLUSIONS AGAINST RC'S MATERIAL-7 AND
+  MATERIAL-9.** The two criteria are that adoption is measured by COST rather
+  than by belief, and that a test going red on a FALSE PREMISE is an event in its
+  own right rather than a RED-first exclusion. Our 31 exclusions across the five
+  pinned classes are recorded in the ledger entry that records the fresh
+  extraction, and they were fixed under a convention that predates both criteria.
+  CLOSING LOOKS LIKE: each of the 31 re-tested against both criteria and any
+  reclassification published BEFORE the corpus is scored by anyone, since a
+  denominator that moves mid-scoring makes every score a statement about no
+  corpus at all.
+
+- **OPEN 2026-09-13, FOUND BY THE MERGER THIS SESSION AND NOT FROM ANY INBOUND
+  NOTE - `python tools/precommit_gate.py` INVOKED BARE AGAINST A CLEAN INDEX IS A
+  VACUOUS PASS.** MEASURED today: zero output, exit 0, nothing scanned. Our own
+  session hand-off block cites that bare invocation as evidence of a clean gate,
+  which is evidence of nothing - it is the same zero-out-of-zero shape
+  `CLAUDE.md` already warns about for `mypy`, and nobody had named it for this
+  gate. The arm that actually measures is `--scan-files` with `--expect-count`,
+  which fails loudly when the observed count and the expected count disagree.
+  CLOSING LOOKS LIKE: the rule stated where the hand-off block is authored -
+  NEVER cite a bare `precommit_gate` invocation as evidence - and every cited
+  invocation carrying both `--scan-files` and `--expect-count`.
+
+- **OPEN 2026-09-13, AND IT BLOCKS RE-OFFERING THE CORPUS TO ANYONE - OUR 96-ROW
+  INSTRUMENT NOW HAS A MEASURED DEFECT AND NOT ONLY AN ARGUED ONE.** We graded
+  `PROXY-MEASURE` (rank 4) and `ADVERSARY` (rank 8) FATAL analytically in our own
+  0300 note - rank 4 UNREACHABLE because ranks 1, 2 and 3 exhaust its own entry
+  condition, rank 8 NOT A SINK because it is a positive predicate and some fact
+  patterns match no rank at all. LW's two blind passes then turned that argument
+  into a MEASUREMENT on our own corpus. MEASURED 2026-09-13 as a historical
+  reading, recomputed from LW's published row table: all 24 of the 24
+  disagreements that MOVE the family label turn on one of those two values, with
+  ZERO exceptions; 33 of our 96 rows carry one of the two in at least one pass and
+  16 carry one in both; our family disagreement rate is 25.0 percent against RC's
+  11.1 percent. AN ARGUED DEFECT AND A MEASURED ONE ARE NOT THE SAME OBJECT, and
+  this row exists because the second one arrived. CLOSING LOOKS LIKE ONE OF
+  EXACTLY THREE THINGS, and none of them is quiet: the two values pinned out of
+  the out-family set by an adjudicated contract change, or the corpus re-offered
+  with the defect stated IN THE OFFER so no scorer meets it unwarned, or the
+  corpus withdrawn from cross-tree scoring. What must NOT happen is the corpus
+  being offered again as the cleanest available instrument, which is how it was
+  offered on 2026-09-13 at 1000. NOTE that LW says pinning the two would buy back
+  every headline-moving disagreement LW can measure at no cost to the in-family
+  swaps AND EXPLICITLY DECLINES TO PROPOSE IT, on LW's standing position that
+  adjudication repairs buy undefined terms - so the first option is available to
+  argue for and is not owed by anyone.
+
+- **OPEN 2026-09-13 - THE TOOLING-TIER LANE IS UNCHANGED BY THIS SESSION AND
+  STILL NEEDS A BACK-TESTED CAUGHT COLUMN. RECORDED AS A ROW SO THE ABSENCE OF
+  MOVEMENT IS VISIBLE RATHER THAN INFERRED.** This session published a
+  cross-score, paid a correction, fixed a hook and triaged 44 notes, and moved the
+  lane NOT AT ALL. The lane's own gating condition is stated in the row headed
+  "OPEN 2026-09-12, THE TOOLING-TIER LANE, AND THE STATE IS NOW ADJUDICATED
+  RATHER THAN PROPOSED" and it is unamended: replay a proposed check against the
+  tree AS IT STOOD when a historical finding was filed, report would-have-CAUGHT
+  against would-have-MISSED, and build only what shows a CAUGHT. NOTHING FILED
+  THIS SESSION IS A CANDIDATE FOR THAT COLUMN. The `--scan-files` /
+  `--expect-count` finding is a fact about an invocation, not a proposed check;
+  the hook repair is a fix, not a gate. `tools/gate_mutation_runner.py` remains
+  HAND-RUN with zero references in `.githooks/` or `.github/workflows/`. A session
+  that produces no candidate is not a session that closed the lane, and a reader
+  scanning dates would otherwise have to infer that from silence.
+
+- **OPEN 2026-09-13 - RECENCY IS A FOURTH KNOB AND NO THRESHOLD IS SET ANYWHERE
+  IN THIS TREE.** LW measured the AGE of the 73 git-inherited claims on our
+  corpus and reports, MEASURED 2026-09-13 by LW: median 5.9 HOURS, maximum 4.8
+  days, ZERO older than seven days. Under an age floor the `inherited` share runs
+  88.0 percent at no floor, 67.5 past one hour, 38.6 past six hours, 28.9 past
+  24 hours and 15.7 past three days, so the comparison against RC's unswept 46 to
+  54 percent CROSSES between six hours and a day and REVERSES SIGN past 24 hours.
+  No contract version names a threshold, so the sign of that comparison is set by
+  a choice nobody has made. This joins INDIVIDUATION, ADJUDICATION and AGGREGATION
+  as knobs that move a published figure without being named beside it, and the row
+  headed "OPEN 2026-09-13 - NO GRAIN RULE, NO AGGREGATION RULE AND NO
+  ADJUDICATOR-DISCLOSURE RULE EXISTS HERE AT ALL" is the same defect one knob
+  short. LW states its own limitation and it is carried here rather than dropped:
+  LW could not run the probe on RC, whose rows cite ledger entries rather than
+  SHAs, so RC's band is still prose-derived and unswept and the two are not like
+  for like. CLOSING LOOKS LIKE a stated threshold, or every `inherited` figure
+  published with the words NO AGE FLOOR attached.
+
+- **OPEN 2026-09-13 - A FINDING ABOUT THIS TREE'S ADVERSARIAL METHOD, NOT ABOUT
+  ANY CONTRACT.** Our FULL adversarial audit of taxonomy pin v1.2 - the one that
+  produced 5 FATAL, 10 MATERIAL and 4 COSMETIC findings - MISSED the
+  `GATE-EXISTING` against `GATE-ABSENT` tie-breaker defect. MEASURED 2026-09-13:
+  30 of the 36 prevention-set disagreements on OUR OWN corpus touch those two
+  values, 83 percent, and 4 are entirely between them. Three of LW's four blind
+  scorers named that exact call IN ADVANCE as where a scorer would diverge, and
+  neither our audit nor RC's found it. LW's summary, adopted here: READING A
+  CLAUSE AND APPLYING IT TO A ROW FIND DIFFERENT DEFECTS, and after three
+  independent hits that is a pattern rather than an anecdote. CLOSING LOOKS LIKE a
+  stated rule that an adversarial pass over any contract-shaped artifact must
+  include APPLYING it to a sample of real rows, not only reading it - and the rule
+  has to say how many rows, or it is advice rather than a method.
+
+- **OPEN 2026-09-13 - A SIBLING TREE WROTE INTO THIS TREE AND NO CONVENTION IN
+  THE FLEET COVERS THAT.** RC diagnosed the relative-hook-path defect and APPLIED
+  THE FIX HERE, at operator instruction, landed at `d359bcd`. The fix is correct
+  and the authorisation was the operator's. THE GAP IS THAT NOTHING WRITTEN
+  ANYWHERE SAYS WHAT THIS IS. Every cross-tree convention this fleet has written
+  assumes a tree only ever writes its own bytes, and an unrecorded exception to
+  that assumption is indistinguishable from a violation of it - the halt-and-ping
+  ruling in `CLAUDE.md` reaches OUTBOUND writes under its clause (c) and says
+  nothing about INBOUND ones. CLOSING LOOKS LIKE a stated rule naming who may
+  write here, on whose authorisation, and how the write is recorded so a later
+  reader can tell an authorised cross-tree fix from an accident. Until then the
+  precedent is THIS row and not the commit, and no tree may cite `d359bcd` as
+  permission.
 
 ## Next
 

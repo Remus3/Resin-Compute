@@ -48,6 +48,19 @@ is the pure deterministic compute engine inside it.
 - **Commit messages with special characters:** use `git commit -F <tmpfile>`
   (ASCII-only) or a single-quoted here-string. Never a double-quoted here-string
   or a piped string - BOM and ANSI-mangle risk, same root cause as the dash rule.
+- **The commit message file goes in the SESSION SCRATCHPAD, never a shared tmp
+  path.** Commit with `git commit -F <scratchpad-file>`. Measured in this tree
+  2026-09-12: a message file staged under the SHARED Git tmp path was overwritten
+  by a CONCURRENT session in the window between our write and our read, and one
+  commit first landed carrying ANOTHER tree's commit message. Under Git Bash on
+  this host a `/tmp` redirect resolves into the Git INSTALLATION directory and not
+  the `C:` drive root, so a litter check at `C:\` reports clean while the litter
+  sits elsewhere - the wrong place was searched, which is why the collision read as
+  impossible. **No gate exists for this and probably none can.** The vulnerable
+  window closes before `git commit` is even invoked, so a pre-commit or pre-push
+  hook has nothing left to inspect: by the time any hook runs the message is a
+  well-formed file that is simply the wrong one. Discipline is the whole control
+  here; do not go looking for a guard that catches it.
 - **State assumptions explicitly before coding.**
 - **Live-state-first.** Derive state from the current response only. No
   hardcoding, no stale cache treated as truth.
