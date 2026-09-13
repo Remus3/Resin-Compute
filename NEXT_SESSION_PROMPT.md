@@ -31,8 +31,10 @@ Measured in a SHELL invocation from the repo root:
   python -m ruff check .               All checks passed
   python -m mypy                       Success, 36 source files - ADVISORY ONLY
   python tools/precommit_gate.py --scan-files   selected=5 scanned=5 exempt=0
-CI: ci AND docs-guards both fired at f12d3a8 and were IN PROGRESS when this block
-was written - check them, do not assume.
+CI: ci AND docs-guards BOTH fired at f12d3a8 and BOTH completed success. The
+hand-off commit that carries this block lands after it and fires docs-guards
+only, because ci.yml carries paths-ignore '**/*.md'. Check that one; a commit
+cannot report its own CI from inside itself.
 
 A BARE precommit_gate.py RUN IS A VACUOUS PASS. Measured 2026-09-13: with a
 CLEAN INDEX it prints nothing and exits 0, because it is STAGED mode over an
