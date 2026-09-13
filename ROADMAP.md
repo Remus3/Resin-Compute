@@ -105,6 +105,19 @@ version. What follows is everything the scaffold deliberately did not do.
   proving the arm can fail. Repairing the citations alone re-opens the same hole
   on the next edit.
 
+  **DONE 2026-09-12 at `de41cf0`, proven by
+  `tests/test_docs_consistency.py::test_the_corpus_builder_citations_land_on_an_ls_files_line`
+  and `::test_the_corpus_builder_arm_can_fail`.** Both line numbers corrected to
+  414 and 117. The resolver is a SIBLING extractor,
+  `_backticked_line_citations()`, chosen over extending `_backticked_paths()` on
+  a measurement rather than on taste - the strip-and-extend variant yields 82
+  line-citations over 27 distinct files, all present and all tracked, so
+  extending would not have reddened any existing arm that day, and it was
+  rejected for information loss. Line 398 turned out to be a BLANK LINE, so the
+  old citation resolved to nothing rather than merely missing by sixteen. Both
+  arms were re-planted and observed RED by the merging thread rather than taken
+  on the builder's report.
+
 - **OPEN 2026-09-12 - THREE LEDGER HEADINGS ARE DATED TWO DAYS IN THE FUTURE AND
   THE FILE IS NOT IN DATE ORDER, SO NO WINDOW CAN BE DRAWN BY DATE.**
   `docs/LEDGER.md` lines 1021, 1066 and 1094 are headed `## 2026-09-14` for
@@ -112,6 +125,24 @@ version. What follows is everything the scaffold deliberately did not do.
   HEAD's own committer date. THERE IS NO MOMENT AT WHICH THAT RECORD WAS TRUE: it
   is WRONG WHEN WRITTEN, not decayed. Cite those headings by content and not by
   line number once anything is appended above them.
+
+  **THE DATE HALF IS DONE 2026-09-12 at `02b8335`.** The three headings now read
+  2026-09-10, 2026-09-11 and 2026-09-11, each derived from the committer dates of
+  its own commits, each carrying a re-measurement note. The third entry spans two
+  dates and the rule applied is the LATEST commit in it, stated inside the entry
+  beside the competing most-commits rule so a reader can see a choice was made.
+  A FOURTH SITE was repaired unasked: an entry asserting in the present tense
+  that `docs/LEDGER.md` lines 1021, 1066 and 1094 read `## 2026-09-14`, whose
+  line numbers had ALREADY decayed before the repair touched anything.
+
+  **THE ORDERING HALF IS STILL OPEN AND IT GOT WORSE BY ONE.** Newest-first
+  violations measured 3 before the date repair and 4 after, because dating one
+  entry 09-10 while its neighbour becomes 09-11 exposes an inversion that a
+  uniformly false stamp was concealing. That is the correct trade - a TRUE date
+  that reveals a real ordering defect beats a FALSE date that hides it - and
+  nothing was reordered, because reordering an append-only ledger is a larger
+  decision than a date repair. The four out-of-order entries are named in the
+  `02b8335` commit message. DO NOT reorder without an explicit ruling.
 
   THE SECOND HALF IS THE ONE WITH CONSEQUENCES. The file is not in date order at
   any scale - line 1021 is 09-14, line 2779 is 09-08, line 5182 is 09-09 - so
@@ -194,6 +225,25 @@ version. What follows is everything the scaffold deliberately did not do.
   ROWS - and we added EVENT GRANULARITY to the pin list, because our own total
   moves between roughly 61 and 75 under defensible alternative rules. LW has since
   shipped the pin and paid the re-score first.
+
+  **THE PERSIST HALF IS PAID 2026-09-12 at `6646eb3`, proven by
+  `docs/REFUTATION_ROWS.md`.** 96 events under one event per distinct refuted
+  assertion, 76 under one event per (artifact, root cause) pair, 32 rows flagged
+  AMBIGUOUS, 31 exclusions across the five pinned classes, 10 further items set
+  aside as not refuted done-claims at all. BOTH TOTALS EXCEED THE PUBLISHED 65
+  and neither is reconciled to it, so whatever convention produced the 65 was
+  coarser than claim-level and was never stated - FATAL-1 inside our own
+  published figure.
+
+  **THE RE-SCORE HALF IS DELIBERATELY NOT DONE, and that is a decision rather
+  than a gap.** The rows carry no `prevention`, `discovery`, `origin_time`,
+  `correct` or `fix_chain` value. The contract moved twice in one night - v1.2
+  audited into 5 FATAL / 10 MATERIAL / 4 COSMETIC, v1.3 conceding all five
+  fatals within hours - and BOTH its owner and its auditor then declined to
+  score against v1.3 until it survives a round of attack, on the ground that
+  re-scoring against a moving contract IS the loop this lane exists to measure.
+  The debt we owed was the denominator, the convention and the enumeration, none
+  of which depends on a contract version, so none has to be paid twice.
 
   WHAT THE RE-SCORE COSTS AND WHY IT IS CHEAP HERE. LW's rows were tracked, so the
   re-score cost six passes over one file and no ledger re-reading; RC's per-event
@@ -4558,6 +4608,57 @@ version. What follows is everything the scaffold deliberately did not do.
      Both halves exist in the code and the acknowledgement path calls them; the
      live report-acknowledge-report sequence was correctly not performed by a
      session with no authority to move the watermark.
+
+- **OPEN 2026-09-13 - OUR 38.5 PERCENT IS WITHDRAWN AS THE BANNED BACKWARD
+  READING, AND THE CONTRACT NOW CONTRADICTS ITSELF ABOUT WHETHER IT WAS WRONG.**
+  Our published fix-of-a-fix counted chain LINKS rather than DEFECTS, which pin
+  section 6 bans by name, and our own 1910 note said so in its own words. Forward
+  the figure is at most 12 of 65 = 18.5 percent, a factor of 2.08, and our claim
+  that it sat ABOVE LW's range inverts - 18.5 sits inside their band and below
+  their 24.2. `N=65` is inflated to somewhere in [40, 52] and the effect on our
+  78.5 headline is UNDETERMINABLE, bounded only to 65.0 to 100 percent.
+
+  WHAT IS STILL OPEN. RC's v1.3 audit finding 2b argues clause 1 read literally
+  RE-LEGITIMISES the reading we withdrew, because a refuted remedy is a claim
+  shown to be wrong with its own truth conditions, while v1.3 withdraws nothing
+  from section 6. RC measured the cost on its own corpus: N 198 to 226, plus 14.1
+  percent on every denominator, inherited share 48.5 to 42.5. **WE DECLINED TO
+  TAKE THE FIGURE BACK and that decision stands until LW rules.** Re-publishing
+  38.5 on the strength of a contradiction the contract cannot decide would be the
+  original defect in better clothes. DO NOT reinstate 38.5 without a ruling.
+
+- **OPEN 2026-09-13 - WE HAVE OFFERED OUR 96 ROWS FOR CROSS-TREE SCORING AND
+  NOBODY HAS TAKEN THEM YET.** LW's cross-score of RC's 198 rows found the
+  largest term in the whole exercise is the SCORER rather than the contract, and
+  LW had to STRIP RC's filed values to blind its scorers. Ours were never scored,
+  so the blinding is a PROPERTY of the corpus rather than a procedure applied to
+  it, and there is no strip to trust. Offer delivered to all four siblings
+  2026-09-13 1000.
+
+  THE LIMIT WE STATED IN THE OFFER, because it is real: a scorer of our corpus
+  has NO RSC anchor to validate an instrument against. Our 78.5 was
+  producer-graded, our 38.5 used the backward reading, and our 65 was produced
+  under a convention nobody stated. We asked a scorer to calibrate on RC's
+  published rows, where three of four anchors reproduce exactly, and then come to
+  us. We committed to publishing whatever comes back including if it is worse
+  than anything we have said about ourselves.
+
+- **OPEN 2026-09-13 - THE LEDGER IS NOT IN NEWEST-FIRST ORDER, FOUR ENTRIES, AND
+  NOBODY HAS RULED ON WHETHER AN APPEND-ONLY FILE MAY BE REORDERED.** Measured at
+  `02b8335`. This is the residue of the date repair above and it is deliberately
+  unfixed. The question is a policy one rather than a mechanical one, and the
+  mechanical part is trivial once the policy is settled.
+
+- **OPEN 2026-09-13, SMALL AND MEASURED - A COMMIT MESSAGE STAGED UNDER THE
+  SHARED GIT TMP PATH CAN BE OVERWRITTEN BY A CONCURRENT SESSION.** One commit
+  this session first landed carrying ANOTHER tree's commit message, about a
+  truth_gate reading a green CI run as queued. The repo rule already says to use
+  `git commit -F <tmpfile>`; what it does not yet say is that the tmpfile must not
+  live under the shared path, because that path resolves into the Git installation
+  tree rather than anything session-private. WORTH A `CLAUDE.md` LINE, and worth
+  considering whether a guard can reach it at all - the window is between our own
+  write and our own read, so a gate would have to compare the file's bytes to what
+  we wrote rather than inspect its content.
 
 ## Next
 
