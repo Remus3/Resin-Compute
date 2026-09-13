@@ -437,3 +437,191 @@ def test_the_ascii_guard_catches_a_control_byte():
         assert byte < 0x20 and byte not in _ALLOWED_CONTROL
     for byte in (0x09, 0x0A, 0x0D):
         assert byte in _ALLOWED_CONTROL
+
+
+# ---------------------------------------------------------------------------
+# Line-number citations - the `path:NNN` form
+#
+# WHY THIS SECTION EXISTS, and it is measured rather than hypothetical.
+# `_backticked_paths()` above SILENTLY DROPS every `path:NNN` token. Trace it
+# with `tools/precommit_gate.py:398`: `tail` becomes `precommit_gate.py:398`,
+# which contains a dot and ends with NO entry in KNOWN_SUFFIXES, so the function
+# hits its `continue`. The token never reaches the existence check or the
+# trackedness check. So the guard whose entire job is policing citations in the
+# docs was BLIND to the citation form that carries a line number, and CLAUDE.md
+# carried two wrong line numbers - 398 for a real 414, and 86 for a real 117 -
+# with every arm in this file green.
+#
+# WHY A SIBLING EXTRACTOR RATHER THAN EXTENDING `_backticked_paths()`. The
+# choice is STRUCTURAL, not a risk dodge. That function returns a set of bare
+# path strings and its six callers - lines 211, 219, 227, 234, 270 and 278 -
+# all feed each element straight into `(REPO_ROOT / p).exists()` or
+# `_is_tracked(p)`. Returning the raw `path:NNN` token would break all six,
+# because no such path is on disk. Stripping the `:NNN` before returning would
+# keep them working but DISCARDS the line number, which is the one datum the
+# arms below exist to check. A sibling extractor is the only shape that can
+# carry both.
+#
+# MEASURED, so that the structural argument is not doing the work alone: the
+# strip-and-extend variant was evaluated over every tracked `.md` in this tree
+# and found 82 line-number citations naming 27 distinct files, all 27 of which
+# exist on disk AND are tracked by git. So extending would NOT have reddened any
+# existing arm today. It was rejected for losing the line number, not for
+# breaking a neighbour.
+# ---------------------------------------------------------------------------
+
+
+#: Suffix alternation built FROM KNOWN_SUFFIXES rather than retyped, so the two
+#: extractors cannot drift about what counts as a file.
+_SUFFIX_ALTERNATION = "|".join(sorted(re.escape(suffix.lstrip(".")) for suffix in KNOWN_SUFFIXES))
+
+#: A backticked citation of the form `path/to/file.py:123` or `...:123-456`.
+#: Anchored at the start and deliberately indifferent to what follows the line
+#: number: docs/LEDGER.md cites
+#: `tests/test_task_liveness.py:836: AssertionError, assert "LIVE" in out`,
+#: which is a real citation with a pasted failure line glued to it.
+_LINE_CITATION = re.compile(
+    r"^((?:[A-Za-z0-9_.\-]+/)*[A-Za-z0-9_.\-]+\.(?:" + _SUFFIX_ALTERNATION + r")):(\d+)(?:-(\d+))?"
+)
+
+#: The three guard corpus-builders CLAUDE.md cites by line in its
+#: cross-repo-inbox section. Every one of the three makes the SAME claim: that
+#: the cited line is where that guard builds its corpus from `git ls-files`.
+#: Listed by path only - the line numbers are read out of the document, which is
+#: what lets a wrong one fail here.
+CORPUS_BUILDER_CITATIONS = (
+    "tools/precommit_gate.py",
+    "tests/test_no_sibling_names.py",
+    "tests/test_docs_consistency.py",
+)
+
+#: The token the cited line must actually contain. The claim in CLAUDE.md is
+#: about `git ls-files`, and that is the substring an out-of-range check can
+#: never stand in for: 398 and 414 are both inside a 700-line file.
+_CORPUS_BUILDER_TOKEN = "ls-files"
+
+
+def _tracked_markdown() -> list[str]:
+    """Every markdown file git stores, as repo-relative posix paths.
+
+    Derived from the SAME cached `git ls-files` the trackedness predicate uses,
+    so the corpus and the predicate cannot disagree, and a nested foreign
+    checkout cannot contribute - git does not store another repository's files.
+    """
+    files, _ = _tracked_paths()
+    found = sorted(name for name in files if name.endswith(".md"))
+    assert found, "git stores no markdown at all - zero out of zero is not a pass"
+    return found
+
+
+def _backticked_line_citations(text: str) -> list[tuple[str, int, int]]:
+    """Every backticked `path:NNN` citation, as (path, first line, last line).
+
+    A list rather than a set: the same citation appearing twice in one document
+    is two claims, and both are worth resolving. A bare `path` with no line
+    number is NOT returned - that form is `_backticked_paths()`'s business.
+    """
+    found: list[tuple[str, int, int]] = []
+    for token in re.findall(r"`([^`\n]+)`", text):
+        match = _LINE_CITATION.match(token.strip())
+        if match is None:
+            continue
+        first = int(match.group(2))
+        last = int(match.group(3)) if match.group(3) else first
+        found.append((match.group(1), first, last))
+    return found
+
+
+def test_every_line_number_citation_resolves():
+    """ARM 1, generic: the cited file exists, is tracked, and HAS that line."""
+    failures: list[str] = []
+    for doc in _tracked_markdown():
+        for path, first, last in _backticked_line_citations(_read(doc)):
+            target = REPO_ROOT / path
+            if not target.exists():
+                failures.append(f"{doc} -> {path}:{first} names a file that does not exist")
+                continue
+            if not _is_tracked(path):
+                failures.append(f"{doc} -> {path}:{first} names a file git does not store")
+                continue
+            total = len(target.read_text(encoding="utf-8", errors="replace").splitlines())
+            if first < 1 or last > total:
+                failures.append(f"{doc} -> {path}:{first}-{last} is outside that file's {total} lines")
+    assert not failures, "line-number citations that do not resolve: " + "; ".join(sorted(failures))
+
+
+def test_the_line_citation_sweep_walked_a_real_corpus():
+    """A parser that recognised no citation would make the arm above vacuous.
+
+    The floor is far below the corpus - 82 citations when this arm was written -
+    and is set low on purpose, because the docs gain and lose citations
+    constantly and this arm exists to catch a parser that found NOTHING.
+    """
+    citations = sum(len(_backticked_line_citations(_read(doc))) for doc in _tracked_markdown())
+    assert citations >= 40, f"the line-citation sweep only walked {citations} citations - the parser is broken"
+
+
+def test_the_line_citation_parser_is_narrow_and_not_blind():
+    """Both directions, so neither a parser stuck on None nor one that swallows
+    ordinary paths can survive. The last probe is the LEDGER's real shape: a
+    citation with a pasted failure line glued onto it."""
+    recognised = _backticked_line_citations(
+        "`tools/precommit_gate.py:414` `ops/loop/winmutex.py:37-38` "
+        "`core/types.py` `engines/objectives.expand_character_goal` "
+        '`tests/test_task_liveness.py:836: AssertionError, assert "LIVE" in out`'
+    )
+    assert recognised == [
+        ("tools/precommit_gate.py", 414, 414),
+        ("ops/loop/winmutex.py", 37, 38),
+        ("tests/test_task_liveness.py", 836, 836),
+    ], recognised
+
+
+def test_the_corpus_builder_citations_land_on_an_ls_files_line():
+    """ARM 2, semantic: the cited line must really be the `git ls-files` call.
+
+    This is the arm with teeth. An out-of-range check cannot tell 398 from 414 -
+    both are inside a 700-line file - so only reading the cited line and looking
+    for what the prose claims is there can fail on the real defect.
+    """
+    cited = {
+        path: (first, last)
+        for path, first, last in _backticked_line_citations(_read("CLAUDE.md"))
+        if path in CORPUS_BUILDER_CITATIONS
+    }
+    absent = [path for path in CORPUS_BUILDER_CITATIONS if path not in cited]
+    assert not absent, (
+        f"CLAUDE.md no longer cites a line in {absent}, so this arm is not measuring what it claims - "
+        "either restore the citation or retire it from CORPUS_BUILDER_CITATIONS"
+    )
+
+    wrong: list[str] = []
+    for path, (first, last) in sorted(cited.items()):
+        lines = (REPO_ROOT / path).read_text(encoding="utf-8").splitlines()
+        if first < 1 or last > len(lines):
+            wrong.append(f"CLAUDE.md cites {path}:{first} but that file has only {len(lines)} lines")
+            continue
+        window = lines[first - 1 : last]
+        if not any(_CORPUS_BUILDER_TOKEN in line for line in window):
+            wrong.append(
+                f"CLAUDE.md cites {path}:{first} as the {_CORPUS_BUILDER_TOKEN} corpus builder, "
+                f"but line {first} reads {lines[first - 1].strip()!r}"
+            )
+    assert not wrong, "; ".join(wrong)
+
+
+def test_the_corpus_builder_arm_can_fail():
+    """Non-vacuity for ARM 2, without mutating the tree.
+
+    The arm above passes on sight once the numbers are right, and an arm that
+    cannot fail is not a gate. So the CHECK is re-run here against a known-wrong
+    number and a known-right one, proving the comparison discriminates. 398 is
+    the exact number CLAUDE.md carried while claiming to point at the glyph
+    gate's corpus builder; 414 is where that call really is.
+    """
+    lines = (REPO_ROOT / "tools/precommit_gate.py").read_text(encoding="utf-8").splitlines()
+    assert len(lines) > 414, "precommit_gate.py shrank below 414 lines - re-measure before trusting this arm"
+    assert _CORPUS_BUILDER_TOKEN in lines[413], f"line 414 no longer reads as the corpus builder: {lines[413]!r}"
+    assert _CORPUS_BUILDER_TOKEN not in lines[397], (
+        f"line 398 now also contains {_CORPUS_BUILDER_TOKEN!r} - this arm can no longer tell the two apart"
+    )
