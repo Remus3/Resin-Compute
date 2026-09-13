@@ -164,6 +164,14 @@ describes and the shape RC's RECORD DECAY axis does not reach. The file is also
 not in date order at any scale, so anyone re-deriving our window by date gets a
 different set of entries than the commit range gives.
 
+CORRECTED 2026-09-12, SAME DAY: the finding was right and the three stamps are now
+REPAIRED, so the present tense above no longer describes the file - the headings
+read 2026-09-10, 2026-09-11 and 2026-09-11, each carrying its own re-measurement
+note, and the entry headed "Six guards landed and four of the arms guarding them
+could not fail" carries the reconciliation. The three line numbers cited above had
+ALREADY DECAYED before the repair and are not worth restating, which is the reason
+this file is cited by heading and never by line.
+
 THIRD, THE FILE EVERY SESSION HERE READS FIRST MISDIRECTS ON TWO OF THE THREE
 GUARDS IT NAMES. Probed at HEAD `90e5e1f`: `tools/precommit_gate.py:398` is a
 BLANK line and the `git ls-files` call is at line 414, off by 16;
@@ -1240,17 +1248,31 @@ identical on both sides, so the copy was not a different population. The defect 
 ABSENT here and its cause in that copy is recorded as UNDIAGNOSED rather than as
 flaky.
 
-A STAMP DISCREPANCY, recorded because it will confuse the next reader. The three
-entries above this one are stamped 2026-09-14, and the commits they describe carry
-committer dates of 2026-09-10 and 2026-09-11, NOT a single date. CORRECTED
+A STAMP DISCREPANCY, recorded because it confused the next reader, and now REPAIRED
+rather than merely noted. AS WRITTEN, the three entries immediately FOLLOWING this
+one were stamped 2026-09-14, and the commits they describe carry committer dates of
+2026-09-10 and 2026-09-11, NOT a single date. CORRECTED
 2026-09-12: the original wording here said `git log --date=iso` reads 2026-09-11
 for `72c7041`, `0d1fa70`, `77408ad`, `f77c4ad` and `76ccdeb` ALIKE, and that was
 false - re-measured, three of the five read 2026-09-10 (`72c7041` 22:59:47,
 `77408ad` 22:59:52, `f77c4ad` 23:20:45) and two read 2026-09-11 (`0d1fa70`
 00:25:36, `76ccdeb` 00:26:01), all at -0500. The run straddled midnight, which is
-the cause the word ALIKE concealed. The CONCLUSION stands unchanged and was never
-in doubt: not one of the five carries 2026-09-14, so the stamps above are not
+the cause the word ALIKE concealed. The CONCLUSION stood unchanged and was never
+in doubt: not one of the five carries 2026-09-14, so those stamps were not
 evidence of a later session.
+
+CORRECTED AGAIN 2026-09-12, ON TWO COUNTS, and this paragraph is now HISTORY of a
+closed defect rather than a live description of the file. FIRST, the word ABOVE was
+wrong: this passage said the three entries sit above this one, and measured by line
+number the three 2026-09-14 headings sat at HIGHER line numbers than this
+paragraph, which in a newest-first file puts them BELOW it in reading order and
+OLDER in the ordering convention - it now reads as following this one. SECOND, the
+discrepancy itself is GONE from the file: the three stamps were rewritten in place
+to 2026-09-10, 2026-09-11 and 2026-09-11, each entry carrying its own
+re-measurement note under the heading it corrects, and the third recording that its
+three commits straddle midnight and that the latest-commit-in-the-entry rule was
+applied. A reader who finds no 2026-09-14 stamp in this file is reading the
+repaired state, not a missing defect.
 
 Merged files and their guards: `tools/git_subprocess_census.py`
 (`tests/test_git_subprocess_census.py`); `core/provenance.py`
@@ -1258,10 +1280,16 @@ Merged files and their guards: `tools/git_subprocess_census.py`
 modules that guard themselves, `tests/test_task_state_claims.py`,
 `tests/test_docs_hook_commands.py` and `tests/test_conftest_git_gate_sites.py`.
 
-## 2026-09-14 - The commit gate read an unreadable corpus as a clean one, and the fix ran on its own commit
+## 2026-09-10 - The commit gate read an unreadable corpus as a clean one, and the fix ran on its own commit
 
 Files: `tools/precommit_gate.py`, `tests/test_precommit_gate_corpus.py` (new).
 Landed at `72c7041`.
+
+CORRECTED 2026-09-12: this heading was stamped 2026-09-14, a date two days in the
+FUTURE of the session that wrote it and carried by no commit in the entry.
+Re-measured with `git log -1 --date=iso --format=%cd 72c7041`, the one commit this
+entry lands: 2026-09-10 22:59:47 -0500, so the stamp now reads 2026-09-10. Nothing
+else in the entry changed.
 
 **THE DEFECT, AND IT IS AN INDISTINGUISHABILITY RATHER THAN A CRASH.** `_git`
 returned `out.stdout` and never consulted `out.returncode`, and its except branch
@@ -1303,10 +1331,16 @@ Plus the only valid test of a hook gate, run end to end: a banned glyph staged b
 explicit path, a real `git commit` attempted, exit 1 naming both the file and the
 glyph, HEAD unchanged afterwards.
 
-## 2026-09-14 - Every non-zero exit was reported as a refusal, so one class sent the reader hunting a cause that does not exist
+## 2026-09-11 - Every non-zero exit was reported as a refusal, so one class sent the reader hunting a cause that does not exist
 
 Files: `ops/check_task_liveness.py`, `tests/test_task_liveness.py`. Landed at
 `0d1fa70`.
+
+CORRECTED 2026-09-12: this heading was stamped 2026-09-14, a date two days in the
+FUTURE of the session that wrote it and carried by no commit in the entry.
+Re-measured with `git log -1 --date=iso --format=%cd 0d1fa70`, the one commit this
+entry lands: 2026-09-11 00:25:36 -0500, so the stamp now reads 2026-09-11. Nothing
+else in the entry changed.
 
 **THE DEFECT.** `collect_facts` mapped EVERY non-zero return code to one
 operator-facing reason naming an account and a TaskPath. For the ConsoleHost
@@ -1331,10 +1365,22 @@ filed in `ROADMAP.md` rather than decided here.
 AssertionError with both codes spelled as literals, plus two controls: exit 1
 keeps the generic headline, and exit 0 with a payload is returned verbatim.
 
-## 2026-09-14 - Two figures this tree wrote down were refuted, the denominator was a third mistake on the same passage, and a guard built to stop a false green converts into a false red
+## 2026-09-11 - Two figures this tree wrote down were refuted, the denominator was a third mistake on the same passage, and a guard built to stop a false green converts into a false red
 
 Files: `ROADMAP.md`, `docs/LEDGER.md`, `NEXT_SESSION_PROMPT.md`. Landed at
 `77408ad`, `f77c4ad` and `76ccdeb`.
+
+CORRECTED 2026-09-12, AND THE CHOICE IS STATED BECAUSE THERE IS NO SINGLE RIGHT
+ANSWER. This heading was stamped 2026-09-14, a date two days in the FUTURE of the
+session that wrote it and carried by none of its commits - and re-measured with
+`git log -1 --date=iso --format=%cd`, the three do not agree with each other
+either: `77408ad` reads 2026-09-10 22:59:52, `f77c4ad` reads 2026-09-10 23:20:45
+and `76ccdeb` reads 2026-09-11 00:26:01, all at -0500, so this entry's work
+STRADDLED MIDNIGHT and the span is real rather than a measurement error. The rule
+applied is the LATEST COMMIT IN THE ENTRY, `76ccdeb`, on the grounds that an entry
+is dated by when the work it describes finished, so the stamp now reads 2026-09-11;
+a reader applying the most-commits-carry rule instead would get 2026-09-10, and the
+midnight straddle is exactly why the two rules disagree.
 
 **GATES MEASURED AT `76ccdeb`, STAMPED AS A READING AT THAT COMMIT AND NOT AS A
 LIVE CLAIM.** Local interpreter 3.14 while CI pins 3.11, so every local green here
