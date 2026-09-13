@@ -171,10 +171,24 @@ QUIET_SHAPE = re.compile(r"\A\s*\Z|^unread: \d+\s*$", re.MULTILINE)
 #: restated here - which is the exact-lookup property working rather than an
 #: inconvenience. A hook cannot acquire a flag without somebody saying what it
 #: must now print, and neither of these labels changes the stdout at all.
+#:
+#: SO IS `$CLAUDE_PROJECT_DIR`, AND SO ARE THE DOUBLE QUOTES AROUND IT. The
+#: declared script paths went absolute on 2026-09-13 at operator instruction.
+#: A session's working directory DRIFTS into `moon_sync_inbox/` while notes are
+#: being read, and a relative `scripts/watch_inbox.py` then resolves to
+#: `<repo>/moon_sync_inbox/scripts/watch_inbox.py`, which does not exist - so
+#: the UserPromptSubmit hook fails and EVERY prompt is blocked. The quotes are
+#: load-bearing on top of that: this checkout path contains a real space, and
+#: an unquoted expansion splits there and fails silently. Tidying either the
+#: variable or the quotes away re-breaks the prompt path, and this table is
+#: where that edit is forced to be noticed. The absolute-path guard still
+#: passes because `PROJECT_DIR_VARS` is unwrapped before a token is judged.
 EXPECTED_SHAPE = {
-    "python scripts/watch_inbox.py --source sessionstart": REPORT_SHAPE,
-    "python scripts/watch_inbox.py --quiet-when-empty --source userpromptsubmit": QUIET_SHAPE,
-    "python tools/caveman_default.py": BANNER_SHAPE,
+    'python "$CLAUDE_PROJECT_DIR/scripts/watch_inbox.py" --source sessionstart': REPORT_SHAPE,
+    'python "$CLAUDE_PROJECT_DIR/scripts/watch_inbox.py" --quiet-when-empty --source userpromptsubmit': (
+        QUIET_SHAPE
+    ),
+    'python "$CLAUDE_PROJECT_DIR/tools/caveman_default.py"': BANNER_SHAPE,
 }
 
 #: sha256 of the `_BANNER` string literal in `tools/caveman_default.py`, and its

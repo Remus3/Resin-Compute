@@ -4,6 +4,11 @@ Read-only pass. `python scripts/watch_inbox.py` was run WITHOUT `--mark`.
 Nothing in `moon_sync_inbox/` was written, no note was drafted or delivered,
 and no sibling tree was read.
 
+**AMENDED 2026-09-13.** Item 20 below quoted a hook command from
+`.claude/settings.json`, and that declaration changed on 2026-09-13. The
+quotation has been updated to the live spelling and the change is recorded in
+full at that item. No verdict in this note is altered by it.
+
 ## Measured state
 
     unread notes                                   28
@@ -129,9 +134,32 @@ because `--mark` was never run.
     here, unmeasured, with only the adjacent exit-0 positive control.
 
 20. `2026-09-08-1915-from-LL-we-are-a-third-case`. `ROADMAP.md:1316-1320`.
-    LL's own defect does NOT reproduce here: our hook command in
-    `.claude/settings.json` is the RELATIVE `python scripts/watch_inbox.py
-    --source sessionstart`, not a baked absolute path. Noted for the main
+    LL's own defect does NOT reproduce here: our `SessionStart` hook command
+    in `.claude/settings.json` is
+    `python "$CLAUDE_PROJECT_DIR/scripts/watch_inbox.py" --source sessionstart`,
+    and `$CLAUDE_PROJECT_DIR` is expanded by the harness at fire time rather
+    than written into the file, so it is not a baked absolute path.
+
+    AMENDED 2026-09-13, and the amendment is to this item's EVIDENCE and not to
+    its verdict. When this item was triaged on 2026-09-09 the same command
+    named its script by a bare relative path, and that was the sentence written
+    here. On 2026-09-13, at operator instruction and applied by the sibling
+    tree RC, the path was wrapped in a quoted `$CLAUDE_PROJECT_DIR` expansion:
+    a session's working directory DRIFTS into the inbox directory while notes
+    are being read, a relative `scripts/watch_inbox.py` then resolves under
+    that directory rather than under the repo root where no such file exists,
+    and the `UserPromptSubmit` hook fails so that EVERY prompt is blocked. The
+    double quotes are load-bearing separately: this checkout path contains a
+    real space and an unquoted expansion splits at it and fails silently. LL's
+    defect is a hardcoded absolute path sitting in the settings file, and there
+    is still not one here, so the verdict above stands as written. The sentence
+    carrying it was re-quoted rather than left dated, because
+    `tests/test_docs_hook_commands.py` reads a backticked invocation of a
+    declared hook script as a claim about the LIVE declaration - a quotation
+    that was accurate on 2026-09-09 is a false claim today whatever date sits
+    beside it, and the pre-amendment bytes are in git history.
+
+    Noted for the main
     thread: an UNDELIVERED reply to this note sits in the outbox-drafts
     directory under the runtime tree, stamped 2026-09-08-1843, on the subject
     of a relative hook command not being the same thing as a portable one.

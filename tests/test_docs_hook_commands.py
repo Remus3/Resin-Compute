@@ -85,6 +85,26 @@ import pytest
 
 from tests.conftest import require_git_repository
 
+#: THE PROJECT-DIR UNWRAPPER IS IMPORTED, NOT RE-WRITTEN, AND THAT IS THE ROOT
+#: CAUSE OF THE 2026-09-13 BREAKAGE STATED AS CODE.
+#:
+#: Two modules in this tree derive facts about the same three hook commands.
+#: `tests/test_session_hooks.py` grades the declaration and has always known
+#: that a token may be spelled `$CLAUDE_PROJECT_DIR/<path>`; this module graded
+#: the DOCUMENTS and did not. When the declared paths went absolute on
+#: 2026-09-13 the two derivations disagreed, `_declared_scripts` returned a set
+#: of `$CLAUDE_PROJECT_DIR/...` strings that no document could ever match, and
+#: the sweep graded ZERO citations - caught only because the non-vacuity arms
+#: refuse a zero-out-of-zero pass.
+#:
+#: The fix is ONE unwrapper, not two that agree today. A local copy here would
+#: be a THIRD mechanism and would drift by exactly the same route the moment
+#: the harness ships a second spelling of the variable. A shared non-test helper
+#: module would be tidier still - `tests/_hook_declaration.py`, say - but that
+#: file is not on this slice's write-list, and importing the one that already
+#: exists achieves the single-mechanism property without inventing a third.
+from tests.test_session_hooks import _repo_relative
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 
@@ -201,8 +221,21 @@ def _declared_scripts(commands: tuple[str, ...]) -> frozenset[str]:
     one of these. Anything else is some other script and none of this file's
     business - `python scripts/install_hooks.py` in `CLAUDE.md` is a real
     instruction to a reader and is not a hook declaration.
+
+    THE TARGETS ARE REPO-RELATIVE, whatever the declaration spells them as.
+    `_repo_relative` strips a `$CLAUDE_PROJECT_DIR/` wrapper and normalises
+    separators, so the set is in the same coordinate system a document writes
+    a path in, and `(REPO_ROOT / script)` still resolves. Without it this
+    function answered `{'$CLAUDE_PROJECT_DIR/scripts/watch_inbox.py', ...}` and
+    no citation in the tree could match anything in it.
     """
-    return frozenset(token for command in commands for token in _tokens(command) if token.endswith(".py"))
+    targets: set[str] = set()
+    for command in commands:
+        for token in _tokens(command):
+            target = _repo_relative(token)
+            if target.endswith(".py"):
+                targets.add(target)
+    return frozenset(targets)
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +310,13 @@ def _citations(document: str, text: str, scripts: frozenset[str]) -> list[Citati
             # appears after a leading interpreter token. Grading bare pointers
             # was this file's first draft, and it demanded edits to `ROADMAP.md`
             # and `docs/LEDGER.md` for citations that were never wrong.
-            if not any(token in scripts for token in tokens[1:]):
+            #
+            # UNWRAPPED ON THIS SIDE TOO. `scripts` is repo-relative, so a
+            # document that transcribes the declaration verbatim - variable,
+            # quotes and all - has to be brought into the same coordinate
+            # system before it can be recognised. Normalising only one side is
+            # what broke this sweep on 2026-09-13.
+            if not any(_repo_relative(token) in scripts for token in tokens[1:]):
                 continue
             absolute = block_start + match.start()
             found.append(
@@ -359,18 +398,70 @@ def test_every_quoted_hook_command_matches_the_live_declaration():
 # ---------------------------------------------------------------------------
 
 
+def _command_values(payload: object) -> list[str]:
+    r"""Every `"command"` string value anywhere in the decoded settings file.
+
+    A SECOND AND DELIBERATELY INDEPENDENT reading, which is the whole point of
+    the arm below: this walk knows nothing about the `hooks` structure that
+    `_declared_commands` navigates, so the two can only agree by both having
+    read the live file.
+
+    IT DECODES RATHER THAN PATTERN-MATCHES, and that is the 2026-09-13 repair.
+    The arm previously ran `re.findall(r'"command"\s*:\s*"([^"]*)"', ...)` over
+    the raw text. That character class stops at the first `"` in the file's
+    bytes, and a JSON-escaped `\"` is one - so the moment the declared commands
+    acquired `\"$CLAUDE_PROJECT_DIR/...\"` the pattern extracted `python \`
+    three times and the arm reddened having measured nothing at all about any
+    command. A regex over JSON string escapes is the defect; the escape is not,
+    and widening the character class would only move the next collision.
+    """
+    found: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key == "command" and isinstance(value, str):
+                found.append(value)
+            else:
+                found.extend(_command_values(value))
+    elif isinstance(payload, list):
+        for item in payload:
+            found.extend(_command_values(item))
+    return found
+
+
 def test_the_declaration_is_read_from_the_live_settings_file():
     """Not a fixture, not a restatement - the file the hooks are declared in."""
     assert SETTINGS.is_file(), f"{SETTINGS_CITATION} is missing"
     commands = _declared_commands()
     assert commands, "the settings file declares no command hook at all"
-    assert set(commands) <= set(_normalise(c) for c in re.findall(r'"command"\s*:\s*"([^"]*)"', SETTINGS.read_text(encoding="utf-8"))), (
-        "a command reached the checker that is not a `command` string in the settings file"
+    literal = {_normalise(c) for c in _command_values(json.loads(SETTINGS.read_bytes().decode("utf-8")))}
+    assert literal, f"{SETTINGS_CITATION} carries no `command` value anywhere, so this arm compares against nothing"
+    assert set(commands) <= literal, (
+        "a command reached the checker that is not a `command` string in the settings file: "
+        f"{sorted(set(commands) - literal)}"
     )
     scripts = _declared_scripts(commands)
     assert scripts, "no declared hook command invokes a .py target, so nothing can ever be in scope"
     for script in scripts:
         assert (REPO_ROOT / script).is_file(), f"the declaration invokes {script}, which is not here"
+
+
+def test_the_command_reader_survives_an_escaped_quote_a_regex_splits_on():
+    r"""Non-vacuity for `_command_values`, driven by PLANTED json in memory.
+
+    The control comes first and is the whole arm: it shows the discarded
+    pattern really does mis-read this input, so replacing it with a decoder was
+    a repair and not a restyling. Planted rather than measured against the live
+    file, because an arm that asserted the live declaration still carries an
+    escaped quote would redden the day somebody legitimately removes one.
+    """
+    planted = {"hooks": {"Ev": [{"hooks": [{"type": "command", "command": 'python "a b/c.py" --flag'}]}]}}
+    text = json.dumps(planted)
+
+    naive = re.findall(r'"command"\s*:\s*"([^"]*)"', text)
+    assert naive == ["python \\"], f"the control did not reproduce the regex defect, so it proves nothing: {naive}"
+
+    decoded = _command_values(json.loads(text))
+    assert decoded == ['python "a b/c.py" --flag'], f"the decoder did not recover the command either: {decoded}"
 
 
 def test_at_least_one_declared_command_carries_a_long_flag():
@@ -431,11 +522,36 @@ def test_the_detector_leaves_an_exact_quotation_alone():
 
 def test_a_quotation_survives_being_hard_wrapped_across_a_line():
     """The bottom of the triage note spelled its command across a line break
-    inside the backticks. A parser that stopped at the newline walked past it."""
+    inside the backticks. A parser that stopped at the newline walked past it.
+
+    THE FIXTURE WAS REPAIRED HERE, NOT THE MEMBERSHIP CHECK, and the choice is
+    deliberate. This arm used to build its wrapped command by rejoining
+    `_tokens(live)`, leaning on a round-trip that was identity only while no
+    declared command contained a quote - `_tokens` STRIPS surrounding quotes by
+    design, because the absolute-path and script-target guards need the bare
+    token. On 2026-09-13 the declaration acquired `"..."` around its script
+    path and the rejoin started producing a command the settings file does not
+    contain, so the sweep reported it stale. That was the guard WORKING on a
+    fixture that had drifted, not a false positive to be relaxed away.
+
+    The alternative was to make `_check` compare token-wise instead of
+    string-wise, and it is refused: the contract this module states in its own
+    first line is that a document quotes the LIVE DECLARATION, and comparing
+    after a quote-stripping round-trip would certify a document that spelled
+    the path relatively while the declaration spells it absolutely - which is
+    the exact regression the quoting and the variable were added to prevent.
+
+    So the wrap is now applied to the declared string itself, at its last
+    whitespace boundary, which is what a hard-wrapping editor actually does.
+    """
     live = _a_declared_command()
-    tokens = _tokens(live)
-    assert len(tokens) >= 2, "the live command is too short to wrap"
-    wrapped = " ".join(tokens[:-1]) + "\n" + tokens[-1]
+    head, separator, tail = live.rpartition(" ")
+    assert separator, f"the live command is a single token and cannot be wrapped: {live!r}"
+    wrapped = head + "\n" + tail
+    assert wrapped != live, "the probe did not actually introduce a line break"
+    assert _normalise(wrapped) == live, (
+        f"collapsing the wrap did not restore the declaration, so the fixture is wrong: {_normalise(wrapped)!r}"
+    )
     checked, offenders = _check("planted.md", f"the hook is (`{wrapped}`).", _declared_commands())
     assert checked == 1, f"a hard-wrapped quotation was not graded: checked={checked}"
     assert not offenders, f"a hard-wrapped exact quotation was reported stale: {offenders}"
@@ -708,15 +824,18 @@ def test_the_scope_widening_reaches_a_script_the_whitespace_split_cannot_see():
     with pytest.raises(ValueError):
         shlex.split(command, posix=False)
 
+    # `_repo_relative` on both, because that is the question `_citations` asks.
+    # A control that asked a DIFFERENT question than the code under test would
+    # be measuring nothing about the code under test.
     plain = [token.strip("\"'") for token in command.split()]
-    assert not any(token in scripts for token in plain[1:]), (
+    assert not any(_repo_relative(token) in scripts for token in plain[1:]), (
         f"the whitespace split already found the script, so this control proves nothing: {plain}"
     )
 
     widened, reason = _scope_tokens(command, scripts)
     assert reason, "an unparseable command came back with no reason, so it would read as clean"
     assert widened[0] != script, "the widened script landed at index 0, which `_citations` slices off"
-    assert any(token in scripts for token in widened[1:]), (
+    assert any(_repo_relative(token) in scripts for token in widened[1:]), (
         f"the widening did not reach the declared script: {widened}"
     )
 
