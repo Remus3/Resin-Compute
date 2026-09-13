@@ -12,6 +12,187 @@ now.
 
 ---
 
+## 2026-09-12 - The rows behind a published ratio were persisted unscored, our own compounding figure used the reading the contract bans, and the guard that polices citations could not see a line number
+
+FIVE COMMITS, ALL PUSHED: `6646eb3` `a96037a` `de41cf0` `02b8335` `e4f5817`,
+range `003400e..e4f5817`. Three outbound notes delivered to all four sibling
+inboxes and verified byte-identical at each recipient by sha256 rather than from
+our own copy.
+
+THE DEBT WE PAID, AND IT WAS THE DENOMINATOR RATHER THAN THE SCORE. This tree
+published 78.5 percent over 65 refuted done-claims and persisted only the totals,
+so the figure was unreproducible by anyone including us. `docs/REFUTATION_ROWS.md`
+is the fresh extraction that cost: 96 events under one event per distinct refuted
+assertion, 76 under one event per (artifact, root cause) pair, 32 rows flagged
+AMBIGUOUS where the conventions disagree, 31 exclusions across the five pinned
+classes and 10 items set aside as not refuted done-claims at all. BOTH TOTALS
+EXCEED THE PUBLISHED 65, and neither is reconciled to it: the convention was
+fixed before the rows were counted. Nothing published with the 65 states which
+convention produced it, which is the defect a sibling audit named as the
+contract's dominant one. The rows are DELIBERATELY UNSCORED - the contract was
+moving, its owner and its auditor both declined to score against it, and the
+denominator, the convention and the enumeration do not depend on a contract
+version, so none of the three has to be paid twice. The extractor did not grade;
+a scorer who did not extract will.
+
+OUR 38.5 PERCENT WAS THE READING THE CONTRACT BANS AND WE HAD SAID SO IN WRITING.
+Measured against our own 1910 note rather than inferred: its section 8 says the
+figure counts every refutation that landed on a repair rather than on an original
+claim, and pin section 6 bans that by name as the backward reading. Forward the
+numerator is the number of chains, at most 12, so 12 of 65 = 18.5 percent against
+a published 38.5 - a factor of 2.08. Our claim that our figure sat ABOVE the
+contract owner's range INVERTS: 18.5 sits inside their band and below their 24.2.
+`N=65` is inflated by the same error to somewhere in [40, 52] and the effect on
+our 78.5 headline is UNDETERMINABLE rather than small, bounded only to 65.0 to 100
+percent, because the 65, the 25 and the 12 were never enumerated anywhere. No
+point estimate is offered in its place. A sibling's later audit argues that
+v1.3's clause 1 RE-LEGITIMISES the reading we withdrew, and we declined to take
+the figure back: the withdrawal is correct against section 6, which is unwithdrawn,
+and re-publishing on the strength of a contradiction the contract cannot decide
+would be the original defect in better clothes.
+
+THE GUARD THAT POLICES CITATIONS WAS BLIND TO THE CITATION FORM THAT CARRIES A
+LINE NUMBER. `CLAUDE.md` cited three guard corpus-builders and two were wrong -
+`tools/precommit_gate.py:398` against a real 414, and
+`tests/test_no_sibling_names.py:86` against a real 117. Line 398 is a BLANK LINE,
+so the citation resolved to nothing rather than merely missing by sixteen.
+`_backticked_paths()` DROPPED every `path:NNN` token, because the computed tail
+contains a dot and ends with no known suffix and the function reached its
+`continue`, so the token never arrived at the existence or tracked-ness check. Two
+arms now: a generic one asserting every line citation in every tracked `.md` names
+a tracked file and a line inside its real length, and a specific one asserting the
+cited line CONTAINS `ls-files`, because out-of-range cannot separate 398 from 414
+inside a 729-line file. Verification pointer:
+`tests/test_docs_consistency.py::test_the_corpus_builder_citations_land_on_an_ls_files_line`
+and `::test_the_corpus_builder_arm_can_fail`. Both arms were re-planted and
+observed RED by the merging thread rather than taken on the builder's report, with
+`__pycache__` purged on both sides because the mutation is net-zero in size. A
+sibling extractor was chosen over extending `_backticked_paths()` on a
+measurement, not on taste: the strip-and-extend variant yields 82 line-citations
+over 27 distinct files, all present and all tracked, so extending would not have
+reddened anything that day; it was rejected for information loss.
+
+A GATE IN THE PRE-PUSH PATH BLAMED THE SUITE FOR THE OPERATOR'S OWN WRITES. The
+arm snapshotted the bytes of the live `ops/runtime/` records, ran a nested pytest
+and attributed ANY difference to the suite, with no isolation from external
+writers. Those records are shared live state: the live label census measured 978
+`userpromptsubmit` lines against 86 `cli`, so the operator's inbox hook is the
+dominant writer and any prompt inside the nested-run window produced a false RED.
+Observed once at 2719 passed 1 failed against a control re-run of the identical
+tree at 2720 passed. THE CLAIM WAS RIGHT AND THE DISCRIMINATOR WAS WRONG. Repaired
+by ATTRIBUTION rather than detection: the nested run carries a unique per-run token
+in `RESINCOMPUTE_INVOCATION_SOURCE` and the arm asserts no live record contains it,
+so the race is gone by construction rather than by timing. The token path was
+measured BEFORE the design was committed to, because the failure mode of this
+repair is an arm that cannot fail, which is strictly worse than the flake it
+replaces - a flake is visible and a vacuous green is not. That is pinned in the
+arm itself, which asserts `resolve_source(SOURCE_CLI) == token` as a precondition.
+Verification pointer:
+`tests/test_session_hooks.py::test_this_file_stamps_nothing_into_the_live_runtime_records`.
+Breaking isolation at the `_fire` launch site was re-run by the merging thread and
+observed RED; that deliberate break wrote 8 contaminating lines into the live log,
+which is the defect demonstrating itself, and the file was restored from a
+pre-probe snapshot and verified byte-exact by sha256 with a census confirming zero
+remain.
+
+TWO LEDGER STATEMENTS WERE FALSE AND ARE BACKFILLED IN PLACE rather than prevented
+going forward. The entry recording 2715 passed 2 skipped attributed the pre-push
+run's third skip to the scheduled-task EndBoundary census; that skip fires in BOTH
+readings and cannot be the third. The third is
+`tests/test_hook_interpreter.py::test_the_git_install_discovery_still_fires_where_an_sh_demonstrably_sits`
+and the mechanism is PATH - a git hook runs with git's own libexec prepended, so
+`shutil.which("git")` resolves to a shim layout rather than an install root and the
+arm takes its honest could-not-grade skip. Toggled in both directions over eleven
+pytest invocations. MEASURED 2026-09-12 as a historical reading: 2717 collected, a
+shell run is 2715 passed 2 skipped and a run under the git hook is 2714 passed 3
+skipped, so neither number may be cited without naming the invocation. Separately,
+the claim that five SHAs read 2026-09-11 ALIKE was false - three read 2026-09-10
+and two read 2026-09-11, all at -0500, because the session straddled midnight. In
+both cases the CONCLUSION was already right and the CAUSE was wrong, which is the
+shape worth correcting precisely because nothing downstream looks broken.
+
+THREE HEADINGS WERE DATED TWO DAYS IN THE FUTURE, AND REPAIRING THEM MADE THE
+FILE'S ORDERING WORSE BY ONE. They now read 2026-09-10, 2026-09-11 and
+2026-09-11, each derived from its own commits. The third spans two dates and the
+rule applied is the LATEST commit in the entry, stated inside the entry alongside
+the competing most-commits rule, so a reader can see a choice was made.
+Newest-first violations measured at 3 before the repair and 4 after, because
+dating one entry 09-10 while its neighbour becomes 09-11 exposes an inversion a
+uniformly false stamp was concealing. A TRUE date that reveals a real ordering
+defect beats a FALSE date that hides it; nothing was reordered, because reordering
+an append-only ledger is a larger decision than a date repair. A fourth site was
+repaired unasked: an entry asserting in the present tense that this file's lines
+1021, 1066 and 1094 read `## 2026-09-14`, whose line numbers had ALREADY decayed
+before the repair - the exact defect the rule against citing this file by line
+number exists to prevent, committed inside the file the rule is about.
+
+A COUNT THREE TREES GOT WRONG, AND THE CONTRACT OWNER HAS NOW WITHDRAWN IT.
+Measured here: the word `event` appears 15 times by word boundary across 14
+distinct lines of the 214-line pin v1.2, and 20 times only by counting the
+`event` inside `prevention`. Two siblings had it at around thirty and one of
+them copied the figure into the clause that repairs `origin_time`, making it
+`INHERITED` with `origin_sub=BORN-WRONG` inside the document that defines that
+value. The owner re-derived it, reproduced our numbers exactly, withdrew the
+figure, pinned 15, adopted our framing and took ownership of the instance.
+Separately our arithmetic pinned their scored denominator: every share they have
+published is over 124 and not 126, confirmed by them, reached here by two
+independent routes from published quantities with 126 unreachable by any. The
+FATAL itself is untouched by the count and stands on the owner's own 22.5-point
+pricing.
+
+AN INSTRUMENT FINDING THAT GENERALISES. A SHA-substring probe of this ledger
+cannot decide the window's own HEAD commit in either direction. Of 32 window
+commits the probe answered 10 unledgered at snapshot `90e5e1f` and 9 at
+`003400e`, and the entire difference is `90e5e1f` itself: at its own snapshot it
+must read unledgered because a commit cannot cite its own abbreviated SHA inside a
+file that commit contains, and at the later snapshot it reads ledgered only
+because three range-endpoint mentions name it. False negative at one snapshot,
+false positive at the other, same commit. THE CITABLE FORM: 31 of the 32 commits
+are decidable by that probe and 9 of those 31 are unledgered.
+
+A CROSS-SESSION HAZARD FOUND WHILE LANDING A COMMIT. One commit first landed
+carrying ANOTHER tree's commit message, about a truth_gate reading a green CI run
+as queued. A commit message staged at a `/tmp` path under Git Bash is not in a
+session-private directory - that path resolves into the shared Git installation
+tree, so a concurrently running session overwrote the file between the write and
+the `git commit` that read it. The repo rule already says to use
+`git commit -F <tmpfile>`; what it did not say, and what is now measured, is that
+the tmpfile must not be under that shared path. Message files now go to the
+session scratchpad.
+
+THE ROSTER CHECK, RUN ON OURSELVES UNDER THE STRONGER FORM a sibling supplied. An
+outbound delivery check passes cleanly on an ADDRESS-LIST OMISSION, because a tree
+that was never addressed cannot distinguish a note it was never sent from a note
+that was never written, and its silence is then read as dissent. Measured over 40
+RSC outbound notes: held by 4 inboxes 17, by 2 inboxes 5, by 1 inbox 18, by 3 or
+by 0 none. Zero delivery faults and zero address-list omissions - all five
+two-inbox notes were checked individually rather than reported as a count, four
+being the winmutex and slots notes correctly targeted at the two sibling carriers
+of the byte-identical files and the fifth reaching exactly the two trees its
+header names. THE LIMIT, stated rather than passed over: 18 bilaterals plus the
+older notes carrying no address list mean the omission class is UNMEASURABLE on
+part of our corpus rather than clean, which is the same limit the sibling conceded
+for 74 of its own 100.
+
+DECISIONS MADE, so they are not re-litigated. Rows are persisted UNSCORED because
+the debt was the denominator and a contract version cannot be allowed to make it
+payable twice. Our withdrawn 38.5 is NOT reinstated on the strength of clause 1
+re-legitimising it, because section 6 is unwithdrawn and the contract contradicts
+itself. The ledger ordering is NOT repaired in the same pass as the dates. mypy is
+NOT cited as evidence about `tests/`, because neither authored test file is inside
+its `files=` roots and citing its Success there is zero out of zero reading as a
+pass.
+
+MEASURED THIS RUN, as a historical reading and not a claim about now, shell
+invocation from the repo root: `tests` 2720 passed 2 skipped, `agents/pity_engine`
+80 passed, `tests/test_licence_posture.py` 47 passed,
+`tests/test_docs_consistency.py` 34 passed, `scripts/qa_companion.py` 17 passed 0
+failed 2 skipped 3 noted, `shell` node --test 52 pass 0 fail, headless
+`--once --dry-run` exit 0 at 0 pass 0 fail 6 skip, ruff clean, mypy Success over
+36 source files as ADVISORY only, glyph gate exit 0.
+
+---
+
 ## 2026-09-12 - Four counts clustered between 73.8 and 83.3 percent because four trees graded their own rows, the one tree that did not reports a third of that, and the leading gate was retracted by its own author
 
 NOTHING WAS BUILT. No code changed, no gate was wired, no shared artifact was
