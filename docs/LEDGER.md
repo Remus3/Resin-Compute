@@ -318,7 +318,19 @@ MEASURED THIS RUN, as a historical reading and not a claim about now: `tests`
 files, `tools/precommit_gate.py` exit 0. The pre-push hook reported THREE skips
 where the local run reported two, the third being the scheduled-task EndBoundary
 census finding no non-empty boundary on this machine - so the skip count is
-environment-dependent and neither number is the count.
+environment-dependent and neither number is the count. CORRECTED 2026-09-12: the
+CONCLUSION was right and the CAUSE named here was wrong. The EndBoundary census
+skip fires in BOTH readings and is one of the two seen locally, so it cannot be
+the third. The third skip is
+`tests/test_hook_interpreter.py::test_the_git_install_discovery_still_fires_where_an_sh_demonstrably_sits`,
+and the mechanism is PATH rather than environment in the loose sense: a git hook
+runs with git's own libexec prepended, so `shutil.which("git")` resolves to
+`C:\Program Files\Git\mingw64\libexec\git-core\git.exe`, a shim layout
+rather than an install root, and the arm takes its honest could-not-grade skip.
+Toggled in both directions with nothing edited, by prepending that directory to
+PATH. Measured 2026-09-12 at `6646eb3`: 2717 collected, a shell run is 2715
+passed 2 skipped and a run under the git hook is 2714 passed 3 skipped. Cite
+neither figure without naming the invocation.
 
 ---
 
@@ -1230,10 +1242,15 @@ flaky.
 
 A STAMP DISCREPANCY, recorded because it will confuse the next reader. The three
 entries above this one are stamped 2026-09-14, and the commits they describe carry
-committer dates of 2026-09-11 - `git log --date=iso` reads 2026-09-11 for
-`72c7041`, `0d1fa70`, `77408ad`, `f77c4ad` and `76ccdeb` alike. This entry uses
-the date the commits actually carry. Do not read the stamps above as evidence of a
-later session.
+committer dates of 2026-09-10 and 2026-09-11, NOT a single date. CORRECTED
+2026-09-12: the original wording here said `git log --date=iso` reads 2026-09-11
+for `72c7041`, `0d1fa70`, `77408ad`, `f77c4ad` and `76ccdeb` ALIKE, and that was
+false - re-measured, three of the five read 2026-09-10 (`72c7041` 22:59:47,
+`77408ad` 22:59:52, `f77c4ad` 23:20:45) and two read 2026-09-11 (`0d1fa70`
+00:25:36, `76ccdeb` 00:26:01), all at -0500. The run straddled midnight, which is
+the cause the word ALIKE concealed. The CONCLUSION stands unchanged and was never
+in doubt: not one of the five carries 2026-09-14, so the stamps above are not
+evidence of a later session.
 
 Merged files and their guards: `tools/git_subprocess_census.py`
 (`tests/test_git_subprocess_census.py`); `core/provenance.py`
