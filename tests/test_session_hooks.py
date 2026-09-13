@@ -79,6 +79,7 @@ import shlex
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import NamedTuple
 
@@ -991,7 +992,49 @@ NESTED_MARKER = "RESINCOMPUTE_HOOK_SUITE_NESTED"
 NESTED_TIMEOUT_SECONDS = 600
 
 
-def test_this_file_leaves_the_live_runtime_records_byte_unchanged():
+#: WHAT A NESTED-RUN CHILD CALLS ITSELF WHEN NOTHING ISOLATES IT, and the whole
+#: discriminator of the arm below. A fresh value is minted per run and stamped
+#: into the one environment variable `scripts/watch_inbox.py` reads when it
+#: labels a line, so a launch site inside the nested run that forgets
+#: `_isolated_env` inherits it and writes THIS RUN'S token into the operator's
+#: live log. No external writer can write a value invented microseconds ago.
+#:
+#: SHAPED TO THE WATCHER'S OWN LABEL VALIDATOR, `[a-z0-9][a-z0-9._-]{0,31}`. A
+#: token that validator rejects is replaced by the `cli` fallback, so it would
+#: never reach a log line and the arm could never fire. The arm therefore
+#: PROVES the shape against the module rather than trusting this spelling.
+NESTED_TOKEN_PREFIX = "suite-probe-"
+
+#: Entry-point labels belonging to this suite alone, named by MODULE ATTRIBUTE
+#: so a rename in the watcher turns this file red rather than silent.
+#:
+#: `SOURCE_CLI` IS DELIBERATELY ABSENT. A bare `python scripts/watch_inbox.py`
+#: typed in a terminal writes it, so it is the operator's label to write and a
+#: new `cli` line is not attributable to the suite. `suite` and `main` are:
+#: a NEW one in the live log is a suite write whatever else happened, which
+#: catches the HALF-ISOLATED launch - a caller that passed the source label and
+#: forgot the runtime redirect, where no token is stamped to find.
+SUITE_ONLY_LABEL_ATTRS = ("SOURCE_SUITE", "SOURCE_MAIN")
+
+
+def _label_counts(raw: bytes) -> dict[str, int]:
+    """How many lines of an invocation log carry each entry-point label.
+
+    COUNTS RATHER THAN A DIFF OF THE TWO FILES. `log_invocation` does not
+    append - it rebuilds the file from a capped tail - so the before bytes are
+    not guaranteed to be a prefix of the after bytes and prefix arithmetic
+    would be wrong at the cap. Trimming can only LOWER a count, so "this label
+    appears more often than it did" stays true across a trim.
+    """
+    counts: dict[str, int] = {}
+    for line in raw.decode("ascii", errors="replace").splitlines():
+        columns = line.split("\t")
+        if len(columns) >= 2:
+            counts[columns[1]] = counts.get(columns[1], 0) + 1
+    return counts
+
+
+def test_this_file_stamps_nothing_into_the_live_runtime_records(monkeypatch):
     """A SUITE RUN MUST NOT WRITE INTO THE INSTRUMENT IT IS MEASURING.
 
     NARROWED, AND SAID PLAINLY. This runs `tests/test_session_hooks.py`, not
@@ -1001,9 +1044,30 @@ def test_this_file_leaves_the_live_runtime_records_byte_unchanged():
     entire exposure. The full-run claim belongs to a measurement in the
     session record, not to this arm, and this arm does not make it.
 
-    THE BASELINE IS BYTES, NOT MTIME OR EXISTENCE. Six identical `cli` lines
-    appended to a log that already had lines is exactly the shape that reads as
-    unchanged to anything coarser.
+    IT ATTRIBUTES THE WRITE INSTEAD OF DETECTING A DIFFERENCE, AND THAT IS A
+    BUG FIX RATHER THAN A PREFERENCE. The previous shape snapshotted the record
+    bytes, ran the nested run, and failed on any difference. Those records are
+    SHARED LIVE STATE: `.claude/settings.json` wires `UserPromptSubmit` to the
+    watcher, so the operator's own hook appends to the live log on EVERY prompt
+    of an interactive session. Any such fire landing inside the nested-run
+    window - seconds, against a timeout ceiling of minutes - failed the arm and
+    BLAMED THE SUITE for a write the suite did not make. Measured 2026-09-12:
+    one run gave `1 failed, 2719 passed` and an immediate re-run of the
+    identical tree gave `2720 passed`, and an induced append from a separate
+    process reproduced it on demand. A false red in the pre-push gate blocks a
+    push for a reason that is not there.
+
+    THE DISCRIMINATOR IS A PER-RUN TOKEN. The nested run is launched with
+    `RESINCOMPUTE_INVOCATION_SOURCE` set to a value minted here, which is the
+    channel `resolve_source` reads to label every line it writes. A child
+    launched WITHOUT `_isolated_env` inherits this environment, so it writes
+    the token into the live log and the arm fires for exactly the real defect.
+    An external writer cannot produce the token, so the race is gone rather
+    than tolerated - no control run, no retry, no flake.
+
+    THE SECOND ASSERTION COVERS THE HALF-ISOLATED LAUNCH, which stamps no
+    token: a caller that overrides the label and not the runtime directory
+    writes `suite` into the live log. See `SUITE_ONLY_LABEL_ATTRS`.
 
     THE RECORDS ARE DISCOVERED FROM THE MODULE. A new runtime record added
     tomorrow is covered today; a hand-written list would have been correct on
@@ -1023,10 +1087,35 @@ def test_this_file_leaves_the_live_runtime_records_byte_unchanged():
     assert len(records) >= 3, (
         f"the discovery found almost nothing, so this arm is vacuous: {sorted(records)}"
     )
-    before = {name: (p.read_bytes() if p.is_file() else None) for name, p in records.items()}
+
+    token = NESTED_TOKEN_PREFIX + uuid.uuid4().hex[:12]
+    monkeypatch.setenv(watcher.ENV_INVOCATION_SOURCE, token)
+    assert watcher.resolve_source(watcher.SOURCE_CLI) == token, (
+        f"the watcher refuses {token!r} as an entry-point label and falls back, so "
+        "the token can never reach a log line and the arm below could never fail. "
+        f"The label shape or its ceiling in {WATCHER} has moved - see resolve_source"
+    )
+
+    needle = token.encode("ascii")
+
+    def _stamped() -> list[str]:
+        return sorted(
+            name
+            for name, path in records.items()
+            if path.is_file() and needle in path.read_bytes()
+        )
+
+    assert _stamped() == [], (
+        f"{token!r} is in the live records BEFORE the nested run, so the check "
+        "after it would be a statement about somebody else's bytes"
+    )
+
+    invocations = records["DEFAULT_INVOCATIONS"]
+    before_counts = _label_counts(invocations.read_bytes() if invocations.is_file() else b"")
 
     env = dict(os.environ)
     env[NESTED_MARKER] = "1"
+    env[watcher.ENV_INVOCATION_SOURCE] = token
     done = subprocess.run(
         [sys.executable, "-m", "pytest", f"tests/{Path(__file__).name}", "-q"],
         cwd=str(REPO_ROOT),
@@ -1036,15 +1125,27 @@ def test_this_file_leaves_the_live_runtime_records_byte_unchanged():
         timeout=NESTED_TIMEOUT_SECONDS,
     )
 
-    after = {name: (p.read_bytes() if p.is_file() else None) for name, p in records.items()}
-    touched = sorted(name for name in records if before[name] != after[name])
-
-    assert touched == [], (
-        f"a run of this file changed the operator's live runtime records {touched}. "
-        "Every launch here must carry _isolated_env; a launch site added without "
-        "it writes suite lines into the one instrument that answers whether the "
-        "SessionStart hook fires"
+    stamped = _stamped()
+    assert stamped == [], (
+        "a run of this file stamped ITS OWN entry-point label into the operator's "
+        f"live runtime records {stamped} ({token!r}). Every launch here must carry "
+        "_isolated_env; a launch site added without it inherits this run's "
+        "environment and writes suite lines into the one instrument that answers "
+        "whether the SessionStart hook fires"
     )
+
+    after_counts = _label_counts(invocations.read_bytes() if invocations.is_file() else b"")
+    grew = sorted(
+        label
+        for label in (getattr(watcher, attr) for attr in SUITE_ONLY_LABEL_ATTRS)
+        if after_counts.get(label, 0) > before_counts.get(label, 0)
+    )
+    assert grew == [], (
+        f"the live invocation log gained {grew} line(s) across the nested run. Those "
+        "labels are this suite's alone, so a launch redirected its LABEL and not its "
+        "runtime directory - _isolated_env sets both and neither half is optional"
+    )
+
     assert done.returncode == 0, (
         "the nested run of this file failed, so the comparison above is a "
         f"statement about a broken run: {done.stdout.strip()[-800:]!r}"
@@ -1447,7 +1548,7 @@ def test_a_fired_hook_writes_its_declared_label_on_both_lines(tmp_path):
     outranks the flag by design and leaving it set would make this a statement
     about the variable rather than about the declared command. The runtime
     redirect stays, so nothing here can reach `ops/runtime/` -
-    `test_this_file_leaves_the_live_runtime_records_byte_unchanged` is what
+    `test_this_file_stamps_nothing_into_the_live_runtime_records` is what
     holds that claim rather than this comment.
     """
     hooks = _watcher_hooks()
