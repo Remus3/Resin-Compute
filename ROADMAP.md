@@ -11,6 +11,58 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-09-14. A TRACKED FILE DELETED FROM THE README TREE BLOCK IS
+  INVISIBLE TO EVERY GUARD, BY CONSTRUCTION.** `tests/test_readme_tree.py`
+  asserts that every path NAMED in the tree exists and is stored by git. That is
+  ONE-DIRECTIONAL. The reverse - a tracked file that the tree block stops naming
+  - is unasserted, and the suite stays green while the page silently drops it.
+  MEASURED THIS SESSION: a rewrite deleted five tracked files from the block
+  with both suites green throughout, and three of the five were the only public
+  disclosure of their own behaviour anywhere in the tree - a second scheduled
+  task whose definition survives its window (`ops/install_responder_task.ps1`,
+  `ops/ResinCompute-Responder.xml`), a full-screen screenshot cadence
+  (`tools/screen_capture.py`, `tools/first_run_capture.py`,
+  `tools/capture_supervisor.py`), and an out-of-repo desktop write
+  (`scripts/make_shortcut.py`). All were restored by hand after an adversarial
+  pass found them; nothing mechanical found them.
+  NOT DONE, AND THE SHAPE IS NOT OBVIOUS. A naive reverse arm requiring every
+  tracked file to appear in the tree is wrong - the block is a curated public
+  summary and the tree has hundreds of files, so that arm would demand the
+  README list everything and would be deleted within a session. The candidate
+  worth testing is a NAMED WATCHLIST: a small explicit set of paths whose
+  disclosure is load-bearing, asserted present in `README.md` by name. CLOSES
+  WHEN such an arm exists AND a planted deletion of one watchlist path is
+  observed RED, because an arm nobody has seen fail is an arm that cannot fail.
+
+- **NEW 2026-09-14. THE REPOSITORY ABOUT DESCRIPTION AND TOPIC LIST ARE PUBLIC
+  SURFACE THAT NO GUARD IN THIS TREE CAN SEE.** Both were refreshed this session
+  through the GitHub API. They live in GitHub's own store, not in any tracked
+  file, so every guard here is structurally blind to them - the same shape as
+  the gitignored inbox, and for the same reason: the guards derive their corpus
+  from `git ls-files`. A description that decays against the README contradicts
+  the page on the repository's own landing surface and nothing goes red.
+  MEASURED 2026-09-14: 20 topics, GitHub's documented cap, and `game-tools` was
+  dropped because its topic page returns HTTP 404 - a slug no public repository
+  uses carries no browse reach whatever it looks like in the sidebar.
+  NOT DONE. No decision has been taken on whether the metadata should be
+  mirrored into a tracked file and cross-checked, or left as an untracked
+  surface that is re-derived by hand. Mirroring buys a guard and costs a second
+  place to go stale. CLOSES WHEN that call is made and recorded either way.
+
+- **NEW 2026-09-14. AN AUDIT BRIEF CAN CARRY ITS OWN INSTRUMENT DEFECT, AND THIS
+  ONE DID.** The visual audit of the rewritten README was dispatched with an
+  instruction to render through GitHub's API using `mode=gfm`. That is GitHub's
+  COMMENT renderer, not its README renderer. MEASURED: it injected 151 spurious
+  line-break elements and stripped every heading id, which produced three
+  confident false findings including fifteen anchors reported broken.
+  `mode=markdown` injects zero and preserves ids, which carry a `user-content-`
+  prefix that GitHub's own frontend strips - so a checker that does not account
+  for the prefix reads a false zero. The agent detected its own instrument and
+  re-ran rather than filing the findings, which is the behaviour to keep.
+  NOT AN OPEN DEFECT IN THE TREE - recorded so the next visual audit does not
+  re-derive it. Any future rendered check must state which renderer it used.
+
+
 - **OPEN 2026-09-12, THE TOOLING-TIER LANE, AND THE STATE IS NOW ADJUDICATED
   RATHER THAN PROPOSED. FIVE COUNTS ARE IN, THE LEADING CANDIDATE WAS RETRACTED
   BY ITS OWN AUTHOR, AND THE ONE TREE THAT DID NOT GRADE ITS OWN ROWS REPORTS A
@@ -4989,8 +5041,20 @@ version. What follows is everything the scaffold deliberately did not do.
 - **Income velocity from real history.** `estimate_velocity` folds observed ledger
   entries, but nothing populates the ledger automatically yet. Wire it to a
   reconciliation job.
-- **Chronicled Wish support in the service route.** The engine models it; the HTTP
-  route does not expose it.
+- **~~Chronicled Wish support in the service route.~~ THE PREMISE WAS FALSE AND
+  THE ROW WAS STALE. CLOSED 2026-09-14 by measurement, not by work.** This row
+  said the engine models Chronicled Wish while the HTTP route does not expose
+  it, and a README rewrite imported that line as a PLANNED item. An adversary
+  probed it rather than believing it: POSTing `{"banner":"chronicled"}` to the
+  running service returns HTTP 200 with a forecast byte-identical to the direct
+  library call, and a bogus banner value correctly returns 400. The mechanism is
+  in `agents/pity_engine/__main__.py`, which builds its banner map from every
+  member of `BannerKind`, and `CHRONICLED` is a member - so the route has
+  accepted it since the map was written, and no work was ever outstanding. WHAT
+  REMAINS IS SMALLER AND DIFFERENT: there is no HTTP-layer test for the
+  chronicled banner, so the route is exposed-and-untested rather than absent.
+  The reusable finding is that a roadmap row can be false at birth rather than
+  by decay, and that a rewrite which copies a row forward inherits its defect.
 - **Prove the git hook gate FIRES, in CI.** `CLAUDE.md` says a hook's PRESENCE is
   never proof it fires, and that the only valid test is end-to-end: stage a
   banned glyph, attempt a real commit, assert HEAD unchanged. Nothing automates
