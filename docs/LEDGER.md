@@ -12,6 +12,111 @@ now.
 
 ---
 
+## 2026-09-14 - The public README was rewritten, and the adversarial pass found the cut had erased a second scheduled task and a screenshot daemon from the only file that disclosed them
+
+WHAT LANDED. `README.md` went from 657 lines to 561 for a public reader. It now
+leads with a forecast captured from a live engine run, carries a scannable
+SHIPPED / PARTIAL / PLANNED table, and places the forward-looking section
+directly under that table rather than at roughly three-quarters depth below a
+collapsed tree. The repository About description and topic list were refreshed
+in the same session, through the GitHub API rather than in any tracked file.
+
+THE METHOD IS THE PART WORTH KEEPING. The draft was frozen and attacked by three
+independent passes with DISTINCT LENSES - a rendered visual audit, a correctness
+refutation, and a scope-and-loss refutation - none of them run by the agent that
+wrote the draft. The visual pass alone would have shipped it. The scope pass
+returned TEN LOSS rulings, and NO GUARD IN THIS TREE COULD HAVE CAUGHT ONE OF
+THEM: `tests/test_readme_tree.py` asserts that every path NAMED in the tree
+exists and is tracked, which is one-directional, so a tracked file DELETED from
+the tree block is invisible to it by construction.
+
+THE THREE LOSSES THAT MATTERED, each verified against the artifact rather than
+against the report.
+
+- `ops/install_responder_task.ps1` registers a SECOND scheduled task,
+  `ResinCompute-Responder`, and its definition PERSISTS in the Windows scheduler
+  store after its window closes. The draft deleted both responder files from the
+  tree while asserting the supervisor task was the one thing in the repository
+  that outlives the clone, and its removal recipe named only the supervisor. A
+  reader who followed that recipe to completion still had a task registered.
+- `tools/screen_capture.py`, `tools/first_run_capture.py` and
+  `tools/capture_supervisor.py` run a full-screen screenshot cadence. Grepped
+  across `README.md`, `SECURITY.md`, `CONTRIBUTING.md` and
+  `docs/LICENSE_NOTES.md`, the README was their ONLY public disclosure anywhere
+  in the tree. Deleting them from the tree block did not relocate that
+  disclosure, it ENDED it.
+- `scripts/make_shortcut.py` writes a shortcut OUTSIDE the checkout, to the
+  desktop, and the draft named neither the file nor the behaviour.
+
+ONE CLAIM WAS REFUTED OUTRIGHT BY MEASUREMENT. The draft listed the Chronicled
+HTTP route as PLANNED, having imported a line that was stale in `ROADMAP.md`.
+MEASURED 2026-09-14 against a cold engine: POSTing `{"banner":"chronicled"}` to
+the running service returns HTTP 200 with a real forecast identical to the
+direct library call, while a bogus banner correctly returns 400. The mechanism
+is in `agents/pity_engine/__main__.py`, which builds its banner map from every
+`BannerKind`, and `CHRONICLED` is one. The route is exposed and merely untested
+at the HTTP layer, which is what the page now says.
+
+A STATUS TAG WAS OVERSTATED AND THE CORRECTION CAME FROM THE FIX SLICE, NOT FROM
+THE MERGER. The Dashboard row was tagged SHIPPED. The merging thread passed down
+a count of 2 READY / 2 PARTIAL / 2 NOT_WIRED taken from an adversary's reading of
+`surface/model.py`. The fix slice MEASURED it instead, through
+`build_dashboard(AccountState(uid=''), now)`, and a fresh clone renders 2 READY,
+0 PARTIAL and 4 NOT_WIRED. The row is now PARTIAL and carries the measured
+count. A count read off source is not a count observed from the function.
+
+WHAT WAS ADDED THAT THE PAGE HAD NEVER CARRIED. Both servers default their bind
+address to `127.0.0.1` and NEITHER AUTHENTICATES. `SECURITY.md` has always said
+so; the README handed a reader a server start command and never did. That was an
+inherited omission rather than a regression, and the rewrite was the opportunity.
+
+WHAT WAS CUT, because the operator asked for less self-deprecation and less
+internal reasoning. The five-line rationale for carrying two CI badges, the 8870
+port migration history, the disclosure of how many projects share the machine,
+the last remaining sibling codename, the argument with an early TypeScript draft
+in the stack section, and two sentences that announced the project's own honesty
+rather than demonstrating it.
+
+A SELF-CONTRADICTION THE REPAIR ITSELF INTRODUCED was caught by the final
+verifier and fixed before the commit: the page said a registered task was the
+only kind of thing that outlives the clone, one section after restoring prose
+about a desktop shortcut that also does.
+
+VERIFICATION POINTERS. `tests/test_readme_tree.py` proves every tree path exists
+and is git-stored. `tests/test_docs_consistency.py::test_every_line_number_citation_resolves`
+holds the 318-line floor that `docs/LEDGER.md` imposes on `README.md` from
+outside it. `tests/test_machine_identity.py::test_the_install_documentation_is_not_collateral_damage`
+pins the space-containing install path literal. `tests/test_no_sibling_names.py`
+went from three sibling references in the old file to zero.
+
+AN INSTRUMENT DEFECT IN OUR OWN AUDIT BRIEF, recorded because it manufactured
+confident false findings. The first visual pass was told to render through
+GitHub's API with `mode=gfm`. That is the COMMENT renderer, not the README
+renderer: it injected 151 spurious line-break elements and stripped every
+heading id, producing three false findings including fifteen broken anchors.
+`mode=markdown` is the correct mode, and the anchors are real once the
+`user-content-` prefix that GitHub's frontend strips is accounted for. The
+agent caught its own instrument and re-ran rather than filing the findings.
+
+MEASURED 2026-09-14 in a shell invocation from the repo root, as a historical
+reading: `python -m pytest tests` 2721 passed 2 skipped; `python -m pytest
+agents/pity_engine` 80 passed; `tests/test_licence_posture.py` 47 passed;
+`tests/test_docs_consistency.py` 34 passed; `python scripts/qa_companion.py` 17
+passed 0 failed 2 skipped 3 noted; `cd shell && node --test` 52 pass 0 fail;
+`python -m headless.runner --once --dry-run` exit 0; `python -m ruff check .`
+clean; `python -m mypy` Success 36 source files, advisory only; `python
+tools/precommit_gate.py --scan-files README.md` selected=1 scanned=1 exempt=0.
+README.md 561 lines, 0 non-ASCII bytes, 0 CR bytes.
+
+THE REPOSITORY METADATA, changed through the API and therefore guarded by
+nothing in this tree. The About description now leads with the nouns a human
+types. Four topics were swapped within GitHub's cap of twenty: out `ai-agents`,
+`multi-agent`, `pytest` and `game-tools`; in `hoyoverse`, `enka-network`,
+`game-companion` and `probability-calculator`. `game-tools` was dropped on a
+measurement rather than on taste - its topic page returns HTTP 404, confirmed
+independently by the merging thread, so it carries no browse reach at all, and a
+404 on a topic page is what GitHub returns for a slug no public repository uses.
+
 ## 2026-09-13 - A sibling scored the 96 rows we published unscored, we published the result unsoftened, and every headline-moving disagreement sits on the two values we ourselves graded FATAL
 
 DISCHARGED A WRITTEN COMMITMENT. When this tree published 96 deliberately

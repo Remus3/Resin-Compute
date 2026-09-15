@@ -1,7 +1,8 @@
 # Next session prompt
 
-Paste the fenced block below into a cold session. It is the hand-off, and it is
-the only thing that session will have.
+Paste the block below into a cold session. It is the hand-off, and
+`tools/publish_next_session.py` reads it from this file rather than from a
+retyped copy, so the printed block and the Desktop backup cannot disagree.
 
 ```
 Read CLAUDE.md, README.md, docs/SPEC_SCAFFOLD.md, ROADMAP.md, docs/LEDGER.md and
@@ -17,129 +18,125 @@ soft-pity ramp SATURATES AT PULL 77 under a 7 percent increment and any claim of
 79 or 80 is arithmetically impossible. 1.600 percent is 1 / E[wishes per 5-star],
 a long-run average, NEVER a per-wish Bernoulli parameter.
 
-STATE OBSERVED 2026-09-13, AT COMMIT f12d3a8, AS A READING AND NOT A PROMISE.
-main clean and pushed, 0 worktrees. Two commits landed, ba8ef26..f12d3a8.
-Measured in a SHELL invocation from the repo root:
+STATE OBSERVED 2026-09-14, AS A READING AND NOT A PROMISE. main clean and pushed,
+0 worktrees. Measured in a SHELL invocation from the repo root:
   python -m pytest tests                      2721 passed, 2 skipped
   python -m pytest agents/pity_engine            80 passed
   python -m pytest tests/test_licence_posture.py 47 passed
   python -m pytest tests/test_docs_consistency.py 34 passed
-  python -m pytest tests/test_no_sibling_names.py 19 passed
   python scripts/qa_companion.py      17 passed, 0 failed, 2 skipped, 3 noted
   cd shell && node --test              52 pass, 0 fail
   python -m headless.runner --once --dry-run   exit 0, 0 pass 0 fail 6 skip
   python -m ruff check .               All checks passed
   python -m mypy                       Success, 36 source files - ADVISORY ONLY
-  python tools/precommit_gate.py --scan-files   selected=5 scanned=5 exempt=0
-CI: ci AND docs-guards BOTH fired at f12d3a8 and BOTH completed success. The
-hand-off commit that carries this block lands after it and fires docs-guards
-only, because ci.yml carries paths-ignore '**/*.md'. Check that one; a commit
-cannot report its own CI from inside itself.
+  python tools/precommit_gate.py --scan-files README.md  selected=1 scanned=1
+README.md is 561 lines, 0 non-ASCII bytes, 0 CR bytes.
 
-A BARE precommit_gate.py RUN IS A VACUOUS PASS. Measured 2026-09-13: with a
-CLEAN INDEX it prints nothing and exits 0, because it is STAGED mode over an
-empty staged set. Our own hand-off block had been citing that bare invocation as
-evidence for weeks. The arm that MEASURES is --scan-files with --expect-count,
-which prints selected=N scanned=N exempt=0. Same zero-out-of-zero shape CLAUDE.md
-already warns about for mypy. Never cite the bare form again.
+THIS SESSION REWROTE THE PUBLIC README AND REFRESHED THE REPOSITORY METADATA.
+README.md went 657 lines to 561: it now leads with a forecast captured from a
+live engine run, carries a scannable SHIPPED / PARTIAL / PLANNED table, and puts
+the forward-looking section directly under that table. The About description and
+the topic list were changed through the GitHub API.
 
-THE SUITE COUNT DEPENDS ON THE INVOCATION AND NEITHER NUMBER IS THE COUNT.
-A shell run is 2721 passed 2 skipped; a run UNDER THE GIT PRE-PUSH HOOK is one
-higher on skips and one lower on passes - observed this session as 2720 passed
-3 skipped. Cause, measured: a git hook runs with git's own libexec prepended to
-PATH, so shutil.which("git") in tests/test_hook_interpreter.py resolves to a shim
-layout rather than an install root and that arm takes its honest could-not-grade
-skip. NEVER cite a count without naming the invocation.
+THE LESSON IS NOT THE README, IT IS THAT NO GUARD COULD SEE THE WORST DEFECT.
+The draft was frozen and attacked by THREE passes with DISTINCT LENSES - rendered
+visual, correctness, scope-and-loss - none run by the agent that wrote it. The
+visual pass alone would have shipped it. The scope pass returned TEN LOSS
+rulings. tests/test_readme_tree.py asserts every path NAMED in the tree exists
+and is tracked, which is ONE-DIRECTIONAL, so five tracked files DELETED from the
+block were invisible and both suites stayed green. Three of the five were the
+only public disclosure of their own behaviour anywhere in the tree: a SECOND
+scheduled task whose definition survives its window, a full-screen screenshot
+cadence, and an out-of-repo desktop write. All restored by hand.
 
-MYPY COVERS NEITHER tests/ NOR headless/ NOR ops/ NOR scripts/. It traverses the
-files= roots in mypy.ini - core/, engines/, ingest/, agents/pity_engine/, tools/.
-Its "Success: no issues found in 36 source files" says NOTHING about any test
-file. tests/test_mypy_scope.py goes red if a root leaves the list.
+ONE ROADMAP ROW WAS FALSE AT BIRTH, not stale by decay. The Chronicled HTTP route
+row said the engine models it and the route does not expose it. Measured: POST
+{"banner":"chronicled"} returns HTTP 200 with a forecast identical to the direct
+library call, and a bogus banner returns 400, because __main__.py builds its
+banner map from every BannerKind. The row is closed. A rewrite that copies a
+roadmap row forward inherits that row's defect.
 
-A SIBLING WROTE INTO THIS TREE, AT OPERATOR INSTRUCTION, AND IT WAS CORRECT.
-RC modified .claude/settings.json here on 2026-09-13. Our UserPromptSubmit hook
-used a RELATIVE path; reading inbox notes drifts the session cwd into
-moon_sync_inbox/, so it resolved to a nonexistent
-<repo>/moon_sync_inbox/scripts/watch_inbox.py and BLOCKED EVERY PROMPT. The
-script was never the problem - the cwd was. All three hooks now use
-python "$CLAUDE_PROJECT_DIR/..." and THE QUOTES ARE LOAD-BEARING: this checkout
-path contains a real space and unquoted the command splits at it and fails
-SILENTLY. Do not tidy the quotes away. There is no convention covering a sibling
-writing here; that row is now open on the roadmap.
+A COUNT READ OFF SOURCE IS NOT A COUNT OBSERVED FROM THE FUNCTION. The merging
+thread passed down 2 READY / 2 PARTIAL / 2 NOT_WIRED for the dashboard, taken
+from an adversary reading surface/model.py. The fix slice MEASURED it through
+build_dashboard(AccountState(uid=''), now) and a fresh clone renders 2 READY,
+0 PARTIAL, 4 NOT_WIRED. The subagent corrected the merger; take that seriously.
 
-THE HIGHEST-PRIORITY ITEM OF THE LAST SESSION IS DISCHARGED AND THE RESULT WENT
-AGAINST US. LW scored our 96 unscored rows. We published it UNSOFTENED at
-docs/CROSS_SCORE_LW_ON_RSC_2026-09-13.md, per a written commitment to publish
-whatever came back including if worse than anything we had said about ourselves.
-THE WORST FINDING: every row where LW's two blind readers disagree about a
-published share on our corpus - ALL 24, no exception - turns on PROXY-MEASURE
-(rank 4) or ADVERSARY (rank 8), THE TWO VALUES WE OURSELVES GRADED FATAL. 33 of
-our 96 rows carry one. Our family disagreement rate is 25.0 pct against RC's
-11.1 pct. LW's figures, N=96 fine grain, two blind passes: gate-or-contract 74.0
-and 75.0 pct, inherited 76.0 and 78.1 pct, fix-of-a-fix 5.2 and 7.3 pct as a
-FLOOR, correct 93 YES / 3 UNCLEAR / 0 NO identical in both passes, prevention-set
-disagreement on 36 of 96 rows. LW's 1800 note CLOSED the inherited caveat by
-running the git probe itself - GIT 88.0 pct against PROSE 81.9 / 84.3, meaning
-OUR EXTRACTION UNDERSTATED IT - so do not reach for that openness as a defence.
-RC ran its own instrument against a calibration gate, FAILED it, and declined to
-score our rows rather than publish. That is the protocol working.
+AN AUDIT BRIEF CAN CARRY ITS OWN INSTRUMENT DEFECT. The visual audit was
+dispatched with mode=gfm, which is GitHub's COMMENT renderer: it injected 151
+spurious line breaks and stripped every heading id, manufacturing three confident
+false findings. mode=markdown is correct, and its heading ids carry a
+user-content- prefix that GitHub's frontend strips - a checker blind to the
+prefix reads a false zero. State which renderer any future rendered check used.
 
 DO NOT REINSTATE 78.5, AND DO NOT ADOPT LW'S 74.0 / 75.0 IN ITS PLACE. They are
 not the same object and LW's rests on the same broken boundary. Our 38.5 pct
 stays WITHDRAWN as the backward reading section 6 bans by name. Forward it is at
-most 12 of 65 = 18.5 pct. N=65 is inflated to somewhere in [40, 52] and the
-effect on 78.5 is UNDETERMINABLE, bounded only to 65.0 to 100 pct. Offer no point
-estimate.
+most 12 of 65 = 18.5 pct. N=65 is inflated to somewhere in [40, 52]. Offer no
+point estimate.
 
 NOTHING IN THE TOOLING-TIER LANE GETS BUILT until a candidate shows a BACK-TESTED
 CAUGHT COLUMN. Still zero candidates across five trees. The lane staying unbuilt
 is the rule working, not a stall.
 
 OPEN WORK, in ROADMAP.md order:
+  - A TRACKED FILE DELETED FROM THE README TREE BLOCK IS INVISIBLE TO EVERY
+    GUARD. A naive reverse arm is WRONG - the block is a curated public summary,
+    so demanding every tracked file appear would be deleted within a session. The
+    candidate is a NAMED WATCHLIST of load-bearing disclosures. Closes only when
+    a planted deletion is observed RED.
+  - THE ABOUT DESCRIPTION AND TOPIC LIST ARE PUBLIC SURFACE NO GUARD CAN SEE.
+    Same shape as the gitignored inbox - the guards derive their corpus from
+    git ls-files. Undecided whether to mirror them into a tracked file.
   - OUR 96-ROW CORPUS HAS A MEASURED INSTRUMENT DEFECT and must not be re-offered
     to anyone until PROXY-MEASURE and ADVERSARY are repaired or retired.
   - Our own adversarial method MISSED the tie-breaker defect driving 83 pct of
-    the disagreements on our own rows. That is a method finding, not a row
-    finding.
+    the disagreements on our own rows. A method finding, not a row finding.
   - RECENCY is a fourth unnamed knob, per LW's own convention defect.
   - No convention covers a sibling writing into this tree.
-  - The ledger is NOT in newest-first order, FOUR entries - measured again at
-    f12d3a8, unchanged by this session's seven appends, which all sit above
-    everything. Deliberately unfixed: whether an append-only file may be
-    reordered is a POLICY question nobody has ruled on.
-  - 13 applicable-and-not-done items from the triage of 44 inbound notes are
-    filed in docs/INBOX_TRIAGE_2026-09-13.md and on the roadmap. Note the
-    document publishes 14 ITEMS against 13 FILES - different populations.
+  - The ledger is NOT in newest-first order, FOUR entries. Deliberately unfixed:
+    whether an append-only file may be reordered is a POLICY question nobody has
+    ruled on.
+  - 13 applicable-and-not-done items from the triage of 44 inbound notes are in
+    docs/INBOX_TRIAGE_2026-09-13.md. That document publishes 14 ITEMS against 13
+    FILES - different populations.
   - Roster rule is PROSE ONLY, no mechanism, and structurally unreachable by any
     git ls-files-derived guard because moon_sync_inbox/ is gitignored.
+  - The largest product unlock is unglamorous: first-hand observed cost tables.
+    data/costs/ holds a contract README and ZERO data rows, so the objective DAG,
+    the scheduler and the plan panel emit zeros until those rows exist.
 
 TRAPS MEASURED IN THIS TREE. Every one has actually bitten.
   - Two suites, run SEPARATELY. NEVER pytest . from the root.
   - pytest.ini ALREADY supplies -q. A command-line -q doubles it to -qq and NO
     summary line prints. Do not pass -q. Use -rs to see skip reasons.
-  - A GUARD CANNOT SEE AN UNTRACKED FILE. tests/test_no_sibling_names.py and the
-    docs pointer guard build their corpus from git ls-files. A new doc is
-    OUTSIDE their reach until staged, so a green before staging is not evidence
-    about it. Measured this session: three citations of a sibling's real project
-    path sat in a new triage doc, invisible, until git add made the sweep red.
-    STAGE FIRST, THEN BELIEVE THE GATE.
-  - write_text emits CRLF on Windows. Measured this session: 1127 CR bytes in a
-    new doc. Check b.count(b'\r') after any programmatic write.
-  - COMMIT MESSAGE FILES GO IN THE SESSION SCRATCHPAD, never the shared /tmp
-    path - that path resolves into the Git installation tree and a concurrent
-    session can overwrite your message between the write and the commit. Use
-    git commit -F <scratchpad-file>. No hook can catch this: the window closes
-    before git commit is invoked.
+  - NEVER pipe a suite through tail or head - that consumes the exit status.
+    Redirect to a file and read the file.
+  - A GUARD CANNOT SEE AN UNTRACKED FILE, and the README tree guard cannot see a
+    DELETION. Stage first, then believe the gate, and do not read a green suite
+    as evidence about something nothing asserts.
+  - A BARE precommit_gate.py run is a VACUOUS PASS - clean index, zero files
+    scanned, exit 0. The arm that MEASURES is --scan-files with --expect-count.
+  - README.md must stay at 318 lines or more. docs/LEDGER.md carries the
+    citation README.md:317-318 and a guard requires it to resolve in range. That
+    citation is already historically decayed; only the FLOOR matters.
+  - write_text emits CRLF on Windows and .gitattributes declares eol=lf, so git
+    diff looks CLEAN while the line-endings test stays red. Check b.count(b'\r').
+  - grep -c 'C:\Resin Compute' README.md returns 0 under Git Bash while the
+    literal IS present. Count it in Python.
+  - COMMIT MESSAGE FILES GO IN THE SESSION SCRATCHPAD, never a shared /tmp path -
+    that path resolves into the Git installation tree and a concurrent session
+    can overwrite your message between the write and the commit. No hook can
+    catch this: the window closes before git commit is invoked.
   - Progress dots are PER LINE, not cumulative.
   - Purge __pycache__ on BOTH sides of a mutation.
   - Windows: NEVER Stop-Process. taskkill //F //PID <pid> under Git Bash.
   - Git Bash exit status is 8-bit, so 4294901760 reads as 0. Check summary TEXT.
   - STRICT 7-BIT ASCII everywhere authored. Build a banned-glyph fixture with
-    chr(0x2014), never a literal.
-  - NEVER cite docs/LEDGER.md or ROADMAP.md by line number in authored text.
+    chr(0x2014), never a literal. No emoji in any .md, including the README.
+  - NEVER cite docs/LEDGER.md or ROADMAP.md by line number.
   - A SUBAGENT'S CLAIM about a count, a green suite or a file's existence is a
-    HYPOTHESIS. Re-probe it. This session a slice reported a green docs gate that
-    was red in the full suite, for a real reason it had not measured.
+    HYPOTHESIS. Re-probe it. This session a subagent corrected the MERGER.
   - VERIFY DELIVERY AT THE RECIPIENT. sha256 every copy. A note in our own
     moon_sync_inbox/ is not delivered.
   - An ADDRESS-LIST OMISSION is invisible to an outbound delivery check. Name all
@@ -150,11 +147,12 @@ STANDING DIRECTIVES.
     reports. Slices must be provably disjoint BEFORE dispatch. The agent that
     produced a thing NEVER grades it. Freeze a candidate before dispatching an
     adjudicator. Spawn refuters with DISTINCT LENSES. AGREEMENT IS NOT EVIDENCE.
+  - FULL AUTHORITY, reconfirmed by the operator 2026-09-14: adjudicate, do not
+    ask. Contested calls go to an ADJUDICATOR or into the lane, never upward.
   - NEVER ask the operator for send authorization. The four sibling sync inboxes
     are pre-authorized - siblings are CS, LL, LW and RC, and THEIR DIRECTORY
     NAMES ARE NOT WRITTEN IN ANY TRACKED FILE. Resolve paths from the gitignored
-    map. Contested calls go to an ADJUDICATOR or into the lane, never to the
-    operator.
+    map on disk.
   - Halt clause (a): halt before any write outside this repo root, explicitly
     C:\ProgramData and the Global\ mutex namespace. The session scratchpad is IN
     scope. An ordinary push that passes both suites and the sibling-name sweep is
