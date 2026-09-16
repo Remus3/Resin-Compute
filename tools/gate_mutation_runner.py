@@ -225,9 +225,52 @@ SELF_TEST_MODULE = "tests/test_gate_mutation_runner.py"
 #: template being correctly applied once is not evidence it will be applied
 #: again, which is why `undeclared_shape_graders` below stops the campaign
 #: depending on anyone remembering to.
+#: EXCLUSION THREE, `tests/test_responder_spawn_census.py`. It reads the
+#: responder's SOURCE and asserts that every process-creating call reached through
+#: an import binding, from an enumerated set of callables, carries a usable
+#: `creationflags` - so it is a statement about the target file's text and AST,
+#: which is this list's category.
+#:
+#: THIS ENTRY REPLACED A WRONG ONE ON 2026-09-16, and the correction is the part
+#: worth reading, because the FIRST version of this entry declared
+#: `tests/test_responder_no_console_window.py` and gave a reason that MEASUREMENT
+#: CONTRADICTED.
+#:
+#: WHAT THAT WRONG REASON SAID. That widening `FUNCTION` beyond `_run_once` would
+#: make the module redden OVER SYNTAX the way the two entries above do, so an
+#: undeclared shape grader would record KILLED for mutants no test had driven.
+#:
+#: WHAT ACTUALLY FIRES. That module's arms were BEHAVIOUR arms - they drove
+#: `_spawn_headless` through a patched `subprocess` and graded the kwargs it
+#: really passed. A mutation inside that function reddens them BY BEING DRIVEN,
+#: which is a LEGITIMATE KILL and the exact opposite of the false kill this list
+#: exists to suppress. Its source-reading census arms stayed green throughout. So
+#: the stated mechanism was not the one operating, and because exclusion is PER
+#: MODULE - `suite_argv` emits one `--ignore` for the whole file - declaring it
+#: DELETED those legitimate kills from every campaign. That is a structural
+#: defect and no rewording fixes it.
+#:
+#: THE REPAIR WAS A SPLIT, not a better paragraph. The source-reading arms moved
+#: into `tests/test_responder_spawn_census.py`, which is what genuinely needs
+#: excluding and is what this entry names. The behaviour arms stayed in
+#: `tests/test_responder_no_console_window.py`, which is NOT declared and stays in
+#: the campaign where it can kill. Each file's header says which kind it holds and
+#: forbids acquiring the other kind.
+#:
+#: A COUNT, AND WHAT IT IS AND IS NOT EVIDENCE FOR. Of the 39 mutants
+#: `plan_mutants` derives from the clean responder today, ZERO make the census
+#: redden: every mutant rewrites a statement inside `_run_once`, at responder lines
+#: 2171-2414, while the graded spawn sits in `_spawn_headless` at 2477-2532,
+#: entirely outside it. Setting `function_name="_spawn_headless"` derives 0 mutants
+#: and 20 unmutatable, because every gate tag in the file lies outside that
+#: function - so the hypothetical cannot currently be run at all, and any claim
+#: about what it would show is a prediction and not a measurement. This entry
+#: therefore rests on the CATEGORY - this module reads the target's source - and
+#: not on a reddening count, which is a snapshot of where the tags happen to sit.
 SHAPE_GRADER_MODULES: tuple[str, ...] = (
     "tests/test_responder_gate_census.py",
     "tests/test_gate_name_bindings.py",
+    "tests/test_responder_spawn_census.py",
 )
 
 #: Every path handed to pytest as `--ignore` for a campaign run, in a fixed
@@ -723,6 +766,27 @@ def _binds_and_reads_responder(source: str) -> bool:
     by the `agents/pity_engine` suite, were outside the sample as well. A
     sampled negative is a statement about the sample, so the sampling rule is
     reported beside the number rather than left for a reader to assume away.
+
+    RE-MEASURED AT ff0ed94 ON 2026-09-16 AND THE LOWER BOUND HELD: a wider sweep
+    over one full suite run found 20 distinct repo files reading this responder, of
+    which 17 are invisible to this detector and 16 are invisible AND undeclared.
+    20 CORROBORATES THE 15 RATHER THAN REFUTING IT - the sentence above claims a
+    lower bound and names the reads its sampling could not see, which is why a
+    larger later count is the predicted outcome and not a contradiction. Read the
+    number as "at least", which is what it says.
+
+    THE BLIND SPOT IS WIDER THAN THE `importlib` ROUTE, though, and that part IS a
+    correction. Criterion 2 matches a read attribute on a module-level `Name`, so
+    reading the bound path through a `pytest.mark.parametrize` argument, a plain
+    local variable, or an f-string path is invisible too. Among the 16 blind and
+    undeclared are `tests/test_docs_consistency.py`,
+    `tests/test_machine_identity.py`, `tests/test_no_sibling_names.py`,
+    `tests/test_responder_task_argv.py` and this module itself. All 39 current
+    mutants were run against the 13 runnable ones and every module stayed green, so
+    this is a SCOPE RISK and not a measured confound. Widening the detector is
+    tracked as its own roadmap row rather than done here, because the widening and
+    the 16 declarations it would then demand are one change and not a side effect
+    of an unrelated fix.
     """
     try:
         tree = ast.parse(source)
