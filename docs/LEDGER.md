@@ -18,10 +18,13 @@ WHAT LANDED, 22 commits from `e9b4542` to `87f59eb`.
 
 SLICE A, the watcher contract. `scripts/watch_inbox.py` now implements all six
 clauses of section 5 of the vendored `docs/CHANNEL.md`: a BOUNDED stdin wait,
-per-session suppression in `ops/runtime/inbox_sessions.json`, an UNMEASURED line
+per-session suppression in a new gitignored ops/runtime/inbox_sessions.json file
+- unbackticked deliberately, since the docs guard requires a backticked path to
+be git-stored and every runtime record here is ignored - an UNMEASURED line
 for every could-not-look state, a sanitised session-id column in the invocation
 log, and a 10-name cap newest-first with an overflow pointer to
-`ops/runtime/inbox_report.txt` written atomically BEFORE stdout.
+ops/runtime/inbox_report.txt, also gitignored and also unbackticked, written
+atomically BEFORE stdout.
 
 MEASURED, not intended. The first implementation of the bounded reader HUNG PAST
 25 SECONDS on a pipe held open and never written, under a hook declared with
