@@ -636,13 +636,46 @@ def test_quiet_when_empty_still_speaks_when_a_note_is_unread(watch, tmp_path, ca
     assert "a.md" in out
 
 
-def test_quiet_when_empty_says_nothing_about_an_absent_inbox(watch, tmp_path, capsys):
+def test_quiet_when_empty_still_says_UNMEASURED_about_an_absent_inbox(watch, tmp_path, capsys):
+    """REVERSED ON 2026-09-16, AND THIS ARM IS WHY THE OLD BEHAVIOUR PERSISTED.
+
+    It used to assert `out == ""` for a missing inbox on the quiet path, under
+    the name `test_quiet_when_empty_says_nothing_about_an_absent_inbox`. That was
+    the arm pinning the defect rather than a property: it read as an instance of
+    "a per-prompt hook must not chatter", which is a real rule, and so nobody
+    looked at it twice.
+
+    WHY IT WAS WRONG. Silence is not neutral on this hook. Silence is EXACTLY
+    what a clean inbox produces, so a watcher that could not see the channel at
+    all was rendering as one reporting good news - and `moon_sync_inbox/` is
+    gitignored, so "could not see the channel" is the normal permanent state of a
+    fresh clone and of every worktree. The arm was green in precisely the copies
+    where the tool was blind.
+
+    Clause 2 of the fleet watcher contract in RC's `docs/CHANNEL.md` v1 states
+    the rule: a could-not-measure state prints ONE line carrying the token
+    UNMEASURED and never the affirmative clean line. Clause 1 keeps the exit code
+    at 0 so the harness does not drop the line.
+
+    THE ANTI-CHATTER CONCERN THE OLD ARM WAS REALLY ABOUT IS ANSWERED ELSEWHERE,
+    not ignored: clause 4 lets this one state be shown once per validated session
+    id, and `test_the_absent_inbox_line_is_shown_once_per_session_but_always_
+    without_one` in `tests/test_watch_inbox_session.py` pins that.
+    """
     rc = watch.main(
         ["--dir", str(tmp_path / "absent"), "--state", str(tmp_path / "s.json"),
          "--quiet-when-empty"]
     )
-    assert rc == 0
-    assert capsys.readouterr().out == ""
+    out = capsys.readouterr().out
+
+    assert rc == 0, "a could-not-measure state must still exit 0 or the harness drops the line"
+    assert watch.UNMEASURED in out, f"a blind watcher rendered as clean: {out!r}"
+    assert len([ln for ln in out.splitlines() if ln.strip()]) == 1, (
+        f"clause 2 says ONE line: {out!r}"
+    )
+    assert "unread:" not in out, (
+        f"the affirmative clean line was printed for a channel nobody looked at: {out!r}"
+    )
 
 
 def test_reporting_never_advances_the_watermark(watch, tmp_path):
@@ -2961,10 +2994,22 @@ def test_each_logged_line_is_tab_separated_ascii_with_a_timestamp(watch, tmp_pat
     assert b"\r\n" not in raw, "the log carries CRLF, which no diff in this tree would show"
     for line in _log_lines(watch):
         fields = line.split("\t")
-        assert len(fields) == 3, f"expected timestamp, entry point and disposition: {line!r}"
+        assert len(fields) == 4, (
+            f"expected timestamp, entry point, session and disposition: {line!r}"
+        )
         time.strptime(fields[0], "%Y-%m-%dT%H:%M:%S")
         assert fields[1], f"the entry point column is empty: {line!r}"
-        assert fields[2], f"the disposition column is empty: {line!r}"
+        assert fields[2], f"the session column is empty: {line!r}"
+        assert fields[3], f"the disposition column is empty: {line!r}"
+        # THE DISPOSITION STAYS LAST, and that is a cross-module contract rather
+        # than a preference. `tests/test_session_hooks.py` reads it as the final
+        # tab-separated field and the entry point as the second, so the session
+        # column was inserted THIRD. Appending it would silently redefine both
+        # of those readings while looking like a tidier column order.
+        assert fields[-1] == watch.PHASE_START or fields[-1] in watch.TERMINAL_DISPOSITIONS, (
+            f"the last column is not a phase or a disposition: {line!r}"
+        )
+    assert _terminals(watch), "no terminal line was written, so the shape above is vacuous"
 
 
 def test_an_unwritable_invocation_log_does_not_take_the_watcher_down(watch, tmp_path):
@@ -3314,7 +3359,11 @@ def test_a_forged_label_cannot_reach_a_spawned_log(watch, monkeypatch, tmp_path)
 
     lines = _spawned_lines(redirected, monkeypatch, watch)
     for line in lines:
-        assert len(line.split("\t")) == 3, f"a forged label grew a column: {line!r}"
+        # FOUR COLUMNS SINCE THE SESSION ID ARRIVED: timestamp, entry point,
+        # session, disposition. The count is the whole assertion - a tab that
+        # survived the validator would grow the line to five and forge whichever
+        # column it landed in.
+        assert len(line.split("\t")) == 4, f"a forged label grew a column: {line!r}"
     assert {ln.split("\t")[1] for ln in lines} == {watch.SOURCE_CLI}, (
         f"a rejected label did not fall back to the honest one: {lines}"
     )
@@ -3543,7 +3592,7 @@ def test_a_forged_flag_label_cannot_reach_a_spawned_log(watch, monkeypatch, tmp_
 
     lines = _spawned_lines(redirected, monkeypatch, watch)
     for line in lines:
-        assert len(line.split("\t")) == 3, f"a forged flag label grew a column: {line!r}"
+        assert len(line.split("\t")) == 4, f"a forged flag label grew a column: {line!r}"
     assert {ln.split("\t")[1] for ln in lines} == {watch.SOURCE_CLI}, (
         f"a rejected flag label did not fall back to the honest one: {lines}"
     )
