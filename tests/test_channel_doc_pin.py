@@ -22,7 +22,7 @@ cannot quietly cancel the pin.
   4.  the declared CHANNEL_VERSION parses to an int and equals 1
   5.  no heading line carries a date
   6.  every repo-relative path it names resolves, and it cites no file:line
-  7.  the filename-variant table is present and parses
+  7.  the filename-variant table is present and parses, every cell pinned
 
 THE RE-PIN BLINDNESS, and why this module is shaped the way it is. An
 independent adversary fired 31 disk mutants at the first version of this file.
@@ -52,6 +52,42 @@ loosens its matcher, or makes the pin self-fulfilling by recomputing it from the
 file. It is deliberately not an `inspect.getsource` token check: that would pin
 the arm's TEXT rather than its behaviour, and a shape arm can be satisfied by
 code that no longer does anything.
+
+ARM 7 WAS A SHAPE ARM PRETENDING TO BE A PIN, and CS's REVIEW of the shared test
+core is what surfaced it. The table it names as the grammar's test-vector source
+was graded on column count, row count, the Shape column order, the verdict's
+MEMBERSHIP in the admit-or-refuse pair and that the Example cell was backticked,
+and four of the seven columns were never read. CS supplied six mutations; run
+against THIS tree's arms before any change, five passed arm 7 AND every other
+non-digest arm. Two results differ from CS's own tree and both are recorded
+because a shared core is only shared where the bytes are:
+
+  * CS reports a PRIMARY verdict flipped from ADMIT to REFUSE passes. HERE IT
+    DID NOT. This tree's arm already asserted the exact verdict list
+    `["ADMIT", "REFUSE", "REFUSE", "REFUSE"]` rather than only per-cell
+    membership, so the flip was caught. This tree was stronger on that one.
+  * CS reports deleting the header SEPARATOR row "correctly fails". HERE IT DID
+    NOT. `_variant_table_rows` skips a separator row by CONTENT rather than
+    requiring one, so deleting it leaves the same four rows and the row walk is
+    blind. This tree was weaker on that one, and it now has its own arm.
+
+The repair is CS's: every cell of every row pinned as `EXPECTED_VARIANT_TABLE`,
+with the ROW COUNT asserted BEFORE the content compare as the anti-narrowing
+control, because rows go absent exactly where a count miscounts and a roster
+without its size is half a pin. The per-row WIDTH is asserted before the cell
+compare for the same reason - a row short one cell shifts every later cell left
+and a content compare would blame the wrong column. Alongside it,
+`test_the_variant_table_block_is_present_verbatim` pins the header, the
+separator and all four rows as contiguous bytes, which is what catches the
+separator deletion and what sees cell whitespace the stripped parse cannot.
+All six mutations are now in `_REPIN_MUTANTS`, so they are re-measured in the
+digest-blind state every run.
+
+Why none of this was urgent and was worth doing anyway: while the digest pin
+holds, any of these mutations also reddens arm 2. The blindness becomes live at
+exactly one moment - a CHANNEL_VERSION 2 re-pin, when the digest is legitimately
+recomputed and a hand-copied table is most likely to be mangled. That is the one
+moment arm 7 was ever going to be load-bearing.
 
 Arm 5's scope. It grades ATX headings (`^#{1,6}\\s`) AND setext headings (a
 non-blank line whose successor is all `=` or all `-`), because an ISO date in a
@@ -91,6 +127,21 @@ by its root segment), `scripts/nope.sh` and `core/nope.pyi` (suffixes added),
 and `docs\\nope2.md` (backslash separator, normalised) all escaped the first
 version and are now caught.
 
+That paragraph was a concession in prose. It is now an ASSERTION, because a
+concession nobody re-reads is indistinguishable from a defect nobody found. CS's
+REVIEW of the shared test core and an independent adversary in this tree
+converged on the same point from opposite directions: arm 6's anti-vacuity guard
+was a FLOOR (`len(paths) >= 2`), and a floor advertises independent existence
+evidence that a population of one self-reference plus one gitignored directory
+does not supply. `test_the_path_scan_walked_a_real_population` now pins the
+population EXACTLY and splits it into the disk-resolving half and the
+ignored-only half, and asserts in as many words that the disk-resolving half is
+the file under test. The guard was PINNED rather than DROPPED: dropping it
+removes arm 6's only anti-narrowing control, and a collapsed extractor would
+make `_unresolved_paths` return an empty list over an empty population - green
+forever, measuring nothing. An exact equality also catches the population
+GROWING by accident, which a floor never could.
+
 MEASURED BLIND SPOTS in arm 6, written down rather than left to be discovered:
 
   * A BARE FILENAME - a token with no separator - is out of scope, structurally
@@ -110,6 +161,30 @@ MEASURED BLIND SPOTS in arm 6, written down rather than left to be discovered:
   * A path inside a `%`-bearing or whitespace-bearing token is excluded, which
     is what keeps the doc's one absolute Windows path
     (`%LOCALAPPDATA%\\moonsync\\status.md`) out of a disk lookup.
+  * A SPACE-BEARING path is not merely dropped - it is SHATTERED. `_PATHLIKE`'s
+    character class excludes the space, so `docs/my notes/thing.md` is admitted
+    as the two fragments `docs/my` and `notes/thing.md`, and BOTH are reported
+    unresolved. Arm 6 goes red naming two paths that were never in the doc. CS's
+    REVIEW describes this narrowing as making such a path "invisible to the
+    arm"; measured here it is a false positive rather than a blind spot, which
+    fails safe but misdirects. `test_the_path_extractor_shatters_a_space_bearing
+    _path` pins it. Separately and cleanly: the space in THIS checkout root
+    (`C:\\Resin Compute`) breaks nothing, because resolution is pathlib plus an
+    argument LIST to `git check-ignore` and never a shell string - a distinct
+    question, pinned separately so the two cannot be confused.
+  * A path WRAPPED ACROSS A LINE is seen only as its first fragment, with the
+    same false-positive shape. Pinned by
+    `test_the_path_extractor_cannot_see_a_line_wrapped_path`.
+
+NEITHER OF THOSE TWO WAS WIDENED, and that is the ruling rather than an
+omission. This tree has a measured rule that after a second defeat you stop
+widening the matcher and instead narrow the CLAIM to what the mechanism can
+support, recording the blind list as measured fact. Admitting spaces makes every
+prose phrase around a slash a path candidate; matching across a newline makes
+the pattern non-line-local and joins unrelated prose across paragraph breaks.
+The doc contains neither construct today, section 9 forbids a local edit that
+would add one, and a recorded blind spot is acceptable where an unrecorded one
+is the defect.
 
 REPAIR 4, and which half was fixed. The first version's docstring claimed a
 non-ASCII byte must raise from `decode("ascii")`. That claim is true only for
@@ -623,18 +698,220 @@ def test_every_repo_relative_path_resolves():
     )
 
 
-def test_the_path_scan_walked_a_real_population():
-    """A floor, not just a membership check - arm 5 has one and this needs one.
+#: Arm 6's ENTIRE graded population on CHANNEL_VERSION 1 bytes, pinned exactly
+#: rather than floored. The two halves are split because they carry different
+#: evidence, and lumping them let a guard advertise a property it does not have.
+EXPECTED_PATHS_RESOLVING_ON_DISK = {"docs/CHANNEL.md"}
+EXPECTED_PATHS_RESOLVING_ONLY_AS_IGNORED = {"moon_sync_inbox/"}
 
-    The floor is TWO because two is the honest number on these bytes. That is
-    itself the finding: see the arm 6 paragraph in the module docstring.
+
+def test_the_path_scan_walked_a_real_population():
+    """The population pinned EXACTLY, and the honest statement about it.
+
+    THE ARM THIS GUARDS IS VACUOUS ON THESE BYTES AND THIS TEST SAYS SO RATHER
+    THAN HIDING IT. CS's REVIEW of the shared test core found that the
+    anti-vacuity guard here is satisfied by a self-reference, and an independent
+    adversary in this tree found the same thing before that note arrived.
+    Measured on CHANNEL_VERSION 1 bytes, in this worktree, this run:
+
+      * the population is exactly TWO tokens;
+      * the half that resolves ON DISK is exactly ONE - `docs/CHANNEL.md`, the
+        file under test, whose existence arm 1 already asserts;
+      * the other half, `moon_sync_inbox/`, resolves only through the gitignored
+        disjunct and is absent from every worktree by design.
+
+    So the disk-resolving half carries NO independent existence evidence
+    whatsoever. A guard reading `len(paths) >= 2` implied it did.
+
+    WHY THE GUARD IS PINNED RATHER THAN DROPPED. Dropping it removes the only
+    anti-narrowing control arm 6 has: if `_repo_relative_paths` ever collapsed -
+    a mangled character class, a suffix list edit - `_unresolved_paths` would
+    return an empty list over an empty population and arm 6 would be vacuously
+    green forever with nothing to notice. The defect was never that the guard
+    exists; it was that a FLOOR advertises independent existence evidence this
+    population does not supply. An exact set equality plus the split above keeps
+    the anti-narrowing function and states the truth about the value. An honest
+    narrow arm beats a guard advertising a property it does not have.
+
+    A floor would also have accepted a population that GREW by accident, which
+    is the other direction a re-pin can go wrong. This equality does not.
     """
     paths = _repo_relative_paths(_doc_text())
-    assert len(paths) >= 2, f"path population collapsed to {len(paths)}: {sorted(paths)}"
-    assert "docs/CHANNEL.md" in paths, f"self-reference not found - scan is broken: {sorted(paths)}"
-    assert "moon_sync_inbox/" in paths, f"gitignored inbox not found: {sorted(paths)}"
+    expected = EXPECTED_PATHS_RESOLVING_ON_DISK | EXPECTED_PATHS_RESOLVING_ONLY_AS_IGNORED
+    assert paths == expected, (
+        f"arm 6's graded population moved.\n"
+        f"  measured: {sorted(paths)}\n"
+        f"  pinned  : {sorted(expected)}\n"
+        "If a re-pin legitimately added a path, add it to the right half above "
+        "and re-read this docstring - a path that lands in the disk-resolving "
+        "half is the first real existence evidence this arm has ever had."
+    )
+
+    on_disk = {p for p in paths if (REPO_ROOT / p).exists()}
+    assert on_disk == EXPECTED_PATHS_RESOLVING_ON_DISK, (
+        f"the disk-resolving half moved: {sorted(on_disk)}"
+    )
+    ignored_only = {p for p in paths - on_disk if _is_ignored(p)}
+    assert ignored_only == EXPECTED_PATHS_RESOLVING_ONLY_AS_IGNORED, (
+        f"the ignored-only half moved: {sorted(ignored_only)}"
+    )
+
+    # The vacuity, stated as an assertion so it cannot rot into a surprise: the
+    # only thing arm 6 proves to exist is the file arm 1 already proved exists.
+    assert on_disk == {"docs/CHANNEL.md"}, (
+        "arm 6 now resolves something other than its own subject - that is an "
+        "IMPROVEMENT, and this assertion plus the docstring above must be "
+        "rewritten to stop calling the arm vacuous"
+    )
+
+    # Two exclusions that are the extractor working, not the population failing.
     assert not any("moonsync" in p for p in paths), f"absolute Windows path admitted: {sorted(paths)}"
     assert not any(p.startswith("n/a") for p in paths), "the prose token 'n/a' was read as a path"
+
+
+def test_the_population_pin_has_teeth_in_both_directions(monkeypatch, tmp_path):
+    """The non-vacuity arm for the pin above, and the proof it beats the floor.
+
+    Runs the population guard ITSELF against doc-derived mutants, per the
+    control convention at the top of this module - not a re-implementation of
+    it, which could be weaker than what it grades.
+
+    The GROWTH case is the one the old `len(paths) >= 2` floor could never
+    catch: measured, that floor is still satisfied on a population of three.
+    """
+    original = _doc_bytes()
+    grown = original + b"\nSee `docs/nope-population-sentinel.md`.\n"
+    shrunk = original.replace(b"moon_sync_inbox/", b"INBOXDIR")
+    assert grown != original and shrunk != original, "no-op mutant"
+
+    # The floor the exact equality replaced, re-stated here only to show it is
+    # silent on growth. This is the ONLY place a re-implementation appears, and
+    # it is the thing being refuted rather than the thing being trusted.
+    assert len(_repo_relative_paths(grown.decode("ascii"))) >= 2, (
+        "the old floor would have fired on the growth case after all - "
+        "re-derive the defence in the docstring above"
+    )
+
+    for label, mutant in (("grown", grown), ("shrunk", shrunk)):
+        assert _run_arm_against(
+            monkeypatch, tmp_path, test_the_path_scan_walked_a_real_population, mutant
+        ) is not None, f"the population pin accepted a {label} population"
+
+    assert _run_arm_against(
+        monkeypatch, tmp_path, test_the_path_scan_walked_a_real_population, original
+    ) is None, "the population pin rejects the real bytes"
+
+
+def test_the_verbatim_block_arm_is_the_only_guard_on_the_separator(monkeypatch, tmp_path):
+    """Isolation proof: without the block arm, the separator deletion survives.
+
+    This is the measured statement behind the docstring's claim that this tree
+    was WEAKER than CS's on that one mutation. `_variant_table_rows` skips a
+    separator row by content rather than requiring one, so the row walk returns
+    the same four rows either way and arm 7's parse still passes.
+    """
+    original = _doc_bytes()
+    mutant = _drop_table_separator(original)
+    assert mutant != original, "no-op mutant - the header or separator spelling moved"
+
+    caught = [
+        arm.__name__ for arm in _NON_DIGEST_ARMS
+        if _run_arm_against(monkeypatch, tmp_path, arm, mutant) is not None
+    ]
+    assert caught == ["test_the_variant_table_block_is_present_verbatim"], (
+        "the separator deletion is no longer caught by exactly the block arm - "
+        f"caught by: {caught}. If another arm now catches it that is an "
+        "improvement and this isolation note is stale; if NOTHING catches it "
+        "the separator has lost its only guard."
+    )
+
+
+def test_the_path_extractor_shatters_a_space_bearing_path():
+    """FINDING THREE, first half - recorded beside the arm, not widened.
+
+    CS reports the path filter "drops any token containing a SPACE, so a
+    checkout path with a space in it is invisible to the arm". Measured here,
+    that is NOT what this tree's extractor does, and the difference matters:
+    `_PATHLIKE`'s character class simply excludes the space, so the regex does
+    not drop the token - it SHATTERS it into fragments and admits the fragments.
+
+    `docs/my notes/thing.md` becomes `docs/my` (admitted by its known root) and
+    `notes/thing.md` (admitted by its suffix). Neither names anything. Both are
+    then reported UNRESOLVED, so arm 6 goes RED on two paths that were never in
+    the doc. That is a FALSE POSITIVE, not a blind spot - louder than CS
+    describes, and it fails safe rather than silent, but it would send a
+    re-pinner hunting for files that do not exist.
+
+    NOT WIDENED, deliberately. This tree has a measured rule that after a second
+    defeat you stop widening the matcher and narrow the CLAIM to what the
+    mechanism can support, recording the blind list as measured fact. Admitting
+    spaces would make every prose phrase around a slash a path candidate. The
+    doc contains no space-bearing path today and section 9 forbids a local edit
+    to add one, so the cost is bounded and written down here.
+    """
+    shattered = _repo_relative_paths("See `docs/my notes/thing.md` for more.")
+    assert shattered == {"docs/my", "notes/thing.md"}, (
+        f"the shatter behaviour changed - re-derive this record: {sorted(shattered)}"
+    )
+    assert "docs/my notes/thing.md" not in shattered, "the whole token entered the population"
+    # And the fragments are not merely admitted, they are reported unresolved.
+    assert _unresolved_paths("See `docs/my notes/thing.md` for more.") == [
+        "docs/my", "notes/thing.md",
+    ]
+
+
+def test_a_space_in_this_checkout_root_does_not_break_resolution():
+    """FINDING THREE, first half, second question - and it is a CLEAN result.
+
+    CS notes the space narrowing "matters more than it looks because at least
+    one participating tree's root contains a space". THIS tree is that tree:
+    the repo root is `C:\\Resin Compute`. Measured here, the space in the ROOT
+    breaks nothing, and the two are separate questions that are easy to run
+    together and get wrong.
+
+    The reason is mechanical rather than lucky. Resolution never builds a shell
+    string: `(REPO_ROOT / p).exists()` is pathlib, and `_is_ignored` hands
+    `git check-ignore` an argument LIST, so no word splitting happens anywhere.
+    The narrowing above is about spaces inside a token IN THE DOC; it says
+    nothing about the checkout path, and this test is what keeps the two apart.
+    """
+    assert " " in str(REPO_ROOT), (
+        "this checkout root no longer contains a space, so this test now "
+        "measures nothing here - it stays as the record for the trees whose "
+        "roots do, but do not cite it as a live control from this tree"
+    )
+    assert (REPO_ROOT / "docs/CHANNEL.md").exists()
+    assert _is_ignored("moon_sync_inbox/")
+    assert not _is_ignored("docs/CHANNEL.md")
+    assert _unresolved_paths(_doc_text()) == []
+
+
+def test_the_path_extractor_cannot_see_a_line_wrapped_path():
+    """FINDING THREE, second half - REPRODUCED, with the same correction.
+
+    CS: "the backtick pattern cannot see a path wrapped across a line, so a long
+    path broken by the doc's own wrapping is not a token at all." Measured here,
+    the second clause is wrong in this tree for the same reason as above. The
+    wrapped path is not absent - its FIRST fragment is admitted and reported
+    unresolved, and its tail, having no separator, is dropped by the bare-
+    filename rule. Arm 6 goes red naming a path that does not exist.
+
+    Also not widened, and for a stronger reason than the space case: seeing
+    across a newline means the matcher stops being line-local, and a
+    multiline-dotall path pattern over a 300-line markdown doc would join
+    unrelated prose across paragraph breaks. The doc wraps no path today.
+    """
+    wrapped = "See `docs/very-long-\nname-sentinel.md` for more."
+    found = _repo_relative_paths(wrapped)
+    assert found == {"docs/very-long-"}, (
+        f"the wrapped-path behaviour changed - re-derive this record: {sorted(found)}"
+    )
+    assert _unresolved_paths(wrapped) == ["docs/very-long-"]
+    # The unwrapped spelling of the same path is seen whole, which is the proof
+    # that the newline is the cause and not the name.
+    assert _repo_relative_paths("See `docs/very-long-name-sentinel.md` for more.") == {
+        "docs/very-long-name-sentinel.md"
+    }
 
 
 def test_the_path_extractor_catches_every_shape_that_escaped_the_first_version():
@@ -732,23 +1009,143 @@ def test_every_citation_shape_is_caught():
 
 EXPECTED_SHAPES = ["PRIMARY", "Variant A", "Variant B", "Variant C"]
 
+#: EVERY CELL OF EVERY ROW, not a shape summary. CS's REVIEW of the shared test
+#: core showed that grading column count, row count, the Shape column and the
+#: verdict's MEMBERSHIP in the admit-or-refuse pair leaves four of the seven
+#: columns ungraded, so the Example names - the actual test vectors - could be
+#: replaced with nonsense or swapped between rows and the arm still passed.
+#: Measured here before the repair: of CS's six mutations, five passed this
+#: tree's arm 7 and every other non-digest arm.
+#:
+#: The example filenames ARE the grammar's test vectors. Every tree grades its
+#: own responder against these strings, so a mangled cell is a silent loss of
+#: coverage in five trees at once - and it goes unnoticed at exactly one moment,
+#: a CHANNEL_VERSION 2 re-pin, when the digest is legitimately recomputed and a
+#: hand-copied table is most likely to be damaged.
+EXPECTED_VARIANT_TABLE = [
+    [
+        "`2026-09-15-0930-from-RC-FYI-example-topic.md`",
+        "ADMIT", "routes", "any entry", "no responder", "no responder", "PRIMARY",
+    ],
+    [
+        "`2026-09-15-from-RC-FYI-example-topic.md`",
+        "REFUSE", "routes", "any entry", "no responder", "no responder", "Variant A",
+    ],
+    [
+        "`from-RC-2026-09-15-0930-FYI-example-topic.md`",
+        "REFUSE", "zero destinations", "any entry", "no responder", "no responder", "Variant B",
+    ],
+    [
+        "`2026-09-15-0930-from-RC-FYI-example-topic.txt`",
+        "REFUSE", "routes", "any entry", "no responder", "no responder", "Variant C",
+    ],
+]
+
+#: The header and its separator, pinned as literals. The separator matters on its
+#: own: `_variant_table_rows` SKIPS a separator row by content rather than
+#: requiring one, so deleting it is invisible to the row walk. Measured here -
+#: CS reports its own tree catches that mutation and this tree did NOT.
+EXPECTED_TABLE_HEADER = "| Example | RC gate 6 | RSC | LW | CS | LL | Shape |"
+EXPECTED_TABLE_SEPARATOR = "|---|---|---|---|---|---|---|"
+
+
+def _render_row(cells: list[str]) -> str:
+    """The doc's own row spelling, so a pin and a mutant cannot disagree."""
+    return "| " + " | ".join(cells) + " |"
+
 
 def test_the_filename_variant_table_parses():
+    """Every cell of every row, not a shape summary.
+
+    THE ORDER OF THESE ASSERTIONS IS LOAD-BEARING. The row count is asserted
+    BEFORE the content compare because rows go absent exactly where a count
+    miscounts: delete row 2 and a straight content compare reports "row 2 is
+    wrong", which reads as a corrupted cell and sends the reader looking in the
+    wrong place. A roster without its size is half a pin.
+
+    What this replaced, and why: the previous version graded column count, row
+    count, the Shape column order, the verdict's MEMBERSHIP in the admit-or-
+    refuse pair and that the Example cell was backticked - and never read four
+    of the seven columns. Measured against CS's six mutations before the repair,
+    five passed this arm and every other non-digest arm.
+    """
     rows = _variant_table_rows(_doc_text())
     assert rows, "the filename-variant table was not found at all"
-    assert len(rows) == len(EXPECTED_SHAPES), (
-        f"expected {len(EXPECTED_SHAPES)} variant rows, parsed {len(rows)}: {rows}"
+
+    # (1) the anti-narrowing control, first.
+    assert len(rows) == len(EXPECTED_VARIANT_TABLE), (
+        f"expected {len(EXPECTED_VARIANT_TABLE)} variant rows, parsed "
+        f"{len(rows)} - a row was added or lost, which is a silent change to "
+        f"the grammar's test vectors in five trees at once: {rows}"
     )
-    assert [row[-1] for row in rows] == EXPECTED_SHAPES
-    # Seven columns: Example, RC gate 6, the four other trees, then Shape.
-    for row in rows:
-        assert len(row) == 7, f"variant row has {len(row)} cells, expected 7: {row}"
-        assert row[0].startswith("`") and row[0].endswith("`"), (
-            f"the Example cell must be a backticked filename: {row[0]}"
+
+    # (2) the per-row width, before the cell compare, for the same reason: a
+    #     row short one cell shifts every later cell left and a content compare
+    #     would blame the wrong column.
+    for index, row in enumerate(rows):
+        assert len(row) == len(EXPECTED_VARIANT_TABLE[index]), (
+            f"variant row {index} has {len(row)} cells, expected "
+            f"{len(EXPECTED_VARIANT_TABLE[index])}: {row}"
         )
-        assert row[1] in {"ADMIT", "REFUSE"}, f"RC gate 6 verdict unparsable: {row[1]}"
+
+    # (3) the content compare - every cell of every row.
+    for index, (parsed, expected) in enumerate(zip(rows, EXPECTED_VARIANT_TABLE)):
+        assert parsed == expected, (
+            f"variant table row {index} does not match the pin.\n"
+            f"  parsed  : {parsed}\n"
+            f"  expected: {expected}\n"
+            "These filenames ARE the grammar's test vectors. Do not edit the "
+            "doc to make this green - the bytes are pinned in five trees. If "
+            "this is a CHANNEL_VERSION 2 re-pin, retype EXPECTED_VARIANT_TABLE "
+            "from the new doc by hand and check every cell."
+        )
+    assert rows == EXPECTED_VARIANT_TABLE
+
+    # (4) the two derived claims the previous version made, kept because they
+    #     say WHAT the table means rather than what it contains. Both are
+    #     implied by (3); they survive as documentation that goes red.
+    assert [row[-1] for row in rows] == EXPECTED_SHAPES
     # The PRIMARY row is the only ADMIT; RC's gate refuses all three variants.
     assert [row[1] for row in rows] == ["ADMIT", "REFUSE", "REFUSE", "REFUSE"]
+
+
+def test_the_variant_table_block_is_present_verbatim():
+    """The header, its separator and all four rows, as contiguous bytes.
+
+    NOT a second copy of arm 2. Arm 2 is a digest over the whole doc and is
+    blind by construction in the one round that matters - a re-pin, where it is
+    recomputed over the new bytes. This is a narrow pin over the ONE region
+    whose content is a cross-tree contract, and on a re-pin it must be retyped
+    by hand from the new doc, which is exactly the moment a mangled hand-copy
+    should go red.
+
+    It also grades what the parsed-cell arm cannot: `_variant_table_rows` strips
+    each cell, so `|  ADMIT  |` parses identically to `| ADMIT |`. This sees the
+    spelling.
+
+    The SEPARATOR is the half that has no other guard. `_variant_table_rows`
+    skips a separator row by CONTENT rather than requiring one, so deleting it
+    leaves the row walk returning the same four rows. CS reports its own tree
+    catches that mutation; measured here, this tree did not.
+    """
+    text = _doc_text()
+    block = "\n".join(
+        [EXPECTED_TABLE_HEADER, EXPECTED_TABLE_SEPARATOR]
+        + [_render_row(row) for row in EXPECTED_VARIANT_TABLE]
+    )
+    if block in text:
+        return
+    # Narrow the failure to the first line that moved, so the reader is not
+    # handed a seven-line diff to eyeball.
+    for line in block.split("\n"):
+        assert line in text, (
+            "the filename-variant table block does not appear verbatim in "
+            f"docs/CHANNEL.md - this line is absent or respelled:\n  {line}"
+        )
+    raise AssertionError(
+        "every line of the variant table is present but not as one contiguous "
+        "block - a row was reordered, or something was inserted between rows"
+    )
 
 
 def test_the_variant_table_parser_can_fail():
@@ -781,6 +1178,7 @@ _NON_DIGEST_ARMS = (
     test_every_repo_relative_path_resolves,
     test_the_doc_cites_no_line_number,
     test_the_filename_variant_table_parses,
+    test_the_variant_table_block_is_present_verbatim,
 )
 
 
@@ -808,6 +1206,69 @@ def _corrupt_variant_verdict(data: bytes) -> bytes:
     return data.replace(b"| ADMIT |", b"| MAYBE |")
 
 
+# --- CS's six table mutations, added after its REVIEW of the shared test core.
+# Each is built from EXPECTED_VARIANT_TABLE so a pin and a mutant cannot drift
+# apart: if the doc's row spelling ever moves, the no-op assertion in the
+# parametrised test fires rather than the row quietly mutating nothing.
+
+def _row_bytes(index: int) -> bytes:
+    return _render_row(EXPECTED_VARIANT_TABLE[index]).encode("ascii")
+
+
+def _replace_row(data: bytes, index: int, cells: list[str]) -> bytes:
+    return data.replace(_row_bytes(index), _render_row(cells).encode("ascii"))
+
+
+def _nonsense_primary_example(data: bytes) -> bytes:
+    cells = list(EXPECTED_VARIANT_TABLE[0])
+    cells[0] = "`zzz-nonsense-primary.md`"
+    return _replace_row(data, 0, cells)
+
+
+def _nonsense_variant_example(data: bytes) -> bytes:
+    cells = list(EXPECTED_VARIANT_TABLE[1])
+    cells[0] = "`zzz-nonsense-variant.md`"
+    return _replace_row(data, 1, cells)
+
+
+def _swap_two_variant_examples(data: bytes) -> bytes:
+    """Variant A and Variant B trade example names; every other cell is intact.
+
+    The nastiest of the six: row count, column count, Shape order and every
+    verdict are all still correct, so a shape-only arm sees a perfect table
+    while two of the four grammar vectors now test the wrong shape.
+    """
+    a_cells = list(EXPECTED_VARIANT_TABLE[1])
+    b_cells = list(EXPECTED_VARIANT_TABLE[2])
+    a_cells[0], b_cells[0] = b_cells[0], a_cells[0]
+    out = _replace_row(data, 1, a_cells)
+    return _replace_row(out, 2, b_cells)
+
+
+def _flip_primary_verdict(data: bytes) -> bytes:
+    cells = list(EXPECTED_VARIANT_TABLE[0])
+    cells[1] = "REFUSE"
+    return _replace_row(data, 0, cells)
+
+
+def _blank_responder_columns(data: bytes) -> bytes:
+    """Columns 2..5 - the four non-RC trees - emptied on every row."""
+    out = data
+    for index, row in enumerate(EXPECTED_VARIANT_TABLE):
+        cells = list(row)
+        for column in (2, 3, 4, 5):
+            cells[column] = ""
+        out = _replace_row(out, index, cells)
+    return out
+
+
+def _drop_table_separator(data: bytes) -> bytes:
+    return data.replace(
+        (EXPECTED_TABLE_HEADER + "\n" + EXPECTED_TABLE_SEPARATOR + "\n").encode("ascii"),
+        (EXPECTED_TABLE_HEADER + "\n").encode("ascii"),
+    )
+
+
 #: Every entry is a DEFECT CLASS a re-pin round must still catch. Adding one
 #: without checking `mutant != original` is how a table accumulates no-op
 #: entries that read as passes; the test asserts that for every row.
@@ -833,6 +1294,12 @@ _REPIN_MUTANTS = {
     "cite prose form": _append("\nSee line 39 of slots.py.\n"),
     "variant row dropped": _drop_variant_row,
     "variant verdict corrupted": _corrupt_variant_verdict,
+    "primary example name nonsense": _nonsense_primary_example,
+    "variant example name nonsense": _nonsense_variant_example,
+    "two variant example names swapped": _swap_two_variant_examples,
+    "primary verdict flipped to refuse": _flip_primary_verdict,
+    "responder columns blanked": _blank_responder_columns,
+    "table separator row dropped": _drop_table_separator,
     "bel byte": lambda data: data + bytes([0x07]),
     "del byte": lambda data: data + bytes([0x7F]),
     "crlf conversion": lambda data: data.replace(b"\n", b"\r\n"),
@@ -866,4 +1333,4 @@ def test_the_repin_regression_excludes_the_digest_deliberately():
         "through it and the re-pin blindness is no longer measured"
     )
     assert len(names) == len(_NON_DIGEST_ARMS), "duplicate arm in the re-pin tuple"
-    assert len(_REPIN_MUTANTS) >= 24, f"mutant table shrank to {len(_REPIN_MUTANTS)}"
+    assert len(_REPIN_MUTANTS) >= 30, f"mutant table shrank to {len(_REPIN_MUTANTS)}"
