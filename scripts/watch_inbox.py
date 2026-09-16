@@ -174,14 +174,17 @@ SessionStart fire, and does it survive /clear - is about ONE of those events.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
+import logging
 import os
 import re
 import stat
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple
 
@@ -472,6 +475,57 @@ _SESSION_ID_SHAPE = re.compile(
 )
 
 
+@contextlib.contextmanager
+def _console_logging_muted() -> Iterator[None]:
+    """Keep `core/atomic_io.py`'s raw error text off this process's stderr.
+
+    THE RULE THIS ENFORCES IS ABSOLUTE IN THIS TREE: never surface a raw API or
+    error string on a user-facing surface - catch it, render a friendly degraded
+    state, and LOG the raw error. Every rendering path in this module already
+    obeyed it. The WRITE paths did not, and nothing here was the thing printing.
+
+    MEASURED. `core/atomic_io.py` catches its own `OSError` and returns False,
+    exactly as documented, and then logs the failure through `core/log_setup.py`,
+    whose console handler is a `StreamHandler` on stderr. So a refused write on
+    the overflow-report path put a raw `PermissionError: [WinError 5]` in front
+    of the operator, carrying the FULL FILESYSTEM PATH - which is also a
+    machine-identity leak of the kind this tree has closed before - and ANSI
+    colour codes with it. The friendly degraded state was rendered correctly on
+    stdout at the same moment, so the operator got both.
+
+    THE FIX IS HERE AND NOT IN `core/atomic_io.py`. That module is the sanctioned
+    state-write path for the entire tree and its logging is correct FOR A
+    LIBRARY: it must not decide that some caller's console is too precious for an
+    error. What is wrong is this module running a hook surface without saying so.
+    A caller that knows it is a hook is the right place to say it.
+
+    THE RAW ERROR IS STILL LOGGED, which is the half that must not be lost.
+    `core/log_setup.py` attaches a `FileHandler` beside the console handler, and
+    only the console one is muted - so the error still reaches the day's log file
+    where an operator can grep it. Muting by RAISING THE HANDLER'S LEVEL rather
+    than by detaching it keeps that true even if the handler is shared
+    process-wide, which `core/log_setup.py` says it is.
+
+    `FileHandler` IS A SUBCLASS OF `StreamHandler`, which is the trap in writing
+    this and the reason the check excludes it explicitly. Selecting on
+    `StreamHandler` alone would mute the file handler too and turn "do not
+    surface it" into "do not record it", which is the opposite instruction.
+    """
+    muted: list[tuple[logging.Handler, int]] = []
+    for logger in (logging.getLogger("core.atomic_io"), logging.getLogger()):
+        for handler in list(logger.handlers):
+            if isinstance(handler, logging.StreamHandler) and not isinstance(
+                handler, logging.FileHandler
+            ):
+                muted.append((handler, handler.level))
+                handler.setLevel(logging.CRITICAL + 1)
+    try:
+        yield
+    finally:
+        for handler, level in muted:
+            handler.setLevel(level)
+
+
 def _read_stdin_budget(wait: float | None = None) -> bytes:
     """At most `MAX_STDIN_BYTES` from stdin, waiting at most `STDIN_WAIT_SECONDS`.
 
@@ -561,9 +615,10 @@ def _read_stdin_budget(wait: float | None = None) -> bytes:
 def session_id_from_payload(raw: bytes) -> str | None:
     """The validated session id in a hook's stdin payload, or `None`.
 
-    PURE, AND SEPARATED FROM THE READ ON PURPOSE. The read has one untestable
-    residual in it - see `_read_stdin_budget` - and the validation has none, so
-    keeping them apart lets every hostile-payload arm run without a pipe.
+    PURE, AND SEPARATED FROM THE READ ON PURPOSE. The read has to reach a real
+    descriptor and a real clock - see `_read_stdin_budget` - and the validation
+    has to reach neither, so keeping them apart lets every hostile-payload arm
+    below run against plain bytes, with no pipe, no thread and no wait.
 
     THE ID IS THE SECOND FIELD THIS MODULE DOES NOT CHOOSE, after the source
     label, and it is validated for the same measured reason: the invocation
@@ -1607,6 +1662,18 @@ def main(
     already `None`, and `log_invocation` re-validates it anyway because it is the
     one column whose value came from outside this process.
     """
+    # APPLIED AT THE SURFACE, ONCE, RATHER THAN AT EACH WRITE. `main` IS the
+    # user-facing surface - it is what `.claude/settings.json` invokes - so this
+    # is the frame that knows a raw error string must not escape. Wrapping it
+    # covers every write and every degraded read inside it, including the ones a
+    # later edit adds, rather than depending on each new call site remembering.
+    # The raw error still reaches the day's log file; see `_console_logging_muted`.
+    with _console_logging_muted():
+        return _main_logged(argv, source, session)
+
+
+def _main_logged(argv: list[str] | None, source: str, session: str | None) -> int:
+    """`main`'s body, so the logging guard above stays one unindented `with`."""
     log_invocation(source, PHASE_START, session=session)
     try:
         code, disposition = _main(argv, session)
@@ -1893,9 +1960,10 @@ if __name__ == "__main__":
     # exactly once, so a second read anywhere would return nothing and leave the
     # two lines disagreeing - one attributed, one not.
     #
-    # READ BEFORE ANYTHING ELSE HAPPENS, and bounded. See `MAX_STDIN_BYTES` for
-    # why an unbounded read on this path kills mail announcements silently, and
-    # `_read_stdin_budget` for the two independent bounds and the one residual.
+    # READ BEFORE ANYTHING ELSE HAPPENS, and bounded in TIME as well as in bytes.
+    # See `STDIN_WAIT_SECONDS` for why an unbounded read on this path kills mail
+    # announcements silently - it was shipped that way once and measured hanging
+    # past 25 seconds under a hook declared with a five second ceiling.
     raise SystemExit(
         main(
             source=resolve_source(source_from_argv(sys.argv[1:]) or SOURCE_CLI),
