@@ -776,6 +776,16 @@ PHASE_START = "start"
 #: channel would claim the inbox was checked and was empty, which is a different
 #: fact and sends a reader somewhere else entirely.
 TERMINAL_NO_INBOX = "no-inbox"
+
+#: `inbox-unlistable` IS DELIBERATELY NOT `no-inbox` AND NOT `nothing-unread`.
+#: It used to be the third of those, which made the invocation log agree with
+#: the false line on screen: a fire that could not read the channel filed itself
+#: as a fire that read it and found it quiet. Those are opposite facts and the
+#: log is the only place either is recorded, so an operator reconstructing a
+#: blind window from the log would have found nothing to notice. It is not
+#: `no-inbox` either - that state is normal and permanent in a fresh clone and
+#: in every worktree, while this one is a fault somebody has to go and fix.
+TERMINAL_UNLISTABLE_INBOX = "inbox-unlistable"
 TERMINAL_NOTHING_UNREAD = "nothing-unread"
 TERMINAL_REPORTED = "reported"
 TERMINAL_WITHDRAWN_ONLY = "withdrawn-only"
@@ -799,6 +809,7 @@ TERMINAL_SUPPRESSED = "suppressed"
 #: this tuple is itself a hand-maintained list and those go stale silently.
 TERMINAL_DISPOSITIONS = (
     TERMINAL_NO_INBOX,
+    TERMINAL_UNLISTABLE_INBOX,
     TERMINAL_NOTHING_UNREAD,
     TERMINAL_REPORTED,
     TERMINAL_WITHDRAWN_ONLY,
@@ -843,6 +854,57 @@ REASON_REPARSE = "reparse-point-not-followed"
 REASON_UNCLASSIFIABLE = "neither-file-nor-directory"
 REASON_UNWALKABLE = "directory-could-not-be-listed"
 REASON_BUDGET = "entry-budget-exhausted"
+
+
+class InboxUnlistable(Exception):
+    """The inbox directory is THERE and its listing failed.
+
+    A FOURTH COULD-NOT-MEASURE STATE, and the one that used to print the
+    affirmative clean line. CS published it as a fleet-wide review finding on
+    2026-09-16 and asked to be checked rather than agreed with; it REPRODUCED
+    here, through a REAL permission denial rather than only an injected one -
+    which is the limit CS stated on its own reproduction. Measured on this host
+    2026-09-16 against `icacls <dir> /deny <user>:(RD)` on a directory holding
+    one real note: `is_dir()` answered True, `os.listdir` raised
+    `PermissionError` WinError 5, and the real script printed `unread: none`
+    with exit 0 - silence on the quiet path - and filed `nothing-unread` as its
+    terminal disposition.
+
+    THE ROOT CAUSE WAS ONE `except OSError` DOING TWO JOBS. `_entries` guarded
+    its listing against a MISSING directory, which is normal in a fresh clone,
+    and the same clause caught PRESENT-BUT-UNLISTABLE and answered both with an
+    empty list. Every caller of `_entries` was then handed "the inbox is empty"
+    as the answer to "the inbox could not be read", and there were THREE of
+    them, not one:
+
+      the report        printed the affirmative clean line over real mail
+      `withdrawn`       derived every held key as RETRACTED, announcing a
+                        retraction of mail sitting in the directory - and a
+                        withdrawal is the one inbox event with no artifact left
+                        on disk, so a fabricated one is uncheckable
+      `--mark`          rewrote the watermark from the empty listing and ERASED
+                        it, and pruned the report record to nothing. Measured:
+                        `{"seen": {"NOTE-live.md": "41bc9432..."}}` became
+                        `{"seen": {}}`, printing `marked read:` while it did it
+
+    SO THE SIGNAL IS AN EXCEPTION RATHER THAN A GUARD AT ONE CALL SITE. A guard
+    added where the report reads would have left the acknowledge destroying
+    state, because `mark_seen` does not go through the report. Raising makes the
+    blind state impossible to receive as an empty listing, which fixes all three
+    by construction rather than by remembering three times.
+
+    NOT AN `OSError` SUBCLASS, deliberately. Half this module's readers catch
+    `OSError` to degrade gracefully around one unreadable child, and every one
+    of them would swallow this - reinstating the exact conflation it exists to
+    end.
+    """
+
+
+#: The label the exception above carries, spelled beside its siblings so the
+#: vocabulary stays in one place. Distinct from `REASON_UNWALKABLE`, which is a
+#: directory INSIDE a drop: that one is an anomaly within a payload that was
+#: otherwise measured, and this one means the channel was not examined at all.
+REASON_INBOX_UNLISTABLE = "inbox-could-not-be-listed"
 
 
 class Entry(NamedTuple):
@@ -1021,15 +1083,36 @@ def _drop_manifest(drop: Path) -> tuple[str, int, bool, tuple[str, ...]]:
 def _entries(inbox: Path) -> list[Entry]:
     """Every note and drop in the inbox, oldest name first.
 
-    An absent or unreadable inbox is empty rather than an error: a fresh clone
-    has no `moon_sync_inbox/` at all.
+    An ABSENT inbox is empty rather than an error: a fresh clone has no
+    `moon_sync_inbox/` at all, and so does every worktree, because the directory
+    is gitignored.
+
+    AN INBOX THAT IS THERE AND CANNOT BE LISTED RAISES `InboxUnlistable`, and
+    the two states are split apart here on purpose - see that exception for the
+    three defects one shared `except OSError` produced. Empty and unreadable are
+    the same VALUE and they are opposite FACTS, so the difference cannot be
+    carried in the return value.
+
+    THE `is_dir()` PROBE KEEPS ITS OWN TOLERANT GUARD. A path whose PARENT is
+    unreadable makes `is_dir()` itself raise, and that is the absent case as far
+    as this tool can tell: there is nothing at `inbox` that it can name.
     """
     try:
         if not inbox.is_dir():
             return []
-        children = sorted(inbox.iterdir(), key=lambda p: p.name)
     except OSError:
         return []
+
+    try:
+        children = sorted(inbox.iterdir(), key=lambda p: p.name)
+    except OSError as exc:
+        # THE RAW ERROR REACHES THE LOG AND NEVER THE SURFACE, which is this
+        # tree's absolute rule and the same split `_console_logging_muted`
+        # exists to keep. The exception carries a LABEL, not the error text: it
+        # is rendered into a user-facing line by `_main`, and an error string
+        # there would carry a full filesystem path in front of the operator.
+        logging.getLogger(__name__).warning("inbox listing failed at %s: %r", inbox, exc)
+        raise InboxUnlistable(REASON_INBOX_UNLISTABLE) from exc
 
     entries: list[Entry] = []
     for child in children:
@@ -1108,6 +1191,12 @@ def survey(inbox: Path, state: Path) -> tuple[int, list[Entry]]:
     "unread: none" and looks exactly like a clean one: zero out of zero
     rendered as a clean bill of health. The examined count is what lets a
     caller - and every arm of `tests/test_watch_inbox.py` - tell the two apart.
+
+    RAISES `InboxUnlistable` RATHER THAN ANSWERING `(0, [])`, which is the same
+    property one step further on. An examined count of zero at least says "I
+    matched nothing"; a blind read has not examined anything and must not be
+    able to say it did. `_main` renders it; see that exception for what the
+    silent version cost.
     """
     entries = _entries(inbox)
     digests, legacy = _seen(state)
@@ -1138,13 +1227,25 @@ def mark_seen(inbox: Path, state: Path) -> bool:
 
     Rewriting is also the migration: one `--mark` carries a legacy name-only
     watermark over to the keyed shape.
+
+    AND AN UNLISTABLE INBOX IS REFUSED RATHER THAN REWRITTEN FROM NOTHING. The
+    rewrite-rather-than-merge property above is exactly what makes this
+    destructive: handed an empty listing for an inbox it could not read, it
+    writes `{"seen": {}}` over a real watermark. Measured against a real ACL
+    denial on this host 2026-09-16 - one `--mark` erased a watermark holding a
+    real note and printed `marked read:` while doing it, on the one command an
+    operator runs deliberately.
+
+    FALSE COMES BACK AND THE BYTES ARE LEFT ALONE, following `prune_records`,
+    which already refuses for the mirror-image reason on the other record rather
+    than inventing a second convention beside it.
     """
+    try:
+        seen = {entry.key: entry.digest for entry in _entries(inbox)}
+    except InboxUnlistable:
+        return False
     state.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "version": STATE_VERSION,
-        "seen": {entry.key: entry.digest for entry in _entries(inbox)},
-    }
-    return atomic_write_json(state, payload)
+    return atomic_write_json(state, {"version": STATE_VERSION, "seen": seen})
 
 
 def _reported_record(reported: Path) -> tuple[set[str], str | None]:
@@ -1245,10 +1346,22 @@ def withdrawn(inbox: Path, state: Path, reported: Path) -> list[str]:
     session cleared before anyone reads the output loses it - and unlike every
     other inbox event there is no artifact left on disk to notice later. It is
     carried until an explicit `--mark` prunes it.
+
+    AN UNLISTABLE INBOX IS NOT A MASS RETRACTION. The subtraction below reads an
+    empty listing as "none of it is there any more", so an inbox this tool
+    cannot read used to derive EVERY held key as withdrawn - the watcher
+    announcing that a sibling pulled mail that is sitting in the directory.
+    Nothing is returned instead, and the caller says it was blind; that is the
+    only honest answer, because a withdrawal is the one inbox event with no
+    artifact left on disk to check a claim against.
     """
+    try:
+        present = {entry.key for entry in _entries(inbox)}
+    except InboxUnlistable:
+        return []
     digests, legacy = _seen(state)
     baseline = set(digests) | legacy | read_reported(reported)
-    return sorted(baseline - {entry.key for entry in _entries(inbox)})
+    return sorted(baseline - present)
 
 
 def prune_records(inbox: Path, reported: Path) -> bool:
@@ -1268,11 +1381,20 @@ def prune_records(inbox: Path, reported: Path) -> bool:
     destroying the exact history it exists to maintain, and doing it on the one
     command the operator runs deliberately. False comes back and the bytes are
     left alone; `_main` refuses the whole acknowledge on it.
+
+    AND AN UNLISTABLE INBOX IS REFUSED FOR THE SAME REASON FROM THE OTHER SIDE.
+    The intersection has two inputs and the refusal above covered only one of
+    them: an inbox this tool could not READ arrived as an empty `present` set
+    and pruned the record to `[]` just as surely as a degraded read of the
+    record itself. Measured against a real ACL denial on this host 2026-09-16.
     """
     known, unusable = _reported_record(reported)
     if unusable is not None:
         return False
-    present = {entry.key for entry in _entries(inbox)}
+    try:
+        present = {entry.key for entry in _entries(inbox)}
+    except InboxUnlistable:
+        return False
     reported.parent.mkdir(parents=True, exist_ok=True)
     keep = sorted(known & present)
     return atomic_write_json(reported, {"version": 1, "reported": keep})
@@ -1293,6 +1415,20 @@ SHOWN_GONE = "gone:"
 #: permanent state of a fresh clone and of every worktree, so re-printing it
 #: would put a line in front of the operator on every single prompt, forever.
 SHOWN_NO_INBOX = "no-inbox:"
+
+#: The UNLISTABLE-INBOX line's own event key, namespaced away from the one above
+#: for the reason `SHOWN_UNREAD` and `SHOWN_GONE` are namespaced away from each
+#: other: two different events about one bare path, and a flat key set would
+#: score the second as already shown.
+#:
+#: IT TAKES THE SAME ONCE-PER-SESSION ALLOWANCE AS ITS SIBLING, and for the same
+#: clause 4 reason: an ACL does not clear itself between prompts, so a per-prompt
+#: hook would otherwise put this line in front of the operator on every single
+#: prompt for as long as the fault lasts. The SessionStart command declares no
+#: `--quiet-when-empty`, so a session still always BEGINS by being told - which
+#: is the fire that matters - and with no session id it re-prints, which is fail
+#: open.
+SHOWN_UNLISTABLE_INBOX = "unlistable-inbox:"
 
 
 def read_shown(sessions: Path, session: str | None) -> set[str]:
@@ -1746,10 +1882,40 @@ def _main(argv: list[str] | None, session: str | None = None) -> tuple[int, str]
                 record_shown(DEFAULT_SESSIONS, session, [key])
         return 0, TERMINAL_NO_INBOX
 
-    if args.all:
-        entries, heading = _entries(inbox), "all notes"
-    else:
-        entries, heading = unseen_entries(inbox, state), "unread"
+    try:
+        if args.all:
+            entries, heading = _entries(inbox), "all notes"
+        else:
+            entries, heading = unseen_entries(inbox, state), "unread"
+    except InboxUnlistable:
+        # THE FOURTH COULD-NOT-MEASURE STATE, and the one that was printing the
+        # affirmative clean line. See `InboxUnlistable` for the measurement and
+        # for the two further defects that shared its root cause.
+        #
+        # THE RETURN IS THE OTHER HALF OF THE FIX. Everything below this point -
+        # `withdrawn`, the suppression cache, the overflow report, and `--mark`
+        # itself - derives from a listing that does not exist. Leaving through
+        # here is what stops the acknowledge reaching `mark_seen` at all; the
+        # refusal inside `mark_seen` covers the OTHER callers, and neither one
+        # is redundant.
+        #
+        # NO RAW ERROR STRING, per this tree's absolute rule. The label went to
+        # the day's log inside `_entries`; this is the friendly degraded state.
+        line = (
+            f"{UNMEASURED} - the inbox at {inbox} exists but could not be listed, "
+            "so the channel was not examined"
+        )
+        quiet_session = args.quiet_when_empty and session is not None
+        key = SHOWN_UNLISTABLE_INBOX + str(inbox)
+        if not quiet_session or key not in read_shown(DEFAULT_SESSIONS, session):
+            print(line)
+            if quiet_session:
+                # Flushed before the cache write, for the reason `record_shown`
+                # records: a fire killed between the two would file this as
+                # shown having never emitted it.
+                sys.stdout.flush()
+                record_shown(DEFAULT_SESSIONS, session, [key])
+        return 0, TERMINAL_UNLISTABLE_INBOX
 
     # QUIET IS FOR THE PER-PROMPT HOOK. It runs on every single prompt, and a
     # hook that speaks when it has nothing to say trains the reader to skip it -
