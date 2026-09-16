@@ -107,6 +107,25 @@ class _FakeStdin:
         raise OSError("no descriptor")
 
 
+class _FakeStdinWithFd:
+    """A non-terminal stdin handing out a fixed descriptor number.
+
+    Paired with a monkeypatched `os.read`, so the number is never dereferenced.
+    That is what lets the wait arms measure the WAIT rather than some platform's
+    pipe semantics - and it is why they cannot hang the suite the way an
+    undrained real pipe already did once here.
+    """
+
+    def __init__(self, fd: int) -> None:
+        self._fd = fd
+
+    def isatty(self) -> bool:
+        return False
+
+    def fileno(self) -> int:
+        return self._fd
+
+
 # ---------------------------------------------------------------------------
 # ITEM 1 - THE BOUNDED STDIN READER
 # ---------------------------------------------------------------------------
@@ -222,6 +241,89 @@ def test_the_read_is_capped_at_the_budget(watch, monkeypatch, tmp_path):
     )
     assert watch.session_id_from_payload(raw) is None, (
         "a truncated payload parsed anyway, so the JSON reader is not strict"
+    )
+
+
+def test_the_wait_is_a_named_constant_well_under_the_hook_ceiling(watch):
+    """The bound that actually matters, asserted against literals.
+
+    The hook is declared with a five second timeout. A wait anywhere near that
+    is not a bound, it is the same silent death with extra steps.
+    """
+    assert isinstance(watch.STDIN_WAIT_SECONDS, (int, float))
+    assert 0 < watch.STDIN_WAIT_SECONDS <= 1.0, (
+        f"the stdin wait is {watch.STDIN_WAIT_SECONDS}s against a declared hook "
+        "ceiling of 5s; that is not a tenfold margin"
+    )
+
+
+def test_a_stdin_that_never_arrives_returns_inside_the_wait(watch, monkeypatch):
+    """THE HANG ARM, AND THE HANG WAS REAL AND WAS SHIPPED ONCE.
+
+    The first version of this reader was one un-timed `os.read`, argued bounded
+    on the grounds that it did not loop. It is not: `os.read` on a pipe blocks
+    until bytes arrive or every write handle closes, and a parent holding the
+    pipe open satisfies neither. Reproduced at over 25 seconds and killed with
+    `taskkill`. Under the hook's five second timeout that is a hook killed on
+    every prompt, with its stdout dropped by the harness - a watcher that dies
+    silently rather than one that says nothing.
+
+    ASSERTED ON ELAPSED TIME, which is the only thing that distinguishes the
+    broken version from the fixed one: both return `b""` eventually.
+
+    A DESCRIPTOR THAT NEVER YIELDS, WITHOUT NEEDING A PIPE. `os.read` is replaced
+    with a sleep longer than the wait, so the arm measures the WAIT rather than
+    any platform's pipe semantics - and it cannot itself hang the suite the way
+    an undrained real pipe already did once in this module's history.
+    """
+    import time as _time
+
+    slept: list[float] = []
+
+    def never(fd: int, size: int) -> bytes:
+        slept.append(size)
+        _time.sleep(30.0)
+        return b"too late"
+
+    monkeypatch.setattr(watch.os, "read", never)
+    monkeypatch.setattr(watch.sys, "stdin", _FakeStdinWithFd(0))
+
+    started = _time.monotonic()
+    got = watch._read_stdin_budget()
+    elapsed = _time.monotonic() - started
+
+    assert slept, "os.read was never called, so nothing was being waited on"
+    assert got == b"", f"a payload that never arrived was returned anyway: {got!r}"
+    assert elapsed < watch.STDIN_WAIT_SECONDS + 1.5, (
+        f"the reader took {elapsed:.2f}s against a declared wait of "
+        f"{watch.STDIN_WAIT_SECONDS}s. An unbounded read here kills the hook at "
+        "its five second ceiling and the harness DROPS the stdout, so the "
+        "failure is silent"
+    )
+
+
+def test_a_payload_that_arrives_late_but_inside_the_wait_is_still_read(watch, monkeypatch):
+    """THE SURVIVING-NEIGHBOUR HALF OF THE ARM ABOVE, and it is why this is a
+    bounded WAIT rather than a bounded peek.
+
+    `os.set_blocking` and `PeekNamedPipe` both return immediately with nothing
+    when the parent has not written YET, so a parent a few milliseconds late
+    loses its session id and the fire falls open. A wait does not have that race.
+    A reader that failed this arm would be a reader that suppresses nothing,
+    which looks exactly like the defect the suppression was built to fix.
+    """
+    import time as _time
+
+    def late(fd: int, size: int) -> bytes:
+        _time.sleep(0.05)
+        return b'{"session_id": "late1"}'
+
+    monkeypatch.setattr(watch.os, "read", late)
+    monkeypatch.setattr(watch.sys, "stdin", _FakeStdinWithFd(0))
+
+    assert watch.validated_session_id() == "late1", (
+        "a payload that arrived 50ms after the read began was lost, so this is a "
+        "peek and not a wait"
     )
 
 
@@ -825,6 +927,406 @@ def test_the_cache_does_not_grow_without_a_bound(watch, tmp_path, capsys):
         "the newest session is not the one retained, so the running session is "
         "the one whose suppression gets dropped"
     )
+
+
+# ---------------------------------------------------------------------------
+# THE SUPPRESSED DISPOSITION - A CONSTANT THAT SHIPPED WITH NO ARM
+#
+# `TERMINAL_SUPPRESSED` was added with a docstring arguing that an invisible
+# suppression is indistinguishable from swallowed mail, and then no test
+# anywhere emitted it - zero grep hits across tests/. An adversary mutated
+# `return 0, TERMINAL_SUPPRESSED` to `TERMINAL_NOTHING_UNREAD` and the mutant
+# SURVIVED the whole suite. The exact property the constant was added for was
+# the one left unguarded, which is the sharpest version of this mistake.
+# ---------------------------------------------------------------------------
+
+
+def test_a_suppressed_fire_says_suppressed_and_not_nothing_unread(watch, tmp_path, capsys):
+    """KILLS THE `TERMINAL_SUPPRESSED` -> `TERMINAL_NOTHING_UNREAD` MUTANT.
+
+    The two are different facts. `nothing-unread` claims the channel was checked
+    and was quiet; `suppressed` says there IS unread mail and this session had
+    already been told about it. The invocation log is the only place either is
+    recorded, so collapsing them makes per-session suppression invisible - and an
+    invisible suppression is indistinguishable from the swallowed-mail defect it
+    is one refactor away from becoming.
+
+    BOTH POLARITIES ARE ASSERTED. Requiring `suppressed` to be present is what
+    kills the mutant; requiring `nothing-unread` to be ABSENT is what stops a
+    later version emitting both and passing.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    argv = ["--dir", str(inbox), "--state", str(tmp_path / "seen.json"), "--quiet-when-empty"]
+
+    watch.main(argv, session="sess1")
+    assert "a.md" in capsys.readouterr().out, "the first fire printed nothing to suppress"
+    first_terminals = [ln.split(chr(9))[-1] for ln in _log_lines(watch)]
+    assert watch.TERMINAL_REPORTED in first_terminals, (
+        f"the first fire did not report, so the second proves nothing: {first_terminals}"
+    )
+
+    watch.main(argv, session="sess1")
+    assert capsys.readouterr().out == "", "the second fire was not suppressed at all"
+
+    terminals = [ln.split(chr(9))[-1] for ln in _log_lines(watch)]
+    assert terminals[-1] == watch.TERMINAL_SUPPRESSED, (
+        f"a suppressed fire logged {terminals[-1]!r}. If that is "
+        f"{watch.TERMINAL_NOTHING_UNREAD!r} the log now claims a quiet channel "
+        "over real unread mail, and the suppression is invisible"
+    )
+    assert watch.TERMINAL_NOTHING_UNREAD not in terminals, (
+        f"a fire over unread mail recorded {watch.TERMINAL_NOTHING_UNREAD!r}: {terminals}"
+    )
+
+
+def test_a_genuinely_quiet_fire_still_says_nothing_unread(watch, tmp_path, capsys):
+    """THE SURVIVING-NEIGHBOUR HALF. The arm above must not be satisfiable by a
+    watcher that simply always writes `suppressed`, which would erase the
+    distinction in the other direction.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    state = tmp_path / "seen.json"
+    watch.mark_seen(inbox, state)
+    argv = ["--dir", str(inbox), "--state", str(state), "--quiet-when-empty"]
+
+    watch.main(argv, session="sess1")
+    assert capsys.readouterr().out == ""
+
+    terminals = [ln.split(chr(9))[-1] for ln in _log_lines(watch)]
+    assert terminals[-1] == watch.TERMINAL_NOTHING_UNREAD, (
+        f"a genuinely quiet channel logged {terminals[-1]!r}, so the disposition "
+        "no longer separates a quiet inbox from a suppressed one"
+    )
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 2 - THE UNMEASURED LINE FOR A CHANNEL THAT WAS NOT LOOKED AT
+# ---------------------------------------------------------------------------
+
+
+def test_the_quiet_no_inbox_path_prints_one_unmeasured_line(watch, tmp_path, capsys):
+    """A BLIND WATCHER MUST NEVER READ AS CLEAN, and this path used to be silent.
+
+    Silence is not neutral on a hook that fires before every prompt: silence is
+    EXACTLY what a clean inbox produces, so a watcher that could not see the
+    channel at all read as one reporting good news. It is also the normal state
+    of a fresh clone and of every worktree, because `moon_sync_inbox/` is
+    gitignored - so this was the quiet failure in the copies that most need the
+    warning.
+    """
+    rc = watch.main(
+        ["--dir", str(tmp_path / "absent"), "--state", str(tmp_path / "s.json"),
+         "--quiet-when-empty"]
+    )
+    out = capsys.readouterr().out
+
+    assert rc == 0, "a could-not-measure state must still exit 0; clause 1"
+    assert watch.UNMEASURED in out, f"no UNMEASURED token on a blind fire: {out!r}"
+    assert len([ln for ln in out.splitlines() if ln.strip()]) == 1, (
+        f"clause 2 says ONE line, got: {out!r}"
+    )
+    assert "unread: none" not in out and "unread: 0" not in out, (
+        f"the affirmative clean line was printed for a channel nobody looked at: {out!r}"
+    )
+    assert "nothing to report" not in out, (
+        "the retired affirmative wording is back; that phrase is what clause 2 forbids"
+    )
+
+
+def test_an_absent_seen_store_is_an_empty_set_and_never_unmeasured(watch, tmp_path, capsys):
+    """CLAUSE 2'S OWN EXCEPTION, spelled out because it is easy to over-apply.
+
+    "An absent SEEN STORE is an empty set, not a failure." A fresh clone has no
+    watermark and every note in the inbox is legitimately unread; printing
+    UNMEASURED for that would cry blind over a state the tool measured perfectly.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    state = tmp_path / "definitely" / "absent.json"
+    assert not state.exists()
+
+    watch.main(["--dir", str(inbox), "--state", str(state), "--quiet-when-empty"])
+    out = capsys.readouterr().out
+
+    assert "a.md" in out, "the note did not surface, so this arm is vacuous"
+    assert watch.UNMEASURED not in out, (
+        f"an absent watermark was reported as a measurement failure: {out!r}"
+    )
+
+
+def test_the_absent_inbox_line_is_shown_once_per_session_but_always_without_one(
+    watch, tmp_path, capsys
+):
+    """Clause 4 allows this ONE could-not-measure state to be shown once per
+    session id, and it needs the allowance more than any other: an absent inbox
+    is not a transient fault that clears. It is permanent in a worktree, so
+    re-printing it would put the line in front of the operator on every prompt
+    forever.
+    """
+    argv = [
+        "--dir", str(tmp_path / "absent"), "--state", str(tmp_path / "s.json"),
+        "--quiet-when-empty",
+    ]
+
+    watch.main(argv, session="sess1")
+    assert watch.UNMEASURED in capsys.readouterr().out, "the first fire said nothing"
+    watch.main(argv, session="sess1")
+    assert capsys.readouterr().out == "", "the blind line re-printed inside one session"
+    watch.main(argv, session="sess2")
+    assert watch.UNMEASURED in capsys.readouterr().out, "a new session was not told"
+
+    # FAIL OPEN with no id, and nothing written.
+    cache = Path(watch.DEFAULT_SESSIONS)
+    before = cache.read_bytes()
+    watch.main(argv)
+    assert watch.UNMEASURED in capsys.readouterr().out, "fail open did not print"
+    watch.main(argv)
+    assert watch.UNMEASURED in capsys.readouterr().out, "fail open suppressed on a second fire"
+    assert cache.read_bytes() == before, "a fire with no session id wrote the cache"
+
+
+def test_the_non_quiet_no_inbox_line_also_carries_the_token(watch, tmp_path, capsys):
+    """Clause 2 is about the STATE, not about which hook observed it."""
+    watch.main(["--dir", str(tmp_path / "absent"), "--state", str(tmp_path / "s.json")])
+    out = capsys.readouterr().out
+    assert watch.UNMEASURED in out, f"the session-start rendering stayed affirmative: {out!r}"
+    assert "nothing to report" not in out
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 3 - THE LIST CAP, NEWEST FIRST, AND THE OVERFLOW REPORT FILE
+# ---------------------------------------------------------------------------
+
+
+def _many(inbox: Path, count: int) -> list[str]:
+    """`count` date-stamped notes, returned OLDEST name first."""
+    names = []
+    for i in range(count):
+        name = f"2026-09-{i + 1:02d}-1200-from-RC-note-{i:02d}.md"
+        _note(inbox, name, f"body {i}\n")
+        names.append(name)
+    return names
+
+
+def test_the_transcript_is_capped_at_ten_names_newest_first(watch, tmp_path, capsys):
+    """CLAUSE 3, and the ORDER is the half this tree got wrong first.
+
+    `_entries` sorts ascending and its docstring says "oldest name first", so the
+    uncapped render listed oldest first - which under a cap is the worst possible
+    choice: it shows the ten notes you are least likely to still need and hides
+    today's. The names on this channel are date-prefixed, so a descending name
+    sort IS newest-first.
+
+    THE COUNTS LINE CARRIES THE FULL COUNT. "unread: 25" over ten names plus a
+    pointer is honest; "unread: 10" would be a lie that matches its own list.
+    """
+    inbox = tmp_path / "inbox"
+    names = _many(inbox, 25)
+    watch.main(
+        ["--dir", str(inbox), "--state", str(tmp_path / "seen.json")], session="sess1"
+    )
+    out = capsys.readouterr().out
+
+    assert f"unread: {len(names)}" in out, f"the counts line is not the full count: {out!r}"
+    listed = [ln for ln in out.splitlines() if ln.startswith("  [")]
+    assert len(listed) == watch.MAX_LISTED_NAMES, (
+        f"{len(listed)} names listed against a cap of {watch.MAX_LISTED_NAMES}"
+    )
+    assert names[-1] in out, "the NEWEST note is not in the transcript"
+    assert names[0] not in out, (
+        "the OLDEST note is in the transcript, so the cap kept the wrong end"
+    )
+    expected = list(reversed(names))[: watch.MAX_LISTED_NAMES]
+    assert [ln.split("] ")[1].split("  (")[0] for ln in listed] == expected, (
+        f"the ten names are not the newest ten in newest-first order: {listed}"
+    )
+    assert f"+{len(names) - watch.MAX_LISTED_NAMES} more" in out, "no overflow pointer"
+    assert "..." not in out, "a name was truncated, which clause 6 forbids outright"
+
+
+def test_the_overflow_report_is_written_before_stdout_and_named_by_the_pointer(
+    watch, tmp_path, capsys
+):
+    """CLAUSE 3's ordering, and it is the OPPOSITE of the cache's on purpose.
+
+    The report file is written BEFORE stdout so the pointer never names a file
+    that is not there; the per-session cache is written AFTER the flush so a
+    killed hook re-prints. Two writes, two clauses, two opposite mistakes being
+    guarded against.
+
+    Asserted on the ORDER of the calls, because on any fire that is not killed
+    both orderings look identical.
+    """
+    inbox = tmp_path / "inbox"
+    names = _many(inbox, 15)
+    order: list[str] = []
+    real_text = watch.atomic_write_text
+
+    def traced_text(path, payload):
+        order.append(f"write:{Path(path).name}")
+        return real_text(path, payload)
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(watch, "atomic_write_text", traced_text)
+    monkey.setattr(watch.sys.stdout, "flush", lambda: order.append("flush"), raising=False)
+    try:
+        watch.main(
+            ["--dir", str(inbox), "--state", str(tmp_path / "seen.json"), "--quiet-when-empty"],
+            session="sess1",
+        )
+    finally:
+        monkey.undo()
+    out = capsys.readouterr().out
+
+    report = Path(watch.DEFAULT_REPORT)
+    assert report.is_file(), f"no overflow report was written: {order}"
+    assert str(report) in out, (
+        f"the pointer does not name this project's report file: {out!r}"
+    )
+    written = f"write:{report.name}"
+    assert written in order, f"the report write was not observed: {order}"
+    assert "flush" in order, f"stdout was never flushed: {order}"
+    assert order.index(written) < order.index("flush"), (
+        f"the report was written after stdout was flushed: {order}. The pointer "
+        "would then name a file that did not exist when the reader saw it"
+    )
+
+    body = report.read_text(encoding="utf-8")
+    for name in names:
+        assert name in body, f"{name} is missing from the full listing"
+    assert body.index(names[-1]) < body.index(names[0]), (
+        "the report file is not newest-first"
+    )
+
+
+def test_without_a_session_id_the_pointer_is_plain_and_no_file_is_written(
+    watch, tmp_path, capsys
+):
+    """CLAUSE 3, and it is the same fail-open rule the cache follows: a fire that
+    cannot attribute itself does not get to leave state behind.
+    """
+    inbox = tmp_path / "inbox"
+    _many(inbox, 15)
+    watch.main(["--dir", str(inbox), "--state", str(tmp_path / "seen.json")])
+    out = capsys.readouterr().out
+
+    assert "+5 more" in out, f"no overflow pointer at all: {out!r}"
+    assert str(Path(watch.DEFAULT_REPORT)) not in out, (
+        f"the pointer named a report file on a fire that writes none: {out!r}"
+    )
+    assert not Path(watch.DEFAULT_REPORT).exists(), (
+        "a fire with no validated session id wrote the report file anyway"
+    )
+
+
+def test_a_failed_report_write_says_unmeasured_and_does_not_treat_the_rest_as_shown(
+    watch, tmp_path, capsys
+):
+    """CLAUSE 3's LAST SENTENCE, both halves.
+
+    A pointer to an absent file is worse than no pointer: it sends the reader
+    somewhere empty and they conclude there was nothing to see. And the entries
+    beyond the cap must NOT be recorded as shown, or the next fire in this
+    session suppresses names that reached no human and no file.
+    """
+    inbox = tmp_path / "inbox"
+    names = _many(inbox, 15)
+    argv = ["--dir", str(inbox), "--state", str(tmp_path / "seen.json"), "--quiet-when-empty"]
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(watch, "atomic_write_text", lambda path, payload: False)
+    try:
+        watch.main(argv, session="sess1")
+    finally:
+        monkey.undo()
+    out = capsys.readouterr().out
+
+    assert watch.UNMEASURED in out, f"a failed report write was not disclosed: {out!r}"
+    assert str(Path(watch.DEFAULT_REPORT)) not in out, (
+        f"the pointer named a file whose write failed: {out!r}"
+    )
+
+    cache = json.loads(Path(watch.DEFAULT_SESSIONS).read_text(encoding="utf-8"))
+    shown = cache["sessions"][0]["shown"]
+    assert len(shown) == watch.MAX_LISTED_NAMES, (
+        f"{len(shown)} entries recorded as shown when only "
+        f"{watch.MAX_LISTED_NAMES} reached the transcript and the file failed"
+    )
+    assert names[0] not in "".join(shown), (
+        "an entry beyond the cap was recorded as shown after the report write failed"
+    )
+
+    # AND THE PROOF THAT MATTERS: the held-back entries come back on the next
+    # fire. Recording them as shown would have swallowed them for the rest of the
+    # session, which is the whole reason clause 3 says not to.
+    watch.main(argv, session="sess1")
+    second = capsys.readouterr().out
+    assert names[0] in second, (
+        "an entry beyond the cap never reached the transcript OR the report file "
+        f"and was still suppressed on the next fire: {second!r}"
+    )
+    assert names[-1] not in second, (
+        "an entry that WAS listed on the first fire printed again, so suppression "
+        "stopped working while fixing the overflow case"
+    )
+
+
+def test_a_withdrawal_only_quiet_fire_does_not_print_the_affirmative_clean_line(
+    watch, tmp_path, capsys
+):
+    """A PRE-EXISTING BUG, FIXED HERE, AND IT PREDATES THE SESSION WORK.
+
+    At base e9b454218253f205a2d050ab8e2561656b790f20 a withdrawal-only quiet fire
+    printed `unread: none` and then the withdrawal block. Two faults: `unread:
+    none` is the affirmative clean line, which clause 2 keeps off this hook; and
+    `QUIET_SHAPE` in `tests/test_session_hooks.py` rejects that body, so shipped
+    behaviour could redden an arm nobody had run with a withdrawal pending.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    state = tmp_path / "seen.json"
+    reported = tmp_path / "reported.json"
+    watch.mark_seen(inbox, state)
+    (inbox / "a.md").unlink()
+
+    watch.main([
+        "--dir", str(inbox), "--state", str(state), "--reported", str(reported),
+        "--quiet-when-empty",
+    ])
+    out = capsys.readouterr().out
+
+    assert "WITHDRAWN" in out, "no withdrawal was reported, so this arm is vacuous"
+    assert "unread: none" not in out, (
+        f"the affirmative clean line was printed beside a withdrawal: {out!r}"
+    )
+
+
+def test_a_withdrawal_only_session_start_fire_still_renders_the_heading(watch, tmp_path, capsys):
+    """THE SURVIVING-NEIGHBOUR HALF of the fix above.
+
+    Dropping `unread: none` from the QUIET path must not drop it from the
+    deliberate one. `SessionStart` and a manual run are somebody asking, and
+    "unread: none" is the answer - it is the affirmative clean line doing its
+    actual job, on a surface that fires once rather than on every prompt.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    state = tmp_path / "seen.json"
+    reported = tmp_path / "reported.json"
+    watch.mark_seen(inbox, state)
+    (inbox / "a.md").unlink()
+
+    watch.main([
+        "--dir", str(inbox), "--state", str(state), "--reported", str(reported),
+    ])
+    out = capsys.readouterr().out
+
+    assert "unread: none" in out, (
+        f"the session-start rendering lost its counts line: {out!r}"
+    )
+    assert "WITHDRAWN" in out
 
 
 def test_the_report_never_carries_a_payload_byte_on_the_suppressed_path(watch, tmp_path, capsys):
