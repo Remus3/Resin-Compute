@@ -647,7 +647,80 @@ def _check_staged(command: str) -> int:
     return 0
 
 
+#: Hoisted out of main() so a refusal and the usage it prints cannot drift
+#: apart, and so every refusal below names the WHOLE contract rather than the
+#: one mode the caller happened to misspell.
+_USAGE = (
+    "  usage: precommit_gate.py                      (staged mode, "
+    "command string on stdin)\n"
+    "         precommit_gate.py --message-file PATH\n"
+    "         precommit_gate.py [--expect-count N] --scan-files PATH...\n"
+    "         precommit_gate.py [--expect-count N] --scan-files-from0 LISTFILE\n"
+    "         precommit_gate.py [--expect-count N] --scan-tracked source|docs\n"
+    "         precommit_gate.py --list-tracked source|docs|all\n"
+)
+
+
+def _refuse(problem: str) -> int:
+    """Refuse to START, and say so in words. See main() for the rule.
+
+    A SEPARATE HEADLINE FROM `precommit_gate BLOCKED`, deliberately. BLOCKED
+    means the gate ran and the tree did not pass. REFUSED means the gate never
+    ran at all because it did not understand how it was invoked. Collapsing the
+    two would let a typo in a hook line read as a finding about the tree.
+
+    EXIT 1, NOT 2, and the number is not the carrier. This tree has a recorded
+    finding that EXIT 2 IS NOT SELF-EVIDENCING - a module with a syntax error
+    and a tool deliberately declining to start both leave the interpreter at 2,
+    so the code cannot distinguish them. 1 is this module's stated contract
+    ("Any finding exits 1" in the docstring above) and is what all three hook
+    bodies read with `|| exit 1`. The MESSAGE is what carries the meaning, so
+    it always says REFUSED and always says that nothing was scanned.
+    """
+    sys.stderr.write(
+        "precommit_gate REFUSED - "
+        + problem
+        + "\n  NOTHING was scanned. This is a refusal to START, not a clean "
+        "result: a gate that did not understand its own invocation must never "
+        "be indistinguishable from one that ran and found nothing.\n"
+        + _USAGE
+    )
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
+    """Dispatch on argv, REFUSING every invocation this tool does not understand.
+
+    THE RULE, and it is the whole point of this function: there is no
+    fall-through. An argument that is not recognised, a mode flag carrying a
+    token that is not recognised, and a bare invocation with no payload on
+    stdin are all refused loudly and non-zero. They are never quietly routed
+    into the staged lane, which - with nothing to read - would exit 0.
+
+    WHY. A sibling tree measured this exactly on 2026-09-08: its gate invoked
+    with a ONE-CHARACTER SLIP in a flag exited 0 and printed NOTHING, because
+    only the exact token was recognised and everything else fell through to the
+    hook path, found no stdin payload, and returned 0. A real invocation exits
+    0 on a clean repository too, so a git hook - which reads nothing but the
+    exit code - could not tell a working gate from one a typo had switched off.
+    This tree already refused an unrecognised LEADING flag; three narrower
+    paths still fell through and are closed here. See
+    tests/test_precommit_gate_corpus.py for the three, each measured at rc 0
+    with empty stdout and empty stderr before this change.
+
+    THE DECISION ON A BARE INVOCATION WITH NO PAYLOAD, which is a choice and
+    not a deduction: it is REFUSED. The staged lane is driven by a command
+    string, and .githooks/pre-commit always supplies one - the line is
+    literally `echo "git commit" | "$PY" "$ROOT/tools/precommit_gate.py"` - so
+    no legitimate caller in this tree ever runs it with an empty stdin. What
+    DOES run with an empty stdin is a human at a terminal typing
+    `python tools/precommit_gate.py` and reading exit 0 as "the gate passed",
+    which it never was. That vacuous pass is recorded in docs/LEDGER.md.
+
+    THE LANE THAT DELIBERATELY DOES NOT CHANGE: a command string that IS
+    present and is NOT a `git commit` still exits 0. That input was understood
+    and the answer is a genuine no-op. Refusing it would wedge the hook.
+    """
     args = list(sys.argv[1:] if argv is None else argv)
 
     # A leading --expect-count N modifies whichever scan mode follows. Parsed
@@ -655,38 +728,76 @@ def main(argv: list[str] | None = None) -> int:
     expect: int | None = None
     if args and args[0] == "--expect-count":
         if len(args) < 2:
-            sys.stderr.write("precommit_gate: --expect-count needs an integer\n")
-            return 1
+            return _refuse("--expect-count needs an integer and nothing followed it.")
         try:
             expect = int(args[1])
         except ValueError:
-            sys.stderr.write(
-                f"precommit_gate: --expect-count needs an integer, got {args[1]!r}\n"
-            )
-            return 1
+            return _refuse(f"--expect-count needs an integer, got {args[1]!r}.")
         args = args[2:]
+        if not args:
+            return _refuse(
+                "--expect-count modifies a SCAN MODE and no scan mode followed "
+                "it. Taking the count and falling through to the staged lane "
+                "would silently discard the one argument whose entire job is "
+                "to refuse a sweep that selected the wrong number of files."
+            )
 
     # Explicit flags rather than sniffing argv shape, so each hook body reads
     # as a statement of what it is asking for.
+    #
+    # EVERY SINGLE-VALUE MODE CHECKS args[2:] AS WELL AS args[1]. Reading
+    # args[1] alone is how `--message-file README.md --scan-fils x` scanned
+    # README.md, threw the rest away and exited 0.
     if args and args[0] == "--message-file":
         if len(args) < 2:
-            sys.stderr.write("precommit_gate: --message-file needs a path\n")
-            return 1
+            return _refuse("--message-file needs a path and nothing followed it.")
+        if len(args) > 2:
+            return _refuse(
+                f"--message-file takes exactly one path; did not understand "
+                f"{args[2]!r}."
+            )
+        if expect is not None:
+            return _refuse(
+                "--expect-count counts SELECTED paths and --message-file "
+                "selects exactly one named file, so the two together do not "
+                "state anything this tool can act on."
+            )
         return _check_message_file(args[1])
     if args and args[0] == "--scan-tracked":
         if len(args) < 2:
-            sys.stderr.write("precommit_gate: --scan-tracked needs source|docs\n")
-            return 1
+            return _refuse("--scan-tracked needs source|docs and nothing followed it.")
+        if len(args) > 2:
+            return _refuse(
+                f"--scan-tracked takes exactly one mode; did not understand "
+                f"{args[2]!r}."
+            )
         return _check_scan_tracked(args[1], expect_count=expect)
     if args and args[0] == "--list-tracked":
         if len(args) < 2:
-            sys.stderr.write("precommit_gate: --list-tracked needs source|docs|all\n")
-            return 1
+            return _refuse(
+                "--list-tracked needs source|docs|all and nothing followed it."
+            )
+        if len(args) > 2:
+            return _refuse(
+                f"--list-tracked takes exactly one mode; did not understand "
+                f"{args[2]!r}."
+            )
+        if expect is not None:
+            return _refuse(
+                "--expect-count gates a SCAN and --list-tracked does not scan; "
+                "it prints the selection for a caller to scan."
+            )
         return _list_tracked(args[1])
     if args and args[0] == "--scan-files-from0":
         if len(args) < 2:
-            sys.stderr.write("precommit_gate: --scan-files-from0 needs a list path\n")
-            return 1
+            return _refuse(
+                "--scan-files-from0 needs a list path and nothing followed it."
+            )
+        if len(args) > 2:
+            return _refuse(
+                f"--scan-files-from0 takes exactly one list path; did not "
+                f"understand {args[2]!r}."
+            )
         paths = _paths_from_nul_file(args[1])
         if paths is None:
             sys.stderr.write(
@@ -697,24 +808,30 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         return _check_scan_files(paths, expect_count=expect)
     if args and args[0] == "--scan-files":
+        # VARIADIC ON PURPOSE, and it needs no trailing-token check: everything
+        # after the flag is a path, so a misspelled flag among them becomes a
+        # path that cannot be opened, and _check_scan_files reports that as a
+        # violation rather than skipping it. That half is already fail-CLOSED.
         return _check_scan_files(args[1:], expect_count=expect)
     if args:
-        sys.stderr.write(
-            f"precommit_gate: unknown argument {args[0]!r}\n"
-            "  usage: precommit_gate.py                      (staged mode, "
-            "command string on stdin)\n"
-            "         precommit_gate.py --message-file PATH\n"
-            "         precommit_gate.py [--expect-count N] --scan-files PATH...\n"
-            "         precommit_gate.py [--expect-count N] --scan-files-from0 LISTFILE\n"
-            "         precommit_gate.py [--expect-count N] --scan-tracked source|docs\n"
-            "         precommit_gate.py --list-tracked source|docs|all\n"
-        )
-        return 1
+        return _refuse(f"unknown argument {args[0]!r}.")
 
-    raw = sys.stdin.read() if not sys.stdin.isatty() else ""
+    try:
+        raw = sys.stdin.read() if not sys.stdin.isatty() else ""
+    except (AttributeError, OSError, ValueError):
+        # stdin detached, closed, or replaced by something unreadable. That is
+        # the same FACT as no payload, and it takes the same answer.
+        raw = ""
     # A PowerShell pipe prepends a UTF-8 BOM; json.loads rejects it and the
     # raw-string fallback then never regex-matches, which is a SILENT pass.
     raw = raw.lstrip(chr(0xFEFF)).strip()
+    if not raw:
+        return _refuse(
+            "no arguments and NO command payload on stdin, so there is nothing "
+            "to gate. The staged lane is driven by a command string and "
+            '.githooks/pre-commit supplies one (`echo "git commit" | ...`); an '
+            "empty stdin means nobody asked for a scan."
+        )
     try:
         # Accepts a structured hook payload as well as a bare command string.
         command = (json.loads(raw).get("tool_input") or {}).get("command", "")
