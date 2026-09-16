@@ -2961,10 +2961,22 @@ def test_each_logged_line_is_tab_separated_ascii_with_a_timestamp(watch, tmp_pat
     assert b"\r\n" not in raw, "the log carries CRLF, which no diff in this tree would show"
     for line in _log_lines(watch):
         fields = line.split("\t")
-        assert len(fields) == 3, f"expected timestamp, entry point and disposition: {line!r}"
+        assert len(fields) == 4, (
+            f"expected timestamp, entry point, session and disposition: {line!r}"
+        )
         time.strptime(fields[0], "%Y-%m-%dT%H:%M:%S")
         assert fields[1], f"the entry point column is empty: {line!r}"
-        assert fields[2], f"the disposition column is empty: {line!r}"
+        assert fields[2], f"the session column is empty: {line!r}"
+        assert fields[3], f"the disposition column is empty: {line!r}"
+        # THE DISPOSITION STAYS LAST, and that is a cross-module contract rather
+        # than a preference. `tests/test_session_hooks.py` reads it as the final
+        # tab-separated field and the entry point as the second, so the session
+        # column was inserted THIRD. Appending it would silently redefine both
+        # of those readings while looking like a tidier column order.
+        assert fields[-1] == watch.PHASE_START or fields[-1] in watch.TERMINAL_DISPOSITIONS, (
+            f"the last column is not a phase or a disposition: {line!r}"
+        )
+    assert _terminals(watch), "no terminal line was written, so the shape above is vacuous"
 
 
 def test_an_unwritable_invocation_log_does_not_take_the_watcher_down(watch, tmp_path):
@@ -3314,7 +3326,11 @@ def test_a_forged_label_cannot_reach_a_spawned_log(watch, monkeypatch, tmp_path)
 
     lines = _spawned_lines(redirected, monkeypatch, watch)
     for line in lines:
-        assert len(line.split("\t")) == 3, f"a forged label grew a column: {line!r}"
+        # FOUR COLUMNS SINCE THE SESSION ID ARRIVED: timestamp, entry point,
+        # session, disposition. The count is the whole assertion - a tab that
+        # survived the validator would grow the line to five and forge whichever
+        # column it landed in.
+        assert len(line.split("\t")) == 4, f"a forged label grew a column: {line!r}"
     assert {ln.split("\t")[1] for ln in lines} == {watch.SOURCE_CLI}, (
         f"a rejected label did not fall back to the honest one: {lines}"
     )
@@ -3543,7 +3559,7 @@ def test_a_forged_flag_label_cannot_reach_a_spawned_log(watch, monkeypatch, tmp_
 
     lines = _spawned_lines(redirected, monkeypatch, watch)
     for line in lines:
-        assert len(line.split("\t")) == 3, f"a forged flag label grew a column: {line!r}"
+        assert len(line.split("\t")) == 4, f"a forged flag label grew a column: {line!r}"
     assert {ln.split("\t")[1] for ln in lines} == {watch.SOURCE_CLI}, (
         f"a rejected flag label did not fall back to the honest one: {lines}"
     )
