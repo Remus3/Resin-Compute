@@ -10,7 +10,14 @@ git log. Before planning any character build read docs/GOAL_SPEC_SEED_TEAM.md.
 Before adding any data source read docs/LICENSE_NOTES.md. Before re-litigating a
 past choice read docs/adr/README.md.
 
-YOUR STANDING TASK THIS SESSION, operator instruction 2026-09-16: CONTINUE A
+LANED LOOPING IS ARMED BUT NOT ACTIVE FOR THIS TREE. Operator instruction, late
+2026-09-16, superseding the earlier instruction the same day: ONLY RC AND CS RUN
+HEADLESS LOOPED LANES FOR NOW. RSC DOES NOT. The directive below is kept ready
+verbatim so it can be switched on without being re-derived - DO NOT ACT ON IT
+unless the operator says so in this session, in their own words. If they do not,
+work the open items normally, one at a time, and keep the main thread quiet.
+
+THE DIRECTIVE, HELD IN RESERVE: CONTINUE A
 LANED, HEADLESS, ORCHESTRATED, PARALLEL LOOPING SESSION OVER THE OPEN ITEMS IN
 ROADMAP.md, LOOPING UNTIL THE LANES ARE DRAINED OR THE OPERATOR INTERRUPTS.
 Lane the open items into DISJOINT slices BEFORE dispatching any of them,
