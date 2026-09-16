@@ -206,7 +206,10 @@ def test_one_undecodable_byte_no_longer_discards_the_log(watch):
     assert survived[: len(PLANTED)] == PLANTED, (
         f"the originals must survive in order, got {survived}"
     )
-    assert survived[-1].endswith("\tmain\tup-to-date")
+    # The session column sits between the entry point and the disposition, so a
+    # fire that was handed no session id writes the placeholder there. Spelled
+    # from the module's own constant rather than as a literal `-`.
+    assert survived[-1].endswith(f"\tmain\t{watch.SESSION_ABSENT}\tup-to-date")
     assert len(survived) == len(PLANTED) + 2, (
         f"five originals, the mangled line and the new line: got {survived}"
     )
@@ -297,7 +300,10 @@ def test_ascii_log_survives_a_fire(watch):
     survived = _lines(target)
     assert len(survived) == len(PLANTED) + 1, f"expected {len(PLANTED) + 1} lines, got {survived}"
     assert survived[: len(PLANTED)] == PLANTED, "the originals must survive in order"
-    assert survived[-1].endswith("\tmain\tup-to-date")
+    # The session column sits between the entry point and the disposition, so a
+    # fire that was handed no session id writes the placeholder there. Spelled
+    # from the module's own constant rather than as a literal `-`.
+    assert survived[-1].endswith(f"\tmain\t{watch.SESSION_ABSENT}\tup-to-date")
     assert "?" not in "".join(survived), "a clean log must not acquire a mangle marker"
 
 

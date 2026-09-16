@@ -175,6 +175,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import stat
@@ -229,6 +230,41 @@ DEFAULT_REPORTED = RUNTIME_DIR / "inbox_reported.json"
 #: One line per fire. See `log_invocation` for why this is a requirement of the
 #: hook rather than an improvement filed against it.
 DEFAULT_INVOCATIONS = RUNTIME_DIR / "inbox_invocations.log"
+
+#: WHAT THIS SESSION HAS ALREADY BEEN TOLD. A CACHE, not a record, and the
+#: distinction is the whole reason it is a THIRD file rather than a field in one
+#: of the two above.
+#:
+#: NOT `DEFAULT_REPORTED`, and that is not tidiness. `withdrawn` unions
+#: `read_reported()` into its baseline by design - Sibling-D's correction,
+#: because a note LISTED at session start and pulled before anyone acknowledged
+#: lives in the report record and nowhere else. Writing per-session keys into
+#: that file would inject them straight into the WITHDRAWAL baseline, and every
+#: one of them would re-derive as a withdrawn note on the next fire. Scoping
+#: them per session inside that file cannot help either: the baseline reads the
+#: whole list.
+#:
+#: NOT `DEFAULT_STATE` for the reason clause 5 of the fleet contract states
+#: flatly - SHOWING NEVER ACKNOWLEDGES. The watermark is what `--mark`
+#: advances deliberately, and a per-prompt hook must never reach it.
+#:
+#: NEVER UNDER `%LOCALAPPDATA%` OR `%APPDATA%`, AND THAT IS MEASURED. RC found
+#: this on 2026-09-15 on its own poller state: a hook or tool carrying the
+#: Claude desktop app's MSIX package identity has its writes under those roots
+#: redirected into the package's LocalCache TWIN, and every later read from that
+#: harness returns the twin - silently, with no error and no permission failure.
+#: A months-old shadow was being read by every harness shell while the live task
+#: rewrote the real file on every poll. Repo roots are NOT virtualised, so this
+#: joins `RUNTIME_DIR` like every other runtime record here rather than standing
+#: a second contract beside it.
+DEFAULT_SESSIONS = RUNTIME_DIR / "inbox_sessions.json"
+
+#: Ceiling on the session rows kept, newest retained. Bounded for the same
+#: reason `MAX_INVOCATION_LINES` is: this is rewritten on EVERY prompt, and a
+#: record nobody prunes on a path nobody stops is a file that grows for as long
+#: as the tree is used. The only session whose suppression can matter is the one
+#: now running, so the oldest rows are the ones that go.
+MAX_TRACKED_SESSIONS = 64
 
 #: Ceiling on the lines kept. The `UserPromptSubmit` hook fires on EVERY prompt,
 #: so an uncapped log is a file that grows for as long as the tree is used and
@@ -302,6 +338,188 @@ MAX_SOURCE_LABEL_CHARS = 32
 _SOURCE_LABEL_SHAPE = re.compile(
     r"\A[a-z0-9][a-z0-9._-]{0," + str(MAX_SOURCE_LABEL_CHARS - 1) + r"}\Z"
 )
+
+#: CEILING ON WHAT THIS PROCESS READS FROM STDIN, AS A LITERAL, AND IT IS THE
+#: MOST DANGEROUS NUMBER IN THIS FILE.
+#:
+#: `.claude/settings.json` wires this script as a `UserPromptSubmit` hook with a
+#: FIVE SECOND timeout, on every prompt. A read that blocks does not fail loudly:
+#: the hook is killed, its stdout is DROPPED by the harness, and nothing anywhere
+#: records that it had mail to announce. So the read is bounded on two
+#: independent axes, and the budget is only the second of them.
+#:
+#: THE FIRST AXIS IS THAT IT IS ONE `os.read` AND IS NEVER LOOPED - see
+#: `_read_stdin_budget`. A single `os.read` returns as soon as ANY bytes are
+#: available, so it waits on one syscall rather than on a full buffer. A loop
+#: that drained to the budget or to EOF would reintroduce the unbounded wait
+#: that this constant cannot save anyone from.
+#:
+#: 65536 IS CHOSEN AGAINST THE PAYLOAD RATHER THAN AT RANDOM. A Claude Code hook
+#: payload is a small JSON object - the session id, the event name, a transcript
+#: path, a working directory - except that a `UserPromptSubmit` payload also
+#: carries the operator's PROMPT, which has no small bound at all. A prompt past
+#: the budget truncates the JSON, which fails to parse, which yields no session
+#: id, which FAILS OPEN and prints. That is the accepted cost and it is armed:
+#: the worst outcome is a duplicate line on screen, never a swallowed note.
+MAX_STDIN_BYTES = 65536
+
+#: The field a Claude Code hook payload carries the session id in.
+SESSION_ID_FIELD = "session_id"
+
+#: What the session column holds when no validated id reached this process - a
+#: manual run, a hook whose stdin was closed, or a payload this module refused.
+#:
+#: A PLACEHOLDER RATHER THAN AN EMPTY COLUMN. The log is TAB separated and a
+#: blank field collapses the record for a naive splitter, so a fire with no
+#: session id must still leave a well-formed four-column line.
+SESSION_ABSENT = "-"
+
+#: Ceiling on a session id, as a literal, for the same reason
+#: `MAX_SOURCE_LABEL_CHARS` is one: the id is written into a capped,
+#: line-oriented log and an unbounded id is an unbounded line. A Claude Code
+#: session id is a 36-character UUID today; the ceiling is set above that rather
+#: than at it, because the shape is a validator and not a format claim.
+MAX_SESSION_ID_CHARS = 64
+
+#: `\A` and `\Z`, NEVER `^` and `$`, for exactly the reason recorded above
+#: `_SOURCE_LABEL_SHAPE`: in Python `$` also matches immediately before a
+#: trailing newline, so `^[a-z]+$` accepts an id followed by a newline - which is
+#: the forgery this shape exists to refuse, since a newline in the id writes a
+#: second line into a line-oriented log.
+#:
+#: MIXED CASE IS ALLOWED HERE AND IS NOT ALLOWED FOR THE SOURCE LABEL, and the
+#: difference is deliberate. A source label is a name THIS TREE chooses, so two
+#: spellings of one entry point are a defect and the shape refuses them. A
+#: session id is an OPAQUE IDENTIFIER some other process chose; folding its case
+#: would merge two genuinely different sessions, and refusing its case would
+#: throw away a real id and fail open on every fire of a harness that happens to
+#: emit one. Neither is a repair worth making to an identifier.
+_SESSION_ID_SHAPE = re.compile(
+    r"\A[A-Za-z0-9][A-Za-z0-9._-]{0," + str(MAX_SESSION_ID_CHARS - 1) + r"}\Z"
+)
+
+
+def _read_stdin_budget() -> bytes:
+    """At most `MAX_STDIN_BYTES` from stdin, in ONE read. Never raises, never blocks.
+
+    THIS IS THE RISKIEST FUNCTION IN THIS FILE and it is written to be boring.
+    It runs on a `UserPromptSubmit` hook with a five second ceiling, on every
+    prompt, and every failure mode it has is silent: a killed hook has its stdout
+    dropped, so a blocked read does not report a blocked read - it reports
+    nothing at all, on the one path whose entire job is to speak up.
+
+    THE TERMINAL IS CHECKED FIRST, AND IT IS THE CASE THAT BITES FIRST. It is
+    not the hook. `python scripts/watch_inbox.py` typed at a prompt - the usage
+    this module's own docstring documents - has stdin attached to the TERMINAL,
+    where a read blocks until somebody types and presses return. So `isatty` is
+    consulted before a descriptor is asked for at all, and
+    `test_a_terminal_stdin_is_not_read_at_all` asserts the ORDER rather than the
+    outcome, because a fake that is never asked for its fd is the only proof the
+    terminal is not read.
+
+    ONE `os.read`, NEVER LOOPED, AND THAT IS THE ACTUAL BOUND. `os.read` returns
+    as soon as any bytes are available; it does not wait for the buffer to fill.
+    A loop that drained until the budget was reached or until EOF arrived would
+    wait on a writer that may never write, and the byte budget does nothing
+    whatsoever about that. `test_the_reader_issues_exactly_one_os_read` counts
+    the calls for that reason. The cost is real and is stated rather than hidden:
+    a payload split across two writes comes back partial, fails to parse, and the
+    fire falls back to printing.
+
+    `sys.stdin.buffer.read(n)` IS NOT USED, deliberately. It loops internally
+    until it has `n` bytes or EOF, which is the drain this function refuses.
+
+    WHAT IT RETURNS `b""` FOR, all of them normal: no stdin at all (a windowless
+    parent, or a harness that passed nothing); a terminal; an object with no file
+    descriptor, which is what pytest's own capture installs and therefore what
+    every in-process arm in this suite runs under; and any OS-level failure on
+    the read. There is no exception path, because an exception here escapes
+    before a single line has been written and reads afterwards exactly like a
+    hook that is not wired.
+
+    THE ONE RESIDUAL, STATED RATHER THAN CLAIMED AWAY: a pipe that is held open
+    by a parent which never writes and never closes would still block this single
+    read. Windows offers no portable way to poll a pipe for readiness, so that
+    case is bounded only by the hook's own five second ceiling and by the
+    fail-open fallback. It is not a measured case here - the harness closes
+    stdin, and `subprocess.DEVNULL` gives immediate EOF - and it is recorded as a
+    residual rather than as a solved problem.
+    """
+    stream = sys.stdin
+    if stream is None:
+        return b""
+    try:
+        if stream.isatty():
+            return b""
+        fd = stream.fileno()
+    except (OSError, ValueError, AttributeError):
+        # `io.UnsupportedOperation` - what pytest's captured stdin raises out of
+        # `fileno` - subclasses both OSError and ValueError, so it is already in
+        # this tuple and importing `io` to name it would say nothing extra.
+        return b""
+    try:
+        return os.read(fd, MAX_STDIN_BYTES)
+    except (OSError, ValueError):
+        return b""
+
+
+def session_id_from_payload(raw: bytes) -> str | None:
+    """The validated session id in a hook's stdin payload, or `None`.
+
+    PURE, AND SEPARATED FROM THE READ ON PURPOSE. The read has one untestable
+    residual in it - see `_read_stdin_budget` - and the validation has none, so
+    keeping them apart lets every hostile-payload arm run without a pipe.
+
+    THE ID IS THE SECOND FIELD THIS MODULE DOES NOT CHOOSE, after the source
+    label, and it is validated for the same measured reason: the invocation
+    record is TAB separated and LINE oriented and capped at
+    `MAX_INVOCATION_LINES`, so a tab forges the disposition column and a newline
+    forges a whole row - timestamp, entry point, disposition and all. A forged
+    row is a fabricated answer to the one question the log exists to answer.
+
+    REFUSED RATHER THAN TRIMMED INTO SHAPE, following `resolve_source` rather
+    than inventing a second convention beside it. A silently repaired id is an
+    id nobody can trace back to a session, and it would also merge two sessions
+    whose ids differed only in the part that got trimmed - which turns a
+    suppression cache into a cross-session gag.
+
+    EVERY REFUSAL FAILS OPEN. `None` means the caller prints and writes nothing.
+    Absent, closed, empty, truncated, non-UTF-8, non-JSON, JSON that is not an
+    object, an object with no id, an id that is not a string and an id the shape
+    refuses all arrive here as the same answer, because the caller's correct
+    response to all nine is identical.
+    """
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        # `json.JSONDecodeError` is a `ValueError`. A truncated payload - the
+        # normal consequence of the byte budget - lands here.
+        return None
+    if not isinstance(payload, dict):
+        return None
+    candidate = payload.get(SESSION_ID_FIELD)
+    if not isinstance(candidate, str) or not _SESSION_ID_SHAPE.match(candidate):
+        return None
+    return candidate
+
+
+def validated_session_id() -> str | None:
+    """This fire's session id, read from stdin under budget. `None` fails open.
+
+    RESOLVED AT THE PROCESS ENTRY POINT and handed to `main`, for the same
+    reason `source_from_argv` is: `main` writes its `start` line BEFORE the body
+    runs, and both lines of one fire must name the same session. A fire killed
+    at the hook's five second ceiling leaves only that `start` line, so it is
+    precisely the line that must carry the id.
+
+    IT IS ALSO WHY THIS IS A PARAMETER RATHER THAN AN AMBIENT READ. Stdin can be
+    consumed exactly once. A second call would return `b""` and the two lines of
+    one fire would disagree - one attributed, one not - which is the same defect
+    `source_from_argv` was written to close for the entry-point label.
+    """
+    return session_id_from_payload(_read_stdin_budget())
 
 
 def resolve_source(fallback: str) -> str:
@@ -417,6 +635,15 @@ TERMINAL_USAGE = "usage-printed"
 TERMINAL_ARGV_REJECTED = "argv-rejected"
 TERMINAL_CRASHED = "crashed"
 
+#: `suppressed` IS DELIBERATELY NOT `nothing-unread`, for exactly the reason
+#: `no-inbox` is not. A quiet fire that found unread mail and stayed silent
+#: because THIS SESSION had already been told is a different fact from a fire
+#: that found a quiet channel, and the log is the only place either one is
+#: recorded. Collapsing the two would make the per-session suppression
+#: invisible - and an invisible suppression is indistinguishable from the
+#: swallowed-mail defect it is one refactor away from becoming.
+TERMINAL_SUPPRESSED = "suppressed"
+
 #: Cross-checked against the module's own `TERMINAL_` constants by
 #: `test_the_declared_dispositions_are_discovered_rather_than_listed`, because
 #: this tuple is itself a hand-maintained list and those go stale silently.
@@ -430,6 +657,7 @@ TERMINAL_DISPOSITIONS = (
     TERMINAL_USAGE,
     TERMINAL_ARGV_REJECTED,
     TERMINAL_CRASHED,
+    TERMINAL_SUPPRESSED,
 )
 
 #: This repo's own code in the `from-<CODE>-` naming convention. A note we sent
@@ -900,6 +1128,97 @@ def prune_records(inbox: Path, reported: Path) -> bool:
     return atomic_write_json(reported, {"version": 1, "reported": keep})
 
 
+#: How a suppression key names the EVENT rather than the entry. A note shown as
+#: unread and the same note's later WITHDRAWAL are two different events about one
+#: bare name, so a flat key set would score the withdrawal as already shown and
+#: stay silent about it - losing the one inbox event that leaves no artifact on
+#: disk for anybody to notice later.
+SHOWN_UNREAD = "unread:"
+SHOWN_GONE = "gone:"
+
+
+def read_shown(sessions: Path, session: str | None) -> set[str]:
+    """Event keys this SESSION has already been shown. Absent or unusable is empty.
+
+    DEGRADES TO EMPTY, WHICH IS FAIL OPEN, AND THAT IS THE OPPOSITE POLARITY TO
+    `_reported_record`. The difference is the point and not an inconsistency.
+
+    `_reported_record` fails CLOSED because a caller that spliced an unreadable
+    report record with new data and wrote it back would DELETE history that is on
+    disk and irreplaceable. This file holds no history. It is a CACHE whose
+    entire content is reconstructed by the next fire, and the worst consequence
+    of losing all of it is one duplicate line on screen. Failing closed here
+    would invert that: a single stray byte in a cache file would suppress real
+    mail, which is the failure the watcher exists to prevent.
+
+    `test_an_unreadable_cache_re_prints_rather_than_suppressing` pins this half
+    so a later reader cannot "finish the fix" by tightening the wrong one.
+
+    NO SESSION MEANS THE EMPTY SET, so a fire with no validated id suppresses
+    nothing at all.
+    """
+    if session is None:
+        return set()
+    payload = read_json(sessions, default=None)
+    if not isinstance(payload, dict):
+        return set()
+    rows = payload.get("sessions")
+    if not isinstance(rows, list):
+        return set()
+    for row in rows:
+        if isinstance(row, dict) and row.get("id") == session:
+            shown = row.get("shown")
+            if isinstance(shown, list):
+                return {k for k in shown if isinstance(k, str)}
+            return set()
+    return set()
+
+
+def record_shown(sessions: Path, session: str | None, keys: list[str]) -> bool:
+    """Add `keys` to this session's shown set. Returns whether a write landed.
+
+    CALLED ONLY AFTER STDOUT HAS BEEN FLUSHED, and the caller is where that
+    ordering lives. It matters because this hook is declared with a five second
+    ceiling: recorded first and then killed, an entry would be filed as SHOWN
+    having never reached a human - a note silently swallowed, which is the one
+    outcome worse than a duplicate. Written after the flush, a killed fire
+    RE-PRINTS instead. `test_the_cache_is_written_only_after_stdout_is_flushed`
+    asserts the order rather than an outcome, because both orderings look
+    identical on any fire that is not killed.
+
+    IT NEVER TOUCHES THE WATERMARK AND NEVER TOUCHES THE REPORT RECORD. That is
+    clause 5 of the fleet contract - SHOWING NEVER ACKNOWLEDGES - and it is why
+    this is a third file. See `DEFAULT_SESSIONS` for why neither existing record
+    could carry it.
+
+    THE CURRENT SESSION IS MOVED TO THE END, which is what makes the cap an LRU
+    rather than a guillotine. Rows are ordered oldest first and the tail is kept,
+    so the session now running can never be the row that gets dropped.
+
+    A CORRUPT CACHE IS REPLACED RATHER THAN REFUSED, which is the direction
+    `record_reported` deliberately does NOT take. Again: there is no history here
+    to lose. Refusing the write would leave a bad byte suppressing nothing
+    forever and growing nothing, but it would also leave the file unrepairable by
+    the only thing that writes it.
+    """
+    if session is None or not keys:
+        return False
+    payload = read_json(sessions, default=None)
+    rows: list[dict] = []
+    if isinstance(payload, dict) and isinstance(payload.get("sessions"), list):
+        rows = [
+            row
+            for row in payload["sessions"]
+            if isinstance(row, dict) and isinstance(row.get("id"), str)
+        ]
+    kept = [row for row in rows if row.get("id") != session]
+    kept.append({"id": session, "shown": sorted(read_shown(sessions, session) | set(keys))})
+    sessions.parent.mkdir(parents=True, exist_ok=True)
+    return atomic_write_json(
+        sessions, {"version": 1, "sessions": kept[-MAX_TRACKED_SESSIONS:]}
+    )
+
+
 def _log_tail() -> list[str]:
     """The lines already in the invocation log, oldest first. Unreadable is MANGLED.
 
@@ -944,8 +1263,13 @@ def _log_tail() -> list[str]:
     return [line.replace(_REPLACEMENT, "?") for line in raw.splitlines() if line.strip()]
 
 
-def log_invocation(source: str, disposition: str, now: float | None = None) -> bool:
-    """One line per fire: when, from which entry point, and what came of it.
+def log_invocation(
+    source: str,
+    disposition: str,
+    now: float | None = None,
+    session: str | None = None,
+) -> bool:
+    """One line per fire: when, from which entry point, in which session, and what came of it.
 
     THIS IS A REQUIREMENT, NOT AN IMPROVEMENT. This tool's only output is a
     report to a human, and a report to a human leaves nothing behind that says
@@ -961,10 +1285,27 @@ def log_invocation(source: str, disposition: str, now: float | None = None) -> b
     this did not, so the same argument that condemned the responder condemned
     this tool and nobody had said so.
 
-    NEVER A PAYLOAD BYTE. The columns are a timestamp, an entry point and a
-    disposition, all of them values this module chose. A note is untrusted data
-    and none of it reaches the log, for the same reason none of it reaches the
-    report.
+    NEVER A PAYLOAD BYTE. The columns are a timestamp, an entry point, a session
+    and a disposition. Three of the four are values this module chose. A note is
+    untrusted data and none of it reaches the log, for the same reason none of it
+    reaches the report.
+
+    THE SESSION COLUMN GOES THIRD, NOT LAST, AND THE POSITION IS LOAD-BEARING.
+    `tests/test_session_hooks.py` reads the disposition as the LAST tab-separated
+    field and the entry point as the second. Appending the session would silently
+    redefine both readings, and the arms would go red describing a disposition
+    defect that is not there. Third, every existing reader keeps its meaning and
+    the line still ends with what came of the fire - which is also the natural
+    reading order, since the outcome is the thing a reader scans for.
+
+    THE SESSION IS VALIDATED HERE AND NOT ONLY AT THE PARSE. It is the one column
+    whose value originates outside this process, and the log line is where a tab
+    or a newline in it would do its damage: a tab forges the disposition column,
+    a newline fabricates an entire row. `session_id_from_payload` is the gate on
+    the stdin path, but it is not the only way a value can reach this function -
+    a later caller could hand one straight in - so the refusal is enforced at the
+    write as well. Anything the shape refuses becomes `SESSION_ABSENT` rather
+    than being trimmed into something plausible.
 
     ATOMIC, DESPITE BEING AN APPEND. `core/atomic_io.py` is the only sanctioned
     state-write path in this tree because readers poll mid-write, and a bare
@@ -972,7 +1313,8 @@ def log_invocation(source: str, disposition: str, now: float | None = None) -> b
     its newline. The cap needs a rewrite rather than an append in any case.
     """
     stamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() if now is None else now))
-    kept = [*_log_tail(), f"{stamp}\t{source}\t{disposition}"][-MAX_INVOCATION_LINES:]
+    column = session if session is not None and _SESSION_ID_SHAPE.match(session) else SESSION_ABSENT
+    kept = [*_log_tail(), f"{stamp}\t{source}\t{column}\t{disposition}"][-MAX_INVOCATION_LINES:]
     try:
         return atomic_write_text(DEFAULT_INVOCATIONS, "\n".join(kept) + "\n")
     except (OSError, ValueError):
@@ -1056,7 +1398,11 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None, source: str = SOURCE_MAIN) -> int:
+def main(
+    argv: list[str] | None = None,
+    source: str = SOURCE_MAIN,
+    session: str | None = None,
+) -> int:
     """Run one report, with its outcome guaranteed to reach the invocation log.
 
     EVERY EXIT IS LOGGED HERE, not on the path that takes it. The responder
@@ -1075,27 +1421,37 @@ def main(argv: list[str] | None = None, source: str = SOURCE_MAIN) -> int:
     Two lines per fire, a `start` and exactly one terminal. The `start` is not
     redundant: a fire killed at the hook's five second ceiling writes no
     terminal line, and the `start` is then the only evidence it happened.
+
+    `session` IS A PARAMETER AND IS NOT READ HERE, for the reason
+    `validated_session_id` records: stdin can be consumed exactly once, and both
+    lines of one fire must name the same session. It arrives already validated or
+    already `None`, and `log_invocation` re-validates it anyway because it is the
+    one column whose value came from outside this process.
     """
-    log_invocation(source, PHASE_START)
+    log_invocation(source, PHASE_START, session=session)
     try:
-        code, disposition = _main(argv)
+        code, disposition = _main(argv, session)
     except SystemExit as exc:
         # argparse, and only argparse. A usage print and a rejected flag are
         # different events: the second means something invoked this tool with a
         # flag it does not have, which for a hook is a wiring defect that would
         # otherwise leave no trace at all.
-        log_invocation(source, TERMINAL_USAGE if not exc.code else TERMINAL_ARGV_REJECTED)
+        log_invocation(
+            source,
+            TERMINAL_USAGE if not exc.code else TERMINAL_ARGV_REJECTED,
+            session=session,
+        )
         raise
     except BaseException:
         # NOT swallowed. A watcher that hides its own failure is the defect one
         # layer down; the log says the fire died before the exception goes on.
-        log_invocation(source, TERMINAL_CRASHED)
+        log_invocation(source, TERMINAL_CRASHED, session=session)
         raise
-    log_invocation(source, disposition)
+    log_invocation(source, disposition, session=session)
     return code
 
 
-def _main(argv: list[str] | None) -> tuple[int, str]:
+def _main(argv: list[str] | None, session: str | None = None) -> tuple[int, str]:
     """The report itself. Returns (exit code, terminal disposition).
 
     It does not log. That is the whole point of the wrapper above: a path that
@@ -1137,6 +1493,42 @@ def _main(argv: list[str] | None) -> tuple[int, str]:
     # raise.
     _, unusable = _reported_record(reported)
 
+    # ONCE PER VALIDATED SESSION, AND ONLY ON THE PER-PROMPT PATH.
+    #
+    # The quiet hook fires on EVERY prompt, and acknowledging is a separate
+    # deliberate act, so an unread note re-printed into the session context on
+    # every single prompt for as long as it stayed unread - which is potentially
+    # forever. The fleet contract states the corollary senders have to budget
+    # for: anything that adds notes adds PERMANENT session-start text in every
+    # recipient until somebody acknowledges.
+    #
+    # THE QUIET PATH AND NOTHING ELSE. `SessionStart` fires once per session, so
+    # there is nothing for suppression to save there - and a suppressed
+    # session-start report is a session that begins blind, which is the exact
+    # failure this whole tool was built for. A deliberate manual run and `--all`
+    # are the operator asking, and an answer that has been withheld because some
+    # earlier prompt already got it is not an answer.
+    #
+    # NO SESSION ID MEANS FAIL OPEN - print, and write nothing. Without an id
+    # there is nothing to scope suppression to, and a global scope would be an
+    # acknowledgement wearing a cache's name.
+    #
+    # THE KEY IS THE EVENT, NOT THE ENTRY. An unread note and that same note's
+    # later withdrawal are two events about one bare name, so they are
+    # namespaced - see `SHOWN_UNREAD`. The unread key carries the DIGEST as well,
+    # because an in-place CORRECTION is the case this channel keys on content
+    # for: RULING then ADDENDUM then CORRECTION is routine here, and suppressing
+    # on the name alone would swallow the correction inside the very session that
+    # had been told about the version it corrects.
+    suppress = args.quiet_when_empty and session is not None
+    already = read_shown(DEFAULT_SESSIONS, session) if suppress else set()
+    held_back = 0
+    if suppress:
+        fresh = [e for e in entries if SHOWN_UNREAD + e.key + ":" + e.digest not in already]
+        fresh_gone = [k for k in gone if SHOWN_GONE + k not in already]
+        held_back = (len(entries) - len(fresh)) + (len(gone) - len(fresh_gone))
+        entries, gone = fresh, fresh_gone
+
     if entries or gone or not args.quiet_when_empty:
         _render(entries, heading)
 
@@ -1167,6 +1559,27 @@ def _main(argv: list[str] | None) -> tuple[int, str]:
     if entries:
         record_reported(reported, [entry.key for entry in entries])
 
+    # AND THE PER-SESSION CACHE IS RECORDED AFTER STDOUT IS FLUSHED, which is a
+    # stronger ordering than "after rendering" and is a separate requirement.
+    #
+    # `print` writes into a buffer. A hook killed at its five second ceiling
+    # between the cache write and the flush would have recorded as SHOWN a line
+    # that never left the process, so the next fire in that session would stay
+    # silent about mail no human ever saw. Flushing first makes a killed fire
+    # RE-PRINT, which is the direction every degraded path in this module takes.
+    #
+    # `record_shown` refuses a `None` session on its own, so the fail-open
+    # "print and write nothing" rule is enforced there rather than depending on
+    # this call site remembering it.
+    if suppress and (entries or gone):
+        sys.stdout.flush()
+        record_shown(
+            DEFAULT_SESSIONS,
+            session,
+            [SHOWN_UNREAD + e.key + ":" + e.digest for e in entries]
+            + [SHOWN_GONE + key for key in gone],
+        )
+
     if args.mark:
         # REFUSED BEFORE EITHER WRITE, NOT BETWEEN THEM. `mark_seen(...) and
         # prune_records(...)` runs the watermark write FIRST, so a prune that
@@ -1193,6 +1606,11 @@ def _main(argv: list[str] | None) -> tuple[int, str]:
         return 0, TERMINAL_REPORTED
     if gone:
         return 0, TERMINAL_WITHDRAWN_ONLY
+    if held_back:
+        # There WAS unread mail and this session had already been told. Saying
+        # `nothing-unread` here would be a false line in the one record that
+        # exists to say what a fire decided. See `TERMINAL_SUPPRESSED`.
+        return 0, TERMINAL_SUPPRESSED
     return 0, TERMINAL_NOTHING_UNREAD
 
 
@@ -1215,6 +1633,18 @@ if __name__ == "__main__":
     #
     # Resolved BEFORE `main` is entered, because `main` writes its `start` line
     # before argv is ever parsed and both lines of one fire must agree.
+    # THE SESSION ID IS READ HERE, ONCE, AND FOR THE SAME REASON THE SOURCE
+    # LABEL IS. `main` writes its `start` line before the body runs, so both
+    # lines of one fire must be handed the same value; and stdin can be consumed
+    # exactly once, so a second read anywhere would return nothing and leave the
+    # two lines disagreeing - one attributed, one not.
+    #
+    # READ BEFORE ANYTHING ELSE HAPPENS, and bounded. See `MAX_STDIN_BYTES` for
+    # why an unbounded read on this path kills mail announcements silently, and
+    # `_read_stdin_budget` for the two independent bounds and the one residual.
     raise SystemExit(
-        main(source=resolve_source(source_from_argv(sys.argv[1:]) or SOURCE_CLI))
+        main(
+            source=resolve_source(source_from_argv(sys.argv[1:]) or SOURCE_CLI),
+            session=validated_session_id(),
+        )
     )
