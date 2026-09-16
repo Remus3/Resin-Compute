@@ -127,6 +127,32 @@ by its root segment), `scripts/nope.sh` and `core/nope.pyi` (suffixes added),
 and `docs\\nope2.md` (backslash separator, normalised) all escaped the first
 version and are now caught.
 
+THIS MODULE MUST BE RUN IN BOTH CHECKOUT SHAPES BEFORE IT IS BELIEVED, and that
+sentence was written in blood. Two arms here were built in a worktree, went
+green there, merged, and went RED in the primary checkout on identical bytes at
+an identical commit. Nothing about the doc differed. `moon_sync_inbox/` is
+gitignored, and a gitignored directory exists exactly where somebody created
+one: the primary checkout receives notes, a fresh worktree never does. An arm
+that asked `Path.exists()` about it was asking about the filesystem it happened
+to be standing on, and a population pinned from one shape is a claim about that
+shape alone.
+
+The rule generalises past this one directory, which is why it is at the top of
+the module rather than beside the arm: every tree in this fleet uses isolated
+checkouts for parallel work, so ANY presence that is a property of the checkout
+rather than of the repository has this exposure - gitignored paths, generated
+artifacts, caches, runtime state under `ops/runtime/`, anything a session
+creates. Where a claim can be phrased against the REPOSITORY - what git tracks,
+what git ignores, what a tracked file contains - phrase it that way and it holds
+everywhere. Where it cannot, it is not a claim this module can make.
+
+No arm can assert this rule; it is a statement about how the module is RUN, and
+a test that could check it would have to be run in both shapes to be trusted,
+which is the same regress. What is armed instead is the specific mechanism -
+`test_a_gitignored_directorys_presence_is_a_property_of_the_checkout` pins the
+trailing-slash asymmetry that makes the repository-level question answerable at
+all. The rule itself lives here, unarmed and stated, which is the honest shape.
+
 That paragraph was a concession in prose. It is now an ASSERTION, because a
 concession nobody re-reads is indistinguishable from a defect nobody found. CS's
 REVIEW of the shared test core and an independent adversary in this tree
@@ -699,66 +725,117 @@ def test_every_repo_relative_path_resolves():
 
 
 #: Arm 6's ENTIRE graded population on CHANNEL_VERSION 1 bytes, pinned exactly
-#: rather than floored. The two halves are split because they carry different
-#: evidence, and lumping them let a guard advertise a property it does not have.
-EXPECTED_PATHS_RESOLVING_ON_DISK = {"docs/CHANNEL.md"}
-EXPECTED_PATHS_RESOLVING_ONLY_AS_IGNORED = {"moon_sync_inbox/"}
+#: rather than floored, and SPLIT ON WHETHER GIT IGNORES THE TOKEN.
+#:
+#: The split key is load-bearing and it is the second thing this pin got wrong.
+#: The first version of it split on `Path.exists()`, which is a fact about the
+#: FILESYSTEM THE TEST HAPPENS TO BE STANDING ON. `moon_sync_inbox/` is
+#: gitignored, and a gitignored directory exists exactly where somebody created
+#: one: notes ARRIVE in the primary checkout, so it is there, while a worktree
+#: is a fresh checkout that never created it. Pinned from a worktree the
+#: disk-resolving half had one member; run in the primary checkout it had two,
+#: and the arm went red on identical bytes at identical commits.
+#:
+#: Whether git IGNORES a path is a fact about the REPOSITORY - the rule lives in
+#: a tracked `.gitignore` and answers the same in every checkout. That is also
+#: what the doc is actually claiming when it says a clone has no channel. So the
+#: split is by ignore rule, and nothing here asks whether the inbox exists.
+EXPECTED_PATHS_GIT_IGNORES = {"moon_sync_inbox/"}
+EXPECTED_PATHS_GIT_DOES_NOT_IGNORE = {"docs/CHANNEL.md"}
+
+#: THE TRAILING SLASH IS NOT COSMETIC. `.gitignore`'s rule is `moon_sync_inbox/`,
+#: and a trailing slash makes a pattern DIRECTORY-ONLY. Git can only tell that a
+#: pathspec names a directory from a trailing slash on the pathspec or from the
+#: path being on disk, so a probe that STRIPS the slash falls back to the
+#: filesystem and reproduces the exact checkout-dependence this split exists to
+#: remove. `_repo_relative_paths` preserves the slash on a directory token; the
+#: exact set equality below is what keeps it preserved, and
+#: `test_a_gitignored_directorys_presence_is_a_property_of_the_checkout` is what
+#: pins the asymmetry itself.
 
 
 def test_the_path_scan_walked_a_real_population():
-    """The population pinned EXACTLY, and the honest statement about it.
+    """The population pinned EXACTLY, split by GIT'S RULES, not by the disk.
 
     THE ARM THIS GUARDS IS VACUOUS ON THESE BYTES AND THIS TEST SAYS SO RATHER
     THAN HIDING IT. CS's REVIEW of the shared test core found that the
     anti-vacuity guard here is satisfied by a self-reference, and an independent
     adversary in this tree found the same thing before that note arrived.
-    Measured on CHANNEL_VERSION 1 bytes, in this worktree, this run:
+    Measured on CHANNEL_VERSION 1 bytes:
 
       * the population is exactly TWO tokens;
-      * the half that resolves ON DISK is exactly ONE - `docs/CHANNEL.md`, the
-        file under test, whose existence arm 1 already asserts;
-      * the other half, `moon_sync_inbox/`, resolves only through the gitignored
-        disjunct and is absent from every worktree by design.
+      * exactly ONE of them is a path git does not ignore - `docs/CHANNEL.md`,
+        the file under test, whose existence arm 1 already asserts;
+      * the other, `moon_sync_inbox/`, is matched by a tracked ignore rule and
+        is what the doc calls the channel a fresh clone does not have.
 
-    So the disk-resolving half carries NO independent existence evidence
-    whatsoever. A guard reading `len(paths) >= 2` implied it did.
+    So arm 6's only existence evidence is its own subject. A guard reading
+    `len(paths) >= 2` implied otherwise.
 
-    WHY THE GUARD IS PINNED RATHER THAN DROPPED. Dropping it removes the only
-    anti-narrowing control arm 6 has: if `_repo_relative_paths` ever collapsed -
-    a mangled character class, a suffix list edit - `_unresolved_paths` would
-    return an empty list over an empty population and arm 6 would be vacuously
-    green forever with nothing to notice. The defect was never that the guard
-    exists; it was that a FLOOR advertises independent existence evidence this
-    population does not supply. An exact set equality plus the split above keeps
-    the anti-narrowing function and states the truth about the value. An honest
-    narrow arm beats a guard advertising a property it does not have.
+    WHAT WAS DROPPED HERE, AND WHY IT COULD NOT BE SAVED. The previous version
+    also asserted that the set of population members PRESENT ON DISK was exactly
+    `{docs/CHANNEL.md}`. That claim is unmakeable: it is true in a fresh
+    worktree and false in the primary checkout, where `moon_sync_inbox/` is on
+    disk because notes were delivered into it. It is a statement about a
+    filesystem rather than about this repository, and there is no wording of it
+    that survives both checkout shapes - so it is gone rather than weakened.
+    What replaces it is the ignore-rule split, which asserts the same INTENT -
+    only one of these two is a path this repository actually carries - out of
+    facts that are identical in every checkout. This tree's standing rule is to
+    narrow the CLAIM after a defeat rather than widen the matcher, and this is
+    that narrowing.
+
+    WHY THE GUARD IS PINNED RATHER THAN DROPPED ENTIRELY. Dropping it removes
+    the only anti-narrowing control arm 6 has: if `_repo_relative_paths` ever
+    collapsed - a mangled character class, a suffix list edit - then
+    `_unresolved_paths` would return an empty list over an empty population and
+    arm 6 would be vacuously green forever with nothing to notice. The original
+    defect was never that the guard exists; it was that a FLOOR advertises
+    independent existence evidence this population does not supply. An exact set
+    equality plus the split keeps the anti-narrowing function and states the
+    truth about the value. An honest narrow arm beats a guard advertising a
+    property it does not have.
 
     A floor would also have accepted a population that GREW by accident, which
     is the other direction a re-pin can go wrong. This equality does not.
     """
     paths = _repo_relative_paths(_doc_text())
-    expected = EXPECTED_PATHS_RESOLVING_ON_DISK | EXPECTED_PATHS_RESOLVING_ONLY_AS_IGNORED
+    expected = EXPECTED_PATHS_GIT_IGNORES | EXPECTED_PATHS_GIT_DOES_NOT_IGNORE
     assert paths == expected, (
         f"arm 6's graded population moved.\n"
         f"  measured: {sorted(paths)}\n"
         f"  pinned  : {sorted(expected)}\n"
-        "If a re-pin legitimately added a path, add it to the right half above "
-        "and re-read this docstring - a path that lands in the disk-resolving "
-        "half is the first real existence evidence this arm has ever had."
+        "If a re-pin legitimately added a path, add it to the half that matches "
+        "git's answer for it, and re-read this docstring - a path that lands in "
+        "the NOT-ignored half is the first real existence evidence this arm has "
+        "ever had. Keep any trailing slash exactly as the extractor emits it."
     )
 
-    on_disk = {p for p in paths if (REPO_ROOT / p).exists()}
-    assert on_disk == EXPECTED_PATHS_RESOLVING_ON_DISK, (
-        f"the disk-resolving half moved: {sorted(on_disk)}"
+    # The split, from git's rules alone. No `Path.exists()` anywhere in it:
+    # that is what made this arm answer differently in two checkouts.
+    ignored = {p for p in paths if _is_ignored(p)}
+    assert ignored == EXPECTED_PATHS_GIT_IGNORES, (
+        f"the git-ignored half moved: {sorted(ignored)} - if a trailing slash "
+        "was dropped from a directory token, git is now answering from the "
+        "filesystem instead of from .gitignore and this arm has silently become "
+        "checkout-dependent again"
     )
-    ignored_only = {p for p in paths - on_disk if _is_ignored(p)}
-    assert ignored_only == EXPECTED_PATHS_RESOLVING_ONLY_AS_IGNORED, (
-        f"the ignored-only half moved: {sorted(ignored_only)}"
+    assert paths - ignored == EXPECTED_PATHS_GIT_DOES_NOT_IGNORE, (
+        f"the not-ignored half moved: {sorted(paths - ignored)}"
     )
+
+    # A path git does not ignore is one this repository carries, so it must be
+    # on disk in EVERY checkout. This is the one existence check here that is
+    # checkout-independent, and it is also the whole of arm 6's evidence.
+    for path in sorted(paths - ignored):
+        assert (REPO_ROOT / path).exists(), (
+            f"{path} is not ignored and not present - a tracked path missing "
+            "from this checkout is a broken checkout, not a doc defect"
+        )
 
     # The vacuity, stated as an assertion so it cannot rot into a surprise: the
     # only thing arm 6 proves to exist is the file arm 1 already proved exists.
-    assert on_disk == {"docs/CHANNEL.md"}, (
+    assert paths - ignored == {"docs/CHANNEL.md"}, (
         "arm 6 now resolves something other than its own subject - that is an "
         "IMPROVEMENT, and this assertion plus the docstring above must be "
         "rewritten to stop calling the arm vacuous"
@@ -767,6 +844,63 @@ def test_the_path_scan_walked_a_real_population():
     # Two exclusions that are the extractor working, not the population failing.
     assert not any("moonsync" in p for p in paths), f"absolute Windows path admitted: {sorted(paths)}"
     assert not any(p.startswith("n/a") for p in paths), "the prose token 'n/a' was read as a path"
+
+
+def test_a_gitignored_directorys_presence_is_a_property_of_the_checkout():
+    """THE DEFECT THAT SHIPPED RED, pinned as the mechanism rather than a note.
+
+    This module was built in a worktree and merged into the primary checkout,
+    where two of its arms went red on IDENTICAL BYTES AT AN IDENTICAL COMMIT.
+    The cause is that `moon_sync_inbox/` is gitignored, and a gitignored
+    directory exists exactly where somebody created one - the primary checkout
+    receives notes, a fresh worktree never does. CS built the same arm, made the
+    same error, and published the same mechanism; this is its repair, measured
+    here rather than adopted on its word.
+
+    THE TRAP INSIDE THE REPAIR is the trailing slash. `.gitignore`'s rule is
+    `moon_sync_inbox/`, and a trailing slash makes a pattern DIRECTORY-ONLY. Git
+    can only know a pathspec names a directory from a trailing slash on the
+    pathspec, or from the path being on disk. So a probe that strips the slash
+    answers from the FILESYSTEM, which is the defect it was written to remove.
+
+    Measured in this tree, five runs per form per checkout, CS's asymmetry
+    REPRODUCES exactly:
+
+      pathspec `moon_sync_inbox`   NOT ignored in the worktree (0/5 rc=0),
+                                   ignored in the primary      (5/5 rc=0)
+      pathspec `moon_sync_inbox/`  ignored in BOTH             (5/5 rc=0)
+
+    and `git check-ignore -v` returns the identical rule line
+    `.gitignore:115:moon_sync_inbox/` in both checkouts for the slashed form.
+
+    The assertions below are written so that they hold in BOTH shapes. The
+    slashed form is asserted outright because it is a repository fact. The
+    unslashed form is asserted as a BICONDITIONAL against disk presence, which
+    is the trap stated exactly: without the slash, git's answer IS the
+    filesystem's answer.
+
+    `_is_ignored` reads check-ignore's RETURN CODE rather than its stdout, which
+    is correct and must not be regressed - check-ignore returns its answer in
+    the exit code, and a filter that only looks at stdout is blind to it.
+    """
+    assert _is_ignored("moon_sync_inbox/"), (
+        "the slashed pathspec is no longer ignored - .gitignore's rule moved, "
+        "and arm 6's resolution rule must be re-derived before anything else"
+    )
+
+    on_disk = (REPO_ROOT / "moon_sync_inbox").exists()
+    assert _is_ignored("moon_sync_inbox") == on_disk, (
+        "the unslashed pathspec no longer tracks disk presence - git's "
+        "directory-only pattern handling changed, and the trailing-slash "
+        "reasoning in this module must be re-measured in both checkout shapes "
+        f"(on disk here: {on_disk})"
+    )
+
+    # The extractor must keep the slash, or the population pin above starts
+    # asking the filesystem again without anything saying so.
+    assert "moon_sync_inbox/" in _repo_relative_paths(_doc_text()), (
+        "the directory token lost its trailing slash in extraction"
+    )
 
 
 def test_the_population_pin_has_teeth_in_both_directions(monkeypatch, tmp_path):
