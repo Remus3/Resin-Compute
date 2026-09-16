@@ -171,3 +171,151 @@ def test_check_staged_passes_a_clean_repo_with_nothing_staged(
     rc = gate._check_staged(f'git -C "{tmp_path}" commit -m x')
     err = capsys.readouterr().err
     assert rc == 0, f"a clean repo with nothing staged was blocked: {err!r}"
+
+
+# ---------------------------------------------------------------------------
+# ARGUMENT REFUSAL. A second defect of the SAME shape as the corpus read above:
+# an input the tool did not understand reaching the hook lane and exiting 0.
+#
+# LL filed the sharpest statement of it on 2026-09-08. Its gate invoked with a
+# ONE-CHARACTER SLIP in a flag exited 0 and printed NOTHING: only the exact
+# token was recognised, anything else FELL THROUGH to the hook path, found no
+# payload on stdin, and returned 0. The real invocation exits 0 on a clean
+# repository too, so a git hook - which reads nothing but the exit code - could
+# not tell a running gate from a gate that a typo had switched off.
+#
+# THIS TREE ALREADY REFUSED AN UNRECOGNISED LEADING FLAG. Measured at e9b4542
+# before any edit here: `--scan-file README.md` and `--frobnicate` both exited 1
+# naming the argument. `test_an_unrecognised_leading_flag_is_refused` below is
+# therefore a REGRESSION PIN on a property that already held, not a new claim -
+# it is here so the property cannot be deleted silently.
+#
+# THREE RESIDUAL PATHS DID fall through, all three measured at that same SHA,
+# and they are what the other arms are about:
+#
+#   1. `--expect-count 5` with NO scan mode following it. The pair is consumed,
+#      `args` goes empty, the `if args:` unknown-argument branch is skipped
+#      because there is nothing left to be unknown, and control reaches the
+#      stdin lane. rc 0, empty stdout, empty stderr - and the ANTI-VACUITY
+#      count, whose entire job is to refuse a sweep that selected the wrong
+#      number of files, was discarded without a word.
+#   2. A single-value mode flag with a trailing token: `--message-file README.md
+#      --frobnicate` scanned README.md and threw the slip away. rc 0. Every
+#      single-value mode read args[1] and never looked at args[2:].
+#   3. No arguments and NO payload on stdin. rc 0, silent. This is the vacuous
+#      manual run already recorded in docs/LEDGER.md, and it is why "I ran the
+#      gate" by hand has never meant anything here.
+#
+# THE DECISION ON CASE 3, stated in the module docstring of
+# tools/precommit_gate.py as well: a payload on stdin is REQUIRED for the staged
+# lane. .githooks/pre-commit always supplies one - it is literally
+# `echo "git commit" | ... precommit_gate.py` - so no legitimate caller in this
+# tree invokes the gate with an empty stdin. A command string that is present
+# and is NOT a commit still exits 0: that input was understood, and the answer
+# is a genuine no-op. The arms below pin both halves of that, because a refusal
+# that also refused the hook's own no-op call would wedge the repo.
+#
+# EXIT CODE. 1, deliberately, not 2. The module contract is "any finding exits
+# 1", the three hook bodies all read `|| exit 1`, and this tree has a recorded
+# finding that EXIT 2 IS NOT SELF-EVIDENCING - a module whose syntax is broken
+# and a tool that deliberately refused to start are both exit 2, so the number
+# cannot carry the meaning. Every arm here therefore asserts on the SPOKEN
+# refusal as well as on the number.
+
+_REFUSAL = "precommit_gate REFUSED"
+
+
+def _run(args: list[str], stdin: bytes | None = b"") -> subprocess.CompletedProcess:
+    """Invoke the gate as a real process, which is what a hook line does.
+
+    `stdin=b""` is an open but empty stream; `stdin=None` is no stream at all.
+    Both are silent-pass shapes and both are measured.
+
+    NOT `gate.main([...])`: pytest replaces `sys.stdin` with an object whose
+    `read()` raises, so an in-process call cannot exercise the stdin lane at
+    all - and the stdin lane is exactly where the fall-through lands.
+    """
+    argv = [sys.executable, str(TOOLS / "precommit_gate.py"), *args]
+    if stdin is None:
+        return subprocess.run(
+            argv,
+            cwd=str(REPO_ROOT),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=120,
+        )
+    return subprocess.run(
+        argv, cwd=str(REPO_ROOT), input=stdin, capture_output=True, timeout=120,
+    )
+
+
+def _err(out: subprocess.CompletedProcess) -> str:
+    return out.stderr.decode("utf-8", "replace")
+
+
+def test_an_unrecognised_leading_flag_is_refused():
+    """The regression pin. This property held at e9b4542; it must keep holding."""
+    for slip in ("--scan-file", "--frobnicate"):
+        out = _run([slip, "README.md"])
+        assert out.returncode != 0, (
+            f"{slip} exited 0 - a one-character slip switched the gate off and "
+            "reported success"
+        )
+        assert slip in _err(out), f"refused {slip} without naming it: {_err(out)!r}"
+
+
+def test_expect_count_without_a_scan_mode_is_refused_not_silently_dropped():
+    """Case 1. The anti-vacuity count discarded, then rc 0 from the stdin lane."""
+    out = _run(["--expect-count", "5"])
+    assert out.returncode != 0, (
+        "--expect-count with no scan mode exited 0: the count was discarded and "
+        "control fell through to the stdin lane, which scanned nothing"
+    )
+    assert _REFUSAL in _err(out), f"non-zero but not SPOKEN as a refusal: {_err(out)!r}"
+    assert "--expect-count" in _err(out)
+
+
+def test_a_mode_flag_with_a_trailing_unrecognised_token_is_refused():
+    """Case 2. args[1] was read and args[2:] was never looked at."""
+    out = _run(["--message-file", "README.md", "--frobnicate"])
+    assert out.returncode != 0, (
+        "a trailing unrecognised token after --message-file exited 0 - the slip "
+        "was swallowed and the caller was told the scan passed"
+    )
+    assert _REFUSAL in _err(out), f"not spoken as a refusal: {_err(out)!r}"
+    assert "--frobnicate" in _err(out), f"refused without naming it: {_err(out)!r}"
+
+
+def test_no_arguments_and_no_stdin_payload_is_refused():
+    """Case 3, both stream shapes: an empty stream and no stream at all."""
+    for label, stream in (("empty stdin", b""), ("no stdin at all", None)):
+        out = _run([], stdin=stream)
+        assert out.returncode != 0, (
+            f"bare with {label} exited 0 having scanned nothing - every manual "
+            "run of this gate was vacuous"
+        )
+        assert _REFUSAL in _err(out), (
+            f"bare with {label} refused in silence: {_err(out)!r}"
+        )
+
+
+def test_a_non_commit_command_on_stdin_still_exits_zero():
+    """THE LANE THAT MUST NOT CHANGE, and the non-vacuity arm for the one above.
+
+    Without this, the refusal could be implemented as "no arguments always
+    fails" and every no-op hook invocation in the tree would start blocking.
+    The input here is present and understood; the answer is a genuine no-op.
+    """
+    out = _run([], stdin=b"git status\n")
+    assert out.returncode == 0, f"a non-commit command string was refused: {_err(out)!r}"
+
+
+def test_a_named_mode_still_scans(tmp_path):
+    """The other non-vacuity arm: the refusal did not disable the scan modes."""
+    clean = tmp_path / "clean.txt"
+    clean.write_bytes(b"a clean ascii line\n")
+    out = _run(["--scan-files", str(clean)])
+    assert out.returncode == 0, f"--scan-files on a clean file failed: {_err(out)!r}"
+    assert b"1 file(s) scanned" in out.stdout, (
+        f"--scan-files reported no scan: {out.stdout!r}"
+    )
