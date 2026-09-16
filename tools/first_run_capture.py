@@ -74,6 +74,35 @@ WATCH_FILES: list[tuple[str, Path]] = [
     ("launcher-config", LAUNCHER_DIR / "config.ini"),
 ]
 
+# NO CONSOLE FLASH FROM THE `reg` SPAWN. Same rule and same root cause as the
+# responder's spawn: RC's `CHANNEL.md` v1 section 5, a console-subsystem CHILD of
+# a windowless parent gets a fresh console allocated unless the spawn passes
+# CREATE_NO_WINDOW.
+#
+# THIS DAEMON'S PARENT IS MORE WINDOWLESS THAN `pythonw`, NOT LESS, and that is
+# why the site is worse than the responder's rather than merely equal to it.
+# `tools/capture_supervisor.py` launches this file through its `spawn_detached`,
+# whose `flags` are `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`.
+# DETACHED_PROCESS means this process owns NO CONSOLE AT ALL, so every
+# console-subsystem child it starts must allocate one.
+#
+# AND IT IS A LOOP, which is the part that makes it visible. `run` calls
+# `poll_registry` every `registry_every` ticks - default 15 - and the supervisor
+# launches this daemon with `--interval 2`. WATCH_REGISTRY holds three keys and
+# each one is its own `reg` process, so the unflagged form is three console
+# allocations every thirty seconds for as long as the daemon lives.
+#
+# CREATIONFLAGS ARE NOT INHERITED, which is why the fix has to be here and could
+# not have been made at the parent. A flag on `spawn_detached` governs the
+# daemon; it says nothing about the grandchildren the daemon spawns.
+#
+# Windows-only attribute, resolved with `getattr` for the reason
+# `capture_supervisor.spawn_detached` already gives about its own flags: hasattr
+# does not narrow for mypy and both constants are Windows-only in typeshed, so a
+# bare attribute is an error when mypy runs on Linux, and CI runs Linux. Off
+# Windows this is 0, which is `subprocess.run`'s own default for `creationflags`.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 # Registry subtrees exported to .reg text on a slower cadence.
 WATCH_REGISTRY: list[tuple[str, str]] = [
     ("reg-mihoyo", r"HKCU\Software\miHoYo"),
@@ -306,6 +335,7 @@ def poll_registry(store: CaptureStore) -> int:
             proc = subprocess.run(
                 ["reg", "query", key, "/s"],
                 capture_output=True, timeout=30, check=False,
+                creationflags=_NO_WINDOW,
             )
         except (OSError, subprocess.TimeoutExpired):
             continue

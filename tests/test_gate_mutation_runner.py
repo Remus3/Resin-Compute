@@ -605,6 +605,18 @@ def test_the_two_exclusion_reasons_are_named_apart_not_merged() -> None:
     block between the two constants. One list with two entries and one shared
     paragraph is the merged state this arm exists to forbid, and it is reachable
     without touching either constant's name.
+
+    RAISED TO 3 AND 4 ON 2026-09-15, and the pin did its job on the way through.
+    `tests/test_responder_no_console_window.py` was declared as the third shape
+    grader, which made this arm the ONLY one in the file that went red - the
+    arity is the single assertion here that a new entry cannot land past, which
+    is exactly why it was pinned. The two facts worth carrying forward, both
+    recorded at the constant itself: that module reddens on 0 of the 39 mutants
+    the current plan derives, so its exclusion is declared on the MECHANISM
+    rather than on that count; and `undeclared_shape_graders` could not see it at
+    all, because it reads the responder through a `parametrize` argument rather
+    than through the module-level `Name` the detector matches on. The suite was
+    green without the entry. It is declared regardless.
     """
     assert gmr.SELF_TEST_MODULE not in gmr.SHAPE_GRADER_MODULES
     assert gmr.EXCLUDED_MODULES == (gmr.SELF_TEST_MODULE, *gmr.SHAPE_GRADER_MODULES)
@@ -613,8 +625,8 @@ def test_the_two_exclusion_reasons_are_named_apart_not_merged() -> None:
         gmr.EXCLUDED_MODULES
     )
 
-    assert len(gmr.SHAPE_GRADER_MODULES) == 2, gmr.SHAPE_GRADER_MODULES
-    assert len(gmr.EXCLUDED_MODULES) == 3, gmr.EXCLUDED_MODULES
+    assert len(gmr.SHAPE_GRADER_MODULES) == 3, gmr.SHAPE_GRADER_MODULES
+    assert len(gmr.EXCLUDED_MODULES) == 4, gmr.EXCLUDED_MODULES
 
     runner = (REPO_ROOT / "tools" / "gate_mutation_runner.py").read_text(encoding="ascii")
     self_at = runner.index("\nSELF_TEST_MODULE = ")

@@ -225,9 +225,52 @@ SELF_TEST_MODULE = "tests/test_gate_mutation_runner.py"
 #: template being correctly applied once is not evidence it will be applied
 #: again, which is why `undeclared_shape_graders` below stops the campaign
 #: depending on anyone remembering to.
+#: EXCLUSION THREE, `tests/test_responder_no_console_window.py`, and its reason
+#: is NOT the reason the two above carry. It is declared anyway, and the gap
+#: between those two facts is the whole entry.
+#:
+#: WHAT IT GRADES. It asserts that every process-creating call in
+#: `tools/moon_sync_responder.py` carries `creationflags`, resolving import
+#: aliases through an ast walk - `import subprocess as sp`, `from subprocess
+#: import Popen as _P`, `from os import system as _s` - and forbidding the `os`
+#: spawn family outright, since `os.system` and its siblings take no
+#: `creationflags` parameter and therefore have no windowless form. That is a
+#: statement about the target file's AST, which is this list's category.
+#:
+#: MEASURED IN THIS TREE on 2026-09-15, and the number is the OPPOSITE of the
+#: 34-of-35 above: of the 39 mutants `plan_mutants` currently derives from the
+#: clean responder, ZERO make this module redden. The reason is structural -
+#: `FUNCTION` is `_run_once` and every mutant rewrites a statement inside it,
+#: while the spawn this module grades lives in `_spawn_headless`. So on today's
+#: plan this module causes NO false kills and excluding it buys nothing.
+#:
+#: IT IS DECLARED ANYWAY, FOR TWO REASONS.
+#:
+#: First, 0 of 39 IS A SNAPSHOT OF THE CURRENT PLAN AND NOT A PROPERTY OF THIS
+#: MODULE. The count is 0 only because `FUNCTION` names one function that does
+#: not contain the graded spawn. Widen `FUNCTION`, or tag a gate inside
+#: `_spawn_headless`, and this module reddens over syntax exactly the way the
+#: two above do - at which point an undeclared shape grader would be recording
+#: KILLED for mutants no test had driven. Declaring on the measurement rather
+#: than on the mechanism would put the correctness of a campaign at the mercy of
+#: a constant someone edits for an unrelated reason.
+#:
+#: Second, THE DETECTOR CANNOT CURRENTLY SEE THIS MODULE, and that is a finding
+#: rather than a convenience. `_binds_and_reads_responder` looks for a read
+#: attribute invoked on a module-level `Name` bound to the responder path. This
+#: module binds `MODULE` at module level and then reads it through a
+#: `pytest.mark.parametrize` argument, so the read is `target.read_text(...)` on
+#: a parameter and the pattern misses it - the same blind spot the docstring of
+#: that function records for the `importlib` route, reached by a different
+#: syntax. `undeclared_shape_graders` therefore returned `[]` for this module and
+#: the suite was GREEN WITHOUT THIS ENTRY. Relying on that would be resting a
+#: campaign's honesty on which expression form a test happened to use, so the
+#: declaration is made by hand and the blind spot is written down here instead of
+#: being quietly enjoyed.
 SHAPE_GRADER_MODULES: tuple[str, ...] = (
     "tests/test_responder_gate_census.py",
     "tests/test_gate_name_bindings.py",
+    "tests/test_responder_no_console_window.py",
 )
 
 #: Every path handed to pytest as `--ignore` for a campaign run, in a fixed
