@@ -121,6 +121,40 @@ had nothing standing in its way. The CHECK was fixed rather than the wording:
 arm 3b asserts every byte is 0x20..0x7E or newline, which is stricter than the
 tree-wide arm (it forbids tab and CR outright) and is satisfied by the current
 bytes - measured, zero offending bytes.
+
+WHAT "GRADE" MEANS HERE, because nobody who argued about it had defined it - this
+module included - and two reasonable readings give two different answers. "Reads
+the bytes" is what a read-tracer measures. "Can go red because of the content" is
+a strictly smaller question, and it is settled by mutation rather than by tracing.
+Wherever this file says an arm GRADES something, it means the second: the arm's
+outcome can change because of what is in the file.
+
+docs/CHANNEL.md is graded by the pointer, trackedness, ADR-reference and ASCII
+arms of `tests/test_docs_consistency.py` via its `_docs_markdown()`, a filesystem
+sweep, and by its line-citation arms via its `_tracked_markdown()`, which is
+`git ls-files`. The second route sees the file only while git STORES it, so the
+set of arms that grade it is smaller in a tree where the file is present but
+unstaged. Do not record a number here; re-derive it if you need one. A number
+would be an unguarded claim that moves the moment somebody runs `git add`, and
+two independent passes already disagreed about it - the low answer turned out to
+be exactly the present-but-unstaged set, so the wrong figure looked right by
+coincidence and agreed with nothing.
+
+That one file is also not the whole picture, and a figure taken from it
+understates the population badly: these bytes are read by tests spread across
+many files of the application suite, not only by the docs-consistency arms.
+Which is the second reason not to write a number down here.
+
+Finally, a read-tracer is a LOWER BOUND by construction. A grader that reaches
+this file through corpus membership alone, or through a subprocess whose reads a
+tracer does not patch, is invisible to one. Removing the doc from BOTH the index
+and the disk leaves every arm of `tests/test_docs_consistency.py` green -
+measured in this worktree, and so evidence against such a grader living in that
+file rather than proof of its absence. Note that the present-but-UNSTAGED case is
+not green, and for an unrelated reason: this doc cites its own path, so the
+trackedness arm fails on it. What would settle the residual is a per-test run
+with the doc swapped for a byte-differing copy, asserting that only the
+content-sensitive arms change outcome.
 """
 
 from __future__ import annotations
