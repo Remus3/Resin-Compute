@@ -11,6 +11,59 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-09-16. `core/atomic_io.py` LOGS RAW `OSError` TEXT WITH FULL
+  FILESYSTEM PATHS TO A CONSOLE HANDLER ON STDERR.** CONTAINED at the watcher's
+  call site in `scripts/watch_inbox.py`, which mutes console StreamHandlers that
+  are not FileHandlers so the raw error still reaches the day's log file. EVERY
+  OTHER CALLER OF `atomic_io` IS STILL EXPOSED on any user-facing surface, and
+  this tree's rule is that a raw API or error string never reaches one. A full
+  path in stderr is also a machine-identity leak of the kind already closed
+  once here. NOT DONE: decide whether the library should route raw error text to
+  the file handler only, which is the fix that covers every caller rather than
+  one. The call-site containment is deliberately NOT the answer.
+
+- **NEW 2026-09-16. THE SHAPE-GRADER DETECTOR CANNOT SEE A SOURCE READ THROUGH
+  ANYTHING BUT A MODULE-LEVEL NAME.** `tools/gate_mutation_runner.py` requires
+  every test module that reads another module's SOURCE TEXT to be declared, and
+  `_binds_and_reads_responder` only matches a read attribute on a module-level
+  `Name`. MEASURED 2026-09-16: a read through a `parametrize` argument, a plain
+  local variable, or an f-string path is INVISIBLE to it. Of 20 distinct repo
+  files that read `tools/moon_sync_responder.py` during one suite run, 17 are
+  blind to the detector and 16 are blind AND undeclared. All 39 current mutants
+  plus 5 hypothetical ones were run against the 13 runnable blind-undeclared
+  modules and all stayed green, so this is a SCOPE RISK rather than a measured
+  confound - a campaign reporting honest results over a corpus it has silently
+  mis-scoped. NOT DONE, and a wider regex is not the answer: the declaration
+  mechanism needs to rest on something other than expression form.
+
+- **NEW 2026-09-16. `scripts/precommit_pycompile.py:33` SPAWNS `git` UNFLAGGED
+  IN THE HOOK LANE.** It is invoked from `.githooks/pre-commit:70` - the same
+  hook, the same parent - as `tools/precommit_gate.py`, which carries the
+  windowless-interpreter comment and flags all four of its own spawns. That
+  makes this the fifth spawn in that lane and the only unflagged one. NOT DONE:
+  add `CREATE_NO_WINDOW` using the established `getattr(subprocess, ...)` idiom
+  and give it a test arm.
+
+- **NEW 2026-09-16. A VENDORED FILE THAT ARRIVES WITH NO BYTE PIN IS INVISIBLE
+  TO THE PROVENANCE GUARD.** `tests/test_vendored_provenance.py` derives its
+  registry from this tree's own byte pins, which is what stops a row being
+  deleted to quiet a red - but a future third-party drop that nobody pins is
+  outside its reach by construction. There is no machine-readable "not ours"
+  marker on a tracked file, and inventing one that only this module reads would
+  be a marker nobody applies. NOT DONE: this needs a CONVENTION, not a wider
+  regex, and probably a fleet one since four trees vendor from each other.
+
+- **NEW 2026-09-16. THIS TREE'S DENY-BASED ARMS VERIFY THE TOKEN AND NOT THE
+  PATH.** The unlistable-inbox arm manufactures a real ACL denial and verifies
+  the denial actually took before grading, skipping when the host refuses the
+  fault. MEASURED ACROSS THREE TREES 2026-09-16: the same deny ACE is honoured
+  or ignored as a function of BOTH the process token AND the directory - one
+  sibling measured it token-dependent, another location-dependent, a third held
+  the path constant while varying the token. So a tree that verified the fault
+  engages in one directory under one token has verified for NEITHER the other
+  directory NOR the other token. This tree's arm covers the token half only.
+  NOT DONE, recorded as a known gap rather than repaired.
+
 - **NEW 2026-09-14. A TRACKED FILE DELETED FROM THE README TREE BLOCK IS
   INVISIBLE TO EVERY GUARD, BY CONSTRUCTION.** `tests/test_readme_tree.py`
   asserts that every path NAMED in the tree exists and is stored by git. That is
