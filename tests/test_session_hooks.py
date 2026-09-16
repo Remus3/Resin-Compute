@@ -182,17 +182,64 @@ BANNER_SHAPE = re.compile(
 #: the watcher no longer prints the affirmative clean line beside a withdrawal,
 #: and the withdrawal heading is admitted here.
 #:
-#: STILL NOT A PERMISSIVE PATTERN. Every alternative is anchored to a line this
-#: tool actually emits, so a traceback, a launcher error or a `python: can't open
-#: file` still fails - which is the only reason the silence alternative is safe to
-#: keep. `test_the_quiet_shape_matcher_accepts_silence_and_a_report_but_not_noise`
-#: carries the surviving-neighbour half.
+#: MATCHED WHOLE-BODY, NOT PER LINE, AND THAT IS A CORRECTION OF THIS PATTERN'S
+#: ORIGINAL SHAPE RATHER THAN A REFINEMENT OF IT.
+#:
+#: Every version of this regex until 2026-09-16 was a set of `^...$` alternatives
+#: under `re.MULTILINE`, consumed by `.search()`. That means ONE acceptable line
+#: anywhere in the body passed the whole body, and everything around it was
+#: unexamined. The first widening for the two clauses above made that latent
+#: weakness bite: adding a `WITHDRAWN` and an `UNMEASURED` alternative
+#: accidentally admitted five bodies the previous pattern refused, including the
+#: EXACT base-e9b4542 defect - `unread: none` beside a withdrawal - that this same
+#: regex had been used to measure as rejected. An arm that is strictly weaker than
+#: it was, carrying a comment claiming it is not, is worse than a weak arm that
+#: admits it.
+#:
+#: The pre-existing half was just as bad and was never noticed: a full traceback
+#: co-occurring with `unread: 3` passed, because one good line was enough. The old
+#: docstring's claim that "a traceback ... still fails" was true only of a
+#: traceback ALONE.
+#:
+#: SO THE PATTERN NOW DESCRIBES THE WHOLE GRAMMAR THIS TOOL EMITS, anchored
+#: `\A`...`\Z`. `.search()` on a fully anchored pattern is `.fullmatch()`, so the
+#: call sites did not have to change. Anything the watcher does not emit - a
+#: traceback, a launcher error, a raw `PermissionError`, a second UNMEASURED line,
+#: or the affirmative clean line sitting beside any of them - now fails because
+#: there is no alternative that can absorb it.
+#:
+#: `test_the_quiet_shape_matcher_accepts_silence_and_a_report_but_not_noise`
+#: carries both halves, and names each of the five regressions explicitly so a
+#: later widening has to defeat them one at a time rather than by accident.
+
+#: `  [recv] 2026-09-15-from-RC-topic.md  (2 files)` - one listed entry.
+_Q_ENTRY = r"[ ]{2}\[[a-z]+\] [^\n]*\n"
+#: `  (+4 more)`, or the same naming the report file, or saying UNMEASURED.
+_Q_POINTER = r"[ ]{2}\(\+\d+ more[^\n]*\)\n"
+#: The counts line plus its names. `unread: none` is deliberately NOT here: it is
+#: the affirmative clean line and clause 2 keeps it off a per-prompt hook.
+_Q_REPORT = r"(?:unread|all notes): \d+\n(?:" + _Q_ENTRY + r")+(?:" + _Q_POINTER + r")?"
+#: The withdrawal block, heading through its trailing hint line.
+_Q_WITHDRAWN = (
+    r"WITHDRAWN after being shown: \d+\n"
+    r"(?:[ ]{2}\[gone\] [^\n]*\n)+"
+    r"[ ]{2}\(run --mark[^\n]*\)\n"
+)
+#: The one could-not-measure line, clause 2. ONE, and nothing beside it.
+_Q_UNMEASURED = r"UNMEASURED - no inbox at [^\n]*\n"
+#: The unusable-report-record disclosure: a headline and two parenthetical lines.
+_Q_UNUSABLE = (
+    r"the record of what has been shown is unusable - [^\n]*\n"
+    r"[ ]{2}\([^\n]*\)\n"
+    r"[ ]{2}\([^\n]*\)\n"
+)
+
 QUIET_SHAPE = re.compile(
-    r"\A\s*\Z"
-    r"|^unread: \d+\s*$"
-    r"|^UNMEASURED - no inbox at .+$"
-    r"|^WITHDRAWN after being shown: \d+\s*$",
-    re.MULTILINE,
+    r"\A(?:"
+    r"\s*"
+    r"|" + _Q_UNMEASURED +
+    r"|(?:" + _Q_REPORT + r")?(?:" + _Q_WITHDRAWN + r")?(?:" + _Q_UNUSABLE + r")?"
+    r")\Z"
 )
 
 #: The EXACT declared command -> the shape its stdout must carry.
@@ -1376,6 +1423,91 @@ def test_the_quiet_shape_matcher_accepts_silence_and_a_report_but_not_noise():
         "some tool said UNMEASURED about something else\n",
     ):
         assert not QUIET_SHAPE.search(bad), f"noise matched the quiet shape: {bad!r}"
+
+
+#: THE FIVE BODIES THE FIRST WIDENING OF `QUIET_SHAPE` ACCIDENTALLY ADMITTED, and
+#: a sixth that the pattern had been letting through since it was written.
+#:
+#: Each was REJECTED by the pre-widening pattern and ACCEPTED by the widened one,
+#: measured by an adversary against the version at 4d7ff31. The cause was
+#: structural rather than a bad alternative: `^...$` alternatives under
+#: `re.MULTILINE` consumed by `.search()` pass the whole body on ONE matching
+#: line, so every widening silently widened by more than it said.
+#:
+#: Listed here as data with the reason each one must fail, so a future widening
+#: has to defeat them individually and on purpose.
+_QUIET_REGRESSIONS = (
+    (
+        "unread: none\nWITHDRAWN after being shown: 1\n  [gone] a.md\n"
+        "  (run --mark to acknowledge; they are carried until you do)\n",
+        "the affirmative clean line beside a withdrawal - the EXACT base-e9b4542 "
+        "defect this same regex was used to measure as rejected",
+    ),
+    (
+        "unread: none\nUNMEASURED - no inbox at /opt/x/moon_sync_inbox\n",
+        "the affirmative clean line beside UNMEASURED, which clause 2 forbids "
+        "outright - a channel cannot be both clean and unexamined",
+    ),
+    (
+        "some arbitrary junk nobody emits\nWITHDRAWN after being shown: 1\n"
+        "  [gone] a.md\n  (run --mark to acknowledge; they are carried until you do)\n",
+        "arbitrary junk carried in beside a legitimate withdrawal heading",
+    ),
+    (
+        "PermissionError: [WinError 5] Access is denied: 'C:\\\\x\\\\y.txt'\n"
+        "UNMEASURED - no inbox at /opt/x/moon_sync_inbox\n",
+        "a raw error string beside UNMEASURED; this tree forbids a raw API or "
+        "error string on any user-facing surface, and the path is a "
+        "machine-identity leak as well",
+    ),
+    (
+        "UNMEASURED - no inbox at /opt/x\nUNMEASURED - no inbox at /opt/y\n",
+        "TWO could-not-measure lines, where clause 2 says ONE",
+    ),
+    (
+        'Traceback (most recent call last):\n  File "x", line 1\nunread: 3\n'
+        "  [recv] a.md\n",
+        "a traceback co-occurring with a real report. This one is NOT from the "
+        "widening - the per-line `.search()` shape let it through from the "
+        "beginning, and the docstring claiming tracebacks fail was true only of "
+        "a traceback alone",
+    ),
+)
+
+
+@pytest.mark.parametrize("body,why", _QUIET_REGRESSIONS)
+def test_the_quiet_shape_refuses_every_body_the_widening_let_through(body, why):
+    """THE ANTI-REGRESSION ARM FOR `QUIET_SHAPE` ITSELF.
+
+    The arm above states the pattern's intent. This one states what it must never
+    do again, which is a different and less forgiving property: a widening that
+    satisfies the intent while re-admitting any of these is the failure that
+    actually happened.
+    """
+    assert not QUIET_SHAPE.search(body), f"QUIET_SHAPE accepted {why}: {body!r}"
+
+
+def test_the_quiet_shape_is_anchored_so_one_good_line_cannot_carry_a_body():
+    """THE STRUCTURAL PROPERTY, asserted directly rather than through examples.
+
+    Every body in `_QUIET_REGRESSIONS` is an instance of one root cause: an
+    unanchored per-line pattern. Six examples do not stop a seventh, but the
+    anchors do, so the anchors are asserted on the pattern itself.
+    """
+    assert QUIET_SHAPE.pattern.startswith(r"\A"), QUIET_SHAPE.pattern
+    assert QUIET_SHAPE.pattern.endswith(r"\Z"), QUIET_SHAPE.pattern
+    assert not QUIET_SHAPE.flags & re.MULTILINE, (
+        "MULTILINE is back, which makes `^` and `$` line anchors again and "
+        "restores the one-good-line-carries-the-body hole"
+    )
+    legitimate = "unread: 1\n  [recv] a.md\n"
+    assert QUIET_SHAPE.search(legitimate), "the anchors rejected real output"
+    assert not QUIET_SHAPE.search("noise\n" + legitimate), (
+        "a prefix line was absorbed, so the body is still not matched whole"
+    )
+    assert not QUIET_SHAPE.search(legitimate + "noise\n"), (
+        "a suffix line was absorbed, so the body is still not matched whole"
+    )
 
 
 def test_the_shape_lookup_refuses_a_command_nobody_has_graded():

@@ -303,14 +303,23 @@ def test_a_stdin_that_never_arrives_returns_inside_the_wait(watch, monkeypatch):
 
 
 def test_a_payload_that_arrives_late_but_inside_the_wait_is_still_read(watch, monkeypatch):
-    """THE SURVIVING-NEIGHBOUR HALF OF THE ARM ABOVE, and it is why this is a
-    bounded WAIT rather than a bounded peek.
+    """THE SURVIVING-NEIGHBOUR HALF OF THE ARM ABOVE.
 
-    `os.set_blocking` and `PeekNamedPipe` both return immediately with nothing
-    when the parent has not written YET, so a parent a few milliseconds late
-    loses its session id and the fire falls open. A wait does not have that race.
-    A reader that failed this arm would be a reader that suppresses nothing,
-    which looks exactly like the defect the suppression was built to fix.
+    The arm above passes for a reader that always returns `b""` immediately. This
+    one fails for that reader, so between them they pin "waits, but not forever".
+
+    WHAT THIS ARM DOES NOT PROVE, corrected after it was over-cited once. It was
+    described as discriminating this design from the rejected `os.set_blocking`
+    and `PeekNamedPipe` variants, on the grounds that both peek and so lose to a
+    parent that writes late. That reasoning is sound about the DESIGNS and this
+    arm does not test it: the arm patches `os.read` itself, so a peek-based
+    reader that called the patched `os.read` after a successful readiness check
+    would pass here too. Discriminating those variants needs a real descriptor
+    and a real writer, which is what the probe in the commit message measured and
+    what no in-process arm here does.
+
+    The hang itself is killed by `test_a_stdin_that_never_arrives_returns_inside_
+    the_wait`, not by this.
     """
     import time as _time
 
@@ -868,6 +877,71 @@ def test_the_cache_is_written_only_after_stdout_is_flushed(watch, tmp_path, caps
     )
 
 
+def test_the_reported_record_is_also_written_only_after_stdout_is_flushed(
+    watch, tmp_path, capsys
+):
+    """CLAUSE 4'S LITERAL SUBJECT, AND IT IS THE `reported` FILE IT NAMES.
+
+    The clause says "the reported record is written only AFTER stdout is flushed,
+    so a killed hook re-prints rather than suppresses". The arm above pins the
+    per-session CACHE, which is this tree's own addition; the record the clause
+    actually names is `inbox_reported.json`, and moving it after the flush was
+    claimed in a commit message with NO GUARD BEHIND IT. An adversary swapped it
+    back to its pre-fix position and the whole suite was byte-identical in its
+    results - the mutant survived completely, because `inbox_reported.json`
+    appeared in no ordering assertion anywhere in `tests/`.
+
+    That is the same class of defect as a constant shipping without an arm, in
+    the same commit as the fix for one.
+
+    WHY THE ORDER MATTERS HERE TOO, even though this record is gentler than the
+    cache. `record_reported` feeds `withdrawn`'s baseline, so an early write can
+    only OVER-report a withdrawal and can never swallow mail - the failure
+    direction is safe. It is still a fleet contract this tree claims compliance
+    with, and a benign deviation left unguarded is how a later refactor makes it
+    non-benign without anybody noticing.
+
+    ASSERTED ON THE CALL ORDER, because both orderings produce identical state on
+    any fire that is not killed.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    reported = tmp_path / "isolated-reported.json"
+    order: list[str] = []
+    real_json = watch.atomic_write_json
+
+    def traced(path, payload):
+        order.append(f"write:{Path(path).name}")
+        return real_json(path, payload)
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(watch, "atomic_write_json", traced)
+    monkey.setattr(watch.sys.stdout, "flush", lambda: order.append("flush"), raising=False)
+    try:
+        watch.main(
+            ["--dir", str(inbox), "--state", str(tmp_path / "seen.json"),
+             "--reported", str(reported), "--quiet-when-empty"],
+            session="sess1",
+        )
+    finally:
+        monkey.undo()
+    capsys.readouterr()
+
+    assert reported.is_file(), f"the reported record was never written: {order}"
+    written = f"write:{reported.name}"
+    assert written in order, (
+        f"the reported-record write was not observed at all, so this arm is "
+        f"vacuous: {order}"
+    )
+    assert "flush" in order, f"stdout was never flushed: {order}"
+    assert order.index("flush") < order.index(written), (
+        f"the reported record was written BEFORE stdout was flushed: {order}. A "
+        "hook killed at its five second ceiling would then have recorded as shown "
+        "something no human ever saw, which is exactly what clause 4 orders these "
+        "two writes to prevent"
+    )
+
+
 def test_an_unreadable_cache_re_prints_rather_than_suppressing(watch, tmp_path, capsys):
     """FAIL OPEN HERE, WHICH IS THE OPPOSITE POLARITY TO `_reported_record`.
 
@@ -1110,6 +1184,28 @@ def _many(inbox: Path, count: int) -> list[str]:
     return names
 
 
+def test_the_cap_is_the_contract_value_of_ten(watch):
+    """PINS THE NUMBER ITSELF, because every other arm is parametric in it.
+
+    The cap arm below derives its expectations from `MAX_LISTED_NAMES`, so it
+    follows the constant wherever it goes and cannot pin it. An adversary found
+    the value was held only by ACCIDENT - a hardcoded "+5 more" literal in
+    `test_without_a_session_id_...`, which pins the arithmetic of one fixture and
+    would still pass at a different cap with a different fixture.
+
+    Clause 3 names the number: "at most N full names ... where N is the project's
+    existing list cap or 10 where none exists". MEASURED AT BASE e9b4542 this
+    tree had no cap - `_render` printed every entry - so N is the fleet default of
+    10 and it is a CONTRACT VALUE rather than a tuning knob. Changing it is a
+    change to what this tree tells four other repositories it does.
+    """
+    assert watch.MAX_LISTED_NAMES == 10, (
+        f"the transcript cap is {watch.MAX_LISTED_NAMES}, not the 10 that clause 3 "
+        "of the fleet watcher contract specifies for a project with no prior cap. "
+        "This is a cross-repo commitment, not a local preference"
+    )
+
+
 def test_the_transcript_is_capped_at_ten_names_newest_first(watch, tmp_path, capsys):
     """CLAUSE 3, and the ORDER is the half this tree got wrong first.
 
@@ -1271,6 +1367,139 @@ def test_a_failed_report_write_says_unmeasured_and_does_not_treat_the_rest_as_sh
         "an entry that WAS listed on the first fire printed again, so suppression "
         "stopped working while fixing the overflow case"
     )
+
+
+def test_a_refused_report_write_leaks_no_raw_error_to_stderr(watch, tmp_path, capsys):
+    """NEVER A RAW API OR ERROR STRING ON A USER-FACING SURFACE - a hard rule here.
+
+    MEASURED, and the leak was real. `core/atomic_io.py` catches its own OSError
+    and returns False exactly as documented, then LOGS the failure through
+    `core/log_setup.py`, whose console handler is a `StreamHandler` on stderr. So
+    a refused write on the overflow-report path put a raw
+    `PermissionError: [WinError 5]` in front of the operator, carrying the full
+    filesystem path - a machine-identity leak of the kind this tree has closed
+    before - and ANSI colour codes with it. The friendly degraded state was
+    rendered correctly on stdout at the same instant, so the operator got both.
+
+    THE STDOUT HALF IS ASSERTED TOO, and it is the arming half: a watcher that
+    crashed, or one that silently skipped the whole path, would satisfy the
+    no-leak assertion perfectly.
+
+    THE RAW ERROR IS NOT SUPPRESSED, ONLY KEPT OFF THIS SURFACE. `core/log_setup.py`
+    attaches a `FileHandler` beside the console handler and only the console one
+    is muted, so the error still reaches the day's log file. That is the third
+    clause of the rule - catch it, render a friendly state, LOG the raw error -
+    and dropping it would trade one violation for another.
+
+    CAPTURED THROUGH AN OWN STREAM HANDLER, NOT THROUGH `capsys`, AND THAT IS A
+    MEASURED CORRECTION. The first version of this arm asserted on
+    `capsys.readouterr().err` and was VACUOUS: `capsys` swaps `sys.stderr`, but
+    `core/log_setup.py` builds its console handler with `stream=sys.stderr`
+    resolved at import, so the handler holds the ORIGINAL stream and writes past
+    the capture entirely. The arm passed whether or not the mute was there -
+    removing the mute from `main` left it green. A handler this arm attaches
+    itself is the thing actually being muted, so it cannot miss.
+    """
+    import io as _io
+    import logging as _logging
+
+    inbox = tmp_path / "inbox"
+    _many(inbox, 15)
+
+    sink = _io.StringIO()
+    probe = _logging.StreamHandler(stream=sink)
+    probe.setLevel(_logging.DEBUG)
+    atomic_log = _logging.getLogger("core.atomic_io")
+    atomic_log.addHandler(probe)
+
+    boom = PermissionError(5, "Access is denied", str(tmp_path / "inbox_report.txt"))
+
+    def refuse(path, payload):
+        # Routed through the real module's logger so this arm exercises the same
+        # path `core/atomic_io.py` takes, rather than a quieter imitation of it.
+        atomic_log.error(
+            "atomic_write_text failed for %s: %s: %s", path, type(boom).__name__, boom
+        )
+        return False
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(watch, "atomic_write_text", refuse)
+    try:
+        watch.main(
+            ["--dir", str(inbox), "--state", str(tmp_path / "seen.json"),
+             "--quiet-when-empty"],
+            session="sess1",
+        )
+    finally:
+        monkey.undo()
+        atomic_log.removeHandler(probe)
+    captured = capsys.readouterr()
+    on_console = sink.getvalue()
+
+    assert watch.UNMEASURED in captured.out, (
+        f"the degraded pointer never rendered, so this arm is vacuous: {captured.out!r}"
+    )
+    for leak in ("PermissionError", "WinError", "Access is denied", "Traceback"):
+        assert leak not in on_console, (
+            f"a raw error string reached a console stream: {leak!r} in "
+            f"{on_console[:400]!r}. This tree forbids a raw API or error string on "
+            "any user-facing surface - catch it, render a friendly degraded state, "
+            "log the raw error"
+        )
+    assert str(tmp_path) not in on_console, (
+        f"a full filesystem path reached a console stream: {on_console[:400]!r}. "
+        "That is a machine-identity leak as well as a raw-error one"
+    )
+
+    # THE ARMING HALF. The probe handler must be capable of receiving that exact
+    # record, or the silence above says nothing about the mute. Emitted OUTSIDE
+    # `main`, where nothing is muted.
+    atomic_log.addHandler(probe)
+    try:
+        atomic_log.error("atomic_write_text failed for %s: %s: %s", tmp_path, "PermissionError", boom)
+    finally:
+        atomic_log.removeHandler(probe)
+    assert "PermissionError" in sink.getvalue(), (
+        "the probe handler never receives this record at all, so the no-leak "
+        "assertions above would pass against a broken instrument"
+    )
+
+
+def test_the_console_mute_leaves_the_file_handler_alone(watch):
+    """THE SURVIVING-NEIGHBOUR HALF, and it guards the trap in writing the mute.
+
+    `logging.FileHandler` IS A SUBCLASS of `logging.StreamHandler`. A mute that
+    selected on `StreamHandler` alone would silence the file handler too, turning
+    "do not surface the raw error" into "do not record it" - which is the
+    opposite of what the rule says and would be undetectable from the console,
+    because the console is the thing being muted.
+    """
+    import logging as _logging
+
+    console = _logging.StreamHandler()
+    console.setLevel(_logging.INFO)
+    to_file = _logging.FileHandler(
+        str(Path(watch.DEFAULT_SESSIONS).parent / "probe.log"), delay=True
+    )
+    to_file.setLevel(_logging.INFO)
+    target = _logging.getLogger("core.atomic_io")
+    target.addHandler(console)
+    target.addHandler(to_file)
+    try:
+        with watch._console_logging_muted():
+            assert console.level > _logging.CRITICAL, (
+                "the console handler was not muted, so the leak is still open"
+            )
+            assert to_file.level == _logging.INFO, (
+                "the FILE handler was muted too. FileHandler subclasses "
+                "StreamHandler, so a mute that does not exclude it stops the raw "
+                "error being RECORDED - the rule says log it, not lose it"
+            )
+        assert console.level == _logging.INFO, "the console level was not restored"
+    finally:
+        target.removeHandler(console)
+        target.removeHandler(to_file)
+        to_file.close()
 
 
 def test_a_withdrawal_only_quiet_fire_does_not_print_the_affirmative_clean_line(
