@@ -3596,3 +3596,340 @@ def test_a_forged_flag_label_cannot_reach_a_spawned_log(watch, monkeypatch, tmp_
     assert {ln.split("\t")[1] for ln in lines} == {watch.SOURCE_CLI}, (
         f"a rejected flag label did not fall back to the honest one: {lines}"
     )
+
+
+# ---------------------------------------------------------------------------
+# AN INBOX THAT EXISTS BUT CANNOT BE LISTED.
+#
+# CS published this as a fleet-wide review finding on 2026-09-16 and asked to be
+# checked rather than agreed with. It REPRODUCED here, and it reproduced through
+# a REAL permission denial rather than only through an injected one - which is
+# the limit CS stated on its own reproduction.
+#
+# MEASURED ON THIS HOST 2026-09-16, against `icacls <dir> /deny <user>:(RD)` on
+# a directory holding one real note:
+#
+#   os.path.isdir(inbox)   -> True
+#   os.listdir(inbox)      -> PermissionError, winerror 5
+#   the real script, plain -> `unread: none`, exit 0
+#   the real script, quiet -> absolute silence, exit 0
+#   its invocation log     -> terminal disposition `nothing-unread`
+#
+# THREE DEFECTS FROM ONE ROOT CAUSE, and only the first is CS's. `_entries`
+# guarded its listing against a MISSING directory, and the same clause caught
+# PRESENT-BUT-UNLISTABLE and returned the same empty list, so every caller of
+# `_entries` was handed "the inbox is empty" as the answer to "the inbox could
+# not be read":
+#
+#   1. the report printed the affirmative clean line over real mail
+#   2. `withdrawn` derived every held key as RETRACTED, fabricating a withdrawal
+#      for mail that is sitting in the directory
+#   3. `--mark` rewrote the watermark from the empty listing and ERASED it, and
+#      pruned the report record to nothing - the acknowledge destroying the
+#      exact history it exists to maintain, on the one command an operator runs
+#      deliberately. Measured: `{"seen": {}}` where one note had been.
+#
+# THE FAULT IS MANUFACTURED, never waited for. The in-process arms below deny
+# the listing of ONE path, which is portable; `tests/test_session_hooks.py`
+# carries the real-ACL arm against a real child process.
+# ---------------------------------------------------------------------------
+
+
+def _deny_listing(monkeypatch, denied: Path) -> None:
+    """Make exactly one directory's listing raise, as a real ACL denial does.
+
+    THE SHAPE IS COPIED FROM A MEASUREMENT, not assumed. On this host a denied
+    directory answers `is_dir()` True and raises `PermissionError` from the
+    listing; that is the pair reproduced here, and it is the pair that made the
+    single `except OSError` clause in `_entries` conflate two states.
+
+    SCOPED TO ONE PATH so a drop walk inside the inbox is untouched. A blanket
+    patch would deny everything and the arm would stop being about the inbox.
+    """
+    real = Path.iterdir
+
+    def fake(self):
+        if self == denied:
+            raise PermissionError(errno.EACCES, "listing denied")
+        return real(self)
+
+    monkeypatch.setattr(Path, "iterdir", fake)
+
+
+def test_the_denial_stand_in_reproduces_the_measured_pair(watch, tmp_path, monkeypatch):
+    """NON-VACUITY FOR EVERY ARM BELOW, and it grades the INSTRUMENT.
+
+    If `is_dir()` stopped answering True the arms below would be exercising the
+    ABSENT-inbox path instead and would pass while saying nothing about the
+    state they name. That is the failure this whole section exists to remove, so
+    it is not left to inspection.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    _deny_listing(monkeypatch, inbox)
+
+    assert inbox.is_dir(), "the stand-in hid the directory, so these arms test the absent path"
+    with pytest.raises(OSError):
+        sorted(inbox.iterdir())
+
+
+def test_an_unlistable_inbox_is_unmeasured_and_never_the_clean_line(
+    watch, tmp_path, capsys, monkeypatch
+):
+    """CS's finding, on the reporting path. A blind watcher must not read clean."""
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    state = tmp_path / "runtime" / "seen.json"
+    _deny_listing(monkeypatch, inbox)
+
+    rc = watch.main(["--dir", str(inbox), "--state", str(state)])
+    out = capsys.readouterr().out
+
+    assert rc == 0, "a degraded read must not crash the hook"
+    assert watch.UNMEASURED in out, f"the inbox could not be listed and nothing said so: {out!r}"
+    assert "unread: none" not in out, (
+        "a watcher that could not see the channel printed the affirmative clean "
+        f"line over real mail: {out!r}"
+    )
+
+
+def test_the_quiet_path_is_not_silent_over_an_unlistable_inbox(
+    watch, tmp_path, capsys, monkeypatch
+):
+    """SILENCE IS THE CLEAN LINE ON THIS HOOK, which is why it is graded apart.
+
+    `--quiet-when-empty` runs before every prompt, and silence is exactly what a
+    clean inbox produces there. A blind fire that says nothing is therefore
+    indistinguishable from good news, and it was measured saying nothing.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    state = tmp_path / "runtime" / "seen.json"
+    _deny_listing(monkeypatch, inbox)
+
+    rc = watch.main(["--dir", str(inbox), "--state", str(state), "--quiet-when-empty"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert watch.UNMEASURED in out, (
+        f"the quiet hook was blind and stayed silent, which reads as clean: {out!r}"
+    )
+
+
+def test_an_unlistable_inbox_does_not_fabricate_a_withdrawal(
+    watch, tmp_path, capsys, monkeypatch
+):
+    """THE SECOND DEFECT FROM THE SAME ROOT CAUSE.
+
+    `withdrawn` subtracts what is in the inbox from what has been seen or shown.
+    Handed an empty listing for an inbox it could not read, it derives EVERY held
+    key as retracted - the watcher announcing that a sibling pulled mail that is
+    sitting in the directory. A withdrawal is the one inbox event with no
+    artifact left on disk, so a fabricated one cannot be checked against
+    anything.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    state = tmp_path / "runtime" / "seen.json"
+    reported = tmp_path / "runtime" / "reported.json"
+    args = ["--dir", str(inbox), "--state", str(state), "--reported", str(reported)]
+    watch.main(args + ["--mark"])
+    capsys.readouterr()
+
+    _deny_listing(monkeypatch, inbox)
+    watch.main(args)
+    out = capsys.readouterr().out
+
+    assert "withdrawn" not in out.lower(), (
+        f"an unreadable inbox was reported as a retraction: {out!r}"
+    )
+    assert watch.UNMEASURED in out, f"and it did not say it was blind either: {out!r}"
+
+
+def test_the_acknowledge_does_not_erase_the_watermark_over_an_unlistable_inbox(
+    watch, tmp_path, capsys, monkeypatch
+):
+    """THE DESTRUCTIVE DEFECT, and it is the worst of the three.
+
+    `mark_seen` REWRITES the watermark from the current listing rather than
+    merging into it - deliberate, and pinned by
+    `test_the_seen_set_does_not_accumulate_renamed_notes`. Handed an empty
+    listing for an inbox it could not read, that same property empties the file.
+
+    MEASURED AGAINST A REAL ACL DENIAL on this host 2026-09-16: one `--mark`
+    took `{"seen": {"NOTE-live.md": "41bc9432..."}}` to `{"seen": {}}` and the
+    report record to `[]`, printing `marked read:` while it did it.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    state = tmp_path / "runtime" / "seen.json"
+    reported = tmp_path / "runtime" / "reported.json"
+    args = ["--dir", str(inbox), "--state", str(state), "--reported", str(reported)]
+    watch.main(args + ["--mark"])
+    capsys.readouterr()
+
+    before_state = state.read_bytes()
+    before_reported = reported.read_bytes()
+    assert json.loads(before_state)["seen"], "nothing was in the watermark, so this arm is vacuous"
+
+    _deny_listing(monkeypatch, inbox)
+    rc = watch.main(args + ["--mark"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert state.read_bytes() == before_state, (
+        "the acknowledge rewrote the watermark from an inbox it could not read, "
+        f"which erases it: {state.read_text(encoding='utf-8')!r}"
+    )
+    assert reported.read_bytes() == before_reported, (
+        "the acknowledge pruned the report record against an inbox it could not "
+        f"read: {reported.read_text(encoding='utf-8')!r}"
+    )
+    assert "marked read" not in out, f"it announced an acknowledge it must not have done: {out!r}"
+
+
+def test_mark_seen_refuses_rather_than_emptying_an_unreadable_inboxs_watermark(
+    watch, tmp_path, monkeypatch
+):
+    """THE UNIT BEHIND THE ARM ABOVE, because `mark_seen` is a public function.
+
+    The report path is fixed by returning early, but anything importing this
+    module calls `mark_seen` directly. A guard that lives only at one call site
+    is a guard the next call site does not have.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    state = tmp_path / "runtime" / "seen.json"
+    assert watch.mark_seen(inbox, state) is True
+    before = state.read_bytes()
+
+    _deny_listing(monkeypatch, inbox)
+    assert watch.mark_seen(inbox, state) is False, (
+        "mark_seen claimed it wrote a watermark for an inbox it could not list"
+    )
+    assert state.read_bytes() == before, "mark_seen emptied the watermark it could not derive"
+
+
+def test_prune_records_refuses_rather_than_emptying_an_unreadable_inboxs_record(
+    watch, tmp_path, monkeypatch
+):
+    """The same unit property on the OTHER record the acknowledge rewrites.
+
+    `prune_records` already refuses an UNREADABLE REPORT RECORD for this exact
+    reason - "the acknowledge destroying the exact history it exists to
+    maintain". An unreadable INBOX reaches the same intersection from the other
+    side and had no such refusal.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    reported = tmp_path / "runtime" / "reported.json"
+    assert watch.record_reported(reported, ["a.md"]) is True
+    before = reported.read_bytes()
+
+    _deny_listing(monkeypatch, inbox)
+    assert watch.prune_records(inbox, reported) is False, (
+        "prune_records claimed a prune it derived from an inbox it could not list"
+    )
+    assert reported.read_bytes() == before, "prune_records emptied the record it could not derive"
+
+
+def test_an_absent_inbox_and_an_unlistable_one_are_two_different_lines(
+    watch, tmp_path, capsys, monkeypatch
+):
+    """THE TWO STATES MUST NOT COLLAPSE BACK INTO ONE.
+
+    Conflating them is the root cause itself, so a fix that reports both with
+    the same sentence has moved the defect rather than closed it: an operator
+    told "no inbox" goes and looks at a fresh clone, and an operator told
+    nothing at all about an ACL never finds it.
+    """
+    absent = tmp_path / "nope"
+    watch.main(["--dir", str(absent), "--state", str(tmp_path / "s1.json")])
+    absent_line = capsys.readouterr().out
+
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    _deny_listing(monkeypatch, inbox)
+    watch.main(["--dir", str(inbox), "--state", str(tmp_path / "s2.json")])
+    denied_line = capsys.readouterr().out
+
+    assert watch.UNMEASURED in absent_line and watch.UNMEASURED in denied_line
+    assert absent_line != denied_line, (
+        "an absent inbox and an unreadable one printed the same line, so the "
+        f"two could-not-measure states are still one: {absent_line!r}"
+    )
+
+
+def test_a_listable_inbox_is_never_reported_as_unlistable(watch, tmp_path, capsys):
+    """THE SWEEP'S SECOND GUARD. The legitimate neighbours must survive.
+
+    A detector that answered "unlistable" for every inbox would score full marks
+    on every arm above while making the tool useless. This is the arm that fails
+    if the new branch is widened past the state it names.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    _note(inbox, "b.md")
+    state = tmp_path / "runtime" / "seen.json"
+
+    rc = watch.main(["--dir", str(inbox), "--state", str(state)])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "unread: 2" in out, f"an ordinary inbox stopped reporting: {out!r}"
+    assert watch.UNMEASURED not in out, f"an ordinary inbox was called blind: {out!r}"
+
+
+def test_an_empty_but_listable_inbox_is_clean_and_not_unmeasured(watch, tmp_path, capsys):
+    """THE NEIGHBOUR NEAREST THE NEW BRANCH, and the one a cheap probe breaks.
+
+    An empty directory yields nothing from its listing, which is the same thing
+    a denied listing yields to a detector that only checks whether any entry came
+    back. A probe written that way would call every empty inbox blind - and an
+    empty inbox is the ONE state that is genuinely, correctly clean.
+    """
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    state = tmp_path / "runtime" / "seen.json"
+
+    rc = watch.main(["--dir", str(inbox), "--state", str(state)])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "unread: none" in out, f"an empty inbox stopped reading as clean: {out!r}"
+    assert watch.UNMEASURED not in out, f"an empty inbox was called blind: {out!r}"
+
+
+def test_withdrawn_does_not_derive_a_mass_retraction_from_an_unreadable_inbox(
+    watch, tmp_path, monkeypatch
+):
+    """THE THIRD PUBLIC FUNCTION, AND IT NEEDED FINDING BY MUTATION.
+
+    Written after `test_an_unlistable_inbox_does_not_fabricate_a_withdrawal` was
+    already green: removing the guard inside `withdrawn` left BOTH watcher test
+    files passing, 183 arms, exit 0. The report arm reaches `withdrawn` through
+    `main`, and `main` now returns at the UNMEASURED branch BEFORE the
+    withdrawal section - so the arm that names this defect cannot reach the
+    function the defect lives in, and the guard was carrying no arm at all.
+
+    `withdrawn` is public, exactly as `mark_seen` and `prune_records` are. A
+    guard reachable only through one caller is a guard the next caller does not
+    have, and an unarmed guard is indistinguishable from one somebody deleted.
+    """
+    inbox = tmp_path / "inbox"
+    _note(inbox, "a.md")
+    _note(inbox, "b.md")
+    state = tmp_path / "runtime" / "seen.json"
+    reported = tmp_path / "runtime" / "reported.json"
+    assert watch.mark_seen(inbox, state) is True
+    assert watch.record_reported(reported, ["a.md", "b.md"]) is True
+    assert watch.withdrawn(inbox, state, reported) == [], (
+        "something was already withdrawn before the denial, so this arm is vacuous"
+    )
+
+    _deny_listing(monkeypatch, inbox)
+    assert watch.withdrawn(inbox, state, reported) == [], (
+        "an inbox that could not be listed derived every held key as retracted. "
+        "A withdrawal is the one inbox event with no artifact left on disk, so a "
+        "fabricated one can never be checked against anything"
+    )

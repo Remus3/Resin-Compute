@@ -922,7 +922,12 @@ class Fired(NamedTuple):
 
 
 def _fire(
-    argv: list[str], tmp_path: Path, label: str, source: str | None = KEEP_SUITE_LABEL
+    argv: list[str],
+    tmp_path: Path,
+    label: str,
+    source: str | None = KEEP_SUITE_LABEL,
+    stdin_payload: bytes | None = None,
+    runtime: Path | None = None,
 ) -> Fired:
     """Launch `argv` at the repo root and read its streams back off disk.
 
@@ -934,21 +939,47 @@ def _fire(
     above: this launch used to write into the operator's live `ops/runtime/`,
     and the log it wrote to is the one instrument that answers whether the hook
     fires at all.
+
+    `stdin_payload` AND `runtime` ARE APPENDED AT THE END WITH DEFAULTS, per
+    `CLAUDE.md`: a mid-signature required parameter breaks every existing call.
+
+    `stdin_payload` IS THE ONLY CHANNEL A REAL SESSION ID ARRIVES ON, which is
+    what makes the twin-print arms below able to see a layer `main(argv,
+    session=...)` cannot. `DEVNULL` stays the default: every existing arm wants
+    an unattributed fire, and the watcher reads stdin under a time budget so a
+    descriptor left open would stall each launch to that ceiling.
+
+    `runtime` LETS TWO FIRES SHARE ONE CACHE. The per-label default gives each
+    launch a fresh directory, which is right for an isolated arm and wrong for
+    any arm about what a SECOND fire remembers - a fresh directory hands it an
+    empty suppression cache and the arm passes on a watcher that cannot suppress
+    at all.
     """
     out_path = tmp_path / f"{label}.out"
     err_path = tmp_path / f"{label}.err"
-    runtime = tmp_path / f"{label}-runtime"
+    runtime = runtime if runtime is not None else tmp_path / f"{label}-runtime"
     started = time.monotonic()
     try:
         with out_path.open("wb") as out, err_path.open("wb") as err:
-            status = subprocess.call(
-                argv,
-                cwd=str(REPO_ROOT),
-                env=_isolated_env(runtime, source),
-                stdout=out,
-                stderr=err,
-                stdin=subprocess.DEVNULL,
-            )
+            if stdin_payload is None:
+                status = subprocess.call(
+                    argv,
+                    cwd=str(REPO_ROOT),
+                    env=_isolated_env(runtime, source),
+                    stdout=out,
+                    stderr=err,
+                    stdin=subprocess.DEVNULL,
+                )
+            else:
+                status = subprocess.run(
+                    argv,
+                    cwd=str(REPO_ROOT),
+                    env=_isolated_env(runtime, source),
+                    stdout=out,
+                    stderr=err,
+                    input=stdin_payload,
+                    check=False,
+                ).returncode
     except OSError as exc:
         pytest.fail(f"could not launch {argv}: {type(exc).__name__}: {exc}")
     return Fired(
@@ -1796,4 +1827,272 @@ def test_a_fired_hook_writes_its_declared_label_on_both_lines(tmp_path):
         f"the fires were not separable on disk: {observed}. This is the arm that "
         "would have caught the state at HEAD 0e9491a, where every fire from "
         "three different callers all read `cli`"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE HIGHEST-CONSEQUENCE INVARIANTS, ENTERED THROUGH THE DOOR THE HOOK USES.
+#
+# CS published this on 2026-09-16 as a general form for every tree on the
+# channel: an arm on the highest-consequence invariant must enter through the
+# same door the hook does, because an acknowledgement or a suppression would be
+# added at the ENTRY POINT - that is where the log write and the stdout write
+# already are - and an arm that calls the renderer cannot see it.
+#
+# CHECKED HERE BY MUTATION RATHER THAN BY READING, 2026-09-16, and the answer is
+# SPLIT rather than yes or no:
+#
+#   MUTANT A, an acknowledgement on the entry point's listing path
+#   (`mark_seen(inbox, state)` after the `unseen_entries` call in `_main`)
+#   was KILLED by 16 arms, one of them
+#   `test_the_user_prompt_submit_hook_speaks_when_a_note_is_unread`, which is
+#   already a real child process running the declared command. So the
+#   never-acknowledge property was ALREADY graded at the right layer here.
+#
+#   MUTANT B, a suppression applied ONE LAYER ABOVE `main()` - in the `__main__`
+#   guard, where `session=validated_session_id()` is resolved - SURVIVED the
+#   whole watcher suite, 240 passed, exit 0. Fired for real it silenced the
+#   SECOND of two REAL sessions completely: session 1 printed `unread: 1` and
+#   session 2 printed nothing at all, over the same unread note.
+#
+# THE GAP IS THE GUARD, NOT `main()`. Every in-process arm passes `session=`
+# straight into `main`, so nothing below `__main__` can observe how a real fire
+# resolves its session id - and the resolution is exactly where a cross-session
+# gag would be written, deliberately or by accident. The arms below launch the
+# DECLARED command and feed stdin, which is the only channel a real session id
+# arrives on.
+# ---------------------------------------------------------------------------
+
+
+def _session_payload(session_id: str) -> bytes:
+    """A hook stdin payload carrying one session id, as Claude Code sends it."""
+    return json.dumps({_watcher_module().SESSION_ID_FIELD: session_id}).encode("ascii")
+
+
+def _watcher_hook(event: str) -> HookCommand:
+    """The one declared command for `event` that runs the watcher."""
+    hooks = [
+        hook
+        for hook in _hook_commands(_load_settings())
+        if hook.event == event and WATCHER in _repo_relative_command(hook.command)
+    ]
+    assert len(hooks) == 1, f"expected exactly one {event} watcher hook, found {len(hooks)}"
+    return hooks[0]
+
+
+def test_two_real_sessions_are_each_told_about_the_same_unread_note(tmp_path):
+    """THE TWIN-PRINT INVARIANT, THROUGH THE DECLARED COMMAND AND REAL STDIN.
+
+    THE ARM THAT MUTANT B SURVIVED. Suppression is per session and it is a
+    CACHE, never an acknowledgement, so a second session must be told again.
+    Collapsing two real sessions onto one cache scope is a cross-session gag:
+    the operator opens a new session and the channel is silent about mail
+    nobody has acknowledged.
+
+    ENTERED THROUGH THE HOOK'S OWN DOOR. `main(argv, session=...)` is handed its
+    session id by the caller; a real fire RESOLVES one from stdin at the
+    `__main__` guard, and that resolution is the layer a suppression would be
+    added at. Every in-process arm is blind to it by construction.
+    """
+    hook = _watcher_hook("UserPromptSubmit")
+
+    inbox = tmp_path / "planted_inbox"
+    inbox.mkdir()
+    (inbox / "2026-09-16-0900-from-CS-planted.md").write_bytes(b"planted\n")
+    state = tmp_path / "planted_state.json"
+    argv = _argv(hook.command) + ["--dir", str(inbox), "--state", str(state)]
+
+    # ONE RUNTIME DIRECTORY FOR BOTH FIRES, AND THIS LINE IS THE ARM.
+    #
+    # Written first with the per-label default, and it passed against the live
+    # mutant. A fresh directory hands the second fire an EMPTY suppression
+    # cache, so the arm could not observe a gag however wide that gag was - a
+    # fixture that excludes the defect cannot fail. The cache is the shared
+    # state the property is about, so the two fires have to share it.
+    runtime = tmp_path / "twin-session-runtime"
+    first = _fire(
+        argv,
+        tmp_path,
+        "twin-session-1",
+        stdin_payload=_session_payload(str(uuid.uuid4())),
+        runtime=runtime,
+    )
+    second = _fire(
+        argv,
+        tmp_path,
+        "twin-session-2",
+        stdin_payload=_session_payload(str(uuid.uuid4())),
+        runtime=runtime,
+    )
+
+    for label, fired in (("first", first), ("second", second)):
+        assert fired.status == 0, (
+            f"the {label} real session exited {fired.status}; stderr: {fired.noise[:400]!r}"
+        )
+    assert "2026-09-16-0900-from-CS-planted.md" in first.body, (
+        f"the FIRST real session was never told, so this arm is vacuous: {first.body!r}"
+    )
+    assert "2026-09-16-0900-from-CS-planted.md" in second.body, (
+        "a SECOND real session was silenced over an unacknowledged note. The "
+        "per-session cache reached across sessions, which is an acknowledgement "
+        f"wearing a cache's name: {second.body!r}"
+    )
+    assert not state.exists(), "a reporting run created the watermark it was handed"
+
+
+def test_one_real_session_is_told_once_and_the_arm_above_can_tell_the_difference(tmp_path):
+    """THE NON-VACUITY ARM FOR THE TWIN-PRINT ONE, and it is the other polarity.
+
+    If suppression never fired at all, the arm above would pass over a watcher
+    with no per-session layer whatsoever and would be grading nothing. Two fires
+    carrying the SAME id must produce a report and then silence, which is the
+    behaviour the twin-print arm exists to keep scoped.
+    """
+    hook = _watcher_hook("UserPromptSubmit")
+
+    inbox = tmp_path / "planted_inbox"
+    inbox.mkdir()
+    (inbox / "2026-09-16-0901-from-CS-planted.md").write_bytes(b"planted\n")
+    state = tmp_path / "planted_state.json"
+    argv = _argv(hook.command) + ["--dir", str(inbox), "--state", str(state)]
+    payload = _session_payload(str(uuid.uuid4()))
+
+    # THE SAME RUNTIME DIRECTORY FOR BOTH, because the suppression cache lives
+    # there. A per-fire directory would hand the second fire an empty cache and
+    # the arm would pass on a watcher that cannot suppress at all.
+    runtime = tmp_path / "one-session-runtime"
+    first = _fire(argv, tmp_path, "one-session-1", stdin_payload=payload, runtime=runtime)
+    second = _fire(argv, tmp_path, "one-session-2", stdin_payload=payload, runtime=runtime)
+
+    assert first.status == 0 and second.status == 0
+    assert "2026-09-16-0901-from-CS-planted.md" in first.body, (
+        f"the first fire said nothing, so nothing was suppressible: {first.body!r}"
+    )
+    assert second.body.strip() == "", (
+        "the per-session cache did not suppress a repeat within ONE session, so "
+        f"the twin-print arm above is grading a watcher with no scope: {second.body!r}"
+    )
+
+
+def test_suppression_never_reaches_the_session_start_command(tmp_path):
+    """THE SAME LAYER, ON THE EVENT THAT MUST NEVER BE SUPPRESSED.
+
+    `SessionStart` fires once per session, so there is nothing for suppression
+    to save there - and a suppressed session start is a session that begins
+    blind, which is the exact failure this tool was built for. Graded on the
+    DECLARED command rather than on the flag, because the flag is what a wiring
+    edit changes.
+    """
+    hook = _watcher_hook("SessionStart")
+
+    inbox = tmp_path / "planted_inbox"
+    inbox.mkdir()
+    (inbox / "2026-09-16-0902-from-CS-planted.md").write_bytes(b"planted\n")
+    state = tmp_path / "planted_state.json"
+    argv = _argv(hook.command) + ["--dir", str(inbox), "--state", str(state)]
+    payload = _session_payload(str(uuid.uuid4()))
+
+    runtime = tmp_path / "session-start-runtime"
+    first = _fire(argv, tmp_path, "sessionstart-1", stdin_payload=payload, runtime=runtime)
+    second = _fire(argv, tmp_path, "sessionstart-2", stdin_payload=payload, runtime=runtime)
+
+    assert first.status == 0 and second.status == 0
+    for label, fired in (("first", first), ("second", second)):
+        assert "2026-09-16-0902-from-CS-planted.md" in fired.body, (
+            f"the {label} SessionStart fire was silent over an unread note. A "
+            "session that begins blind is the failure this tool exists for: "
+            f"{fired.body!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# THE REAL-ACL ARM FOR THE UNLISTABLE INBOX.
+#
+# `tests/test_watch_inbox.py` carries this property portably by denying ONE
+# path's listing in-process. This one manufactures a REAL permission denial and
+# runs the REAL declared command as a child, which is the reproduction CS said
+# it had not managed.
+#
+# IT VERIFIES THE DENIAL TOOK BEFORE IT GRADES ANYTHING, and skips only when it
+# demonstrably did not. Measured on this host 2026-09-16: the same `icacls
+# /deny` is honoured under one shell's process token and ignored under another's,
+# so "the fault was injected" is not something this arm may assume. A skip here
+# is a statement that the HOST refused to produce the fault, never a statement
+# about the watcher.
+# ---------------------------------------------------------------------------
+
+
+def _deny_listing_on_disk(directory: Path) -> bool:
+    """Deny this user the listing of `directory`. Returns whether it took."""
+    if os.name == "nt":
+        user = os.environ.get("USERNAME") or ""
+        if not user:
+            return False
+        subprocess.run(
+            ["icacls", str(directory), "/deny", f"{user}:(RD)"],
+            capture_output=True,
+            check=False,
+        )
+    else:
+        directory.chmod(0o000)
+    try:
+        os.listdir(directory)
+    except OSError:
+        return directory.is_dir()
+    return False
+
+
+def _restore_listing_on_disk(directory: Path) -> None:
+    if os.name == "nt":
+        user = os.environ.get("USERNAME") or ""
+        if user:
+            subprocess.run(
+                ["icacls", str(directory), "/remove:d", user], capture_output=True, check=False
+            )
+    else:
+        directory.chmod(0o700)
+
+
+def test_the_declared_hook_says_unmeasured_over_a_really_denied_inbox(tmp_path):
+    """A REAL ACL, A REAL CHILD, AND THE REAL DECLARED COMMAND.
+
+    The measured failure at base 381db08, before the fix: this exact launch
+    printed `unread: none` with a real note in the directory, exit 0, and filed
+    `nothing-unread` as its terminal disposition.
+    """
+    hook = _watcher_hook("SessionStart")
+
+    inbox = tmp_path / "denied_inbox"
+    inbox.mkdir()
+    (inbox / "2026-09-16-0903-from-CS-planted.md").write_bytes(b"planted\n")
+    state = tmp_path / "denied_state.json"
+    argv = _argv(hook.command) + ["--dir", str(inbox), "--state", str(state)]
+
+    if not _deny_listing_on_disk(inbox):
+        _restore_listing_on_disk(inbox)
+        pytest.skip(
+            "this host would not produce the fault: the listing of a denied "
+            "directory still succeeded, so nothing here could be injected. The "
+            "portable arms in tests/test_watch_inbox.py carry the property"
+        )
+    try:
+        fired = _fire(argv, tmp_path, "denied-inbox")
+    finally:
+        _restore_listing_on_disk(inbox)
+
+    assert fired.status == 0, f"a degraded read crashed the hook: {fired.noise[:400]!r}"
+    assert _watcher_module().UNMEASURED in fired.body, (
+        "the declared hook could not list the inbox and did not say so: "
+        f"{fired.body!r}"
+    )
+    assert "unread: none" not in fired.body, (
+        "the declared hook printed the affirmative clean line over mail it could "
+        f"not see: {fired.body!r}"
+    )
+    assert fired.runtime is not None
+    lines = _isolated_lines(fired.runtime)
+    dispositions = [line.split("\t")[-1] for line in lines]
+    assert _watcher_module().TERMINAL_NOTHING_UNREAD not in dispositions, (
+        "a blind fire filed itself as a clean channel in the one record that "
+        f"says what a fire decided: {lines}"
     )
