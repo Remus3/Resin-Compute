@@ -122,10 +122,16 @@ DRIVE_QUALIFIED = re.compile(r"^[A-Za-z]:[\\/]")
 #: What `scripts/watch_inbox.py` prints. All three renderings are real: the
 #: report, the `--all` listing, and the fresh-clone line for a missing inbox.
 #: Anchored per line so a traceback or an empty run cannot satisfy it.
+#:
+#: THE MISSING-INBOX LINE NOW CARRIES `UNMEASURED` and no longer says "nothing to
+#: report". Clause 2 of the fleet watcher contract in RC's `docs/CHANNEL.md` v1:
+#: a could-not-measure state prints ONE line carrying that token and never the
+#: affirmative clean line. "nothing to report" was the affirmative clean line
+#: being printed for a channel that had not been looked at.
 REPORT_SHAPE = re.compile(
     r"^(?:unread: (?:none|\d+)"
     r"|all notes: (?:none|\d+)"
-    r"|no inbox at .+ - nothing to report)\s*$",
+    r"|UNMEASURED - no inbox at .+)\s*$",
     re.MULTILINE,
 )
 
@@ -157,7 +163,37 @@ BANNER_SHAPE = re.compile(
 #: on stdout, and only `status == 0` separates the two. Stated here rather than
 #: assumed, and `test_the_user_prompt_submit_hook_speaks_when_a_note_is_unread`
 #: is the ARMED half - it proves the silence is a choice and not a broken hook.
-QUIET_SHAPE = re.compile(r"\A\s*\Z|^unread: \d+\s*$", re.MULTILINE)
+#:
+#: TWO ALTERNATIVES WERE ADDED ON 2026-09-16 AND THEY ARE DIFFERENT KINDS OF FIX.
+#:
+#: `UNMEASURED - no inbox at ...` IS NEW BEHAVIOUR, from clause 2 of the fleet
+#: watcher contract. The quiet path used to print NOTHING for a missing inbox,
+#: and silence on this hook is not neutral - silence is exactly what a clean
+#: inbox produces, so a watcher that could not see the channel at all read as one
+#: reporting good news. It is also the normal state of a fresh clone and of every
+#: worktree, because `moon_sync_inbox/` is gitignored, so this arm was previously
+#: passing on a body that meant "blind" while accepting it as "clean".
+#:
+#: `WITHDRAWN after being shown: N` IS A PRE-EXISTING RED THIS REGEX COULD
+#: ALREADY HAVE HIT, and it predates the session work entirely. At base e9b4542 a
+#: withdrawal-only quiet fire printed `unread: none` followed by the withdrawal
+#: block, and this pattern rejects `unread: none` - measured match=False. The arm
+#: had simply never been run with a withdrawal pending. Both halves were fixed:
+#: the watcher no longer prints the affirmative clean line beside a withdrawal,
+#: and the withdrawal heading is admitted here.
+#:
+#: STILL NOT A PERMISSIVE PATTERN. Every alternative is anchored to a line this
+#: tool actually emits, so a traceback, a launcher error or a `python: can't open
+#: file` still fails - which is the only reason the silence alternative is safe to
+#: keep. `test_the_quiet_shape_matcher_accepts_silence_and_a_report_but_not_noise`
+#: carries the surviving-neighbour half.
+QUIET_SHAPE = re.compile(
+    r"\A\s*\Z"
+    r"|^unread: \d+\s*$"
+    r"|^UNMEASURED - no inbox at .+$"
+    r"|^WITHDRAWN after being shown: \d+\s*$",
+    re.MULTILINE,
+)
 
 #: The EXACT declared command -> the shape its stdout must carry.
 #:
@@ -1273,7 +1309,11 @@ def test_the_report_shape_matcher_tells_a_report_from_noise():
         "unread: none\n",
         "unread: 2\n  [recv] a.md\n  [sent] b.md\n",
         "all notes: none\n",
-        "no inbox at /opt/checkout/moon_sync_inbox - nothing to report\n",
+        "UNMEASURED - no inbox at /opt/checkout/moon_sync_inbox, so the channel "
+        "was not examined\n",
+        # The capped rendering, with the pointer at this project's report file.
+        "unread: 25\n  [recv] z.md\n  (+15 more, listed in full in "
+        "/opt/checkout/ops/runtime/inbox_report.txt)\n",
     ):
         assert REPORT_SHAPE.search(good), f"real watcher output not matched: {good!r}"
 
@@ -1282,6 +1322,10 @@ def test_the_report_shape_matcher_tells_a_report_from_noise():
         'Traceback (most recent call last):\n  File "x", line 1\n',
         "unread\n",
         "python: can't open file 'scripts/watch_inbox.py'\n",
+        # THE RETIRED WORDING MUST NOW FAIL. Clause 2 forbids the affirmative
+        # clean line for a state nobody measured, so if this spelling ever comes
+        # back it is a regression rather than a harmless rephrasing.
+        "no inbox at /opt/checkout/moon_sync_inbox - nothing to report\n",
     ):
         assert not REPORT_SHAPE.search(bad), f"noise matched the report shape: {bad!r}"
 
@@ -1298,14 +1342,38 @@ def test_the_quiet_shape_matcher_accepts_silence_and_a_report_but_not_noise():
         "\n",
         "unread: 1\n  [recv] a.md\n",
         "unread: 2\n  [recv] from-RC-verbatim/  (48 files)\n  [recv] a.md\n",
+        # The could-not-measure line, clause 2. This is the body a fresh clone
+        # and every worktree produce, and it used to be silence.
+        "UNMEASURED - no inbox at /opt/checkout/moon_sync_inbox, so the channel "
+        "was not examined\n",
+        # A withdrawal-only quiet fire. The PRE-EXISTING red: at base e9b4542
+        # this body began `unread: none` and was rejected here.
+        "WITHDRAWN after being shown: 1\n  [gone] a.md\n"
+        "  (run --mark to acknowledge; they are carried until you do)\n",
+        # The capped rendering with the overflow pointer, and the degraded
+        # pointer that says so with UNMEASURED rather than naming a missing file.
+        "unread: 25\n  [recv] z.md\n  (+15 more, listed in full in "
+        "/opt/checkout/ops/runtime/inbox_report.txt)\n",
+        "unread: 25\n  [recv] z.md\n  (+15 more - UNMEASURED, the full listing "
+        "could not be written)\n",
     ):
         assert QUIET_SHAPE.search(good), f"a legitimate quiet body was rejected: {good!r}"
 
     for bad in (
         'Traceback (most recent call last):\n  File "x", line 1\n',
         "python: can't open file 'scripts/watch_inbox.py'\n",
+        # STILL BAD, AND FOR A SHARPER REASON THAN BEFORE. `unread: none` ALONE
+        # is the affirmative clean line, and clause 2 keeps it off a per-prompt
+        # hook. What changed is that the watcher no longer emits it beside a
+        # withdrawal, so admitting the withdrawal heading above did not have to
+        # admit this.
         "unread: none\n",
         "no inbox at /opt/checkout/moon_sync_inbox - nothing to report\n",
+        # The retired affirmative wording, and a bare mention of the token with
+        # no line this tool emits - so the new alternatives cannot be satisfied
+        # by an error message that happens to contain the word.
+        "UNMEASURED\n",
+        "some tool said UNMEASURED about something else\n",
     ):
         assert not QUIET_SHAPE.search(bad), f"noise matched the quiet shape: {bad!r}"
 

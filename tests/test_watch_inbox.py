@@ -636,13 +636,46 @@ def test_quiet_when_empty_still_speaks_when_a_note_is_unread(watch, tmp_path, ca
     assert "a.md" in out
 
 
-def test_quiet_when_empty_says_nothing_about_an_absent_inbox(watch, tmp_path, capsys):
+def test_quiet_when_empty_still_says_UNMEASURED_about_an_absent_inbox(watch, tmp_path, capsys):
+    """REVERSED ON 2026-09-16, AND THIS ARM IS WHY THE OLD BEHAVIOUR PERSISTED.
+
+    It used to assert `out == ""` for a missing inbox on the quiet path, under
+    the name `test_quiet_when_empty_says_nothing_about_an_absent_inbox`. That was
+    the arm pinning the defect rather than a property: it read as an instance of
+    "a per-prompt hook must not chatter", which is a real rule, and so nobody
+    looked at it twice.
+
+    WHY IT WAS WRONG. Silence is not neutral on this hook. Silence is EXACTLY
+    what a clean inbox produces, so a watcher that could not see the channel at
+    all was rendering as one reporting good news - and `moon_sync_inbox/` is
+    gitignored, so "could not see the channel" is the normal permanent state of a
+    fresh clone and of every worktree. The arm was green in precisely the copies
+    where the tool was blind.
+
+    Clause 2 of the fleet watcher contract in RC's `docs/CHANNEL.md` v1 states
+    the rule: a could-not-measure state prints ONE line carrying the token
+    UNMEASURED and never the affirmative clean line. Clause 1 keeps the exit code
+    at 0 so the harness does not drop the line.
+
+    THE ANTI-CHATTER CONCERN THE OLD ARM WAS REALLY ABOUT IS ANSWERED ELSEWHERE,
+    not ignored: clause 4 lets this one state be shown once per validated session
+    id, and `test_the_absent_inbox_line_is_shown_once_per_session_but_always_
+    without_one` in `tests/test_watch_inbox_session.py` pins that.
+    """
     rc = watch.main(
         ["--dir", str(tmp_path / "absent"), "--state", str(tmp_path / "s.json"),
          "--quiet-when-empty"]
     )
-    assert rc == 0
-    assert capsys.readouterr().out == ""
+    out = capsys.readouterr().out
+
+    assert rc == 0, "a could-not-measure state must still exit 0 or the harness drops the line"
+    assert watch.UNMEASURED in out, f"a blind watcher rendered as clean: {out!r}"
+    assert len([ln for ln in out.splitlines() if ln.strip()]) == 1, (
+        f"clause 2 says ONE line: {out!r}"
+    )
+    assert "unread:" not in out, (
+        f"the affirmative clean line was printed for a channel nobody looked at: {out!r}"
+    )
 
 
 def test_reporting_never_advances_the_watermark(watch, tmp_path):

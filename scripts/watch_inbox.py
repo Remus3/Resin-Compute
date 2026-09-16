@@ -180,6 +180,7 @@ import os
 import re
 import stat
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import NamedTuple
@@ -265,6 +266,33 @@ DEFAULT_SESSIONS = RUNTIME_DIR / "inbox_sessions.json"
 #: as the tree is used. The only session whose suppression can matter is the one
 #: now running, so the oldest rows are the ones that go.
 MAX_TRACKED_SESSIONS = 64
+
+#: THE OVERFLOW LISTING, and it is the only file here a human is meant to open.
+#:
+#: Clause 3 of the fleet contract caps the transcript at N names and then wants a
+#: POINTER to "the project's gitignored report file". `DEFAULT_REPORTED` could
+#: not be that file: it is a machine key-set that answers "has this ever been
+#: shown", it holds no drop counts and no anomaly reasons, and pointing an
+#: operator at a JSON array of bare keys is pointing them at less than the
+#: transcript already gave them.
+#:
+#: Under `RUNTIME_DIR` with everything else, so it is gitignored and outside the
+#: MSIX LocalCache shadow - see `DEFAULT_SESSIONS`.
+DEFAULT_REPORT = RUNTIME_DIR / "inbox_report.txt"
+
+#: Ceiling on the names put in the transcript, from clause 3: "at most N full
+#: names, newest first, where N is the project's existing list cap or 10 where
+#: none exists". MEASURED AT BASE e9b4542: this tree had no cap at all - `_render`
+#: printed every entry - so the fleet default of 10 applies.
+#:
+#: NAMES ARE NEVER TRUNCATED to make them fit, which clause 6 forbids outright.
+#: The list is shortened; a name that appears appears whole.
+MAX_LISTED_NAMES = 10
+
+#: The token a could-not-measure line must carry, from clause 2. A blind watcher
+#: must never read as clean, and silence on a per-prompt hook reads as clean
+#: because silence is exactly what a clean inbox produces.
+UNMEASURED = "UNMEASURED"
 
 #: Ceiling on the lines kept. The `UserPromptSubmit` hook fires on EVERY prompt,
 #: so an uncapped log is a file that grows for as long as the tree is used and
@@ -363,6 +391,51 @@ _SOURCE_LABEL_SHAPE = re.compile(
 #: the worst outcome is a duplicate line on screen, never a swallowed note.
 MAX_STDIN_BYTES = 65536
 
+#: CEILING ON HOW LONG THIS PROCESS WILL WAIT FOR THAT PAYLOAD, IN SECONDS, AND
+#: IT IS THE BOUND THAT ACTUALLY MATTERS. THE BYTE BUDGET ABOVE DOES NOT BOUND
+#: TIME AT ALL.
+#:
+#: MEASURED, AND IT WAS SHIPPED BROKEN ONCE. The first version of this reader
+#: was a single un-timed `os.read`, defended in prose as bounded because it did
+#: not loop. An adversary reproduced the hole and so did this file's own probe:
+#: with stdin a pipe that a parent holds OPEN and never writes, that one read
+#: blocked past 25 seconds and had to be killed with `taskkill`. Under the
+#: `UserPromptSubmit` hook's declared five second timeout the hook is killed,
+#: its stdout is DROPPED by the harness, and nothing anywhere records that it
+#: had mail to announce. The BASELINE READ NO STDIN AT ALL, so that failure mode
+#: was introduced by adding the reader - a watcher that silently dies on every
+#: prompt is worse than one that says nothing, and calling it a known residual
+#: did not make it safe.
+#:
+#: SO THE BOUND IS A WAIT AND NOT A PEEK, and the three candidates were measured
+#: rather than reasoned about:
+#:
+#:   os.set_blocking(fd, False)  REFUSED. It works on 3.14 on this box and does
+#:                              NOT EXIST on Windows on 3.11, which is the
+#:                              version this tree pins - `AttributeError: module
+#:                              'os' has no attribute 'set_blocking'`. It also
+#:                              mutates an inherited descriptor this process does
+#:                              not own, and it cannot wait, so it loses to a
+#:                              parent that writes a few milliseconds late.
+#:   PeekNamedPipe via ctypes    REFUSED. Works on both interpreters, but it is
+#:                              Windows-only, needs a non-pipe fallback for a
+#:                              file redirect, and has the same startup race: it
+#:                              reports zero bytes available when the parent has
+#:                              simply not written yet.
+#:   a thread with a bounded join  CHOSEN. One code path on every platform and
+#:                              every version, no ctypes, no descriptor
+#:                              mutation, and it WAITS - so a parent that writes
+#:                              late is still read. Measured identically on 3.11
+#:                              and 3.14: 0.03s when the payload is there, and
+#:                              it returns and the process exits 0 in ~0.53s
+#:                              when it never arrives.
+#:
+#: 0.5 SECONDS AGAINST A FIVE SECOND CEILING is a tenfold margin, and the cost is
+#: paid ONLY on a pathological stdin. A closed or absent stdin gives immediate
+#: EOF, a terminal is short-circuited before any read, and a real payload returns
+#: as soon as it lands.
+STDIN_WAIT_SECONDS = 0.5
+
 #: The field a Claude Code hook payload carries the session id in.
 SESSION_ID_FIELD = "session_id"
 
@@ -399,8 +472,10 @@ _SESSION_ID_SHAPE = re.compile(
 )
 
 
-def _read_stdin_budget() -> bytes:
-    """At most `MAX_STDIN_BYTES` from stdin, in ONE read. Never raises, never blocks.
+def _read_stdin_budget(wait: float | None = None) -> bytes:
+    """At most `MAX_STDIN_BYTES` from stdin, waiting at most `STDIN_WAIT_SECONDS`.
+
+    Never raises, and never blocks the caller past that wait.
 
     THIS IS THE RISKIEST FUNCTION IN THIS FILE and it is written to be boring.
     It runs on a `UserPromptSubmit` hook with a five second ceiling, on every
@@ -408,42 +483,46 @@ def _read_stdin_budget() -> bytes:
     dropped, so a blocked read does not report a blocked read - it reports
     nothing at all, on the one path whose entire job is to speak up.
 
-    THE TERMINAL IS CHECKED FIRST, AND IT IS THE CASE THAT BITES FIRST. It is
-    not the hook. `python scripts/watch_inbox.py` typed at a prompt - the usage
-    this module's own docstring documents - has stdin attached to the TERMINAL,
-    where a read blocks until somebody types and presses return. So `isatty` is
-    consulted before a descriptor is asked for at all, and
-    `test_a_terminal_stdin_is_not_read_at_all` asserts the ORDER rather than the
-    outcome, because a fake that is never asked for its fd is the only proof the
-    terminal is not read.
+    THE BOUND IS A WAIT, NOT A BUDGET, AND THE EARLIER VERSION OF THIS FUNCTION
+    GOT THAT WRONG. It issued a single un-timed `os.read` and argued in its own
+    docstring that not looping made it bounded. It does not: `os.read` on a pipe
+    blocks until bytes arrive or every write handle closes, and a parent that
+    holds the pipe open without writing satisfies neither. Reproduced here at
+    over 25 seconds, killed with `taskkill`. See `STDIN_WAIT_SECONDS` for the
+    three candidate fixes and why the thread won on measurement - notably that
+    `os.set_blocking` does not exist on Windows on the 3.11 this tree pins.
 
-    ONE `os.read`, NEVER LOOPED, AND THAT IS THE ACTUAL BOUND. `os.read` returns
-    as soon as any bytes are available; it does not wait for the buffer to fill.
-    A loop that drained until the budget was reached or until EOF arrived would
-    wait on a writer that may never write, and the byte budget does nothing
-    whatsoever about that. `test_the_reader_issues_exactly_one_os_read` counts
-    the calls for that reason. The cost is real and is stated rather than hidden:
-    a payload split across two writes comes back partial, fails to parse, and the
-    fire falls back to printing.
+    THE THREAD IS A DAEMON AND IS DELIBERATELY NEVER JOINED TO COMPLETION. If
+    the payload never arrives the worker stays parked in `os.read` forever, and
+    that is ACCEPTED: a daemon thread does not hold the interpreter open, so the
+    process still exits, measured at ~0.53s and rc 0 on both 3.11 and 3.14. The
+    alternative - waiting for a thread that by construction may never return -
+    is the hang this function exists to remove.
 
-    `sys.stdin.buffer.read(n)` IS NOT USED, deliberately. It loops internally
-    until it has `n` bytes or EOF, which is the drain this function refuses.
+    THE TERMINAL IS STILL CHECKED FIRST, AND IT IS A DIFFERENT CASE FROM THE
+    HANG ABOVE. `python scripts/watch_inbox.py` typed at a prompt has stdin on
+    the TERMINAL, where a read blocks until somebody types. The wait would now
+    bound that too, but at the cost of half a second on every manual run for a
+    payload a terminal is never going to send. `test_a_terminal_stdin_is_not_
+    read_at_all` asserts the ORDER by counting descriptor requests, because a
+    fake that is never asked for its fd is the only proof the terminal is untouched.
 
-    WHAT IT RETURNS `b""` FOR, all of them normal: no stdin at all (a windowless
-    parent, or a harness that passed nothing); a terminal; an object with no file
-    descriptor, which is what pytest's own capture installs and therefore what
-    every in-process arm in this suite runs under; and any OS-level failure on
+    ONE `os.read` INSIDE THE THREAD, NEVER LOOPED. That still matters: a loop
+    draining to the budget or to EOF would keep the worker running past the
+    point the caller stopped caring, and could return a payload nobody reads.
+    The stated cost is unchanged - a payload split across two writes comes back
+    partial, fails to parse, and the fire falls back to printing.
+
+    `sys.stdin.buffer.read(n)` IS NOT USED, deliberately: it loops internally
+    until it has `n` bytes or EOF, which is that same drain.
+
+    WHAT IT RETURNS `b""` FOR, all of them normal: no stdin at all; a terminal;
+    an object with no file descriptor, which is what pytest's own capture
+    installs and therefore what every in-process arm in this suite runs under;
+    a payload that did not arrive inside the wait; and any OS-level failure on
     the read. There is no exception path, because an exception here escapes
     before a single line has been written and reads afterwards exactly like a
     hook that is not wired.
-
-    THE ONE RESIDUAL, STATED RATHER THAN CLAIMED AWAY: a pipe that is held open
-    by a parent which never writes and never closes would still block this single
-    read. Windows offers no portable way to poll a pipe for readiness, so that
-    case is bounded only by the hook's own five second ceiling and by the
-    fail-open fallback. It is not a measured case here - the harness closes
-    stdin, and `subprocess.DEVNULL` gives immediate EOF - and it is recorded as a
-    residual rather than as a solved problem.
     """
     stream = sys.stdin
     if stream is None:
@@ -457,10 +536,26 @@ def _read_stdin_budget() -> bytes:
         # `fileno` - subclasses both OSError and ValueError, so it is already in
         # this tuple and importing `io` to name it would say nothing extra.
         return b""
-    try:
-        return os.read(fd, MAX_STDIN_BYTES)
-    except (OSError, ValueError):
-        return b""
+
+    box: list[bytes] = []
+
+    def _worker() -> None:
+        try:
+            box.append(os.read(fd, MAX_STDIN_BYTES))
+        except (OSError, ValueError):
+            # Swallowed on purpose. Nothing reads a return value from here, and
+            # an exception escaping a thread prints a traceback to stderr - which
+            # on a hook path is noise in the operator's session for a condition
+            # the empty box already reports.
+            pass
+
+    worker = threading.Thread(target=_worker, name="watch-inbox-stdin", daemon=True)
+    worker.start()
+    worker.join(STDIN_WAIT_SECONDS if wait is None else wait)
+    # `box` is read WITHOUT a lock, and that is safe rather than lucky: a single
+    # `list.append` is atomic under the GIL, and the only two states this can
+    # observe are empty and one-element.
+    return box[0] if box else b""
 
 
 def session_id_from_payload(raw: bytes) -> str | None:
@@ -1136,6 +1231,14 @@ def prune_records(inbox: Path, reported: Path) -> bool:
 SHOWN_UNREAD = "unread:"
 SHOWN_GONE = "gone:"
 
+#: The ABSENT-INBOX line's own event key. Clause 4 makes this the one
+#: could-not-measure state that MAY be shown once per session id rather than
+#: re-printed on every fire while it persists - and it needs that allowance more
+#: than any other, because an absent inbox is not transient. It is the normal
+#: permanent state of a fresh clone and of every worktree, so re-printing it
+#: would put a line in front of the operator on every single prompt, forever.
+SHOWN_NO_INBOX = "no-inbox:"
+
 
 def read_shown(sessions: Path, session: str | None) -> set[str]:
     """Event keys this SESSION has already been shown. Absent or unusable is empty.
@@ -1330,6 +1433,46 @@ def log_invocation(
         return False
 
 
+def write_overflow_report(report: Path, entries: list[Entry], heading: str) -> bool:
+    """Write the full listing to `report`. Returns whether the write landed.
+
+    WRITTEN BEFORE STDOUT, WHICH IS THE OPPOSITE ORDERING TO `record_shown`, AND
+    BOTH ARE RIGHT. Clause 3 says the report file is written atomically BEFORE
+    stdout so the pointer never names an absent file; clause 4 says the reported
+    record is written only AFTER stdout is flushed so a killed hook re-prints.
+    The two clauses order two different writes because they are protecting
+    against opposite mistakes - a pointer to nothing, and a suppression of
+    something nobody saw.
+
+    ATOMIC, through `core/atomic_io.py`, which is the only sanctioned state-write
+    path in this tree. It matters more here than usual: the pointer printed a
+    moment later invites a human to open this file, so a reader can arrive
+    mid-write.
+
+    NAMES, COUNTS AND DIGESTS ONLY - NEVER A PAYLOAD BYTE. This file is not
+    stdout and is not injected into a session's context, but it is read by the
+    same operator moments later and the rule does not get to relax because the
+    surface changed.
+    """
+    ordered = _newest_first(entries)
+    lines = [
+        f"{heading}: {len(ordered)}",
+        "the full listing the transcript capped; newest first",
+        f"written by scripts/watch_inbox.py, cap {MAX_LISTED_NAMES}",
+        "",
+    ]
+    lines.extend(f"  [{direction(e.key)}] {e.key}{_describe(e)}" for e in ordered)
+    report.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        return atomic_write_text(report, "\n".join(lines) + "\n")
+    except (OSError, ValueError):
+        # Same guard and the same reason as `log_invocation`: a path carrying a
+        # NUL byte raises `ValueError` out of `mkdir`, which `core/atomic_io.py`
+        # does not catch, and a hook that dies writing a convenience file
+        # surfaces nothing at all.
+        return False
+
+
 def _describe(entry: Entry) -> str:
     """The human-context suffix on a drop's line. Empty for a note."""
     bits: list[str] = []
@@ -1348,13 +1491,49 @@ def _describe(entry: Entry) -> str:
     return "  (" + ", ".join(bits) + ")"
 
 
-def _render(entries: list[Entry], heading: str) -> None:
+def _newest_first(entries: list[Entry]) -> list[Entry]:
+    """`entries` in newest-name-first order, which is clause 3's wording.
+
+    ON THE NAME, DESCENDING, AND NOT ON AN MTIME. Every filename on this channel
+    is `YYYY-MM-DD-HHMM-from-<CODE>-<topic>`, so a descending name sort IS
+    newest-first for the entries that follow the grammar, and it is stable and
+    cheap for the ones that do not. An mtime sort would be a different and worse
+    answer: a `--mark` run, a checkout or a virus scanner moves mtimes, and
+    clause 2 of section 5 is specifically that mtime is not to be trusted here.
+
+    `_entries` DELIBERATELY STAYS ASCENDING - its docstring says "oldest name
+    first" and the watermark and `withdrawn` both depend on its order not being
+    a display decision. This reverses for DISPLAY only.
+    """
+    return sorted(entries, key=lambda entry: entry.key, reverse=True)
+
+
+def _render(entries: list[Entry], heading: str, pointer: str = "") -> list[Entry]:
+    """Print the counts line and at most `MAX_LISTED_NAMES` names, newest first.
+
+    Returns THE ENTRIES ACTUALLY LISTED, which is the load-bearing half of the
+    signature. Clause 3 ends "the entries beyond the cap are NOT treated as
+    shown", so the caller has to be told what went on screen rather than
+    assuming its whole input did. A version that returned nothing would leave
+    every caller recording the full list as shown, which is the swallowed-mail
+    direction.
+
+    THE COUNTS LINE CARRIES THE FULL COUNT, not the listed count. "unread: 25"
+    followed by ten names and a pointer is the honest rendering; "unread: 10"
+    would be a lie that happens to match the list under it.
+    """
     if not entries:
         print(f"{heading}: none")
-        return
+        return []
     print(f"{heading}: {len(entries)}")
-    for entry in entries:
+    ordered = _newest_first(entries)
+    listed = ordered[:MAX_LISTED_NAMES]
+    for entry in listed:
         print(f"  [{direction(entry.key)}] {entry.key}{_describe(entry)}")
+    held = len(ordered) - len(listed)
+    if held:
+        print(f"  (+{held} more{pointer})")
+    return listed
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -1465,11 +1644,39 @@ def _main(argv: list[str] | None, session: str | None = None) -> tuple[int, str]
     reported = Path(args.reported)
 
     if not inbox.is_dir():
-        # Normal in a fresh clone. The directory is gitignored, so it does not
-        # arrive with the repository - which is a different fact from an inbox
-        # that is present and quiet, and the log records it as one.
-        if not args.quiet_when_empty:
-            print(f"no inbox at {inbox} - nothing to report")
+        # A COULD-NOT-MEASURE STATE, AND IT NOW SAYS SO ON EVERY PATH INCLUDING
+        # THE QUIET ONE. Clause 2: a could-not-measure state prints ONE line
+        # carrying the token UNMEASURED and never the affirmative clean line.
+        #
+        # THE QUIET PATH USED TO BE SILENT HERE, and that was the last
+        # return-0-plus-UNMEASURED gap in the fleet. Silence is not neutral on
+        # this hook: silence is EXACTLY what a clean inbox produces, so a
+        # watcher that cannot see the channel at all read as a watcher reporting
+        # good news. A blind watcher must never read as clean. It is also the
+        # normal state of a fresh clone and of EVERY WORKTREE, because the
+        # directory is gitignored - which is precisely when somebody most needs
+        # telling that no channel is being watched.
+        #
+        # AN ABSENT SEEN STORE IS NOT THIS. Clause 2 is explicit that an absent
+        # watermark is an EMPTY SET rather than a failure, and `_seen` treats it
+        # that way; nothing here prints UNMEASURED for that.
+        #
+        # SHOWN ONCE PER VALIDATED SESSION, which clause 4 allows for this one
+        # state specifically and which it needs more than any other: an absent
+        # inbox is not a transient fault that clears, so re-printing it on every
+        # fire would put this line in front of the operator on every prompt
+        # forever. With no session id it re-prints, which is fail open.
+        line = f"{UNMEASURED} - no inbox at {inbox}, so the channel was not examined"
+        quiet_session = args.quiet_when_empty and session is not None
+        key = SHOWN_NO_INBOX + str(inbox)
+        if not quiet_session or key not in read_shown(DEFAULT_SESSIONS, session):
+            print(line)
+            if quiet_session:
+                # Flushed before the cache write, for the reason `record_shown`
+                # records: a fire killed between the two would file this as
+                # shown having never emitted it.
+                sys.stdout.flush()
+                record_shown(DEFAULT_SESSIONS, session, [key])
         return 0, TERMINAL_NO_INBOX
 
     if args.all:
@@ -1529,8 +1736,41 @@ def _main(argv: list[str] | None, session: str | None = None) -> tuple[int, str]
         held_back = (len(entries) - len(fresh)) + (len(gone) - len(fresh_gone))
         entries, gone = fresh, fresh_gone
 
-    if entries or gone or not args.quiet_when_empty:
-        _render(entries, heading)
+    # THE OVERFLOW REPORT IS WRITTEN BEFORE STDOUT, so the pointer printed below
+    # can never name a file that is not there yet. Clause 3, and the ordering is
+    # the clause's whole point.
+    #
+    # ONLY WITH A VALIDATED SESSION ID. Without one the pointer is the plain
+    # "+k more" and NO file is written - a fire that cannot attribute itself does
+    # not get to leave state behind, which is the same fail-open rule the
+    # suppression cache follows.
+    pointer = ""
+    overflow_written = False
+    overflow = [e for e in _newest_first(entries)[MAX_LISTED_NAMES:]]
+    if overflow and session is not None:
+        overflow_written = write_overflow_report(DEFAULT_REPORT, entries, heading)
+        if overflow_written:
+            pointer = f", listed in full in {DEFAULT_REPORT}"
+        else:
+            # THE POINTER SAYS SO WITH `UNMEASURED` RATHER THAN NAMING A FILE
+            # THAT IS NOT THERE, and the entries beyond the cap are NOT recorded
+            # as shown below - both halves of clause 3's last sentence. A pointer
+            # to an absent file is worse than no pointer: it sends a reader
+            # somewhere empty and they conclude there was nothing to see.
+            pointer = f" - {UNMEASURED}, the full listing could not be written"
+
+    # RENDER ONLY WHEN THERE IS SOMETHING TO LIST, ON THE QUIET PATH.
+    #
+    # THIS FIXES A BUG THAT PREDATES THE SESSION WORK. `gone` used to be in this
+    # condition, so a withdrawal-only QUIET fire printed `unread: none` and then
+    # the withdrawal block. Two things wrong with that: `unread: none` is the
+    # affirmative clean line, which clause 2 forbids beside a report of anything,
+    # and `QUIET_SHAPE` in `tests/test_session_hooks.py` rejects it - so shipped
+    # behaviour at base e9b4542 could redden that arm, measured. A withdrawal-only
+    # quiet fire now prints the withdrawal block and nothing else.
+    listed: list[Entry] = []
+    if entries or not args.quiet_when_empty:
+        listed = _render(entries, heading, pointer)
 
     # A WITHDRAWAL IS FILED AS AN ANOMALY, NOT AS AN INFORMATIONAL LINE.
     # Sibling-A pulled 50 files from four inboxes in one night and every
@@ -1554,29 +1794,43 @@ def _main(argv: list[str] | None, session: str | None = None) -> tuple[int, str]
         print(f"  (it will NOT be rewritten; repair or remove {reported})")
         print("  (withdrawal reporting is incomplete until you do)")
 
-    # Recorded AFTER rendering, so the record is of what was actually shown.
-    # This never touches the watermark and never feeds the unread decision.
-    if entries:
-        record_reported(reported, [entry.key for entry in entries])
+    # EVERYTHING BELOW HAPPENS AFTER STDOUT IS FLUSHED, AND THAT NOW INCLUDES
+    # THE REPORT RECORD.
+    #
+    # Clause 4's exact words are "the reported record is written only AFTER
+    # stdout is flushed, so a killed hook re-prints rather than suppresses", and
+    # `record_reported` used to run before the flush. The failure direction was
+    # benign - that record only feeds `withdrawn`, so an early write can
+    # OVER-report a withdrawal and can never swallow mail - but this tree is the
+    # one claiming compliance with the clause, and a benign deviation left
+    # unstated is still a false claim. Both writes are on the far side of the
+    # flush now, so neither can record as shown a line that never left the
+    # process.
+    #
+    # `print` writes into a buffer, which is why the flush is a separate act from
+    # having called `print`.
+    #
+    # WHAT COUNTS AS SHOWN IS `listed`, NOT `entries`, plus the overflow only if
+    # its file actually landed - clause 3's "the entries beyond the cap are NOT
+    # treated as shown". Recording the full list would suppress on the next fire
+    # names this fire never put anywhere a human could read them.
+    shown_now = list(listed)
+    if overflow_written:
+        shown_now.extend(overflow)
 
-    # AND THE PER-SESSION CACHE IS RECORDED AFTER STDOUT IS FLUSHED, which is a
-    # stronger ordering than "after rendering" and is a separate requirement.
-    #
-    # `print` writes into a buffer. A hook killed at its five second ceiling
-    # between the cache write and the flush would have recorded as SHOWN a line
-    # that never left the process, so the next fire in that session would stay
-    # silent about mail no human ever saw. Flushing first makes a killed fire
-    # RE-PRINT, which is the direction every degraded path in this module takes.
-    #
+    if shown_now or gone:
+        sys.stdout.flush()
+    if shown_now:
+        # Never touches the watermark and never feeds the unread decision.
+        record_reported(reported, [entry.key for entry in shown_now])
     # `record_shown` refuses a `None` session on its own, so the fail-open
     # "print and write nothing" rule is enforced there rather than depending on
     # this call site remembering it.
-    if suppress and (entries or gone):
-        sys.stdout.flush()
+    if suppress and (shown_now or gone):
         record_shown(
             DEFAULT_SESSIONS,
             session,
-            [SHOWN_UNREAD + e.key + ":" + e.digest for e in entries]
+            [SHOWN_UNREAD + e.key + ":" + e.digest for e in shown_now]
             + [SHOWN_GONE + key for key in gone],
         )
 
