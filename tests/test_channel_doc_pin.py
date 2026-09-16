@@ -1013,7 +1013,7 @@ def test_a_space_in_this_checkout_root_does_not_break_resolution():
         pytest.skip(
             "this checkout root carries no space, so the question this arm "
             "exists to answer cannot be asked here - measured on CI, whose "
-            "runner root is /home/runner/work/... with no space in it. The "
+            "checkout root carries no space anywhere in it. The "
             "arm is a statement about roots that DO carry one, and asserting "
             "the root's shape made it a claim about the MACHINE rather than "
             "about the code. Skipping is the honest answer; the resolution "
