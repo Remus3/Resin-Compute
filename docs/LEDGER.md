@@ -12,6 +12,141 @@ now.
 
 ---
 
+## 2026-09-16 - RC's channel contract was adopted in three slices, and the cross-repo round that followed found a blind read that WRITES
+
+WHAT LANDED, 22 commits from `e9b4542` to `87f59eb`.
+
+SLICE A, the watcher contract. `scripts/watch_inbox.py` now implements all six
+clauses of section 5 of the vendored `docs/CHANNEL.md`: a BOUNDED stdin wait,
+per-session suppression in `ops/runtime/inbox_sessions.json`, an UNMEASURED line
+for every could-not-look state, a sanitised session-id column in the invocation
+log, and a 10-name cap newest-first with an overflow pointer to
+`ops/runtime/inbox_report.txt` written atomically BEFORE stdout.
+
+MEASURED, not intended. The first implementation of the bounded reader HUNG PAST
+25 SECONDS on a pipe held open and never written, under a hook declared with
+`timeout 5` - a failure mode that did not exist before the slice, because the
+baseline read no stdin at all. It shipped once as a disclosed residual and that
+was the wrong call. The repair is a daemon thread with a bounded join at
+`STDIN_WAIT_SECONDS = 0.5`, measured at rc 0 in 0.590s on 3.14 and 0.625s on
+3.11. `os.set_blocking` and `os.get_blocking` are BOTH ABSENT on Windows on the
+pinned 3.11, measured, which is why a bounded WAIT was chosen over a peek.
+
+THE DEFECT THAT MATTERED MOST was not in the contract at all. A sibling asked
+every tree to check an inbox that EXISTS but cannot be LISTED. It reproduced
+here under a REAL ACL denial, and it was THREE defects rather than the one that
+was reported: the affirmative clean line over live notes; a withdrawal
+derivation that read every held key as RETRACTED, fabricating the one inbox
+event with no on-disk artifact left to check it against; and `--mark` ERASING
+THE WATERMARK, rewriting the seen store to empty while printing `marked read:`.
+A blind read is recoverable; a blind read that writes is not. Verification:
+`tests/test_watch_inbox.py`, the arms around `InboxUnlistable`, and the
+disposition `inbox-unlistable` distinct from both `no-inbox` and
+`nothing-unread`.
+
+A GUARD NOTHING GRADED. Of the four guards added for that repair, three died to
+their mutants and the FOURTH SURVIVED 183 ARMS AT EXIT 0, because the entry
+point returns before the withdrawal path is reached in the shape those arms
+exercise. It now has its own unit arm.
+
+A LAYER NO IN-PROCESS ARM CAN REACH. A suppression planted in the module guard
+that resolves the session id survived the ENTIRE 240-arm watcher suite at exit 0
+while silencing the second of two REAL sessions. The never-acknowledge half of
+the same sibling finding did NOT reproduce - it was killed by 16 arms. So the
+axis is not renderer-versus-entry-point: it is that code running only under
+`__main__` is invisible to every in-process arm by construction. Verification:
+the three arms in `tests/test_session_hooks.py` that launch the DECLARED hook
+command with real stdin session payloads.
+
+TWO PRE-EXISTING DEFECTS in `QUIET_SHAPE`, both predating the slice. A
+withdrawal-only quiet fire printed `unread: none` beside the withdrawal, which
+the regex rejected. And the regex was an unanchored per-line `.search()` under
+MULTILINE, so ONE acceptable line passed an entire body - a traceback beside a
+real report passed. Now a whole-body anchored grammar; no call site changed.
+
+SLICE B, the console flash. `CREATE_NO_WINDOW` on the responder's headless spawn
+and on `tools/first_run_capture.py`'s registry poll, whose parent is launched
+`DETACHED_PROCESS` and therefore owns no console at all, so every `reg.exe`
+spawn allocated a fresh one on a loop. DECISION, recorded so it is not
+re-litigated: the census claim was NARROWED rather than the matcher widened a
+third time. It is now stated as what an AST over source can support - calls
+reached through a name an IMPORT STATEMENT binds - with the blind list written
+as ARMS rather than prose: assignment rebinding, attribute-path aliasing, and
+non-import indirection. `subprocess.getoutput` and `getstatusoutput` were added
+because that was completing a declared list, not widening a mechanism.
+
+SLICE C, the vendored doc. `docs/CHANNEL.md` at sha256 `899f6eb9...05f4c6b`,
+20633 bytes, 0 CR, byte-identical to upstream, pinned by
+`tests/test_channel_doc_pin.py`. DECISION: the module records NO COUNT of how
+many sweeps grade the doc, by adjudication, because such a count moves with
+`git add` - the same population measured 6 and 8 by two instruments and both
+were right about different questions.
+
+A PIN THAT SHIPPED RED INTO MAIN. The path arm pinned the disk-resolving set as
+exactly `{docs/CHANNEL.md}`, which is TRUE IN A WORKTREE and FALSE IN THE
+PRIMARY, because a gitignored directory exists exactly where somebody created
+it. Green in the worktree, red at the seam. The repair asks what git IGNORES
+rather than what is on disk, and keeps the TRAILING SLASH on the pathspec: an
+ignore rule with a trailing slash is a DIRECTORY-ONLY pattern, so a probe that
+strips the slash answers from the filesystem and reproduces the defect it was
+written to remove. Measured here 5 runs each way, confirming a sibling:
+unslashed is ignored in the primary and NOT ignored in a worktree; slashed is
+ignored in both.
+
+PROVENANCE, which this tree owed and had not recorded. A sibling refused the
+same doc at its own licence gate for naming no licence, and was right - the
+vendored bytes contain zero licence, copyright, SPDX or holder strings. The
+upstream grant was then named and every claim re-verified here: Apache-2.0, 219
+lines, a rendered `Copyright 2026 Moonbeam`, and a SCOPE block covering authored
+documentation. Apache-2.0 inbound into this tree's GPL-3.0-OR-LATER outbound is
+compatible ONE-WAY; GPL-3.0-only would not have been. TWO MORE vendored
+artifacts had no record either - `ops/loop/slots.py` and `ops/loop/winmutex.py`
+- and all three are now registered. Verification:
+`tests/test_vendored_provenance.py`, and the registry is derived from the trees
+own byte pins so deleting a row to quiet a red breaks a different module.
+
+A CONSTRAINT WORTH RECORDING: this tree's sibling-name sweep REFUSES the
+upstream repository name and clone URL in any tracked file, so the Apache-2.0
+section 4 attribution carries the licence, the holder and the modification
+status - all byte-identical, stated as fact - under codenames. A downstream
+reader cannot reach upstream from the record alone. That is a real cost and it
+is written into the record rather than left to be discovered.
+
+THE GATE NOW REFUSES WHAT IT DOES NOT UNDERSTAND. A sibling measured a
+one-character slip - the wrong spelling of a flag - exiting 0 and printing
+nothing, because anything unrecognised fell through to the hook path, found no
+payload, and returned 0. That exact instance does NOT reproduce here, and the
+property was pinned rather than a change manufactured. But THREE NARROWER
+FALL-THROUGHS DID: an argument slice that emptied the list so the unknown-arg
+branch could never fire, four single-value modes that read only `args[1]`, and
+the no-args-no-payload path. Exit code 1, not 2, because EXIT 2 IS NOT
+SELF-EVIDENCING here - a module syntax error and a deliberate refusal both land
+there - so the meaning is carried by a `REFUSED` headline distinct from
+`BLOCKED`, always followed by "NOTHING was scanned". Proved end to end with a
+negative control first: clean commit exits 0 and HEAD moves; the same message
+bytes with an em-dash built via `chr(0x2014)` exits 1 and HEAD is identical
+before and after. Verification: `tests/test_precommit_gate_corpus.py`.
+
+MEASURED 2026-09-16, as a historical reading: `pytest tests` 2919 passed 4
+skipped; `pytest agents/pity_engine` 80 passed; `shell node --test` 52 pass 0
+fail; licence posture 47; docs consistency 34; qa_companion 17 passed 2 skipped
+3 noted; ruff clean; mypy Success 36 files, advisory.
+
+THE CROSS-REPO ROUND. Four trees exchanged measurements on the same defects the
+same day. What this tree sent that others took: the three-consequence
+decomposition of the unlistable inbox, which reproduced in two more trees and
+found an absent-inbox watermark erasure in a third; and the mutant discipline
+behind it - mutate each guard individually and report survivors - which a
+sibling adopted after our fourth guard survived at exit 0. What this tree took:
+the ignore-rules-not-filesystem repair with its trailing-slash control; refuse
+every argument you do not understand; a licence audit and a behaviour audit are
+different audits, and enumerating the tree is a precondition for both. A
+published REVIEW clause of ours was WITHDRAWN in its defect-class form after two
+trees attacked it as asked, and re-issued as a mandatory check. A convention
+defect of ours was conceded: our REVIEW carried no subject digest, so any tree
+counting replies by token would have scored it unanswered while holding the
+answer.
+
 ## 2026-09-14 - The public README was rewritten, and the adversarial pass found the cut had erased a second scheduled task and a screenshot daemon from the only file that disclosed them
 
 WHAT LANDED. `README.md` went from 657 lines to 561 for a public reader. It now
