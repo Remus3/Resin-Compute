@@ -605,6 +605,18 @@ def test_the_two_exclusion_reasons_are_named_apart_not_merged() -> None:
     block between the two constants. One list with two entries and one shared
     paragraph is the merged state this arm exists to forbid, and it is reachable
     without touching either constant's name.
+
+    RAISED TO 3 AND 4 ON 2026-09-15, and the pin did its job on the way through.
+    `tests/test_responder_no_console_window.py` was declared as the third shape
+    grader, which made this arm the ONLY one in the file that went red - the
+    arity is the single assertion here that a new entry cannot land past, which
+    is exactly why it was pinned. The two facts worth carrying forward, both
+    recorded at the constant itself: that module reddens on 0 of the 39 mutants
+    the current plan derives, so its exclusion is declared on the MECHANISM
+    rather than on that count; and `undeclared_shape_graders` could not see it at
+    all, because it reads the responder through a `parametrize` argument rather
+    than through the module-level `Name` the detector matches on. The suite was
+    green without the entry. It is declared regardless.
     """
     assert gmr.SELF_TEST_MODULE not in gmr.SHAPE_GRADER_MODULES
     assert gmr.EXCLUDED_MODULES == (gmr.SELF_TEST_MODULE, *gmr.SHAPE_GRADER_MODULES)
@@ -613,8 +625,8 @@ def test_the_two_exclusion_reasons_are_named_apart_not_merged() -> None:
         gmr.EXCLUDED_MODULES
     )
 
-    assert len(gmr.SHAPE_GRADER_MODULES) == 2, gmr.SHAPE_GRADER_MODULES
-    assert len(gmr.EXCLUDED_MODULES) == 3, gmr.EXCLUDED_MODULES
+    assert len(gmr.SHAPE_GRADER_MODULES) == 3, gmr.SHAPE_GRADER_MODULES
+    assert len(gmr.EXCLUDED_MODULES) == 4, gmr.EXCLUDED_MODULES
 
     runner = (REPO_ROOT / "tools" / "gate_mutation_runner.py").read_text(encoding="ascii")
     self_at = runner.index("\nSELF_TEST_MODULE = ")
@@ -721,19 +733,38 @@ def test_the_sweep_finds_every_responder_reader_and_every_one_is_declared() -> N
     genuine responder reader excluded under the OTHER reason. That is why
     `undeclared_shape_graders` subtracts all of `EXCLUDED_MODULES` and not just
     `SHAPE_GRADER_MODULES`.
+
+    RE-MEASURED ON 2026-09-16: 145 tracked `.py`, 18 mentioning the responder, and
+    4 candidates - the third shape grader `tests/test_responder_spawn_census.py`
+    joined the set. BOTH STAMPS ARE KEPT DELIBERATELY. The 2026-09-09 figures are
+    not wrong, they are a measurement of a commit, and silently overwriting them
+    would turn a dated observation into an undated claim that decays again on the
+    next append. Neither pair of numbers is ASSERTED anywhere below - the arm reads
+    the live corpus - so these are provenance for the reasoning and not a pin.
     """
-    known = {
-        "tests/test_gate_mutation_runner.py",
-        "tests/test_gate_name_bindings.py",
-        "tests/test_responder_gate_census.py",
-    }
     found = gmr.responder_reading_modules(REPO_ROOT)
     assert (
         found
-        and known <= set(found)
+        and IMPORTLIB_FLOOR <= set(found)
         and set(found) <= set(gmr.EXCLUDED_MODULES)
         and gmr.undeclared_shape_graders(REPO_ROOT) == []
     ), (found, gmr.EXCLUDED_MODULES)
+
+    # THE WITNESS, RESTORED 2026-09-16. Between 2026-09-15 and the split this arm
+    # passed by a PROPER subset and therefore witnessed nothing about the other
+    # direction: a declared entry that no detector ever finds could sit in
+    # `EXCLUDED_MODULES` untouched, which is precisely what happened while
+    # `tests/test_responder_no_console_window.py` was declared and invisible. Set
+    # EQUALITY is the property that was lost, and the split made it true again by
+    # moving the source-reading arms into a module written in the detector-visible
+    # form. If this goes red, one of two things is true and they need different
+    # answers: a declared module is unreachable by the detector, or a detected
+    # module is undeclared - the tuple in the message says which.
+    assert set(found) == set(gmr.EXCLUDED_MODULES), (
+        sorted(set(found) ^ set(gmr.EXCLUDED_MODULES)),
+        found,
+        gmr.EXCLUDED_MODULES,
+    )
 
 
 def test_the_undeclared_detector_fires_on_a_planted_reader_and_not_on_a_declared_one(
@@ -978,6 +1009,20 @@ IMPORTLIB_READERS = (
     "tests/test_responder_refusal_gates.py",
 )
 
+#: The modules the detector must NEVER stop finding. A FLOOR, deliberately not an
+#: equality: the detector's own docstring admits routes it cannot see, and an
+#: equality here would go red the day somebody widened it to see them, which would
+#: punish the fix. Anything newly found must still be DECLARED, and the companion
+#: assertion checks that - so a widened detector is required to be honest without
+#: being required to find exactly these three.
+IMPORTLIB_FLOOR = frozenset(
+    {
+        "tests/test_gate_mutation_runner.py",
+        "tests/test_gate_name_bindings.py",
+        "tests/test_responder_gate_census.py",
+    }
+)
+
 
 def _module_level_responder_names(source: str) -> set[str]:
     """Plain `Name` targets of a module-level assignment mentioning the responder.
@@ -1026,11 +1071,18 @@ def test_the_detector_states_the_importlib_route_it_cannot_see() -> None:
         assert gmr._binds_and_reads_responder(source) is False, name
         assert name not in gmr.EXCLUDED_MODULES, name
 
-    assert set(gmr.responder_reading_modules(REPO_ROOT)) == {
-        "tests/test_gate_mutation_runner.py",
-        "tests/test_gate_name_bindings.py",
-        "tests/test_responder_gate_census.py",
-    }
+    # THE CONTROL, AND IT NO LONGER PUNISHES A DETECTOR IMPROVEMENT. This was an
+    # equality against a 3-element literal set, which meant that anyone who FIXED
+    # `_binds_and_reads_responder` to see the routes its own docstring admits it
+    # misses would redden this arm for doing so - an arm that locks in a blind spot
+    # is worse than the blind spot. What this control is actually for is proving the
+    # detector has not silently stopped finding anything, so that the clauses above
+    # are not all satisfied by a function returning False for the whole tree. The
+    # floor plus the declared-subset property carries that, and both survive the
+    # detector getting better.
+    found = set(gmr.responder_reading_modules(REPO_ROOT))
+    assert IMPORTLIB_FLOOR <= found, (found, IMPORTLIB_FLOOR)
+    assert found <= set(gmr.EXCLUDED_MODULES), (found, gmr.EXCLUDED_MODULES)
 
 
 def test_the_false_kill_property_cannot_fire_under_the_campaign_argv() -> None:
