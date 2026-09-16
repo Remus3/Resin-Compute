@@ -89,6 +89,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import subprocess
 import sys
 import time
 from collections.abc import Callable
@@ -2428,6 +2429,33 @@ def _reply_name(note: Path) -> str:
     return f"{stamp}-from-{SELF_CODE}-auto-reply-to-{stem}.md"
 
 
+# NO CONSOLE FLASH FROM THE SPAWN. RC's `CHANNEL.md` v1 section 5, adopted
+# fleet-wide: a console-subsystem CHILD of a windowless parent - a `pythonw`
+# process, or any hook running under the desktop harness - gets a fresh console
+# allocated unless the spawn passes CREATE_NO_WINDOW, and that allocation is an
+# on-screen and taskbar flash. The responder's one spawn is exactly that
+# population: it launches the headless `claude` shim, which on this box is a
+# console `cmd.exe` entry point, which is why `_spawn_headless` has to resolve it
+# through `shutil.which` at all.
+#
+# THE INTERPRETER TOKEN REMOVES NO FLASH. Swapping `python` for `pythonw` at a
+# hook command is measured INERT for this, so the fix cannot land on a command
+# line and has to land here, on the spawn.
+#
+# WHAT IS CONFIRMED. RC ran a positive control on 2026-09-15 and it passed on all
+# three arms - both unflagged spawns under a windowless `pythonw` parent produced
+# a `ConsoleWindowClass` event, the CREATE_NO_WINDOW spawn produced none, and a
+# heartbeat landed after the last spawn with no liveness gap. That confirms THE
+# DETECTOR AND THE FLAG. It does NOT confirm that the residual flash an operator
+# observed came from this spawn; that attribution is PROBABLE at n=1 and is not
+# claimed.
+#
+# WINDOWS-ONLY ATTRIBUTE, resolved the way `tools/precommit_gate.py` already
+# resolves it so the fleet has one idiom rather than two. Off Windows it is 0,
+# which is `subprocess.run`'s own default for `creationflags` - so the kwarg is
+# inert on POSIX rather than omitted, and nothing here needs a platform branch.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 #: The headless session command. `{}` is not interpolated - the prompt is passed
 #: on stdin, never on the command line, because a note is untrusted text and a
 #: command line is a place where untrusted text becomes arguments.
@@ -2464,9 +2492,10 @@ def _spawn_headless(prompt: str, bounds: Bounds) -> str:
     - A FAILURE RETURNS EMPTY RATHER THAN RAISING PAST THE GATE. An empty draft
       is refused by `validate_draft` and recorded as `exhausted`, so the failure
       path leads into the gate rather than around it.
+    - NO CONSOLE WINDOW IS ALLOCATED. See `_NO_WINDOW` above for the rule, the
+      measured control and the limit of what that control confirms.
     """
     import shutil
-    import subprocess
 
     # RESOLVE THE EXECUTABLE. On Windows the entry point is a `.CMD` shim and
     # `subprocess` will not launch a bare `claude`. Measured here: the first
@@ -2484,6 +2513,7 @@ def _spawn_headless(prompt: str, bounds: Bounds) -> str:
             timeout=bounds.spawn_timeout_seconds,
             cwd=str(REPO_ROOT),
             check=False,
+            creationflags=_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         # RAISED, NEVER RETURNED AS EMPTY, and that distinction is the point.
