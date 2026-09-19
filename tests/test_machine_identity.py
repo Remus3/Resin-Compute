@@ -187,7 +187,7 @@ PLACEHOLDER_ACCOUNTS: dict[str, str] = {
         "obviously fictional; it names no account on any machine."
     ),
     "<account>": (
-        "The documentation placeholder ROADMAP.md and NEXT_SESSION_PROMPT.md "
+        "The documentation placeholder ROADMAP.md and RSC-NEXT-SESSION.txt "
         "use when describing this very defect. Angle brackets are not legal "
         "in a Windows path segment, so the token cannot name a real account."
     ),

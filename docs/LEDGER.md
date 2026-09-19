@@ -12,6 +12,173 @@ now.
 
 ---
 
+## 2026-09-19 - the console stops printing absolute paths, and five inbox notes are triaged
+
+WHAT LANDED, one commit, `2802447`. The raw-error leak from `core/atomic_io.py`
+is closed for every caller rather than for one, and the fix went somewhere
+neither of this tree's two recorded positions had put it.
+
+THE DEFECT, re-measured rather than inherited. `core/atomic_io.py` has FIVE log
+sites, at lines 87, 126, 145, 165 and 171 - not the six a prior reading
+assumed. Every one interpolates a `Path` that its callers supply absolute, and
+four also interpolate the raw exception, so a refused write put a raw
+`PermissionError: [WinError 5]` carrying a FULL FILESYSTEM PATH on stderr in
+front of whoever was running the lane. That breaks this tree's absolute rule
+about raw error strings on user-facing surfaces, and a full path is also a
+machine-identity leak of the kind already closed once here.
+
+THE TREE HELD TWO CONTRADICTORY POSITIONS ON THE FIX AND BOTH WERE WRONG, which
+is why this is recorded rather than just shipped. `ROADMAP.md` said the library
+should route raw error text to the file handler only. The docstring of
+`_console_logging_muted` at `scripts/watch_inbox.py:479` argued the opposite -
+that `core/atomic_io.py`'s logging is correct FOR A LIBRARY because it must not
+decide that some caller's console is too precious for an error, so the fix
+belongs at a call site that knows it is a hook.
+
+The library argument is CONCEDED and the roadmap row is REFUTED, on mechanism
+rather than on taste: `core/log_setup.py` caches ONE console handler and ONE
+file handler in module globals and shares both process-wide - verified by
+object identity across two different loggers - so `core/atomic_io.py` has no
+handle on either and could not express "console but not file" even if it should.
+
+But the call-site position names the fix's home wrongly. The choice was never
+library-versus-caller; it is `core/atomic_io.py` versus `core/log_setup.py`.
+`core/log_setup.py` ALREADY owns a console-only rendering decision in
+`_ColorFormatter`, whose entire job is to render differently for the console
+than for the file. Redaction is that same decision one notch further out.
+
+WHAT SHIPPED. `_RedactingColorFormatter` in `core/log_setup.py` rewrites the
+repo-root and user-profile prefixes to `<repo>` and `<user>` on the CONSOLE
+handler only. The file handler keeps its plain formatter, so the day log still
+records the raw absolute path an operator needs in order to act.
+
+A FORMATTER AND DELIBERATELY NOT A `logging.Filter`. `get_logger` attaches the
+console handler FIRST and the file handler SECOND, and both receive the SAME
+`LogRecord` object, so a filter - or anything editing `record.msg` in place -
+would redact the day log too, turning "do not surface this" into "do not record
+this". Only the string `super().format()` returns is touched.
+
+ONLY THE PREFIX GOES, and that is not a small point. The "file logging
+disabled" warning in `_ensure_file` carries a path as its only useful content
+on a console-only degraded run, and an operator reading any of the five
+`core/atomic_io.py` reports has to be able to tell WHICH file failed. A blanket
+path scrubber would gut both.
+
+VERIFICATION POINTER: `tests/test_log_setup_console_redaction.py`, five
+behavioural arms capturing real `LogRecord`s through real handlers rather than
+grepping module source, which would pin format instead of behaviour and survive
+the defect. Two were observed RED before the fix for the right reason. The other
+three do not move with the fix by design - one asserts the file handler still
+renders the raw path and goes red if the fix over-reaches, one is the arming
+control asserting the console still emits the record at all, and one asserts no
+ANSI escape reaches the day log.
+
+A CLEARANCE ARM FIRED AND WAS OBEYED RATHER THAN WEAKENED. Adding one test
+module took the `tests/` enumeration to exactly 90, equal to
+`_MIN_TRACKED_FILES` in `tests/test_line_endings.py`, so
+`test_the_floor_keeps_wide_clearance_below_the_real_tree` went red - working
+exactly as written, since 90 no longer sat ABOVE the widest partial
+enumeration. Re-measured at that moment on 2026-09-19: 239 tracked overall, so
+the legal interval was 90 < value <= 119, and the literal was raised to 100 for
+clearance rather than to the nearest legal value. The comment now records that
+this recurs on every added test module and that the remedy is always to raise
+after re-measuring both ends.
+
+THE ROADMAP ROW WAS ALSO OVERSTATED ON SCOPE, and the correction is recorded
+because an inflated row wastes the session that believes it. It claimed "every
+other caller is still exposed". Measured: six importers of `core/atomic_io.py`,
+of which `core/provenance.py` has NO live caller at all - only
+`tests/test_provenance.py` imports it - leaving four live-exposed importers
+fanning out to seven call sites. The substance survives; the count did not.
+
+WHAT WAS NOT DONE, and it is a known gap rather than an oversight.
+`tempfile.gettempdir()` returns the 8.3 short form of the user profile while
+`Path.home()` returns the long form, so a short-form path does not match the
+`<user>` prefix and is not redacted. The repo root has no short-name form on
+this host, so `<repo>` is unaffected.
+
+FIVE INBOX NOTES WERE TRIAGED AND ANSWERED, and the triage found a defect in
+OUR OWN outbound note. `2026-09-19-1451-from-RSC-REVIEW-82c6af46e357` carried,
+in its section E table, the row ".claude/worktrees/ went from 76 MiB to 36 KiB".
+BOTH FIGURES ARE WRONG and the first contradicts that same note's own section A
+eight rows earlier. Measured: 127952319 bytes across 2756 files before, and
+8822 bytes in 1 file after. The note had already been delivered to four trees.
+
+A correction and reply went to all five inboxes as
+`2026-09-19-1625-from-RSC-CORRECTION-82c6af46e357-...`, one sha256 across all
+five recipient copies, carrying the self-correction plus the answers LW and CS
+had asked for. Measured for those answers: RSC's contribution to the
+git-install-root scratch bucket is 9 files / 28540 bytes, all attributed by
+CONTENT because none carries an RSC marker in its name; RSC holds exactly ONE
+key in `~/.claude/projects/`, so LW's two-keys-per-tree defect does not
+reproduce here; and the leading-slash path sweep LL asked every tree to run
+returns ZERO genuine candidates across 151 tracked `.py` files, 3 shell scripts
+and 3 git hooks, reported with the six blind spots the instrument cannot see.
+
+RSC REFUSED A PRUNE AND GAVE THE REASON RATHER THAN THE VERDICT.
+`C:\rsc-first-run`, 8378 files and 15363146655 bytes, was proposed for pruning
+at 12 days idle. It is the compiled-in default capture root of
+`tools/first_run_capture.py:45`, a live tool with no environment-variable
+override. But nothing scheduled or supervised drives it: `Get-ScheduledTask`
+matching `Resin|Capture|RSC` returns nothing across 266 host tasks, and
+`ops/supervisor.py:74` spawns the headless runner only. So the accurate
+classification is the live default target of a currently DORMANT tool, which is
+a KEEP under RSC ownership and not orphaned residue. LW's own principle, that
+an mtime is not a liveness measure, is the reason.
+
+A TRAP FOR ANY TREE REPEATING THE ATTRIBUTION SWEEP: 13 files at the
+git-install root match the marker `moon_sync`, which is FLEET-WIDE and present
+in all five repos. Matching on it attributes a file to whoever happens to run
+the sweep. They were counted unattributable, not ours.
+
+THE HAND-OFF CONVERGED ON THE FLEET SHAPE, on operator ruling mid-session.
+`NEXT_SESSION_PROMPT.md` was `git mv`-ed to `RSC-NEXT-SESSION.txt` so history
+follows the file, and its markdown wrapper and fences were stripped. The file
+is now the RAW hand-off and nothing else. The Desktop holds
+`RSC-NEXT-SESSION.lnk` targeting that tracked file, working directory the repo
+root, read back through `WScript.Shell` and verified to resolve. There is no
+detached copy of the hand-off anywhere, which is the point: the old shape wrote
+a byte copy to the Desktop that was already stale when this session measured
+it, and the sibling that kept both a `.md` and a `.txt` has a `.md` twelve days
+stale against its own `.txt`.
+
+WHY RAW RATHER THAN FENCED, since the module used to require a fence. The file
+that the shortcut opens is what the operator reads in Notepad, and a markdown
+heading plus two fence lines are noise in that window. `extract_prompt` in
+`tools/publish_next_session.py` now treats a fence-less source as the whole
+hand-off while STILL accepting and unwrapping a fenced one - the fleet keeps
+five copies of this pattern and they will not migrate on the same day, so
+refusing a fenced file would turn a shared tool into a local one. More than one
+fenced block is still refused. The size, ASCII and leak guards were not
+weakened; they now cover the whole file rather than one block of it.
+
+THREE GUARDS FIRED ON THE FIRST DRAFT AND EVERY ONE CAUGHT A REAL DEFECT. This
+is the measured evidence that the rename did not silently move the file out of
+its sweeps. `tests/test_machine_identity.py` caught the account short-name and
+long-name written into the hand-off and into `ROADMAP.md`.
+`tests/test_no_sibling_names.py` caught a sibling project named in plain text
+in `ROADMAP.md`, in a public repository. And `tests/test_task_state_claims.py`
+Arm 2 caught the hand-off LEAVING ITS OWN CORPUS: that module's
+`_DOC_SUFFIXES` was `(".md",)`, so the `.md` to `.txt` rename would have
+carried the file straight out of the sweep with every arm green. `.txt` was
+added to that tuple with the reasoning recorded inline. Arm 2 exists precisely
+to assert the corpus rather than the predicate, and this is the first time it
+has fired on a real corpus loss.
+
+VERIFICATION POINTER: `tests/test_task_state_claims.py`
+`test_the_sweep_actually_covers_the_real_installers_and_the_hand_off`, which
+names `RSC-NEXT-SESSION.txt` explicitly, and
+`tests/test_publish_next_session.py`
+`test_a_fenceless_source_is_the_hand_off_in_its_entirety` plus
+`test_a_fenceless_source_is_still_held_to_every_other_guard`, which record
+which way the contract moved and that dropping the fence did not drop the rest.
+
+NOT DONE, and rowed rather than hidden: the publisher itself still writes a
+detached Desktop copy, so a bare run of it would recreate the artifact this
+ruling removed. `.claude/commands/done.md` section 9 now runs `--check` and
+explains why. `TARGET_NAME` and `SOURCE` currently share one basename and must
+be split when the module is converted.
+
 ## 2026-09-19 - a five-repo machine stray-work sweep, and the two defects it found in this tree
 
 WHAT LANDED, one commit, `fadc5f6`. The operator asked every repo on this host

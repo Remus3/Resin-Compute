@@ -5,7 +5,7 @@ which is the whole reason this module exists and the reason every arm below is
 shaped the way it is: a backup that silently disagrees with the thing it backs
 up is worse than no backup, because both read as current.
 
-So the source of truth is `NEXT_SESSION_PROMPT.md` and the publisher NEVER
+So the source of truth is `RSC-NEXT-SESSION.txt` and the publisher NEVER
 accepts prompt text as an argument. It reads the fenced block out of that file
 or it refuses. There is no code path that can write a hand-retyped copy.
 
@@ -68,10 +68,34 @@ def test_the_single_fenced_block_is_extracted_without_its_fences():
     assert FENCE not in extracted
 
 
-def test_a_source_with_no_fenced_block_is_refused():
+def test_a_fenceless_source_is_the_hand_off_in_its_entirety():
+    """THE CONTRACT CHANGED ON 2026-09-19 AND THIS ARM RECORDS WHICH WAY.
+
+    Until that day the source was a markdown page wrapping the hand-off in one
+    fenced block, and a page with NO fence was refused as `no_prompt_block`.
+    The source is now `RSC-NEXT-SESSION.txt`, the RAW hand-off with no wrapper
+    and no fence - what the sibling trees keep, and what the operator reads
+    when the Desktop shortcut opens it in Notepad, where a wrapper and a pair
+    of fences are noise.
+
+    So a fence-less source is no longer an error; it is the normal case, and
+    the whole file is the block. Fails if anyone restores the old refusal.
+    """
+    block = _long_block()
+    assert pns.extract_prompt(block) == block
+
+
+def test_a_fenceless_source_is_still_held_to_every_other_guard():
+    """Dropping the fence requirement must not drop the rest with it.
+
+    The minimum size, the ASCII rule and the leak scan now see ALL of the file
+    rather than one block of it, so this arm drives a raw source that is too
+    short and expects the SAME refusal a wrapped one would have earned. Fails
+    if the fence-less path is ever wired to skip validation.
+    """
     with pytest.raises(pns.Refusal) as caught:
-        pns.extract_prompt("# Next session prompt\n\nNo block here at all.\n")
-    assert caught.value.reason == "no_prompt_block"
+        pns.extract_prompt("too short\n")
+    assert caught.value.reason == "prompt_too_short"
 
 
 def test_a_source_with_two_fenced_blocks_is_refused():
@@ -224,7 +248,7 @@ def test_no_report_or_refusal_names_a_path(tmp_path):
     emitted.extend(str(v) for v in pns.check(source, tmp_path).values())
 
     for bad_source, _reason in (
-        ("no block here\n", "no_prompt_block"),
+        ("short raw source\n", "prompt_too_short"),
         (_source_with("short\n"), "prompt_too_short"),
     ):
         with pytest.raises(pns.Refusal) as caught:
@@ -246,13 +270,13 @@ def test_no_report_or_refusal_names_a_path(tmp_path):
 
 
 def test_the_repo_hand_off_actually_publishes(tmp_path):
-    """If NEXT_SESSION_PROMPT.md stops being publishable, this goes red HERE.
+    """If RSC-NEXT-SESSION.txt stops being publishable, this goes red HERE.
 
     Every other arm runs against a synthetic source. This one runs against the
     file the ritual actually reads, so a prose edit that adds a second fence or
     slips in a smart quote fails a test rather than failing at session end.
     """
-    source = (REPO_ROOT / "NEXT_SESSION_PROMPT.md").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "RSC-NEXT-SESSION.txt").read_text(encoding="utf-8")
     report = pns.publish(source, tmp_path)
     assert report["bytes"] >= pns.MIN_BYTES
     assert (tmp_path / pns.TARGET_NAME).read_text(encoding="ascii").isascii()
@@ -260,7 +284,7 @@ def test_the_repo_hand_off_actually_publishes(tmp_path):
 
 def test_the_repo_hand_off_block_carries_the_bootstrap_instruction():
     """A hand-off that does not tell a cold session what to read is not one."""
-    source = (REPO_ROOT / "NEXT_SESSION_PROMPT.md").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "RSC-NEXT-SESSION.txt").read_text(encoding="utf-8")
     block = pns.extract_prompt(source)
     assert "CLAUDE.md" in block
     assert "ROADMAP.md" in block
@@ -700,7 +724,7 @@ def test_the_adversary_probe_token_never_reaches_disk(tmp_path):
 # module gates something else entirely: a block of PROSE, PATHS, shell commands
 # and fenced code written by an agent, on its way out of the toolchain. The
 # arms below drive the tree's OWN fenced hand-off - the real
-# `NEXT_SESSION_PROMPT.md` block, not a synthetic stand-in - through the real
+# `RSC-NEXT-SESSION.txt` block, not a synthetic stand-in - through the real
 # `publish()`, into `tmp_path`. The module's `--desktop` override is what makes
 # that possible without pointing the ritual at a test directory; the real
 # Desktop is never a target here.
@@ -788,7 +812,7 @@ def test_the_tree_s_own_hand_off_block_with_an_injected_token_never_reaches_disk
     carries exactly two fence lines and `extract_prompt` reaches the leak scan
     rather than refusing for ambiguity first.
     """
-    source = (REPO_ROOT / "NEXT_SESSION_PROMPT.md").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "RSC-NEXT-SESSION.txt").read_text(encoding="utf-8")
 
     clean = tmp_path / "clean"
     clean.mkdir()
@@ -796,22 +820,25 @@ def test_the_tree_s_own_hand_off_block_with_an_injected_token_never_reaches_disk
     assert control["ok"], "the tree's own hand-off does not publish; the arm below is mute"
     assert (clean / pns.TARGET_NAME).is_file()
 
+    # THE SOURCE IS NOW RAW, so there is no opening fence to inject after and
+    # no surrounding prose to miss. The whole file is the block as of
+    # 2026-09-19, which makes the injection point the top of the file and makes
+    # "did it land inside the block" trivially true rather than something to
+    # arrange. The arming assertion below is kept and restated against the
+    # thing that can still go wrong: the line must be inside what
+    # `extract_prompt` returns, whatever shape the source has.
     lines = source.splitlines(keepends=True)
-    opening = next(i for i, line in enumerate(lines) if line.rstrip("\r\n") == FENCE)
-    poisoned = "".join(
-        lines[: opening + 1] + [INJECTED_HAND_OFF_LINE + "\n"] + lines[opening + 1 :]
-    )
+    poisoned = "".join([INJECTED_HAND_OFF_LINE + "\n"] + lines)
     assert poisoned.count(FENCE) == source.count(FENCE), "the injection moved a fence"
 
-    # ARMING: the line has to land INSIDE the block. A poisoned source whose
-    # token sat in the surrounding prose would be refused by nothing and would
-    # still read as a passing arm.
-    poisoned_lines = poisoned.splitlines(keepends=True)
-    fences = [i for i, line in enumerate(poisoned_lines) if line.rstrip("\r\n") == FENCE]
-    assert len(fences) == 2, "the poisoned source no longer has exactly two fences"
-    assert INJECTED_HAND_OFF_LINE in "".join(
-        poisoned_lines[fences[0] + 1 : fences[1]]
-    ), "the injected line did not land inside the fenced block"
+    # ARMING: a poisoned source whose token sat somewhere `extract_prompt`
+    # discards would be refused by nothing and would still read as a passing
+    # arm. Assert against the extractor's own output, not against the file.
+    assert INJECTED_HAND_OFF_LINE in pns.extract_prompt(
+        poisoned.replace(INJECTED_HAND_OFF_LINE, "PLACEHOLDER-NOT-A-TOKEN")
+    ).replace("PLACEHOLDER-NOT-A-TOKEN", INJECTED_HAND_OFF_LINE), (
+        "the injected line did not land inside the extracted hand-off"
+    )
 
     dirty = tmp_path / "dirty"
     dirty.mkdir()
@@ -1006,7 +1033,7 @@ def test_the_repo_hand_off_still_publishes_under_the_widened_separator(tmp_path)
     is a gate an operator switches off.
 
     AND THE ARM SAYS WHAT IT CANNOT PROVE. The brief for this repair asserted
-    that `NEXT_SESSION_PROMPT.md` mentions rostered names in prose. MEASURED
+    that `RSC-NEXT-SESSION.txt` mentions rostered names in prose. MEASURED
     2026-09-11, it does not: all six names occur ZERO times in the file. So with
     respect to the SEPARATOR this arm is vacuous - it has no binding to be wrong
     about - and that was confirmed by mutation rather than assumed: making the
@@ -1019,7 +1046,7 @@ def test_the_repo_hand_off_still_publishes_under_the_widened_separator(tmp_path)
     The corpus arm in `tests/test_no_secret_literals.py` is what actually
     carries the false-positive budget. This one carries the publish path.
     """
-    source = (REPO_ROOT / "NEXT_SESSION_PROMPT.md").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "RSC-NEXT-SESSION.txt").read_text(encoding="utf-8")
     block = pns.extract_prompt(source)
     mentioned = {name: block.count(name) for name in pns.SECRET_NAMES}
     assert sum(mentioned.values()) == 0, (

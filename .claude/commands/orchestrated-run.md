@@ -65,7 +65,7 @@ Rediscovery - rebuilding closed work, re-pitching a settled decision, acting on
 a stale doc - is the dominant failure mode of a cold session. This phase is the
 defence, and it costs a minute.
 
-- Read `NEXT_SESSION_PROMPT.md` if the operator pasted its block, then
+- Read `RSC-NEXT-SESSION.txt` if the operator pasted its block, then
   `git log --oneline -10`.
 - Grep `docs/LEDGER.md` for the work in YOUR OWN WORDS, not in the words of the
   request. The ledger records what was MEASURED, so a hit there closes the
