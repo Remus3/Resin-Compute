@@ -6,7 +6,7 @@ This file writes the same bytes to the Desktop so the hand-off survives the
 chat scrolling away, a crashed client, or a session closed before the paste.
 It is the backup, never the primary.
 
-`NEXT_SESSION_PROMPT.md` is the source of truth. This module NEVER accepts
+`RSC-NEXT-SESSION.txt` is the source of truth. This module NEVER accepts
 prompt text as an argument: it reads the fenced block out of that file or it
 refuses, so the printed block, the tracked file and the Desktop copy cannot
 disagree with each other. There is no code path that writes a retyped copy.
@@ -71,7 +71,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 REPO = Path(__file__).resolve().parents[1]
-SOURCE = REPO / "NEXT_SESSION_PROMPT.md"
+SOURCE = REPO / "RSC-NEXT-SESSION.txt"
 
 # Never derived from an argument. `RC-` belongs to a sibling on this same
 # Desktop, so ResinCompute cannot have it; `RSC-` is the disambiguation.
@@ -96,7 +96,7 @@ MIN_BYTES = 2000
 #:
 #: Why that matters more here than in an ordinary file. The hand-off is pasted
 #: by hand into a cold session, quoted into notes to four sibling repos, and
-#: `NEXT_SESSION_PROMPT.md` is TRACKED in a PUBLIC repository. Sibling-E
+#: `RSC-NEXT-SESSION.txt` is TRACKED in a PUBLIC repository. Sibling-E
 #: raised exactly this and asked whether anyone gated PII more widely; this
 #: tree's honest answer was no. `tests/test_machine_identity.py` sweeps tracked
 #: files and `tests/test_no_secret_literals.py` sweeps them for credentials,
@@ -517,18 +517,31 @@ class Refusal(Exception):
 
 
 def extract_prompt(source_text: str) -> str:
-    """Return the single fenced block of `source_text`, or refuse.
+    """Return the hand-off text of `source_text`, or refuse.
 
-    Fences are matched as WHOLE LINES equal to the fence, so a backticked span
-    inside the prose cannot be mistaken for one. Two fence lines exactly: fewer
-    means there is no block, more means the file is ambiguous about which block
-    is the hand-off, and a guess there publishes the wrong text.
+    THE WHOLE FILE IS THE HAND-OFF, and that is a change of contract made on
+    2026-09-19 when `NEXT_SESSION_PROMPT.md` became `RSC-NEXT-SESSION.txt`.
+    The old source was a markdown page wrapping the hand-off in one fenced
+    block, so this function's job was to find that block and refuse if the page
+    carried zero or several. The new source is the RAW hand-off with no wrapper
+    and no fence - which is what the sibling trees keep, and what the operator
+    actually reads when the Desktop shortcut opens the file in Notepad. A
+    wrapper and a pair of fences are noise in that window.
+
+    A FENCED SOURCE IS STILL ACCEPTED AND STILL UNWRAPPED, deliberately. The
+    fleet keeps five copies of this pattern and they will not migrate on the
+    same day; refusing a fenced file would turn a shared tool into a local one.
+    A file carrying MORE than one fenced block is still refused, because that
+    file is ambiguous about which block is the hand-off and a guess there
+    publishes the wrong text.
+
+    Every other guard is UNCHANGED and now covers strictly more: the minimum
+    size, the ASCII rule and the leak scan used to see one block of the source
+    and now see all of it.
     """
     lines = source_text.splitlines(keepends=True)
     fences = [i for i, line in enumerate(lines) if line.rstrip("\r\n") == FENCE]
 
-    if len(fences) < 2:
-        raise Refusal("no_prompt_block", "the source has no fenced prompt block")
     if len(fences) > 2:
         raise Refusal(
             "multiple_prompt_blocks",
@@ -536,7 +549,7 @@ def extract_prompt(source_text: str) -> str:
             "the hand-off must be the only one",
         )
 
-    block = "".join(lines[fences[0] + 1 : fences[1]])
+    block = "".join(lines[fences[0] + 1 : fences[1]]) if len(fences) == 2 else source_text
 
     size = len(block.encode("ascii", errors="replace"))
     if size < MIN_BYTES:

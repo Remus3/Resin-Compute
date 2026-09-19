@@ -95,7 +95,16 @@ _VERDICT_WORDS = re.compile(
 _EMITS_OUTPUT = re.compile(r"(?i:Write-Host|Write-Step|Write-Output|Write-Information)|print\(")
 
 _CODE_SUFFIXES = (".ps1", ".py")
-_DOC_SUFFIXES = (".md",)
+
+#: `.txt` JOINED THIS SET ON 2026-09-19 AND IT IS NOT COSMETIC. The hand-off
+#: was `NEXT_SESSION_PROMPT.md` until that day, so a `.md`-only doc sweep
+#: covered it. It is now `RSC-NEXT-SESSION.txt`, the raw hand-off with no
+#: markdown wrapper, matching what the sibling trees keep and what the operator
+#: actually reads when the Desktop shortcut opens it. Without `.txt` here the
+#: rename would have carried the hand-off straight OUT of this sweep while
+#: every arm stayed green - a file leaving a corpus is exactly the silent
+#: failure this module's Arm 2 exists to catch, and Arm 2 did catch it.
+_DOC_SUFFIXES = (".md", ".txt")
 
 # This module is itself tracked and is scanned like everything else. It has no
 # exemption and needs none: the needles above are assembled, so its own bytes
@@ -214,7 +223,7 @@ def test_the_sweep_actually_covers_the_real_installers_and_the_hand_off() -> Non
     for expected in (
         "ops/install_responder_task.ps1",
         "ops/install_scheduled_task.ps1",
-        "NEXT_SESSION_PROMPT.md",
+        "RSC-NEXT-SESSION.txt",
         "README.md",
     ):
         assert expected in corpus, "corpus lost a path that carried the defect: " + expected

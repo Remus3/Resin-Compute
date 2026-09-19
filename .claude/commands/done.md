@@ -20,7 +20,7 @@ Three things were dropped on purpose, and each should stay dropped:
   seconds, so the overlap optimises a cost that does not exist here and would
   only add ordering rules to get wrong.
 - **No `WAKEUP_NOTES.md`.** Sibling-C and Sibling-B keep a rolling session log
-  plus an archive. Here `NEXT_SESSION_PROMPT.md` is the hand-off,
+  plus an archive. Here `RSC-NEXT-SESSION.txt` is the hand-off,
   `docs/LEDGER.md` is the closed-work history and `ROADMAP.md` is the open-work
   list. Three files already cover it; a fourth would just be a fourth place to
   go stale.
@@ -142,7 +142,7 @@ per landed unit of work.
 - Add new items for what this session opened up.
 - Do not touch items nobody worked on.
 
-## 7. Rewrite `NEXT_SESSION_PROMPT.md`
+## 7. Rewrite `RSC-NEXT-SESSION.txt` - the RAW hand-off, no wrapper
 
 This file is the SOURCE OF TRUTH for the hand-off. Sections 9 and 11 both read
 from it, so it is written once here and never retyped afterwards.
@@ -159,14 +159,29 @@ only what the operator pastes into it:
   hypothetical.
 - Open work, highest priority first, and anything that must NOT be redone.
 
-Two mechanical constraints, both enforced by
-`tools/publish_next_session.py`:
+**THE FILE IS THE HAND-OFF, RAW - NO MARKDOWN WRAPPER AND NO FENCE.** Changed
+2026-09-19 on operator ruling. It used to be `NEXT_SESSION_PROMPT.md`, a
+markdown page wrapping the hand-off in one fenced block. It is now
+`RSC-NEXT-SESSION.txt`, the bare text and nothing else, which is what the
+sibling trees keep and what the Desktop shortcut opens in Notepad - a wrapper
+and a pair of fences are noise in that window. Write the hand-off straight into
+the file; do not add a heading, a preamble or a fence.
 
-- **Exactly ONE fenced block in the file**, opened and closed by a line that is
-  exactly three backticks. The publisher refuses on zero, and refuses on more
-  than one rather than guessing which block is the hand-off.
+Mechanical constraints, enforced by `tools/publish_next_session.py`:
+
 - **7-bit ASCII, and at least 2000 bytes.** A truncated hand-off reads as
-  current, which is worse than a stale one.
+  current, which is worse than a stale one. These now cover the WHOLE file
+  rather than one block of it.
+- **A fenced source is still accepted and still unwrapped**, so the tool stays
+  usable across the fleet while the other trees migrate. MORE than one fenced
+  block is still refused, because that file is ambiguous about which block is
+  the hand-off.
+- **THE FILE IS TRACKED AND THE REPOSITORY IS PUBLIC.** It is swept by
+  `tests/test_machine_identity.py`, `tests/test_no_sibling_names.py` and
+  `tests/test_task_state_claims.py`. MEASURED 2026-09-19: a first draft of this
+  hand-off named a sibling repo's absolute path and the account short-name, and
+  all three guards fired. Do not write a real account, a sibling project name,
+  or a sibling's absolute path into it - use the channel codes.
 
 ## 8. Memory
 
@@ -177,24 +192,32 @@ file with no index line is invisible to the next session.
 ## 9. Publish the Desktop backup - BEFORE the banner, not after
 
 ```
-python tools/publish_next_session.py
+python tools/publish_next_session.py --check
 ```
 
-**The inline block in section 11 is the hand-off. This file is its BACKUP** -
-insurance against the chat scrolling away, a crashed client, or the session
-being closed before the paste. It is published HERE, ahead of the banner,
-specifically so that nothing at all follows the fenced block in section 11.
+**DO NOT RUN THE BARE PUBLISH UNTIL THE PUBLISHER IS CONVERTED.** Operator
+ruling 2026-09-19: the Desktop no longer holds a detached COPY of the hand-off,
+it holds `RSC-NEXT-SESSION.lnk` POINTING AT the tracked repo-root
+`RSC-NEXT-SESSION.txt` - the shape the sibling trees already use. A bare
+`python tools/publish_next_session.py` still writes the old detached copy and
+would recreate exactly the stale artifact that ruling removed. `--check` reports
+drift and writes nothing, so it is safe and is what this section now runs.
 
-- It reads the fenced block out of `NEXT_SESSION_PROMPT.md`, never a retyped
-  copy, so the printed block and the Desktop file cannot disagree.
-- It writes `RSC-NEXT-SESSION.txt` and only that. The Desktop is shared with
-  five sibling projects that own the `CS-`, `LL-`, `LW-`, `RC-` and `RM-`
-  prefixes - those five basenames are observed on disk and are deliberately not
-  codenamed, because a guard that compares against invented filenames is
-  vacuous. `RSC-` is chosen to be unconfusable with any of them.
-- Report the byte count it prints. **A refusal is a failure of the ritual** -
-  fix `NEXT_SESSION_PROMPT.md` and re-run. Never hand-write the Desktop copy.
-- `--check` reports drift and writes nothing, if you want to look first.
+The conversion of the publisher to converge the shortcut instead of writing a
+copy is an OPEN ROADMAP ROW. Until it lands, this section verifies rather than
+publishes.
+
+- There is now only ONE copy of the hand-off text anywhere: the tracked
+  `RSC-NEXT-SESSION.txt` in the repo root. The inline block in section 11 is
+  read out of that same file, so the printed block and the file cannot
+  disagree - not because a guard compares them, but because there is nothing
+  left to disagree with.
+- The Desktop is shared with five sibling projects that own the `CS-`, `LL-`,
+  `LW-`, `RC-` and `RM-` prefixes - those five basenames are observed on disk
+  and are deliberately not codenamed, because a guard that compares against
+  invented filenames is vacuous. `RSC-` is unconfusable with any of them.
+- If `--check` refuses, that is a failure of the ritual - fix
+  `RSC-NEXT-SESSION.txt` and re-run. Never hand-write anything onto the Desktop.
 
 ## 10. Banner
 
@@ -222,12 +245,12 @@ Anything that failed is surfaced ABOVE the banner, not folded into it.
 
 ## 11. Print the hand-off inline - THE LAST THING IN THE MESSAGE
 
-Print the fenced block from `NEXT_SESSION_PROMPT.md` verbatim, in chat, in one
+Print the fenced block from `RSC-NEXT-SESSION.txt` verbatim, in chat, in one
 fence. This is the continuity mechanism, not a courtesy: rediscovery - redoing
 closed work, re-pitching a settled decision, acting on a stale doc - is the
 dominant failure mode, and this block is the defence against it.
 
-- **Inline, in full, every time.** Writing it to `NEXT_SESSION_PROMPT.md` in
+- **Inline, in full, every time.** Writing it to `RSC-NEXT-SESSION.txt` in
   section 7 does NOT satisfy this, and neither does summarising it or pointing
   at the file. The operator pastes out of the chat.
 - **No language tag on the fence.** A `bash` tag puts a Run button on it.

@@ -33,16 +33,104 @@ version. What follows is everything the scaffold deliberately did not do.
   semantics. NOT DONE: decide whether the doc, the pin or the host is the thing
   that should move. Nothing was changed about it this session.
 
-- **NEW 2026-09-16. `core/atomic_io.py` LOGS RAW `OSError` TEXT WITH FULL
-  FILESYSTEM PATHS TO A CONSOLE HANDLER ON STDERR.** CONTAINED at the watcher's
-  call site in `scripts/watch_inbox.py`, which mutes console StreamHandlers that
-  are not FileHandlers so the raw error still reaches the day's log file. EVERY
-  OTHER CALLER OF `atomic_io` IS STILL EXPOSED on any user-facing surface, and
-  this tree's rule is that a raw API or error string never reaches one. A full
-  path in stderr is also a machine-identity leak of the kind already closed
-  once here. NOT DONE: decide whether the library should route raw error text to
-  the file handler only, which is the fix that covers every caller rather than
-  one. The call-site containment is deliberately NOT the answer.
+- **DONE 2026-09-19, commit `2802447`. THE RAW-ERROR LEAK FROM
+  `core/atomic_io.py` IS CLOSED FOR EVERY CALLER, AND THIS ROW'S OWN
+  PRESCRIPTION WAS REFUTED ON THE WAY.** Shipped as
+  `_RedactingColorFormatter` in `core/log_setup.py`, which rewrites the
+  repo-root and user-profile prefixes to `<repo>` and `<user>` on the CONSOLE
+  handler only, leaving the file handler's plain formatter untouched so the day
+  log keeps the raw absolute path. Pinned by
+  `tests/test_log_setup_console_redaction.py`.
+
+  THIS ROW SAID THE FIX WAS TO ROUTE RAW ERROR TEXT TO THE FILE HANDLER ONLY,
+  FROM INSIDE THE LIBRARY. That is refuted on MECHANISM, not taste:
+  `core/log_setup.py` caches one console handler and one file handler in module
+  globals and shares both process-wide - verified by object identity across two
+  loggers - so `core/atomic_io.py` has no handle on either and cannot express
+  "console but not file". The counter-position in the docstring of
+  `_console_logging_muted` at `scripts/watch_inbox.py:479` is CONCEDED on its
+  library argument and overruled on its scope: the choice was never
+  library-versus-caller but `core/atomic_io.py` versus `core/log_setup.py`, and
+  the latter already owns a console-only rendering decision in
+  `_ColorFormatter`.
+
+  THIS ROW ALSO OVERSTATED THE SCOPE and the correction is kept so nobody
+  re-derives it. "Every other caller is still exposed" was wrong: measured six
+  importers, of which `core/provenance.py` has NO live caller - only
+  `tests/test_provenance.py` imports it - leaving four live-exposed importers
+  over seven call sites. The containment in `scripts/watch_inbox.py` was NOT
+  deleted and is still live; it also suppresses ANSI escapes on a hook lane
+  whose stdout is a parsed contract, which redaction does not replace.
+
+- **NEW 2026-09-19. THE `<user>` REDACTION IS BLIND TO THE 8.3 SHORT PATH
+  FORM.** `tempfile.gettempdir()` returns the 8.3 SHORT form of the user
+  profile while `Path.home()` returns the long form, so a short-form path does
+  not match the `<user>` prefix and reaches the console unredacted. The two
+  spellings are deliberately not written out here - this file is tracked and
+  public, and `tests/test_machine_identity.py` refuses either of them. The repo root has no short-name
+  form on this host, so `<repo>` is unaffected. NOT DONE, and the shape is not
+  obvious: the standard library has no portable short-name resolver, and a
+  second hardcoded prefix would be a machine-specific literal in a module whose
+  whole job is to remove machine identity. CLOSES WHEN a `%TEMP%`-derived path
+  is observed redacted on the console by an arm that was first seen RED.
+
+- **NEW 2026-09-19. THE HAND-OFF DOES NOT WORK LIKE THE REST OF THE FLEET, AND
+  THE OPERATOR HAS RULED ON BOTH HALVES.** Operator observation, 2026-09-19.
+  RC, LL and LW each keep `<CODE>-NEXT-SESSION.txt` as a TRACKED PLAIN-TEXT
+  FILE IN THE REPO ROOT with a Desktop `.lnk` POINTING AT IT - resolved via
+  WScript.Shell this session: each sibling's `.lnk` targets that sibling's own
+  repo root, with the working directory set to the same root. This tree keeps
+  `NEXT_SESSION_PROMPT.md` and writes a DETACHED BYTE COPY to the Desktop,
+  which was already stale when measured. RC kept both files and its
+  `NEXT_SESSION_PROMPT.md` is now 12 days stale against its `.txt`, which is
+  the decay the ruling avoids.
+
+  OPERATOR RULING 1: RENAME, ONE FILE ONLY. `NEXT_SESSION_PROMPT.md` becomes
+  `RSC-NEXT-SESSION.txt` in the repo root, tracked, single source of truth, no
+  second copy of the hand-off text anywhere.
+  OPERATOR RULING 2: REPLACE THE DESKTOP COPY WITH A SHORTCUT, which is an
+  explicit authorization for that ONE delete and that ONE write outside the
+  repo root and for nothing else.
+
+  BOTH RULINGS ARE LANDED. `NEXT_SESSION_PROMPT.md` was `git mv`-ed to
+  `RSC-NEXT-SESSION.txt` so history follows it, and its markdown wrapper and
+  fences were stripped: the file is now the RAW hand-off, matching the sibling
+  shape and matching what Notepad shows when the shortcut opens it. The Desktop
+  now holds `RSC-NEXT-SESSION.lnk` targeting the tracked repo-root file with
+  the working directory set to the repo root, read back through `WScript.Shell`
+  and verified to resolve. There is no detached copy of the hand-off anywhere.
+
+  THREE GUARDS FIRED ON THE FIRST DRAFT AND EACH CAUGHT A REAL DEFECT, which is
+  recorded because it is the evidence that the rename did not quietly move the
+  file out of anything. `tests/test_machine_identity.py` caught the account
+  short-name and long-name written into the hand-off and into this file;
+  `tests/test_no_sibling_names.py` caught a sibling project named in plain text
+  in this file; and `tests/test_task_state_claims.py` Arm 2 caught the hand-off
+  LEAVING its own sweep, because that module's `_DOC_SUFFIXES` was `.md` only
+  and the rename would have carried the file out of the corpus with every arm
+  green. `.txt` was added there with the reasoning inline.
+
+  STILL OPEN - THE PUBLISHER IS NOT CONVERTED. `tools/publish_next_session.py`
+  still writes a detached Desktop COPY rather than converging the shortcut, so
+  a bare run of it recreates exactly the stale artifact ruling 2 removed.
+  `.claude/commands/done.md` section 9 now runs `--check` instead and says why.
+  NOT DONE: convert the module to converge the `.lnk`, REUSING the proven
+  idempotent converge logic in `scripts/make_shortcut.py` - absent create,
+  present-and-correct change nothing, present-and-different rewrite,
+  `--no-clobber` refuse - rather than writing a second `.lnk` writer. Note that
+  `tools/publish_next_session.py:78` holds
+  `TARGET_NAME = "RSC-NEXT-SESSION.txt"` as the DESKTOP basename while `SOURCE`
+  is now the repo-root file of that same name, so one basename currently means
+  two things and must be split when the module is converted. About fifteen arms
+  in `tests/test_publish_next_session.py` assert the copy behaviour and move
+  with it. Most of that module's guard architecture exists BECAUSE it writes a
+  detached copy, so re-justify each guard rather than deleting any on the
+  grounds that its old reason moved.
+
+  ALSO OPEN, minor: `.gitattributes` has no explicit `*.txt` rule, so the
+  hand-off resolves to `eol=lf` through `* text=auto eol=lf`. Verified correct
+  by `git check-attr`. Whether to make it explicit is an open call, since this
+  file is the one artifact that leaves the toolchain for Notepad.
 
 - **NEW 2026-09-16. THE SHAPE-GRADER DETECTOR CANNOT SEE A SOURCE READ THROUGH
   ANYTHING BUT A MODULE-LEVEL NAME.** `tools/gate_mutation_runner.py` requires

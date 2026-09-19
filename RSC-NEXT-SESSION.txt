@@ -1,0 +1,190 @@
+Read CLAUDE.md, README.md, docs/SPEC_SCAFFOLD.md, ROADMAP.md, docs/LEDGER.md and
+git log. Before planning any character build read docs/GOAL_SPEC_SEED_TEAM.md.
+Before adding any data source read docs/LICENSE_NOTES.md. Before re-litigating a
+past choice read docs/adr/README.md.
+
+LANED LOOPING IS ARMED BUT NOT ACTIVE FOR THIS TREE. Operator instruction, late
+2026-09-16, still standing: ONLY RC AND CS RUN HEADLESS LOOPED LANES FOR NOW.
+RSC DOES NOT. Work the open items normally, one at a time, and keep the main
+thread quiet. Do not start a looping session unless the operator says so in this
+session, in their own words.
+
+THE SESSION SHAPE IS STILL SUBAGENT-FIRST AND THAT IS NOT THE SAME THING.
+Standing operator directive: the main session is the OPERATOR'S SURFACE and must
+stay quiet and clear, so the work happens in subagents while the main thread
+holds only the plan, the seams, the merge and the report. Disjoint slices before
+dispatch, a distinct lens per refuter, and the agent that produced a thing never
+grades it. Agreement between two agents is not evidence - find their shared input
+and test THAT.
+
+DO NOT RE-DERIVE THE GACHA CONSTANTS from memory or a web search. They are
+verified and recorded in docs/SPEC_SCAFFOLD.md section 3, with the three
+corrections to the original brief in docs/adr/ADR-003-forecaster-model.md. The
+50/50 has been 55.000 percent consolidated since version 5.0, not 50. The weapon
+soft-pity ramp SATURATES AT PULL 77 under a 7 percent increment and any claim of
+79 or 80 is arithmetically impossible. 1.600 percent is 1 / E[wishes per 5-star],
+a long-run average, NEVER a per-wish Bernoulli parameter.
+
+STATE OBSERVED 2026-09-19 at commit 2802447, AS A READING AND NOT A PROMISE.
+main clean, one commit this session. Measured from the repo root:
+  python -m pytest tests                      2929 passed, 4 skipped
+  python -m pytest agents/pity_engine            80 passed
+  python -m pytest tests/test_licence_posture.py 47 passed
+  python -m pytest tests/test_docs_consistency.py 34 passed
+  python scripts/qa_companion.py      17 passed, 0 failed, 2 skipped, 3 noted
+  cd shell && node --test              52 pass, 0 fail
+  python -m headless.runner --once --dry-run   exit 0, 0 pass 0 fail 6 skip
+  python -m ruff check .               All checks passed
+  python -m mypy                       Success, 36 source files - ADVISORY ONLY
+core.hooksPath is ABSOLUTE here: C:\Resin Compute\.githooks. That matters - a
+RELATIVE hooks path resolves against the working directory, so every worktree
+would silently run NO hooks.
+The host python reports 3.14.4 while CLAUDE.md says 3.11 and mypy.ini pins 3.11,
+so CI and this host are NOT running the same semantics. Unresolved, in ROADMAP
+Now. The qa_companion NOTE rows say ruff, pytest and mypy are all OLDER here than
+the CI pins, so a local green is OPTIMISTIC rather than conclusive.
+
+GATES, in the order /done runs them. Run the two Python suites SEPARATELY, never
+pytest . from the root. READ PYTEST'S OWN EXIT CODE, never a pipeline's - a
+| tail -2 masked a real exit 1 in this tree on 2026-09-16 and reported EXIT=0.
+Use PIPESTATUS or no pipe. pytest prints NO summary line here, because pytest.ini
+already carries -q and a command-line -q doubles it into -qq; judge by exit code.
+A chained gate run reports ONLY its last command's status, so run each gate as
+its own command.
+
+TRAPS MEASURED IN THIS TREE. Every one of these has actually bitten.
+  git add BEFORE running the suite. Several guards build their corpus from
+    git ls-files and CANNOT SEE an unstaged file. That produced a false green
+    twice on 2026-09-16, once hiding three real failures. It matters doubly on a
+    RENAME, where the old path lingers in the index until you stage.
+  A WORKTREE FORKS FROM THE PRE-DISPATCH HEAD. Slices have started up to 16
+    commits behind. Check merge-base and fast-forward BEFORE working.
+  AN ARM BUILT IN A WORKTREE MAKES CLAIMS ABOUT A WORKTREE. A gitignored
+    directory exists exactly where somebody created it, so moon_sync_inbox/ is
+    present in the primary tree and absent in every worktree. Ask what git
+    IGNORES, not what is on disk - and KEEP THE TRAILING SLASH on the pathspec,
+    because an ignore rule with a trailing slash is a DIRECTORY-ONLY pattern.
+  git check-ignore RETURNS ITS ANSWER IN THE EXIT CODE, not on stdout. LW
+    measured the sharper form on 2026-09-19: check-ignore -v can exit 0 printing
+    an EMPTY pattern column, a false GREEN for anyone parsing -v stdout. All nine
+    RSC callers use -q and read the return code, so that shape cannot fire here.
+  EXIT 2 IS NOT SELF-EVIDENCING. A module syntax error and a tool deliberately
+    refusing to start both land there. Carry the meaning in the message.
+  A BARE GATE INVOCATION IS VACUOUS. The only valid proof a hook fires is end to
+    end: negative control first, then stage a banned glyph, attempt a REAL
+    commit, assert HEAD is unchanged.
+  BANNED-GLYPH LITERALS NEED chr(0x2014). Typing an em-dash into an ASCII test
+    makes the test violate the rule it is testing.
+  NEVER Stop-Process. Use taskkill, and under Git Bash write taskkill //F //PID.
+  A /tmp REDIRECT UNDER GIT BASH LANDS IN THE GIT INSTALL DIRECTORY, not C:\.
+    Measured 2026-09-19: that directory root now holds 528 scratch files, 9 of
+    them ours. Use the session scratchpad.
+  A SHELL LOOP OVER A PATH WITH A SPACE SPLITS THIS REPO ROOT. for w in $(...)
+    split C:/Resin Compute at the space and reported 0 for every row, which reads
+    as NOT DIRTY. Use while IFS= read -r. The tell was the same truncated first
+    field on every line - the command did not fail, it answered about the wrong
+    thing.
+  Path.rglob AND Path.glob('**/...') CANNOT PRUNE. Only os.walk with an in-place
+    dirnames[:] assignment avoids the full descent. tools/gate_mutation_runner.py
+    and tools/first_run_capture.py carry the correct shape; copy one.
+  A TEST THAT GREPS A MODULE'S SOURCE IS A SHAPE ARM and pins format, not
+    behaviour. It survives the defect. Build a real behavioural arm that can fail
+    in BOTH directions.
+  A CLEARANCE ARM WILL FIRE WHEN YOU ADD A TEST MODULE.
+    tests/test_line_endings.py:156 holds _MIN_TRACKED_FILES, raised 90 -> 100 on
+    2026-09-19 because the tests/ enumeration reached exactly 90. Re-measure both
+    ends from the tree and RAISE it; never lower it and never weaken the arm.
+  mypy's Success covers only core/, engines/, ingest/, agents/pity_engine/ and
+    tools/. It says NOTHING about scripts/ or tests/. Never cite it for those.
+
+OPEN WORK, highest first, all detailed in ROADMAP.md under Now:
+  1. THE HAND-OFF CONVERGENCE, operator-ruled 2026-09-19 and NOT DONE - it was
+     dispatched and interrupted before any code landed. RC, LL and LW each keep
+     <CODE>-NEXT-SESSION.txt as a TRACKED file in the repo root with a Desktop
+     .lnk pointing AT it; this tree keeps NEXT_SESSION_PROMPT.md and writes a
+     detached Desktop COPY that was already stale when measured. RULING 1:
+     rename NEXT_SESSION_PROMPT.md to RSC-NEXT-SESSION.txt, one file only, no
+     second copy anywhere. RULING 2: delete the Desktop copy and write
+     RSC-NEXT-SESSION.lnk pointing at the repo-root file - an EXPLICIT operator
+     authorization for that one delete and that one write outside the repo root
+     and for NOTHING else. The ROADMAP row carries the full measured groundwork:
+     the 26 tracked references and where they are, that .txt is already in the
+     allowed-suffix set at tests/test_docs_consistency.py:76, that all three
+     sibling .txt hand-offs are LF, and that scripts/make_shortcut.py already has
+     idempotent .lnk converge logic to REUSE rather than re-derive.
+  2. ops/runtime/outbox_drafts/ has SIX files, oldest 2026-09-08, and ZERO code
+     references anywhere in this repo - re-confirmed by measurement 2026-09-19.
+     Classified UNKNOWN, not PRUNE: an undelivered draft reads as sent to whoever
+     finds it. Establish what wrote it, then wire it or remove it. Not on size.
+  3. The <user> redaction is blind to the 8.3 short path form.
+     tempfile.gettempdir() returns the 8.3 SHORT form of the user profile
+     while Path.home() returns the long form, so a %TEMP%-derived path
+     reaches the console unredacted. New 2026-09-19. The stdlib has no portable short-name resolver
+     and a second hardcoded prefix would be a machine-specific literal in the
+     module whose job is removing machine identity.
+  4. The shape-grader detector in tools/gate_mutation_runner.py cannot see a
+     source read through a parametrize argument, a local variable or an f-string
+     path. 16 of 20 reader modules are blind AND undeclared. A wider regex is
+     NOT the answer - the declaration mechanism must rest on something other
+     than expression form.
+  5. scripts/precommit_pycompile.py:33 spawns git unflagged in the hook lane -
+     the fifth spawn there and the only one without CREATE_NO_WINDOW.
+  6. A vendored file arriving with no byte pin is invisible to
+     tests/test_vendored_provenance.py. Needs a convention, not a regex.
+  7. This tree's deny-based arms verify the process TOKEN and not the PATH; the
+     denial is a function of both.
+  8. The host python is 3.14.4 while CLAUDE.md and mypy.ini say 3.11. Decide
+     whether the doc, the pin or the host moves.
+
+DO NOT REDO, all settled and re-litigating them wastes a session:
+  The vendored docs/CHANNEL.md is byte-pinned at sha256 899f6eb957cc26ee25993d
+  83d65d8ca291841fe4eec24a48f729c2dc005f4c6b, 20633 bytes, 0 CR. Do not edit one
+  byte; attribution lives BESIDE it in docs/LICENSE_NOTES.md. Apache-2.0 into
+  this tree's GPL-3.0-or-later, compatible ONE-WAY. LL withdrew its objection on
+  2026-09-19: RC DID name the license, so OPS-91 criteria 1 and 2 are met.
+  tests/test_channel_doc_pin.py deliberately records NO COUNT of how many sweeps
+  grade the doc. The bare-filename case in its path arm is a PERMANENT RECORDED
+  BLIND SPOT.
+  The spawn census claim was NARROWED rather than the matcher widened a third
+  time; its blind list is written as ARMS. Do not widen it.
+  The core/atomic_io.py raw-error leak is CLOSED at commit 2802447, and BOTH of
+  the tree's old recorded positions on it were wrong. The fix is a console-only
+  redacting formatter in core/log_setup.py, NOT in atomic_io - which cannot
+  address one handler because they are cached module-global and shared
+  process-wide - and NOT at the call site. The containment in
+  scripts/watch_inbox.py was NOT deleted and is still live; it also suppresses
+  ANSI escapes on a hook lane whose stdout is a parsed contract.
+
+THE CROSS-REPO INBOX IS NOT OPTIONAL READING. Review moon_sync_inbox/ AND its
+subdirectories, then ingest, implement and respond. Reading the filename list is
+not reviewing it. Verbatim bytes SUPERSEDE any prose describing them. Triage
+every file into ingested, already-have-an-equivalent, not-applicable-because-X,
+or applicable-and-not-done - the fourth bucket reaches the roadmap. SILENCE
+READS AS DISSENT. A REVIEW- you originate MUST carry the first 12 hex of the
+sha256 over its frozen subject in the filename. The inbox is gitignored, so NO
+guard here can see it and a claim that must be guarded has to live in a TRACKED
+file. Filename timestamps drift per sender by up to six hours - never sort by
+name. Writes into moon_sync_inbox/ are PRE-AUTHORIZED: never ask for send
+authorisation and never ask which position to take.
+
+INBOX STATE AS OF 2026-09-19-1625. The five notes outstanding at session start
+were triaged and ANSWERED in one broadcast,
+2026-09-19-1625-from-RSC-CORRECTION-82c6af46e357-..., one sha256 across all five
+recipient copies. It carried a SELF-CORRECTION: our own sweep note 82c6af46e357
+said ".claude/worktrees/ went from 76 MiB to 36 KiB" and BOTH figures were wrong
+and contradicted that note's own section A - the true reading is 127952319 bytes
+across 2756 files down to 8822 bytes in 1 file.
+TWO NOTES ARRIVED AFTER THAT BROADCAST AND ARE NOT TRIAGED. Triage them first:
+  2026-09-19-1521-from-LW-REVIEW-82c6af46e357-section-d-self-check-no-timer-
+    driven-unpruned-walker-and-the-near-miss-was-in-a-drift-guard
+  2026-09-19-1520-from-LW-REVIEW-e085b4a92ab2-attribution-rows-confirmed-lw-
+    claims-both-and-lw-has-the-two-key-transcript-defect-cs-named
+RSC's standing positions, already sent, so do not re-derive them: RSC claims
+exactly TWO rows outside its repo root, C:\rsc-first-run (15363146655 bytes,
+KEEP) and C:\rsc-screen-ctl (4903652 bytes, no position yet), and claims NO
+drive-root artifact. RSC holds ONE key in ~/.claude/projects/. RSC's
+git-install-root contribution is 9 files / 28540 bytes. The leading-slash path
+sweep returns ZERO genuine candidates, reported with six named blind spots.
+RC merges the five reports into one machine-wide reconciliation and the operator
+adjudicates before any gated deletion pass - do NOT delete anything outside this
+repo root before that ruling lands.
