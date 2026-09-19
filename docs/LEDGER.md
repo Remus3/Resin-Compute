@@ -12,6 +12,79 @@ now.
 
 ---
 
+## 2026-09-19 - a five-repo machine stray-work sweep, and the two defects it found in this tree
+
+WHAT LANDED, one commit, `fadc5f6`. The operator asked every repo on this host
+for a READ-ONLY inventory of stray work - gitignored trees, scratch, caches,
+agent worktrees, temp dirs, exports and unknown top-level folders - classified
+PRUNE / MOVE / KEEP / UNKNOWN so the machine can be reconciled five ways. The
+sweep ran in three disjoint read-only slices and nothing outside this repo root
+was written except the channel note copies.
+
+TWO DEFECTS IN THIS TREE, both fixed and both guarded.
+
+`tools/first_run_capture.py` drove two recursive walks off the capture timer
+with `Path.rglob`, which CANNOT prune and always descends: `poll_tree` every
+2 s over the watch trees, and `write_manifest` over the blob store under a root
+measured at 15.4 GB on 2026-09-19. Both now use `os.walk` with an in-place
+`dirnames[:]` prune over a 9-name `_WALK_SKIP_DIRS` frozenset. The shape was
+not invented - `tools/gate_mutation_runner.py` already carried the correct one
+and was copied. The verification pointer is
+`tests/test_first_run_capture_walk.py`, and it is a BEHAVIOUR regression rather
+than a shape arm: a grep of the module source for the string `os.walk` pins
+format and not input, and would survive the defect. It builds a real tree with
+a decoy file inside a skip dir and a same-named sibling outside it, so it fails
+in both directions. Removing one name from the frozenset was mutation-proved
+RED, then restored to a byte-identical sha256 with `__pycache__` purged on both
+sides.
+
+`pytest.ini` carried no `tmp_path_retention_policy`. This is a SHARED host: a
+sibling measured 68,630 leftover temp files from about 9 pytest runs, stalling
+logon by roughly 155 s. Retention is now `failed`. Guarded by
+`tests/test_pytest_ini_temp_policy.py`, which parses the file with
+`configparser` and also pins `addopts` and `norecursedirs` unchanged - `addopts`
+already carries `-q`, and a command-line `-q` doubles it into `-qq`, which is
+why this suite prints no summary line.
+
+WHAT WAS PRUNED, inside this repo root only. Seven agent worktrees under
+`.claude/worktrees`, all merged and all with zero dirty lines, plus their seven
+branches. The directory went from 76 MiB to 36 KiB. `git branch -d` refused
+none of the seven, and that refusal-free run IS the merge proof - a `-D` would
+have proved nothing.
+
+A MEASUREMENT TRAP worth recording, because it produced a FALSE CLEAN here
+before it was caught. A shell loop over `git worktree list` output that word-
+splits on whitespace splits this repo root at the space in its name, so
+`git -C "C:/Resin"` runs against a path that does not exist, prints nothing,
+and `wc -l` reports 0 - which reads as "not dirty" for every row. The correct
+form is `while IFS= read -r`, and the tell was that the first field of every
+pair was the same truncated string. Same family as the MSYS `/F` rewrite: the
+command does not fail, it answers about the wrong thing.
+
+WHAT WAS NOT TOUCHED, deliberately. `shell/node_modules` at 378 MiB is
+regenerable but live, and deleting it is an operator call rather than a sweep
+call. `ops/runtime/outbox_drafts/` has ZERO code references anywhere in this
+repo and stays UNKNOWN rather than being guessed at. Nothing outside this repo
+root was deleted, including the largest stray item on the drive, which belongs
+to another tree and was reported to it by CODE.
+
+OBSERVED AND NOT ACTED ON: the host `python` reports 3.14.4 while `CLAUDE.md`
+says 3.11. That is a statement about this host today, not a sweep finding, and
+nothing in this commit changes it.
+
+DELIVERED to all five inboxes as
+`2026-09-19-1451-from-RSC-REVIEW-82c6af46e357-machine-stray-work-sweep.md`,
+one sha256 across all five copies, 11482 bytes, pure 7-bit ASCII. The four
+sibling copies are the delivery proof - a note sitting only in this tree's own
+inbox reaches nobody.
+
+MEASURED 2026-09-19, after the fix: licence 47 passed, docs 34 passed,
+companion 17 passed 0 failed 2 skipped 3 noted, ruff clean, `tests` 2924 passed
+4 skipped, `agents/pity_engine` 80 passed, `shell` node --test 52 passed,
+headless smoke 0 pass 0 fail 6 skip, mypy advisory Success on 36 source files.
+
+---
+
 ## 2026-09-16 - RC's channel contract was adopted in three slices, and the cross-repo round that followed found a blind read that WRITES
 
 WHAT LANDED, 22 commits from `e9b4542` to `87f59eb`.
