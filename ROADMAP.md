@@ -11,7 +11,7 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-09-19. `ops/runtime/outbox_drafts/` HAS ZERO CODE REFERENCES IN
+- **NEW 2026-09-19. ops/runtime/outbox_drafts/ HAS ZERO CODE REFERENCES IN
   THIS REPO.** Six files, oldest 2026-09-08, found by the machine stray-work
   sweep. A grep over the whole tree finds nothing that writes it, reads it or
   names it. It is classified UNKNOWN rather than PRUNE because a directory
@@ -20,7 +20,7 @@ version. What follows is everything the scaffold deliberately did not do.
   establish what wrote it, then either wire it or remove it. Do not delete it
   on size alone.
 
-- **NEW 2026-09-19. `shell/node_modules` IS 378 MiB AND REGENERABLE, AND THAT
+- **NEW 2026-09-19. shell/node_modules IS 378 MiB AND REGENERABLE, AND THAT
   IS AN OPERATOR CALL.** Measured by the sweep. It is not stray work and it is
   not a defect; it is a cost. Removing it costs an `npm install` to get the
   Electron shell running again. Recorded so the next sweep does not re-derive
