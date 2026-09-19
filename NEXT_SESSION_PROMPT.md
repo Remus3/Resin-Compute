@@ -46,9 +46,9 @@ soft-pity ramp SATURATES AT PULL 77 under a 7 percent increment and any claim of
 79 or 80 is arithmetically impossible. 1.600 percent is 1 / E[wishes per 5-star],
 a long-run average, NEVER a per-wish Bernoulli parameter.
 
-STATE OBSERVED 2026-09-16 at commit 87f59eb, AS A READING AND NOT A PROMISE.
-main clean, 22 commits landed this session. Measured from the repo root:
-  python -m pytest tests                      2919 passed, 4 skipped
+STATE OBSERVED 2026-09-19 at commit fadc5f6, AS A READING AND NOT A PROMISE.
+main clean. Measured from the repo root:
+  python -m pytest tests                      2924 passed, 4 skipped
   python -m pytest agents/pity_engine            80 passed
   python -m pytest tests/test_licence_posture.py 47 passed
   python -m pytest tests/test_docs_consistency.py 34 passed
@@ -60,6 +60,9 @@ main clean, 22 commits landed this session. Measured from the repo root:
 core.hooksPath is ABSOLUTE here: C:\Resin Compute\.githooks. That matters - a
 RELATIVE hooks path resolves against the working directory, so every worktree
 would silently run NO hooks.
+The host python reports 3.14.4 while CLAUDE.md says 3.11 and mypy.ini pins 3.11.
+Observed 2026-09-19. Everything above is green on the host interpreter, so CI
+and this host are NOT running the same semantics. Unresolved, in ROADMAP Now.
 
 GATES, in the order /done runs them. Run the two Python suites SEPARATELY, never
 pytest . from the root. READ PYTEST'S OWN EXIT CODE, never a pipeline's - a
@@ -95,10 +98,31 @@ TRAPS MEASURED IN THIS TREE. Every one of these has actually bitten.
   NEVER Stop-Process. Use taskkill, and under Git Bash write taskkill //F //PID.
   A /tmp REDIRECT UNDER GIT BASH LANDS IN THE GIT INSTALL DIRECTORY, not C:\.
     Use the session scratchpad.
+  A SHELL LOOP OVER A PATH WITH A SPACE SPLITS THIS REPO ROOT. Measured
+    2026-09-19: for w in $(git worktree list ...) split C:/Resin Compute at the
+    space, so git -C "C:/Resin" ran against a path that does not exist, printed
+    nothing, and wc -l reported 0 - which reads as NOT DIRTY for every row. Use
+    while IFS= read -r. The tell was the same truncated first field on every
+    line. The command did not fail; it answered about the wrong thing.
+  Path.rglob AND Path.glob('**/...') CANNOT PRUNE. They always descend, so a
+    skip-name set applied AFTER the walk yields a path still pays the full
+    descent. Only os.walk with an in-place dirnames[:] assignment avoids it.
+    tools/gate_mutation_runner.py and tools/first_run_capture.py carry the
+    correct shape; copy one of them rather than re-deriving.
+  A TEST THAT GREPS A MODULE'S SOURCE FOR os.walk IS A SHAPE ARM and pins
+    format, not input. It survives the defect. Build a real tmp_path tree with a
+    decoy inside the skip dir and a same-named sibling outside it, so the arm
+    can fail in BOTH directions.
   mypy's Success covers only core/, engines/, ingest/, agents/pity_engine/ and
     tools/. It says NOTHING about scripts/ or tests/. Never cite it for those.
 
 OPEN WORK, highest first, all detailed in ROADMAP.md under Now:
+  0. NEW 2026-09-19 from the machine stray-work sweep: ops/runtime/outbox_drafts/
+     has SIX files, oldest 2026-09-08, and ZERO code references anywhere in this
+     repo. Classified UNKNOWN, not PRUNE - an undelivered draft reads as sent to
+     whoever finds it. Establish what wrote it, then wire it or remove it. Do
+     not delete it on size alone. shell/node_modules at 378 MiB is regenerable
+     but live and is an operator call, not a sweep call.
   1. core/atomic_io.py logs raw OSError text with full filesystem paths to a
      console handler. CONTAINED at one call site; every other caller is exposed.
      The library-level fix is the one that covers them all.
