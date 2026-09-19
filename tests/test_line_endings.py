@@ -146,14 +146,26 @@ class _Enumeration(typing.NamedTuple):
 # test_the_floor_keeps_wide_clearance_below_the_real_tree closes that by
 # asserting the interval this value has to sit in rather than the value.
 #
-# 90 AND NOT 50, and the change came out of grading rather than taste. 50 stood
-# here until 2026-09-10, when the lower bound stopped being asserted against
-# itself and started being asserted against the partial enumerations this tree
-# can actually return: `git ls-files` run from `tests/` answers 70 paths, and
-# 70 clears 50. The value has to sit above the widest such answer and at or
-# under half the corpus - 70 < 90 <= 106 against the 213 tracked on 2026-09-10 -
-# and that arm derives both ends from the tree rather than restating 90.
-_MIN_TRACKED_FILES = 90
+# 100 AND NOT 50, and every move of this value came out of grading rather than
+# taste. 50 stood here until 2026-09-10, when the lower bound stopped being
+# asserted against itself and started being asserted against the partial
+# enumerations this tree can actually return: `git ls-files` run from `tests/`
+# answered 70 paths, and 70 clears 50. The value has to sit above the widest
+# such answer and at or under half the corpus - 70 < 90 <= 106 against the 213
+# tracked on 2026-09-10 - and that arm derives both ends from the tree rather
+# than restating the literal.
+#
+# RAISED 90 -> 100 ON 2026-09-19, AND THE TRIGGER IS THE POINT. The `tests/`
+# enumeration reached exactly 90 when one test module was added, so the widest
+# partial answer became EQUAL TO the floor and the clearance arm fired - working
+# exactly as written, since 90 no longer sat ABOVE the widest partial answer.
+# Re-measured at that moment: 239 tracked overall, so the interval was
+# 90 < value <= 119, and 100 was taken for clearance rather than for the
+# nearest legal value. THIS WILL RECUR. The `tests/` enumeration grows every
+# time a module is added, so any slice that adds one walks toward this bound
+# again; the remedy each time is to RAISE this literal after re-measuring both
+# ends, never to lower it and never to weaken the arm that caught it.
+_MIN_TRACKED_FILES = 100
 
 # THE FLOOR ALONE CANNOT SEE A PARTIAL ENUMERATION. A `git ls-files` narrowed by
 # a pathspec, a sparse checkout, or a cwd that landed in a subdirectory can
