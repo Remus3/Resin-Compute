@@ -66,6 +66,16 @@ WATCH_TREES: list[tuple[str, Path, int]] = [
     ("user-screenshots", USERPROFILE / "Pictures" / "Genshin Impact", 64 * 1024 * 1024),
 ]
 
+# Directory names skipped during a recursive walk. Path.rglob("*") cannot
+# prune - it always descends into every subdirectory, and post-filtering the
+# yielded paths still pays the full descent. Only os.walk with an in-place
+# dirnames[:] assignment actually avoids descending. Same shape as
+# tools/gate_mutation_runner.py's purge_caches.
+_WALK_SKIP_DIRS = frozenset({
+    "__pycache__", ".git", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    "node_modules", ".venv", "venv", ".claude",
+})
+
 # Individual files polled by exact path.
 WATCH_FILES: list[tuple[str, Path]] = [
     ("game-config", GAME_DIR / "config.ini"),
@@ -290,28 +300,31 @@ def poll_tree(store: CaptureStore, label: str, root: Path, max_bytes: int) -> in
     if not root.exists():
         return 0
     new = 0
-    for path in root.rglob("*"):
-        try:
-            if not path.is_file():
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
+        dirnames[:] = [name for name in dirnames if name not in _WALK_SKIP_DIRS]
+        for filename in filenames:
+            path = Path(dirpath) / filename
+            try:
+                if not path.is_file():
+                    continue
+                size = path.stat().st_size
+            except OSError:
                 continue
-            size = path.stat().st_size
-        except OSError:
-            continue
-        key = str(path)
-        if size > max_bytes:
-            if store.seen.get(key) != "OVERSIZE":
-                store.seen[key] = "OVERSIZE"
-                store.emit({"kind": "skipped-oversize", "label": label,
-                            "path": key, "bytes": size, "cap": max_bytes})
-            continue
-        data = read_bytes_shared(path)
-        if data is None:
-            if store.seen.get(key) != "UNREADABLE":
-                store.seen[key] = "UNREADABLE"
-                store.emit({"kind": "unreadable", "label": label, "path": key})
-            continue
-        if store.offer(label, key, data):
-            new += 1
+            key = str(path)
+            if size > max_bytes:
+                if store.seen.get(key) != "OVERSIZE":
+                    store.seen[key] = "OVERSIZE"
+                    store.emit({"kind": "skipped-oversize", "label": label,
+                                "path": key, "bytes": size, "cap": max_bytes})
+                continue
+            data = read_bytes_shared(path)
+            if data is None:
+                if store.seen.get(key) != "UNREADABLE":
+                    store.seen[key] = "UNREADABLE"
+                    store.emit({"kind": "unreadable", "label": label, "path": key})
+                continue
+            if store.offer(label, key, data):
+                new += 1
     return new
 
 
@@ -373,9 +386,14 @@ def poll_processes(store: CaptureStore) -> None:
 def write_manifest(store: CaptureStore, started: str) -> None:
     counts: dict[str, int] = {}
     total = 0
-    for blob in store.blobs.rglob("*"):
-        if blob.is_file() and not blob.name.endswith(".tmp"):
-            total += 1
+    for dirpath, dirnames, filenames in os.walk(store.blobs, followlinks=True):
+        dirnames[:] = [name for name in dirnames if name not in _WALK_SKIP_DIRS]
+        for filename in filenames:
+            if filename.endswith(".tmp"):
+                continue
+            blob = Path(dirpath) / filename
+            if blob.is_file():
+                total += 1
     for _key, digest in store.seen.items():
         bucket = "special" if digest in {"OVERSIZE", "UNREADABLE"} else "content"
         counts[bucket] = counts.get(bucket, 0) + 1
