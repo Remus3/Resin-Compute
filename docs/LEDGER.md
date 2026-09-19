@@ -61,9 +61,9 @@ form is `while IFS= read -r`, and the tell was that the first field of every
 pair was the same truncated string. Same family as the MSYS `/F` rewrite: the
 command does not fail, it answers about the wrong thing.
 
-WHAT WAS NOT TOUCHED, deliberately. `shell/node_modules` at 378 MiB is
+WHAT WAS NOT TOUCHED, deliberately. shell/node_modules at 378 MiB is
 regenerable but live, and deleting it is an operator call rather than a sweep
-call. `ops/runtime/outbox_drafts/` has ZERO code references anywhere in this
+call. ops/runtime/outbox_drafts/ has ZERO code references anywhere in this
 repo and stays UNKNOWN rather than being guessed at. Nothing outside this repo
 root was deleted, including the largest stray item on the drive, which belongs
 to another tree and was reported to it by CODE.
