@@ -316,7 +316,7 @@ clause (a) above therefore now has a LIVE subject in this repo rather than a
 hypothetical one. `reap()` in that same file
 unlinks a stale lock without ever consulting the repo field it logs, so it will
 reclaim a lock a SIBLING owns; `ops/loop/winmutex.py:37-38` are `Global\`
-kernel-namespace mutexes; and `tests/test_loop_concurrency.py:145-146` pin both
+kernel-namespace mutexes; and `tests/test_loop_concurrency.py:156-157` pin both
 files by SHA256 as byte-identical across three repos, so "hardening" either one
 desynchronises every carrier that has not moved.
 

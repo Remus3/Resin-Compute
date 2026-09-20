@@ -208,6 +208,20 @@ version. What follows is everything the scaffold deliberately did not do.
   still byte-identical. Re-measure before citing - a shape everyone agrees to is
   not a round that happened.
 
+  LANDED 2026-09-20 AS ROUND B, AND THE TWO PARAGRAPHS ABOVE ARE NOW RECORD
+  RATHER THAN STATUS. The round happened: LW called it and authored the bytes,
+  and this tree landed them in one commit. `ops/loop/winmutex.py` moved from
+  `0b112a4f`, 6190 bytes, to `df0a7a40`, 6184 bytes - ONE COMMENT LINE
+  reworded, no behaviour, verified by hashing this tree's own disk after the
+  copy. In that same commit the sha256 pin in `tests/test_loop_concurrency.py`
+  and the digest in `docs/LICENSE_NOTES.md` moved, and
+  `_KNOWN_CHANNEL_CODE_VIOLATIONS` in `tests/test_no_sibling_names.py` became
+  EMPTY - the stricter pin, not a relaxed one, because the comparison is now
+  against zero. WHAT REMAINS IS NOT THIS TREE'S WORK: LW, RC and SS still hold
+  the superseded bytes and are listed in `WINMUTEX_DIVERGENT` until each lands
+  the same file, which is a round window rather than drift. CS is unaffected -
+  its copy is a different file at `e0d3ac7d`, 7724 bytes.
+
 - **CORRECTION 2026-09-20. `slots.hold()` DOES NOT REAP BEFORE ACQUIRING, AND
   RSC ASSERTED THAT IT DID.** The assertion was made in session and is wrong
   against the bytes. The order in `ops/loop/slots.py` is `try_acquire` FIRST at
