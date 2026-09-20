@@ -15,12 +15,16 @@ participants agree, so a divergence produces no error anywhere. It produces a
 silent concurrency bug - two loops that each believe they are inside the bound
 while together they are outside it.
 
-TWO OF THE THREE ACTUALLY ACQUIRE. Sibling-E and Sibling-C both call
-`slots.hold()` from their loop controllers against the live bucket. THIS REPO
-DOES NOT: it has no executor loop, and the only callers of `hold()` here are the
-tests in this file, which run against a `tmp_path` bucket. So this file guards a
-PARITY CONTRACT JOINED AHEAD OF NEED. Do not read it as evidence that this repo
-throttles anything today.
+ALL THREE ACTUALLY ACQUIRE. Sibling-E and Sibling-C both call `slots.hold()`
+from their loop controllers against the live bucket, and SO DOES THIS REPO: since
+`1a6d8da`, `run_daemon` in `headless/runner.py` wraps each LIVE pass in a held
+slot. No Claude-executor loop was invented to justify the vendored file - the
+daemon loop was already this tree's one repeated executor and gained the governor
+it was always supposed to have. So this file no longer guards a parity contract
+joined ahead of need: a divergence here now bounds the wrong number of real
+passes in THIS tree too, not only in a sibling's. The callers of `hold()` inside
+THIS file still run against a `tmp_path` bucket and must keep doing so; the arms
+about the live acquirer are in `tests/test_headless_runner_slots.py`.
 
 That is why the pin is on BYTES rather than on behaviour. Behaviour tests catch
 a copy that is broken; only a digest catches a copy that is merely DIFFERENT,
@@ -155,10 +159,10 @@ def test_the_vendored_governor_is_present():
     assert not missing, (
         f"{missing} absent from {LOOP_DIR}. This repo has JOINED a machine-wide "
         "concurrency bucket shared with Sibling-E and Sibling-C, both of "
-        "which acquire against it for real. This repo does not acquire yet, so losing "
-        "these files breaks no running loop here - it silently drops this repo out of "
-        "the parity contract, and the drop would surface only when an executor loop is "
-        "finally built against a governor nobody kept in sync. Re-vendor them byte-wise "
+        "which acquire against it for real - and so does this repo, from run_daemon in "
+        "headless/runner.py since 1a6d8da. So losing these files breaks a RUNNING LOOP "
+        "here as well as silently dropping this repo out of the parity contract. "
+        "Re-vendor them byte-wise "
         "from a sibling tree - do not re-author them, and do not delete this test.\n"
         "Resolve the sibling codenames in the gitignored ops/moon_sync_repos.json, "
         "and coordinate the round through moon_sync_inbox/."
@@ -542,10 +546,11 @@ def test_a_slot_is_released_after_use(slots, slot_root: Path):
 def test_a_slot_is_released_even_when_the_body_raises(slots, slot_root: Path):
     """Release lives in a `finally`, and this is why that matters.
 
-    A leaked lock does not degrade this repo. It permanently narrows a bucket
-    two OTHER repos are drawing from, and it is reclaimed only by the stale
-    sweep - which is deliberately set to three cycle deadlines, so the damage
-    outlives the run that caused it by hours.
+    A leaked lock permanently narrows a bucket THREE repos draw from - this one
+    included, since `1a6d8da` put the daemon loop's live passes inside a held
+    slot - and it is reclaimed only by the stale sweep, which is deliberately set
+    to three cycle deadlines, so the damage outlives the run that caused it by
+    hours.
     """
 
     class Boom(RuntimeError):

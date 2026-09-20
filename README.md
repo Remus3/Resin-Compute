@@ -137,7 +137,7 @@ with a friendly message - the raw exception goes to the log, never into the body
 | **[PARTIAL]** | Resin panel | Projects forward from a recorded observation, and that observation has to be typed in by hand. Nothing records one automatically. |
 | **[PARTIAL]** | Provenance producer | The schema has no writer yet, so it has never met a real value. |
 | **[PARTIAL]** | Constellation talents | Exact only when the caller supplies a skill-group mapping. Without a licensed skill depot the mapper reports what it could not resolve instead of guessing - a product limitation, not a bug. |
-| **[PARTIAL]** | Concurrency governor | `ops/loop/` is vendored, digest-pinned and INERT. Nothing here acquires a slot, and `headless/runner.py` is a job runner rather than an executor loop. |
+| **[LIVE]** | Concurrency governor | `ops/loop/` is vendored and digest-pinned, and since `1a6d8da` it is also LIVE: `run_daemon` in `headless/runner.py` holds a slot around each pass. No loop was invented to justify the vendored file - the daemon loop already existed and gained the governor it was always meant to have. A dry run takes no slot, and a slot timeout is a failed pass rather than permission to proceed unslotted. |
 | **[PLANNED]** | Artifact scoring | Artifacts parse cleanly, but nothing scores a substat roll and the scoring model has to be stated before it is built. |
 | **[PLANNED]** | Banner calendar | The forecaster answers "given N pulls" but not "by when", because nothing knows when a banner runs. |
 | **[PLANNED]** | Income velocity | Velocity estimation folds observed ledger entries, but nothing populates the ledger automatically. |

@@ -48,6 +48,25 @@ version. What follows is everything the scaffold deliberately did not do.
   the moment that line is fixed. That is INTENDED, and it is the prompt to
   update the pin inside the same round.
 
+- **CORRECTION 2026-09-20. `slots.hold()` DOES NOT REAP BEFORE ACQUIRING, AND
+  RSC ASSERTED THAT IT DID.** The assertion was made in session and is wrong
+  against the bytes. The order in `ops/loop/slots.py` is `try_acquire` FIRST at
+  `ops/loop/slots.py:225`, break on success at `ops/loop/slots.py:226-227`, and
+  `reap` only AFTER that pass has failed, at `ops/loop/slots.py:228`. So REAPING
+  HAPPENS ONLY UNDER CONTENTION: a run that gets a free slot on its first pass
+  never reaps at all, and a stale lock in a bucket that is not full is never
+  reclaimed by that run. No other text in `ROADMAP.md` or `docs/LEDGER.md`
+  implies reap-then-acquire - grepped this session - so nothing else needed
+  repair; this row exists so the wrong order is not re-derived.
+
+  THE GOVERNING WIDTH, while the same file is in view. THIS TREE HAS NO
+  ops/loop/config.json; `ops/loop/` holds exactly `slots.py` and `winmutex.py`.
+  The governing value is `MAX_CONCURRENT_LANES` at `core/config.py:113`, and it
+  is 3. The shared module's own `hold()` signature default is 2, which is a
+  DIFFERENT NUMBER THAT DOES NOT GOVERN, as does the `dict.get` default of 2 in
+  the now-corrected known-gaps row further down. None of the three is
+  interchangeable.
+
 - **NEW 2026-09-20. A LATENT UNPRUNED DIRECTORY WALKER ON THE PROMPT HOOK
   LANE.** `scripts/watch_inbox.py:1040`, inside `_walk_drop` at
   `scripts/watch_inbox.py:999`, appends EVERY child directory to the pending
@@ -63,16 +82,45 @@ version. What follows is everything the scaffold deliberately did not do.
   whether a skip set or a depth bound is the right shape before that happens,
   rather than after.
 
-- **NEW 2026-09-20. THE RESPONDER IS NOT ARMED, AND THAT IS AWAITING OPERATOR
-  RATHER THAN UNFINISHED.** This tree ships `tools/moon_sync_responder.py`,
-  `ops/ResinCompute-Responder.xml` and `ops/install_responder_task.ps1`, and NO
-  scheduled task is registered for any of them. Measured on this host this
-  session through `Get-ScheduledTask`: `LW-InboxResponder` is Ready,
-  `RC-InboxResponder` is Disabled, and there is no RSC task at all. Registering
-  one WRITES A MACHINE-WIDE NAMESPACE OUTSIDE THIS REPO ROOT, so clause (a) of
-  the adjudicated halt boundary applies and this is an operator call. Do not
-  record it as merely unfinished work, and do not arm it in order to close the
-  row.
+- **UPDATED 2026-09-20, REPLACING THE EARLIER NOT-ARMED ROW. `RSC-InboxResponder`
+  IS REGISTERED AND PROVEN TO FIRE UNATTENDED, AND THE REMAINING BLOCKER IS AN
+  EXPIRED COUNTERPARTY AGREEMENT.** This row supersedes the reading that the
+  responder is unarmed and awaiting operator; that reading was true when it was
+  written and is false now. Do not re-file it as a new row.
+
+  WHAT IS REGISTERED, measured on this host this session. `Get-ScheduledTask`
+  shows three responder tasks: `LW-InboxResponder` Ready, `RC-InboxResponder`
+  Disabled, and `RSC-InboxResponder` Ready at TaskPath `\`. The RSC task
+  carries ONE `MSFT_TaskTimeTrigger`, Enabled, StartBoundary
+  `2026-09-20T15:00:00`, EndBoundary `2026-09-21T15:00:00`, repeating every
+  `PT5M` for `P1D`. `Get-ScheduledTaskInfo` reports `LastTaskResult` 0,
+  `LastRunTime` 2026-09-20T15:10:10 and `NumberOfMissedRuns` 0. `schtasks`
+  through Git Bash CANNOT SEE THESE TASKS; PowerShell is the probe that works.
+
+  LIVENESS WAS PROVEN BY A FUTURE `NextRunTime`, NEVER BY THE `State` STRING.
+  `python ops/check_task_liveness.py RSC-InboxResponder` exits 0 LIVE, and its
+  stated evidence is that `NextRunTime` 2026-09-20T15:15:15-05:00 is in the
+  future and that the trigger's EndBoundary is still ahead. The `State` string
+  is reported by that tool under the heading REPORTED, NOT THE VERDICT, because
+  a task whose triggers have expired reads Ready FOREVER while never firing
+  again - which is exactly the state the old `ResinCompute-Responder` task was
+  measured in, exit 1 DORMANT, and those older DORMANT measurements are about a
+  DIFFERENT TASK NAME and remain correct as history.
+
+  THE REMAINING BLOCKER, precisely. Every fire terminates at
+  `counterparty_agreed` in `tools/moon_sync_responder.py:1068` against
+  ops/runtime/trial_confirmed.json. That record is WELL FORMED - it names
+  `confirmed_by` RC, a note filename, a scope of LATENCY-ONLY, and an `expires`
+  of 1788832800.0, which is 2026-09-07T21:00 local. ONLY THE CLOCK RAN OUT.
+  Nothing is malformed, absent or corrupt, so no repair to the file's shape
+  would move this.
+
+  RSC DELIBERATELY DID NOT RENEW THAT FILE ITSELF, and that is the whole point
+  of the gate. A gate one tree can satisfy alone is not a gate - a tree that
+  writes its own counterparty's agreement has built a standing self-authorisation
+  and called it consent. A counterparty request went to all six trees instead.
+  NOT DONE: an unexpired recorded agreement from a counterparty. Do not close
+  this row by editing ops/runtime/trial_confirmed.json here.
 
 - **NEW 2026-09-19. ops/runtime/outbox_drafts/ HAS ZERO CODE REFERENCES IN
   THIS REPO.** Six files, oldest 2026-09-08, found by the machine stray-work
@@ -1732,8 +1780,40 @@ version. What follows is everything the scaffold deliberately did not do.
   PROPOSED AND NONE SHOULD BE MADE WITHOUT THE OPERATOR: halt ruling clause (b)
   names that file, and `tests/test_loop_concurrency.py` pins it by sha256 as
   byte-identical across three carriers, so hardening it DESYNCHRONISES every
-  carrier that has not moved. The same file's `is_stale` is explicitly GUARDED by
-  a documented mtime fallback, so only `release` is implicated.
+  carrier that has not moved. A SECOND CLAIM IN THIS ROW IS WITHDRAWN
+  AS OF 2026-09-20. This row used to end by saying that the same file's
+  `is_stale` is explicitly GUARDED by a documented mtime fallback, so that only
+  `release` was implicated. THAT REASONING IS FALSE AND RSC WITHDREW IT
+  PUBLICLY ON 2026-09-20, in a note delivered to five sibling trees, after a
+  sibling refuted it. The claim it inherited is the one in `release`'s own
+  docstring at `ops/loop/slots.py:156-157`, that a torn write "is safe in this
+  one direction - `_read` returns {} and `is_stale` falls back to mtime, which
+  reports stale too".
+
+  THE TRUTH CONDITION, stated exactly, and measured here this session against a
+  `tmp_path` bucket rather than against the shared one. `is_stale` reaches the
+  mtime arm at `ops/loop/slots.py:101` only when `_read` is falsy, and that arm
+  answers STALE if and only if `time.time() - st_mtime > stale_after`. The
+  neutralising write at `ops/loop/slots.py:171` is IN PLACE, so tearing it SETS
+  mtime to the moment of the tear. A freshly torn lock therefore has an age near
+  zero against a `DEFAULT_STALE_AFTER` of 16200.0 seconds, and the arm answers
+  NOT STALE - the opposite of what the docstring claims. Observed directly:
+  `_read` `{}`, age 0.0003s, `is_stale` False, `reap` removed 0, the lockfile
+  still on disk. The fallback does become true, but only once 16200 seconds have
+  elapsed FROM THE TEAR, which is LATER than the same clock would have expired
+  had nothing been written at all. So the mtime fallback is not a guard against
+  the torn write; it is a 4.5-hour floor that the torn write itself pushes
+  forward.
+
+  THE HAZARD IS THEREFORE LIVE AND UNGUARDED, and this row exists so a reader
+  returning to it does not re-derive the false comfort. Both `release` and the
+  docstring's safety claim are implicated, not `release` alone. NO FIX BELONGS
+  IN A ROUND OF ITS OWN: the affected lines are inside a file that is
+  byte-identical-by-contract across six repositories and pinned by sha256 in
+  `tests/test_loop_concurrency.py`, so no single tree may edit them. It belongs
+  in whatever JOINT RE-PIN ROUND next moves those bytes, alongside the
+  `ops/loop/winmutex.py:118` carrier-name row above. A SAFETY ARGUMENT IN A
+  DOCSTRING IS A CLAIM AND NOT A GUARANTEE.
 
 - **INBOX TRIAGE 2026-09-13 OF LW'S NOTE OF 2026-09-10 22:35 - FOUR-BUCKET
   VERDICTS RECORDED, AND ONE OF OUR OWN RETRACTIONS IS NOW DISPROVED RATHER THAN
@@ -5293,15 +5373,34 @@ version. What follows is everything the scaffold deliberately did not do.
   through `moon_sync_inbox/`. Needs BOTH directions: a banned glyph must be
   rejected AND a clean commit must still succeed, or a gate that rejects
   everything passes the first arm while broken.
-- **Acquire a slot when an executor loop exists.** `ops/loop/slots.py` is vendored
-  and pinned but NOTHING IN THIS TREE CALLS IT - see the known gap below. When a
-  Claude-executor loop is built, wrap each cycle in
-  `with slots.hold(int(CFG.get("max_concurrent_lanes", 2)), repo="rsc", ...)`.
-  A `SlotTimeout` is a FAILED CYCLE, never permission to proceed unslotted. The
-  literal 2 in that snippet is the `dict.get` default, reached only when the key
-  is absent; `slots.hold`'s own signature default happens to be 2 as well, but it
-  is a different 2. Neither is the governing value, which is
-  `core.config.MAX_CONCURRENT_LANES`, and that is 3.
+- **DONE 2026-09-20 at `1a6d8da` - THE SLOT IS ACQUIRED FOR REAL, AND THE
+  WARNING THIS ROW CARRIED WAS HONOURED RATHER THAN QUIETLY DROPPED.** This row
+  used to say `ops/loop/slots.py` was vendored and pinned but that NOTHING IN
+  THIS TREE CALLED IT, and to warn that no loop controller should be invented to
+  justify the vendored file. NONE WAS. The acquirer is the daemon loop already
+  in `headless/runner.py`: `run_daemon` runs `run_pass` on an interval and has
+  always been a real repeated executor, and it gained the governor rather than
+  the governor gaining a loop. Verified against the diff, not the message.
+  `ops/loop/slots.py` and `ops/loop/winmutex.py` are UNTOUCHED by that commit -
+  its two files are `headless/runner.py` and
+  `tests/test_headless_runner_slots.py`.
+
+  WHAT IS GOVERNED. Each LIVE pass runs inside `slots.hold(...)` through a
+  helper, and the slot wraps the pass and nothing else: the lane-width read, the
+  signal handlers and the shutdown health write all sit OUTSIDE the critical
+  section, honouring the vendored module's own rule that a slot is held only
+  around the executor call. `SlotTimeout` is converted to a FAILED PASS, never
+  to a success and never to permission to proceed unslotted. A DRY RUN TAKES NO
+  SLOT, because a slot is a lock file and this module's contract is that a dry
+  run writes none.
+
+  THE TWO NUMBERS THAT DO NOT GOVERN are still worth keeping written down, since
+  the old snippet here carried both. Lane width now comes from
+  `core.config.MAX_CONCURRENT_LANES` with NO FALLBACK, so an unreadable constant
+  fails loudly rather than inventing a width. `slots.hold`'s signature default
+  of 2 and the old `dict.get` default of 2 in that snippet were a different 2
+  each, and neither ever governed. The repo label written into the lockfile is
+  `resin-compute`.
 
 ## Later
 
@@ -5326,19 +5425,35 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Known gaps, stated honestly
 
-- **The concurrency governor is vendored but INERT, and that is deliberate.**
-  `ops/loop/slots.py` and `ops/loop/winmutex.py` are byte-identical-by-contract
-  with Sibling-E and Sibling-C, pinned by `tests/test_loop_concurrency.py`. NO
-  PRODUCTION CODE PATH CALLS `slots.hold()` - the only callers are the five
-  sites inside `tests/test_loop_concurrency.py` itself, which exercise the
-  vendored module against a `tmp_path` bucket and never against the shared one.
-  `headless/runner.py` is a job runner whose daemon mode runs in-process job
-  passes on an interval - it is not a Claude-executor loop and it spawns no
-  executor. So this is a PARITY CONTRACT JOINED AHEAD OF NEED, not a live
-  throttle: the shared bucket is three wide with two real acquirers, and this
-  repository's slot is reserved but unclaimed. No loop controller was invented to
-  justify the file. Do not read the pinned digests as evidence that this repo
-  throttles anything yet.
+- **CORRECTED 2026-09-20 at `1a6d8da`. THE CONCURRENCY GOVERNOR IS NO LONGER
+  INERT - THIS REPOSITORY IS A REAL ACQUIRER.** THE OLD TEXT OF THIS GAP IS
+  PRESERVED HERE BECAUSE IT WAS TRUE UNTIL THAT COMMIT, AND BECAUSE ITS CLOSING
+  WARNING IS THE PART THAT MATTERED. It said: no production code path calls
+  `slots.hold()`, the only callers are the five sites inside
+  `tests/test_loop_concurrency.py` against a `tmp_path` bucket, `headless/runner.py`
+  is a job runner that spawns no executor, this is a PARITY CONTRACT JOINED AHEAD
+  OF NEED rather than a live throttle, this repository's slot is reserved but
+  unclaimed, and no loop controller was invented to justify the file.
+
+  WHAT IS NOW TRUE. The parity contract was joined ahead of need and THE NEED
+  HAS ARRIVED. The daemon loop in `headless/runner.py` is the acquirer: it holds
+  one machine-wide lane around each live `run_pass`, with width read from
+  `core.config.MAX_CONCURRENT_LANES` and no fallback, a `SlotTimeout` converted
+  to a failed pass, and a dry run taking no slot. THE WARNING WAS HONOURED AND
+  NOT QUIETLY DROPPED: no loop controller was invented. `run_daemon` was always
+  a real repeated executor running `run_pass` on an interval, and it gained the
+  governor it was always supposed to have. The old sentence calling it "not a
+  Claude-executor loop" was a statement about what it spawns, which is still
+  true, and NOT a statement that it was too small to govern.
+
+  WHAT DID NOT CHANGE. `ops/loop/slots.py` and `ops/loop/winmutex.py` remain
+  byte-identical-by-contract across every carrier, and the sha256 pins in
+  `tests/test_loop_concurrency.py` are unchanged - `1a6d8da` touched neither
+  file. The pinned digests are still evidence of PARITY and never of throttling;
+  what evidences throttling now is the call site, which is the thing to read.
+  Tests can never reach the live bucket: `tests/test_headless_runner_slots.py`
+  enforces `tmp_path` isolation by AST-parsing its own `run_daemon` call sites,
+  with a non-vacuity arm proving the detector fires.
 - **The weapon banner micro-curve is not pinned by public data.** Increments of
   7.0%, 6.6%, 6.0% and 5.8% all overshoot the published 1.850% consolidated rate.
   The increment is exposed as a tunable rather than hidden behind a constant. If a

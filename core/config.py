@@ -46,19 +46,21 @@ the environment. It is written up here, BELOW the list and outside it, rather
 than as an entry in it, precisely so that nobody reads it as one.
 
 It is a CROSS-REPO ceiling on total concurrent executor calls, shared with
-Sibling-C and Sibling-E against ONE lockfile slot bucket. Every
-participant reads its OWN copy of the number, so the bucket bounds nothing
-unless all three copies agree. An override on a single participant would not
-raise that participant's share - it would raise the EFFECTIVE ceiling for all
-three to max(3, N), because each side admits holders against its own reading
-and none of them can see what the others decided. A ceiling one side can raise
-alone is not a ceiling, it is theatre.
+every other participant in ONE lockfile slot bucket. Some participants VENDOR
+the governor module byte-identically and some RE-IMPLEMENT the protocol, and
+the bucket does not care which: both admit holders. Every participant reads
+its OWN copy of the number, so the bucket bounds nothing unless every copy
+agrees. An override on a single participant would not raise that
+participant's share - it would raise the EFFECTIVE ceiling for everyone to
+max(3, N), because each side admits holders against its own reading and none
+of them can see what the others decided. A ceiling one side can raise alone
+is not a ceiling, it is theatre.
 
 Live-state-first is the right rule for a value this process owns. This value is
 not owned by this process, so the rule does not reach it, and making it
-env-derived would hand one local shell variable the power to lift a limit two
-other repositories are relying on. Changing it is a JOINT act across all three
-repositories in one round.
+env-derived would hand one local shell variable the power to lift a limit
+every other participating repository is relying on. Changing it is a JOINT act
+across all of them in one round.
 """
 from __future__ import annotations
 
@@ -92,22 +94,35 @@ DEFAULT_ENKA_USER_AGENT = "ResinCompute/0.1 (local single-account planner)"
 #: knob, and not named DEFAULT_* because it is not this repository's default to
 #: pick.
 #:
-#: Three repositories on this machine - Sibling-E, Sibling-C and
-#: ResinCompute - share ONE lockfile slot bucket. TWO of them admit work against
-#: it today: the two siblings both call `slots.hold()` from their loop
-#: controllers. The codenames resolve only in the gitignored
+#: Several repositories on this machine share ONE lockfile slot bucket, and
+#: they admit work against it. Measured 2026-09-20: FOUR trees carry this
+#: byte-identical governor module at the pinned digest - Sibling-E, Sibling-C,
+#: ResinCompute and the sixth fleet member that joined that day. At least two
+#: more trees participate in the SAME bucket through their own
+#: RE-IMPLEMENTATIONS of the protocol rather than by vendoring the file, so the
+#: set of participants is strictly LARGER than the set of carriers, and a digest
+#: pin can never see the difference. Do not read the carrier count as the
+#: participant count. Both counts are moving - the fleet gained a participant on
+#: 2026-09-20 - so re-measure rather than quoting this comment.
+#: The codenames resolve only in the gitignored
 #: `ops/moon_sync_repos.json`; nothing tracked here resolves them.
-#: ResinCompute does NOT - it has vendored and pinned the governor but has no
-#: executor loop to wrap, so its lane is reserved and unclaimed. This number is
-#: therefore a declaration joined ahead of need, not a limit this process
-#: currently enforces. Every participant reads its OWN copy of this
-#: number, so the bucket bounds the total only while all three copies AGREE. If
-#: they ever disagree, the governor silently permits max(a, b) simultaneous
-#: holders and stops being a governor at all. Sibling-C and Sibling-E
-#: both declare 3, so this tree declares 3.
+#: ResinCompute has claimed its lane since `1a6d8da`, where `run_daemon` in
+#: `headless/runner.py` began wrapping each LIVE pass in a held slot sized by
+#: THIS constant - no executor loop was invented to justify the vendored file,
+#: the daemon loop that already ran passes on an interval gained the governor.
+#: So this number is no longer a declaration joined ahead of need: it is a limit
+#: this process enforces on every non-dry daemon pass, and `headless/runner.py`
+#: reads it with NO fallback, so an unreadable value fails loudly rather than
+#: inventing a width. Every participant reads its OWN copy of this
+#: number, so the bucket bounds the total only while EVERY participant's copy
+#: AGREES - carriers and re-implementers alike. If any two disagree, the
+#: governor silently permits the LARGER of their values simultaneous holders
+#: and stops being a governor at all. Sibling-C and Sibling-E both declare 3,
+#: so this tree declares 3.
 #:
-#: Changing it is a JOINT act across all three repositories in one round, never
-#: a unilateral edit here. Deliberately NOT environment-overridable - the module
+#: Changing it is a JOINT act across every participating repository in one
+#: round - carriers and re-implementers both - never a unilateral edit here.
+#: Deliberately NOT environment-overridable - the module
 #: docstring above records why an override on one side raises the effective
 #: ceiling for every side.
 MAX_CONCURRENT_LANES = 3
