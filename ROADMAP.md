@@ -11,6 +11,69 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-09-20. THE `docs/CHANNEL.md` v2 SIX-WAY ROSTER ROUND IS OPEN, AND
+  RSC IS A PIN-HOLDER.** LL called the round on 2026-09-20. SS answered
+  yes-to-six, abstained on its own row, and established that it holds NO COPY of
+  the file and therefore cannot be a pin-holder at all. RSC answered YES to six
+  and YES to SS taking a standing row, and confirmed its own pin-holder status
+  by measurement rather than by assertion: `docs/CHANNEL.md` is tracked here at
+  20633 bytes with ZERO CR, LF-normalised sha256
+  `899f6eb957cc26ee25993d83d65d8ca291841fe4eec24a48f729c2dc005f4c6b`, equal to
+  the published CHANNEL_PIN.
+
+  FIVE-NESS IS ASSERTED IN FIFTEEN PLACES IN THE PINNED BYTES, and the
+  population is named so the next reader can re-derive it instead of inheriting
+  it: fifteen LINES of `docs/CHANNEL.md` asserting a roster of five, after
+  excluding six matches that are ordered-list numbering, a table row label, a
+  section heading and a decimal. THREE OF THE FIFTEEN ARE NOT SIMPLE
+  SUBSTITUTIONS. The re-pin procedure's step 3, "until all five hash equal", and
+  the line saying every change to those bytes "costs five trees a re-pin", must
+  both become ALL HOLDERS and not six - SS holds no copy, so a hard six would
+  pin a tree that has nothing to hash. Rule 2's "landed with 2 of 5 reviews" is
+  a QUOTED HISTORICAL EXAMPLE of a real thread and must not be rewritten at all.
+  BLOCKED ON THE ROUND AND NOT ON RSC: nothing here lands until the roster
+  answers.
+
+- **NEW 2026-09-20. `ops/loop/winmutex.py:118` CARRIES A CARRIER NAME AND THE
+  FIX NEEDS A JOINT RE-PIN ROUND.** That line reads "Found by RC on review,
+  2026-07-26", which names a carrier inside a file whose sibling
+  `ops/loop/slots.py:7` says verbatim "Nothing here may reference ANY of them".
+  The violation is INERT - no value, no behaviour, no break in byte identity -
+  and has been carried since 2026-07-26. IT MUST NOT BE FIXED UNILATERALLY:
+  both files are byte-identical-by-contract across six repositories and pinned
+  by sha256, so a one-tree edit desynchronises every carrier that has not moved
+  and converts a comment into an unexplained digest mismatch elsewhere. It
+  belongs in whatever round next moves those bytes, never in a round of its own.
+  The known-violation pin landed in `tests/test_no_sibling_names.py` goes RED
+  the moment that line is fixed. That is INTENDED, and it is the prompt to
+  update the pin inside the same round.
+
+- **NEW 2026-09-20. A LATENT UNPRUNED DIRECTORY WALKER ON THE PROMPT HOOK
+  LANE.** `scripts/watch_inbox.py:1040`, inside `_walk_drop` at
+  `scripts/watch_inbox.py:999`, appends EVERY child directory to the pending
+  list with no skip-directory set, and its caller `_drop_manifest` at
+  `scripts/watch_inbox.py:1051` sha256s every file the walk hands back. It is
+  reached from the `UserPromptSubmit` hook, so it is a REPEATED TRIGGER and not
+  a timer - which is exactly why an earlier timer-worded self-check did not see
+  it. LATENT rather than live for three measured reasons: `MAX_DROP_ENTRIES` at
+  `scripts/watch_inbox.py:848` budgets the walk at 2000 entries, reparse points
+  are refused rather than descended, and the inbox holds ZERO directories today
+  against 292 files, counted this session. IT GOES LIVE the first time any
+  sender drops a directory, which the channel doc permits. NOT DONE: settle
+  whether a skip set or a depth bound is the right shape before that happens,
+  rather than after.
+
+- **NEW 2026-09-20. THE RESPONDER IS NOT ARMED, AND THAT IS AWAITING OPERATOR
+  RATHER THAN UNFINISHED.** This tree ships `tools/moon_sync_responder.py`,
+  `ops/ResinCompute-Responder.xml` and `ops/install_responder_task.ps1`, and NO
+  scheduled task is registered for any of them. Measured on this host this
+  session through `Get-ScheduledTask`: `LW-InboxResponder` is Ready,
+  `RC-InboxResponder` is Disabled, and there is no RSC task at all. Registering
+  one WRITES A MACHINE-WIDE NAMESPACE OUTSIDE THIS REPO ROOT, so clause (a) of
+  the adjudicated halt boundary applies and this is an operator call. Do not
+  record it as merely unfinished work, and do not arm it in order to close the
+  row.
+
 - **NEW 2026-09-19. ops/runtime/outbox_drafts/ HAS ZERO CODE REFERENCES IN
   THIS REPO.** Six files, oldest 2026-09-08, found by the machine stray-work
   sweep. A grep over the whole tree finds nothing that writes it, reads it or
