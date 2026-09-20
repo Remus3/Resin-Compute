@@ -406,12 +406,18 @@ _CHANNEL = re.compile(r"\b(" + "|".join(_CHANNEL_CODES) + r")\b")
 # already-pinned code would be invisible to a set comparison - so this is a
 # sorted LIST including duplicates, not a set, and a second `RC` in winmutex
 # lengthens it and goes red.
-# The one real violation, verified this run at ops/loop/winmutex.py:118, which
-# reads "Found by RC on review, 2026-07-26." The line number is recorded here in
-# prose deliberately and is NOT part of the comparison.
-_KNOWN_CHANNEL_CODE_VIOLATIONS: list[tuple[str, str]] = [
-    ("ops/loop/winmutex.py", "RC"),
-]
+# THE ONE REAL VIOLATION WAS REPAIRED ON ROUND B, 2026-09-20, and this list is
+# now EMPTY. It held one entry: a comment line in ops/loop/winmutex.py that
+# named a sibling by channel code. LW authored the repair, this tree confirmed
+# the digest and landed the bytes byte-wise, and the joint re-pin moved in
+# tests/test_loop_concurrency.py in the same commit. ONE COMMENT LINE moved and
+# no behaviour. Verified this run: the scoped scan over the two shared files
+# returns nothing.
+#
+# AN EMPTY LIST IS THE STRICTER PIN, not a weaker one. The comparison is now
+# against zero, so a FIRST occurrence of any channel code in either shared file
+# goes red; while the entry stood, only a SECOND one did.
+_KNOWN_CHANNEL_CODE_VIOLATIONS: list[tuple[str, str]] = []
 
 _CHANNEL_MESSAGE = (
     "The two shared loop files are byte-identical-by-contract across SIX "
@@ -437,12 +443,22 @@ def _channel_code_hits(root: Path) -> list[tuple[str, str]]:
 
 
 def test_the_shared_files_name_no_sibling_channel_code():
-    """A KNOWN-VIOLATION PIN, not a clean-tree assertion.
+    """A CLEAN-TREE ASSERTION since round B, and a known-violation pin before it.
 
-    The scoped scan is green today only because it pins the one violation this
-    repository cannot fix alone. Asserting zero would land a permanently red
-    arm on a defect owned by six carriers jointly, and a red arm nobody can
-    close is an arm that gets skipped.
+    It was a pin because the one violation lived in a file six carriers hold
+    jointly, which this repository could not fix alone: asserting zero then
+    would have landed a permanently red arm on a defect owned by all of them,
+    and a red arm nobody can close is an arm that gets skipped. Round B closed
+    the defect instead - LW authored the repair, this tree landed the bytes and
+    moved the sha256 pin in the same commit - so
+    `_KNOWN_CHANNEL_CODE_VIOLATIONS` is empty and the comparison is against
+    zero, which is strictly stronger than what it replaces.
+
+    THE PIN SHAPE IS KEPT rather than collapsed into `assert not hits`. A
+    future joint round may have to admit a violation it cannot close the same
+    day, and the reasoning above the list - (file, code) rather than line
+    number, a sorted list rather than a set, scoped to the two shared files -
+    is what makes that admission safe. It costs one empty literal to keep.
 
     DELIBERATELY UNGATED. `_channel_code_hits()` reads two files from disk by
     path and never shells git, so this arm holds in a git-less checkout - a ZIP
