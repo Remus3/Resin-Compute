@@ -19,7 +19,9 @@ cannot quietly cancel the pin.
   2.  its LF-normalised sha256 equals the pinned digest
   3.  it contains zero CR bytes
   3b. every byte is printable ASCII or newline (added here, not RC's)
-  4.  the declared CHANNEL_VERSION parses to an int and equals 1
+  4.  the declared CHANNEL_VERSION parses to an int and equals PINNED_VERSION
+      (numeral deliberately not named here - this line read "equals 1" and went
+      false on the version 2 vendor, in a TRACKED file, with nothing to catch it)
   5.  no heading line carries a date
   6.  every repo-relative path it names resolves, and it cites no file:line
   7.  the filename-variant table is present and parses, every cell pinned
@@ -275,8 +277,16 @@ CHANNEL_DOC = REPO_ROOT / "docs" / "CHANNEL.md"
 #: recomputed from the file it guards is self-fulfilling. Re-pinning is a JOINT
 #: act across all five trees, and a byte change without a CHANNEL_VERSION bump is
 #: red by construction because arms 2 and 4 live in the same module.
-PINNED_SHA256 = "899f6eb957cc26ee25993d83d65d8ca291841fe4eec24a48f729c2dc005f4c6b"
-PINNED_VERSION = 1
+PINNED_SHA256 = "fc22e86eebe93bb247a91f44835257a3fe717a287c4a3184a8e7a7b9a463fb9c"
+PINNED_VERSION = 2
+
+#: The declared version line, DERIVED from the pin rather than typed. At
+#: CHANNEL_VERSION 1 the version mutants and the version-parser control each
+#: carried the literal `CHANNEL_VERSION: 1`, and vendoring version 2 turned all
+#: of them into NO-OPS - a mutant whose target no longer occurs in the doc
+#: cannot fail, and a parser control that replaces nothing measures nothing.
+#: Deriving the token here makes the next bump carry them along for free.
+_DECLARED_VERSION_TOKEN = f"CHANNEL_VERSION: {PINNED_VERSION}"
 
 #: Bytes a line of this doc may contain: printable ASCII plus the line feed.
 #: Stricter than the tree-wide docs arm, which also allows tab and CR - this doc
@@ -537,7 +547,7 @@ def test_the_digest_arm_has_teeth(monkeypatch, tmp_path):
     original = _doc_bytes()
     mutants = {
         "one byte appended": original + b"x",
-        "version bumped": original.replace(b"CHANNEL_VERSION: 1", b"CHANNEL_VERSION: 2"),
+        "version bumped": _bump_version(original),
         "one heading reworded": original.replace(b"## 0. Roster", b"## 0. Rosters"),
         "final newline stripped": original.rstrip(b"\n"),
     }
@@ -642,7 +652,7 @@ def test_the_byte_hygiene_arm_has_teeth(monkeypatch, tmp_path):
 # Arm 4 - the declared CHANNEL_VERSION
 # ---------------------------------------------------------------------------
 
-def test_the_declared_channel_version_is_one():
+def test_the_declared_channel_version_is_the_pinned_version():
     declared = _declared_version(_doc_text())
     assert declared is not None, "no parsable CHANNEL_VERSION line in docs/CHANNEL.md"
     assert isinstance(declared, int)
@@ -654,9 +664,19 @@ def test_the_declared_channel_version_is_one():
 
 def test_the_version_parser_can_fail():
     text = _doc_text()
-    assert _declared_version(text.replace("CHANNEL_VERSION: 1", "CHANNEL_VERSION: 2")) == 2
-    assert _declared_version(text.replace("CHANNEL_VERSION: 1", "CHANNEL_VERSION: two")) is None
-    assert _declared_version(text.replace("CHANNEL_VERSION: 1", "CHANNEL_VER: 1")) is None
+    bumped = f"CHANNEL_VERSION: {PINNED_VERSION + 1}"
+    # The non-vacuity control comes first: at the version 2 vendor every line
+    # below replaced a token the doc no longer contained, so all three compared
+    # the UNCHANGED text and passed while measuring nothing.
+    assert text.replace(_DECLARED_VERSION_TOKEN, bumped) != text, (
+        f"{_DECLARED_VERSION_TOKEN!r} does not occur in docs/CHANNEL.md - every assertion "
+        "below is replacing nothing and this control is vacuous"
+    )
+    assert _declared_version(text.replace(_DECLARED_VERSION_TOKEN, bumped)) == PINNED_VERSION + 1
+    assert _declared_version(text.replace(_DECLARED_VERSION_TOKEN, "CHANNEL_VERSION: two")) is None
+    assert _declared_version(
+        text.replace(_DECLARED_VERSION_TOKEN, f"CHANNEL_VER: {PINNED_VERSION}")
+    ) is None
 
 
 # ---------------------------------------------------------------------------
@@ -724,8 +744,11 @@ def test_every_repo_relative_path_resolves():
     )
 
 
-#: Arm 6's ENTIRE graded population on CHANNEL_VERSION 1 bytes, pinned exactly
-#: rather than floored, and SPLIT ON WHETHER GIT IGNORES THE TOKEN.
+#: Arm 6's ENTIRE graded population, pinned exactly rather than floored, and
+#: SPLIT ON WHETHER GIT IGNORES THE TOKEN. Re-measured on the CHANNEL_VERSION 2
+#: bytes and UNCHANGED from version 1 - same two tokens, same side of the split
+#: each. The label, not the numbers, was what went stale at the version 2
+#: vendor, so no numeral is named here now.
 #:
 #: The split key is load-bearing and it is the second thing this pin got wrong.
 #: The first version of it split on `Path.exists()`, which is a fact about the
@@ -761,7 +784,9 @@ def test_the_path_scan_walked_a_real_population():
     THAN HIDING IT. CS's REVIEW of the shared test core found that the
     anti-vacuity guard here is satisfied by a self-reference, and an independent
     adversary in this tree found the same thing before that note arrived.
-    Measured on CHANNEL_VERSION 1 bytes:
+    Measured on the CHANNEL_VERSION 2 bytes, and UNCHANGED from version 1 -
+    every figure below was re-derived after the version 2 vendor and moved by
+    nothing:
 
       * the population is exactly TWO tokens;
       * exactly ONE of them is a path git does not ignore - `docs/CHANNEL.md`,
@@ -1164,19 +1189,23 @@ EXPECTED_SHAPES = ["PRIMARY", "Variant A", "Variant B", "Variant C"]
 EXPECTED_VARIANT_TABLE = [
     [
         "`2026-09-15-0930-from-RC-FYI-example-topic.md`",
-        "ADMIT", "routes", "any entry", "no responder", "no responder", "PRIMARY",
+        "ADMIT", "routes", "any entry", "no responder", "no responder",
+        "UNMEASURED", "PRIMARY",
     ],
     [
         "`2026-09-15-from-RC-FYI-example-topic.md`",
-        "REFUSE", "routes", "any entry", "no responder", "no responder", "Variant A",
+        "REFUSE", "routes", "any entry", "no responder", "no responder",
+        "UNMEASURED", "Variant A",
     ],
     [
         "`from-RC-2026-09-15-0930-FYI-example-topic.md`",
-        "REFUSE", "zero destinations", "any entry", "no responder", "no responder", "Variant B",
+        "REFUSE", "zero destinations", "any entry", "no responder", "no responder",
+        "UNMEASURED", "Variant B",
     ],
     [
         "`2026-09-15-0930-from-RC-FYI-example-topic.txt`",
-        "REFUSE", "routes", "any entry", "no responder", "no responder", "Variant C",
+        "REFUSE", "routes", "any entry", "no responder", "no responder",
+        "UNMEASURED", "Variant C",
     ],
 ]
 
@@ -1184,8 +1213,14 @@ EXPECTED_VARIANT_TABLE = [
 #: own: `_variant_table_rows` SKIPS a separator row by content rather than
 #: requiring one, so deleting it is invisible to the row walk. Measured here -
 #: CS reports its own tree catches that mutation and this tree did NOT.
-EXPECTED_TABLE_HEADER = "| Example | RC gate 6 | RSC | LW | CS | LL | Shape |"
-EXPECTED_TABLE_SEPARATOR = "|---|---|---|---|---|---|---|"
+#:
+#: CHANNEL_VERSION 2 INSERTED AN `SS` COLUMN between `LL` and `Shape`, so both
+#: of these strings changed and every variant row gained an eighth cell. The
+#: roster numeral is STILL frozen inside these literals: nothing ties this
+#: header to a roster list anywhere in the tree, so the next roster change is
+#: caught only by a human remembering that this string exists.
+EXPECTED_TABLE_HEADER = "| Example | RC gate 6 | RSC | LW | CS | LL | SS | Shape |"
+EXPECTED_TABLE_SEPARATOR = "|---|---|---|---|---|---|---|---|"
 
 
 def _render_row(cells: list[str]) -> str:
@@ -1289,11 +1324,7 @@ def test_the_variant_table_block_is_present_verbatim():
 
 def test_the_variant_table_parser_can_fail():
     text = _doc_text()
-    dropped = text.replace(
-        "| `2026-09-15-0930-from-RC-FYI-example-topic.txt` | REFUSE "
-        "| routes | any entry | no responder | no responder | Variant C |\n",
-        "",
-    )
+    dropped = text.replace(_render_row(EXPECTED_VARIANT_TABLE[3]) + "\n", "")
     assert dropped != text, "the Variant C row text moved - re-derive this control"
     assert len(_variant_table_rows(dropped)) == 3
     # The parser must not simply return every table in the doc: the roster table
@@ -1312,7 +1343,7 @@ _NON_DIGEST_ARMS = (
     test_the_channel_doc_exists,
     test_the_doc_carries_no_carriage_returns,
     test_the_doc_is_printable_ascii,
-    test_the_declared_channel_version_is_one,
+    test_the_declared_channel_version_is_the_pinned_version,
     test_no_heading_line_carries_a_date,
     test_every_repo_relative_path_resolves,
     test_the_doc_cites_no_line_number,
@@ -1322,11 +1353,14 @@ _NON_DIGEST_ARMS = (
 
 
 def _bump_version(data: bytes) -> bytes:
-    return data.replace(b"CHANNEL_VERSION: 1", b"CHANNEL_VERSION: 2")
+    return data.replace(
+        _DECLARED_VERSION_TOKEN.encode("ascii"),
+        f"CHANNEL_VERSION: {PINNED_VERSION + 1}".encode("ascii"),
+    )
 
 
 def _drop_version(data: bytes) -> bytes:
-    return data.replace(b"CHANNEL_VERSION: 1\n", b"")
+    return data.replace((_DECLARED_VERSION_TOKEN + "\n").encode("ascii"), b"")
 
 
 def _append(text: str):
@@ -1334,11 +1368,9 @@ def _append(text: str):
 
 
 def _drop_variant_row(data: bytes) -> bytes:
-    return data.replace(
-        b"| `2026-09-15-0930-from-RC-FYI-example-topic.txt` | REFUSE "
-        b"| routes | any entry | no responder | no responder | Variant C |\n",
-        b"",
-    )
+    # Derived from the pin, not typed. The typed version carried the version 1
+    # six-column spelling and went NO-OP the moment the SS column landed.
+    return data.replace(_render_row(EXPECTED_VARIANT_TABLE[3]).encode("ascii") + b"\n", b"")
 
 
 def _corrupt_variant_verdict(data: bytes) -> bytes:
