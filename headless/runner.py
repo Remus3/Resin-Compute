@@ -16,6 +16,13 @@ design choice below serves that:
     `headless.jobs.run_job`, which absorbs anything the job leaks and reports
     it as FAIL. One broken job costs one line of the summary.
 
+Daemon mode is governed. This tree's daemon loop is one participant in a
+MACHINE-WIDE concurrency bucket shared with sibling repositories through the
+vendored `ops/loop/slots.py`, so each LIVE pass runs inside a held slot and a
+`SlotTimeout` is a failed cycle rather than permission to run unslotted. The
+slot is held around the pass and nothing else, per that module's own contract,
+and a dry run takes none: a slot is a lock file, and a dry run writes none.
+
 Exit codes:
   0  the pass completed; no job failed, or it was a dry run
   1  at least one job FAILed in a non-dry run
@@ -33,6 +40,7 @@ import os
 import signal
 import sys
 import threading
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -41,6 +49,7 @@ from typing import Any
 
 from headless import jobs as jobs_mod
 from ops import health as health_mod
+from ops.loop import slots as slots_mod
 
 log = logging.getLogger("headless.runner")
 
@@ -49,6 +58,24 @@ log = logging.getLogger("headless.runner")
 ENV_UID = "RESINCOMPUTE_UID"
 
 DEFAULT_INTERVAL_SECONDS = 300
+
+#: The `repo` field written into a slot lockfile. It is a FREE-FORM HUMAN LABEL:
+#: nothing in the vendored governor branches on it, and carriers spell it
+#: differently on purpose - a sibling's measurement, reported rather than
+#: re-measured here, has four carriers writing their full checkout root path and
+#: one writing a short code. Its only job is telling a maintainer who is
+#: grepping a stuck bucket which tree is holding a lane.
+#:
+#: "resin-compute" rather than the short code "rsc", for two reasons.
+#: It is already the spelling every existing call site in this tree uses
+#: (`tests/test_loop_concurrency.py`), so adopting it leaves ONE spelling in the
+#: tree instead of adding a second. And a three-letter code is also this
+#: repository's opaque cross-repo CODENAME, which would put a fleet codename
+#: into a machine-wide artifact that other trees read - exactly the roster leak
+#: `tests/test_no_sibling_names.py` exists to prevent.
+#:
+#: This is the single definition. Runtime code must not spell it inline.
+SLOT_REPO_LABEL = "resin-compute"
 
 EXIT_OK = 0
 EXIT_JOB_FAILED = 1
@@ -316,6 +343,87 @@ def install_signal_handlers(flag: _ShutdownFlag) -> list[str]:
     return installed
 
 
+def _lane_width() -> int:
+    """The cross-repo ceiling on concurrent executor calls.
+
+    Imported HERE rather than at module scope, for the reason in this module's
+    docstring: a sibling slice must not be able to break `--once --dry-run`.
+    There is deliberately NO fallback value. `slots.hold`'s signature default of
+    2 and `Config.max_concurrent_lanes` are different numbers that do not govern
+    this bucket, and inventing a width is worse than failing loudly - every
+    participant must read the SAME number or the bucket bounds nothing.
+    """
+    from core.config import MAX_CONCURRENT_LANES
+
+    return MAX_CONCURRENT_LANES
+
+
+def _run_governed_pass(
+    uid: str | None,
+    dry_run: bool,
+    job_names: Sequence[str] | None,
+    runtime_dir: str | None,
+    run_id: str,
+    cycle: int,
+    slot_root: str | Path | None,
+    slot_timeout: float,
+) -> PassResult | None:
+    """Run one pass while holding one machine-wide lane slot.
+
+    Returns None when no slot came free inside the timeout. That is a FAILED
+    cycle: the pass does not run, and the caller must never read it as
+    permission to proceed unslotted. The bucket exists because the participating
+    repositories share one rate-limit pool, so a cycle that ran anyway would
+    defeat the governor for every carrier at once, silently.
+
+    The slot wraps the pass and NOTHING else - not the lane-width read, not the
+    signal handlers, not the shutdown health write. That is the vendored
+    module's own contract: "HELD ONLY AROUND THE EXECUTOR CALL, never around git
+    or the adjudicator, so a long merge in one repo cannot starve the other."
+
+    A dry run takes no slot. This module promises a dry run writes nothing -
+    "not the health file, not a log file, not a lock file" - and a slot IS a
+    lock file. It also reaches no rate-limited resource, so it is not work the
+    bucket exists to bound.
+    """
+    if dry_run:
+        return run_pass(
+            uid=uid, dry_run=True, job_names=job_names, runtime_dir=runtime_dir
+        )
+
+    # Read OUTSIDE the critical section: config loading is setup, not executor
+    # work, and holding a shared lane while doing it starves the other carriers.
+    max_slots = _lane_width()
+    root = Path(slot_root) if slot_root is not None else None
+
+    try:
+        with slots_mod.hold(
+            max_slots=max_slots,
+            repo=SLOT_REPO_LABEL,
+            run_id=run_id,
+            cycle=cycle,
+            root=root,
+            timeout=slot_timeout,
+            log=lambda message: log.info("%s", message),
+        ):
+            return run_pass(
+                uid=uid, dry_run=False, job_names=job_names, runtime_dir=runtime_dir
+            )
+    except slots_mod.SlotTimeout:
+        # Never swallowed into a success path, and never surfaced raw. The
+        # operator gets a cause; the exception text goes to the debug log.
+        log.error(
+            "cycle %d failed - no lane slot free within %ss (%d lanes). The pass did "
+            "NOT run: a busy bucket is a failed cycle, never permission to run "
+            "unslotted.",
+            cycle,
+            slot_timeout,
+            max_slots,
+        )
+        log.debug("slot acquisition timed out", exc_info=True)
+        return None
+
+
 def run_daemon(
     uid: str | None,
     interval: int,
@@ -323,12 +431,21 @@ def run_daemon(
     job_names: Sequence[str] | None,
     runtime_dir: str | None,
     max_passes: int | None = None,
+    slot_root: str | Path | None = None,
+    slot_timeout: float | None = None,
 ) -> int:
     """Run passes on an interval until a signal arrives.
 
     `max_passes` is a test and operations affordance: it bounds the loop so a
     supervised run can be exercised without relying on a signal being
     deliverable in the harness.
+
+    `slot_root` and `slot_timeout` are APPENDED with defaults, per the tree's
+    convention. `slot_root` defaults to the vendored governor's machine-wide
+    bucket and is overridden only by tests, which must never touch that bucket:
+    sibling repositories hold lanes in it live. `slot_timeout` defaults to one
+    interval - waiting longer than that means the pass is already late, so the
+    cycle fails and the next tick tries again rather than the loop piling up.
     """
     flag = _ShutdownFlag()
     installed = install_signal_handlers(flag)
@@ -338,17 +455,26 @@ def run_daemon(
         ", ".join(installed) if installed else "none available",
     )
 
+    run_id = uuid.uuid4().hex[:12]
+    timeout = float(max(1, int(interval))) if slot_timeout is None else float(slot_timeout)
+
     passes = 0
     last_ok = True
     while not flag.requested:
-        outcome = run_pass(
+        passes += 1
+        outcome = _run_governed_pass(
             uid=uid,
             dry_run=dry_run,
             job_names=job_names,
             runtime_dir=runtime_dir,
+            run_id=run_id,
+            cycle=passes,
+            slot_root=slot_root,
+            slot_timeout=timeout,
         )
-        last_ok = outcome.ok
-        passes += 1
+        # A starved cycle has no PassResult at all, and it is a FAILURE. This is
+        # the one place a None could be mistaken for "nothing went wrong".
+        last_ok = outcome is not None and outcome.ok
         if max_passes is not None and passes >= max_passes:
             log.info("daemon reached max_passes=%d, stopping", max_passes)
             break
