@@ -546,6 +546,54 @@ def _list_tracked(mode: str) -> int:
     return 0
 
 
+def _report_staged_subject(staged: dict[str, dict]) -> None:
+    """State the corpus the staged half actually read, on EVERY exit.
+
+    THE THIRD MEMBER OF THIS MODULE'S VACUITY FAMILY, and the one the other two
+    closures did not reach. `_check_scan_files` refuses a zero-length selection
+    and `_check_staged` refuses an UNREADABLE diff, but a diff that was read and
+    is EMPTY is neither: it is a legitimate corpus that happens to hold nothing,
+    and `_check_staged` used to answer it by returning 0 having written not one
+    byte anywhere. `echo "git commit" | precommit_gate.py` against a clean index
+    and the same line against forty staged files were BYTE-IDENTICAL to the
+    caller - no stdout, no stderr, rc 0. That is the vacuous manual run recorded
+    in docs/LEDGER.md, in its surviving form: the bare-stdin half of it is
+    refused in main(), and this half is what was left.
+
+    WHY THIS REPORTS RATHER THAN BLOCKS, which is a DECISION and not a deduction
+    and is the one thing a later reader must not quietly reverse. An empty index
+    is the NORMAL state for several legitimate callers. `git commit
+    --allow-empty` fires .githooks/pre-commit with exactly this corpus, a human
+    may run the line by hand before staging anything, and `_staged_added`'s own
+    docstring already rules that `{}` is "a genuine no-op commit" as against the
+    `None` that is a corpus never seen. Blocking on empty would wedge all three
+    and would overturn a distinction this file spent a defect learning. So the
+    fault was never that emptiness PASSES - it is that emptiness was INVISIBLE,
+    indistinguishable from a full scan by every channel a caller can read.
+
+    The remedy is the one the scan lane already uses on itself: `selected=
+    scanned= exempt=` makes a zero there LEGIBLE, and the staged lane simply
+    never got the same arithmetic. It is printed BEFORE any violation decision,
+    so a BLOCKED run states its subject too - a blocked caller otherwise cannot
+    tell whether one file was examined or forty.
+
+    WHAT THIS CANNOT DO, stated plainly so it is not over-read. A git hook
+    consumes the EXIT CODE and nothing else, so this line does not make an empty
+    corpus fail anywhere; it makes it legible to whoever reads the output. A
+    caller that must REFUSE an empty staged corpus needs an opt-in flag and a
+    hook line that passes it, and neither exists here.
+    """
+    files = len(staged)
+    lines = sum(len(info["lines"]) for info in staged.values())
+    print(f"precommit_gate: staged={files} added-lines={lines}")
+    if files == 0:
+        print(
+            "precommit_gate: NOTHING IS STAGED - this result is a statement "
+            "about an EMPTY corpus, not about the tree. Zero findings over "
+            "zero added lines is not a clean tree."
+        )
+
+
 def _check_staged(command: str) -> int:
     root = (
         _root_from_command(command)
@@ -574,6 +622,9 @@ def _check_staged(command: str) -> int:
             "staged lines must not report zero findings as a pass.\n"
         )
         return 1
+    # UNCONDITIONAL and placed BEFORE the scan, so the subject is stated on a
+    # blocking exit as well as on a clean one. See _report_staged_subject.
+    _report_staged_subject(staged)
     violations: list[str] = []
 
     # 1. Banned glyphs on ADDED lines, named as file:line.
@@ -838,6 +889,19 @@ def main(argv: list[str] | None = None) -> int:
     except (ValueError, AttributeError):
         command = raw
     if not _is_commit(command):
+        # THE SIBLING OF THE EMPTY-CORPUS SILENCE, same root cause and fixed
+        # the same way. This lane is CORRECT to exit 0 - the input was
+        # understood and the answer is a genuine no-op, which
+        # tests/test_precommit_gate_corpus.py pins so a refusal here cannot
+        # wedge the hook - but it used to do so mutely, and a mute 0 from here
+        # is byte-identical to a mute 0 from a scan that really ran. Say which
+        # of the two happened. Deliberately NOT a `staged=` line: this lane
+        # never read a staged corpus, and reporting a subject it did not have
+        # would be a worse answer than the silence it replaces.
+        print(
+            "precommit_gate: the command on stdin is not a `git commit`, so "
+            "the staged half DID NOT RUN and nothing was scanned."
+        )
         return 0
     return _check_staged(command)
 
