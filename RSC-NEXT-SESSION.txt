@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-09-20, at commit d2a1bcf on main. Everything below is a READING
+Stamped 2026-09-21, at commit 7fbbaf0 on main. Everything below is a READING
 taken that day, not a promise about now. Re-measure before citing.
 
 BOOTSTRAP - READ IN THIS ORDER
@@ -22,140 +22,147 @@ increment, so any claim of 79 or 80 is arithmetically impossible; and 1.600
 percent is a long-run average, never a per-wish Bernoulli parameter.
 
 THE GATES, in the order /done runs them
-  python -m pytest tests/test_licence_posture.py -q
-  python -m pytest tests/test_docs_consistency.py -q
+  python -m pytest tests/test_licence_posture.py
+  python -m pytest tests/test_docs_consistency.py
   python scripts/qa_companion.py
   python -m ruff check .
   python -m pytest tests
   python -m pytest agents/pity_engine
   cd shell && node --test
   python -m headless.runner --once --dry-run
-mypy is ADVISORY, not a gate. It traverses only the files= roots in mypy.ini.
-It says NOTHING about headless/, ops/, surface/, scripts/ or tests/, so never
-cite its Success as evidence about code outside those roots. Never run
-pytest . from the root; the two suites run separately.
+  python tools/publish_next_session.py
+Never pytest . from the root; the two suites run separately. NEVER pass a
+command-line -q - pytest.ini already carries one and a second makes -qq, which
+prints no summary line at all. mypy is ADVISORY and traverses only mypy.ini's
+files= roots, so it says NOTHING about headless/, ops/, surface/, scripts/ or
+tests/.
 
-STATE OBSERVED 2026-09-20 AT d2a1bcf
-  tests 3003 passed 3 skipped; pity_engine 80 passed; shell node 52 passed;
-  ruff clean; mypy 37 source files; headless smoke exit 0; licence 47;
-  docs 34; qa_companion 17 passed 2 skipped 3 noted.
-  Working tree clean, all work pushed.
+STATE OBSERVED 2026-09-21 AT 7fbbaf0
+  tests 3092 passed 4 skipped; pity_engine 80; shell node 52; ruff clean;
+  mypy 38 source files; licence 47; docs 34; qa 17 passed 2 skipped 3 noted;
+  headless smoke rc 0. Working tree clean.
 
-WHAT LANDED THIS SESSION - five commits, 963cda1..d2a1bcf, all pushed
-  67bd2fd  The inbox drop walker is pruned with a casefolded name match, given
-           a depth bound, and the name table moved to one owner in
-           core/walkprune.py shared by three call sites.
-  8433eba  tools/publish_next_session.py converges the Desktop .lnk onto the
-           tracked hand-off instead of writing a detached copy. A machine
-           identity leak in a refusal detail was closed in the same commit.
-  93898dd  CHANNEL_VERSION 2 vendored: docs/CHANNEL.md at 25425 bytes, 0 CR,
-           LF sha256 fc22e86eebe93bb247a91f44835257a3fe717a287c4a3184a8e7a7b9a463fb9c,
-           taken from origin/main as an independent witness. Thirteen pinned
-           constructs moved; eight v1 literals are now derived.
-  3f47b1a  tests/test_responder_refusal_gates_fire.py drives six refusal gates
-           in process and asserts on the RESULT, beside the syntax census that
-           a gate RELOCATION defeats.
-  d2a1bcf  The duplicate syntax arm dropped, so the behavioural module stays
-           inside the mutation campaign instead of being excluded whole.
+  THE FOURTH SKIP IS NEW AND IS DELIBERATE. It is an arm in
+  tests/test_interpreter_pinning.py declining to report an unearned green on a
+  host where a bare python already resolves to sys.executable. It is not
+  contamination. Compare skip REASONS with -rs, never skip COUNTS.
 
-CORRECTIONS MADE THIS SESSION - DO NOT RESURRECT EITHER
-  1. "RC's commit is UNPUSHED" was the stated blocker on holding CHANNEL v2.
-     FALSE. git branch -r --contains answers origin/main. The claim had simply
-     DECAYED - RC's note said not-pushed as that note was written, and every
-     reader since carried it forward unre-measured. A fact with a timestamp is
-     not a fact with a lifetime.
-  2. "RC's acceptance criterion can never be met." WITHDRAWN. The criterion is
-     MEETABLE and not yet met. CS is the sole outstanding carrier at v1,
-     899f6eb9 / 20633 bytes. LL's copy sits at a vendoring prefix under its
-     third_party tree, which resolves RC's previously unexplained gap: the
-     probe was not wrong, its predicate was too narrow.
+THE INTERPRETER QUESTION IS SETTLED - DO NOT REOPEN IT AS AN OPEN CHOICE
+The Python 3.11 pin STANDS. It was settled by measurement, not by amendment.
+An equipped 3.11.9 agrees with 3.14.4 on both suites, ruff, mypy, qa_companion
+and the headless smoke, on an identical collection total, with exactly one
+Windows-only pathlib difference in a positive-control arm whose own docstring
+documents the asymmetry and which is expected green on CI's Linux 3.11. What
+was never true is that this tree's figures ARE 3.11 figures: python here
+resolves to 3.14.4 and CI runs 3.11.16. CLAUDE.md now says so.
 
-THE FOUR-VERSUS-FIVE CARRIER DISPUTE IS RESOLVED AND WAS NEVER A DISAGREEMENT
-  FOUR is the ops/loop/slots.py carrier population at 71fa2a68 - LW, RC, RSC,
-  SS, with CS and LL absent. FIVE is the docs/CHANNEL.md population - CS, LL,
-  LW, RC, RSC, with SS absent. The two exception sets are DISJOINT, which is
-  why neither number ever corrected the other. Name the population before
-  citing either figure.
+WHAT LANDED - five commits, c4cf858..7fbbaf0, all pushed
+  4bd3c29  Every roster numeral in docs/CHANNEL.md is derived from the parsed
+           roster table. 19 sites, 20 numerals, two axes that never mix, plus 9
+           must-stay-at-five exemptions pinned so a later reader finishing the
+           job goes red. Two ordinal sites are graded on ABSENCE of the stale
+           wording and demand a human rewrite, because the mechanical
+           substitution silently drops the tree the sentence already named.
+  abfa3d2  Every carrier claim names its population, and a new guard,
+           tests/test_carrier_population_prose.py, reds on a directory-scoped
+           or unnamed one. 18 hits on the old bytes, 0 on these.
+  5d51bc1  tools/corpus_statement.py publishes untracked_not_ignored so a guard
+           can STATE its corpus. It WARNS and never refuses, and nothing in it
+           raises to its caller, because it runs from a git hook.
+  709cfe0  tests/test_mypy_scope.py launches sys.executable, and the detector
+           now FOLLOWS THE NAME through module-level bindings so a splatted
+           tuple cannot hide a bare interpreter.
+  7fbbaf0  The docs.
+
+THE ONE FINDING THAT REPEATED IN ALL FOUR SLICES - read before writing an arm
+Every slice shipped an arm that COULD NOT FAIL, and the cause was always one of
+two shapes: THE FIXTURE EXCLUDED THE DEFECT, or THE DETECTOR COULD NOT SEE THE
+SHAPE THE FIX ITSELF CREATED.
+  - A helper declared two git variables inert. Its fixture had NO TRACKED FILES,
+    so they had nothing to relabel. With a tracked file present both hijack.
+  - An interpreter fix introduced a module-level tuple, and its detector read
+    argv[0] at the call site, so reinstating the exact defect passed all 14 arms.
+  - A roster tie covered 8 sites and called the rest illustrative; 8 more were
+    found, then 2 more again by a census built BLIND from the document.
+  - A repair declined to build a guard as necessarily vacuous. The guard was
+    then built in about 20 lines and discriminated 18 to 0.
+ALWAYS reinstate the exact defect and prove the arm reds. An arm that has never
+rejected anything is not a gate.
 
 TRAPS MEASURED IN THIS TREE - EACH ONE HAS ACTUALLY BITTEN
+  - A VIRTUALENV ON PATH CONTAMINATES THE SUITE FIGURE. It turned a pass into a
+    skip and produced a false 3002/4 that was written up as a correction to this
+    file. This file was right. Re-measure in a clean shell before believing any
+    figure that disagrees.
+  - WINDOWS CreateProcess RESOLVES A BARE NAME against the calling image's
+    directory FIRST, then cwd, then PATH - not PATH order. One process can reach
+    three different interpreters and none need be the one running the suite.
   - A GUARD WHOSE CORPUS COMES FROM git ls-files CANNOT SEE AN UNTRACKED FILE.
-    This bit this session: a new test module passed the builder's suite run and
-    the merge-seam run at 3004, then the pre-push gate REFUSED the commit,
-    because the guard builds its corpus from git ls-files and the module was
-    untracked. Both green runs were vacuous for that file. Remedy: git add a
-    new file BEFORE running the seam gates.
-  - THE PRE-PUSH HOOK REPORTS A DIFFERENT SKIP COUNT THAN AN INTERACTIVE RUN -
-    4 rather than 3. That is EXPECTED, not a defect. git prepends its own PATH
-    for hooks, so arms keyed on resolving a tool answer a different question
-    there. It is documented in .githooks/pre-push. Do not file the two counts
-    as a conflict.
-  - A scheduled task reads Ready forever once its triggers expire. Prove
-    liveness with ops/check_task_liveness.py and a future NextRunTime, never
-    with the State string. State can VETO liveness and can never vouch for it.
-  - schtasks invoked through Bash cannot see these tasks at all, so reach for
-    the PowerShell cmdlets instead - but treat whatever they print as
-    REPORTED and never as liveness, because that is the same trap again.
+    git add a new file BEFORE running the seam gates or the green is vacuous.
+  - A NO-OP MUTANT READS AS A KILL. An adversary credited an arm with killing a
+    sorted-to-list mutation; git ls-files already emits byte-sorted output, so
+    that mutation is undetectable against any real fixture. Confirm a mutation
+    CHANGED THE BYTES and that the kill names a specific arm.
+  - grep -c RETURNS EXIT 1 ON A ZERO COUNT, which breaks an && chain and can
+    silently truncate a measurement. A zero is often the interesting answer.
+  - tr -d with a NUL deletes the separator and collapses everything onto one
+    line, so a count comes back as 1. Translate the NUL to a newline instead.
+  - THE DOCS GUARD REFUSES A BACKTICKED PATH GIT DOES NOT TRACK. Write
+    gitignored, sibling-only and nonexistent paths in PLAIN TEXT.
+  - A LINE-NUMBER CITATION INTO A DOC DECAYS. CLAUDE.md cites
+    tests/test_loop_concurrency.py:145-146 and only a RANGE check guards it.
   - Path.write_text emits CRLF on Windows and eol=lf in .gitattributes hides it
-    from every diff, so a clean-looking diff proves nothing. Read bytes, write
-    bytes to a temp, replace, then verify the CR count on disk.
-  - A quoted heredoc still mangles backslashes. Use the Write or Edit tool for
-    content containing them. This has put a stray control byte into the ledger.
-  - Under Git Bash a lone /F is rewritten to F:/ by MSYS path conversion, so
-    write taskkill //F //PID <pid>. It fails SILENTLY when redirected.
-  - Never Stop-Process on Windows.
-  - A line-number citation into a doc decays the moment a file above it grows.
-    tests/test_docs_consistency.py catches it; cite by heading or by text.
-  - The docs guard REFUSES a backticked path that git does not track. Write
-    gitignored and nonexistent paths in plain text, no backticks.
-  - A commit message file must live in the SESSION SCRATCHPAD. A shared Git tmp
-    path was overwritten by a concurrent session and a commit once landed
-    carrying another tree's message. No gate exists for this.
-  - A SHAPE ARM IS NOT A GUARD. An arm that reads a module's SOURCE TEXT for an
-    absent name is defeated by a runtime-assembled name or by a second
-    language. Assert on the ARTIFACT - a directory listing, a return value -
-    not on what the source looks like.
-  - Writing an outbound note into this tree's own inbox is AUTHORING, not
+    from every diff. Byte-copy vendored artifacts; shutil.copyfile, never a
+    text-mode write.
+  - A quoted heredoc still mangles backslashes, and a long one can fail to parse
+    outright. Use the Write tool for anything substantial.
+  - The commit message file goes in the SESSION SCRATCHPAD, never a shared tmp
+    path. Under Git Bash a /tmp redirect lands in the Git INSTALLATION dir.
+  - Under Git Bash write taskkill //F //PID <pid>. Never Stop-Process.
+  - cd inside a compound command DRIFTS the working directory for later calls.
+  - Writing an outbound note into THIS tree's own inbox is AUTHORING, not
     DELIVERING. Verify by reading the RECIPIENT'S copy.
   - Subagents contradicted this session's briefs on measured points repeatedly
-    and were right. Brief them to trust their own probe over the brief.
+    and were right every time, including about the briefs' own control figures.
+    Brief them to trust their own probe.
 
-OPEN WORK, HIGHEST PRIORITY FIRST
-  1. CS is the sole outstanding CHANNEL v2 carrier, still at v1. Blocked on CS,
-     not on this tree. RSC has vendored and pushed.
-  2. The joint re-pin round for ops/loop/slots.py and ops/loop/winmutex.py has
-     NO AUTHOR AND NO DATE. Shape agreed by four trees; nobody has called it.
-     Never edit either file unilaterally - both are byte-identical-by-contract
-     and pinned by sha256, and the known-violation pin in
-     tests/test_no_sibling_names.py goes RED when the carrier name is fixed,
-     which is the prompt to re-pin inside that same round.
-  3. The responder is DISABLED, not unregistered, and there are ZERO
-     volunteers. ops/runtime/trial_confirmed.json EXISTS on disk, which invites
-     the wrong reading: it records RC's REFUSAL, scope "LATENCY-ONLY only. RC
-     is NOT armed.", and it EXPIRED at 2026-09-08T02:00Z. It is not a
-     self-satisfied gate. NEVER write that file to unblock this tree - a gate
-     one tree can satisfy alone is not a gate.
-  4. The roster numeral is frozen in a test string literal in
-     tests/test_channel_doc_pin.py with no mechanical tie to any roster list.
-     A sixth participant was added by hand; a seventh would be missed the same
-     way, with every arm green.
-  5. ops/loop/slots.py short-circuits on AGE before pid_alive, so a LIVE holder
-     past the window is declared stale. The window is 16200 seconds, 4h30m.
-     Needs a measured hold() duration against it. RC, CS and LW owe that
-     measurement; this tree's duration corpus is ZERO pairs.
-  6. tests/test_loop_concurrency.py says "all three carriers" where the
-     measured population is four. Tracked file, cosmetic but false.
-  7. A GENERALISED finding, analysis only: a claim is defeatable whenever its
-     BINDING CONDITIONS are narrower than its WORDING. Three measured
-     instances are recorded in ROADMAP.md. Do not propose a CLAUDE.md change on
-     that row's authority alone.
+OPEN WORK, HIGHEST PRIORITY FIRST - full text in ROADMAP.md, cited by heading
+  1. ROUND B LANDS 2026-09-22 AND RSC OWES ITS PART. LW authored the shared
+     ops/loop/winmutex.py repair: 6184 bytes, sha256
+     df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7. RSC has
+     already re-hashed it from its own disk, CONFIRMED the digest, ACCEPTED the
+     wording, and RULED the empty pin STRICTER by measurement. What remains is
+     the act: copy the bytes with shutil.copyfile, hash from your own disk, and
+     land them with BOTH pin changes in ONE commit. RSC's pin coordinates are
+     NOT the ones LW's note states - KNOWN_CODE_HITS does not exist here. RSC
+     pins the digest in tests/test_loop_concurrency.py and the code violation as
+     _KNOWN_CHANNEL_CODE_VIOLATIONS in tests/test_no_sibling_names.py, so RSC's
+     commit touches TWO test files. This trips halt clause (b) by construction,
+     which is what the round exists to authorise. Moving either half alone reds
+     a guard, and that coupling is the guard working.
+  2. THE SS AGE ITEM. ops/loop/slots.py short-circuits on AGE before pid_alive,
+     so a LIVE holder past the 16200-second window is declared stale. This tree
+     now runs a governed live daemon, so it can finally produce the hold()
+     duration corpus it owes. RC, CS and LW owe theirs.
+  3. THE RESPONDER STAYS DISABLED with three refusals and zero volunteers.
+     ops/runtime/trial_confirmed.json records RC's REFUSAL and expired
+     2026-09-08. NEVER write it - a gate one tree can satisfy alone is no gate.
+  4. INBOX: 38 entries remain untriaged, named in the scratchpad file the ledger
+     cites. 37 are RSC's own sent records; exactly ONE is inbound and is already
+     answered. The watermark was deliberately NOT advanced.
+  5. Four open rows from this session in ROADMAP.md: the fourth population and
+     CLAUDE.md's directory-scoped phrasing; the carrier constants that cannot
+     redden for another tree; the clean-index hole in the staged-diff check; and
+     the range-only guard on the CLAUDE.md line citation.
 
 STANDING DIRECTIVES - THESE ARE NOT UP FOR RE-ASKING
   Nothing waits for operator approval. Adjudicate a contested call, act on the
-  ruling, and report it as done. Commit and push everything, batching so CI
-  waits overlap other work. Full machine access is granted with an adjudicator.
-  Subagent-first, always: the main session is the operator's surface. Emit an
-  inline checklist at session start, again only after at least four items have
-  completed, and as the /done pre-flight - never per item. Report a time-to-
-  completion for every action. CAVEMAN ULTRA in chat; byte-exact everywhere
-  else. The cross-repo inbox is reviewed, triaged into four buckets, ingested,
-  implemented and answered every session - silence reads as DISSENT.
+  ruling, and report it as done. Commit and push everything. Subagent-first,
+  always: the main session is the OPERATOR'S SURFACE. The producer NEVER grades
+  its own work, and agreement between two agents is not evidence - find their
+  shared input and test THAT. Emit an inline checklist at session start, again
+  after at least four completions, and as the /done pre-flight - never per item.
+  CAVEMAN ULTRA in chat; byte-exact everywhere else. The cross-repo inbox is
+  reviewed, triaged into four buckets, ingested, implemented and ANSWERED every
+  session, and delivery is verified by reading the RECIPIENT'S copy. Silence
+  reads as DISSENT.
