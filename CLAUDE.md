@@ -110,6 +110,35 @@ measured cost of bringing each remaining root in, and `tests/test_mypy_scope.py`
 goes red if a root leaves the list or if mypy's own file count drifts from the
 arithmetic.
 
+**The contract targets Python 3.11 and this host does not run it.** Measured
+2026-09-20 at `c4cf858`: `python` here resolves to 3.14.4, CI runs 3.11.16, and
+3.11.9 is installed with no `pytest`. Every suite figure this tree has ever
+reported is therefore a 3.14 figure, and saying so is the point of this
+paragraph - the pin is not being relaxed. The divergence was then MEASURED
+rather than feared: with an equipped 3.11.9 the two suites, `ruff`, `mypy`,
+`qa_companion` and the headless smoke all agree with 3.14.4, on an identical
+collection total. Exactly one arm differs, in `tests/test_report_renderability.py`,
+where 3.11's `pathlib` raises for an unsupported flavour under a patched
+`os.name` and 3.14 does not. That is Windows-only - on CI's Linux the sentinel
+selects a supported flavour - and the module's own docstring already documents
+the asymmetry. Nothing in this tree's own code failed under 3.11.
+
+**Never measure the suite with a virtualenv on `PATH`.** Doing that once this
+session turned a pass into a skip and produced a false `3002 passed, 4 skipped`
+that nearly reached this file as a correction. A SKIP-count delta between two
+runs is a statement about the environment; a PASS-count delta is a statement
+about the tree. Compare skip REASONS, not skip counts, and prefer `-rs`.
+
+**Launch an interpreter by `sys.executable`, never by a bare name.** Windows
+`CreateProcess` resolves a bare name against the calling image's directory
+first, then `cwd`, then `PATH` - so a bare `python` can be three different
+interpreters from one process, and none of them need be the one running the
+suite. `tests/test_interpreter_pinning.py` resolves each launcher's `argv[0]`
+through its module-level binding, so a tuple that is splatted or `list()`-ed
+cannot hide a bare name, and it reports an unreadable head as UNRESOLVED rather
+than as clean. The `shell/` Node lane is exempt and recorded there: a Node
+process has no `sys.executable` to name.
+
 ## TDD
 
 Feature work and bug fixes follow TDD: write the failing characterization or

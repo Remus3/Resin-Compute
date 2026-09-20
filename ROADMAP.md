@@ -11,31 +11,65 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-09-20. THE ROSTER NUMERAL IS FROZEN INSIDE A TEST STRING LITERAL
-  WITH NO MECHANICAL TIE TO ANY ROSTER LIST.** `tests/test_channel_doc_pin.py`
-  holds the expected channel table header as a verbatim string literal naming
-  each participant in order. NOTHING OUTSIDE THAT MODULE READS IT, so the
-  roster's size and membership live in one place that no roster change will
-  visit. A SIXTH PARTICIPANT WAS ADDED BY HAND THIS SESSION, which is the
-  evidence rather than the worry: a seventh would be missed exactly the same
-  way, and the arm would stay green while describing a roster that no longer
-  exists. NOT DONE: decide whether the header should be DERIVED from a named
-  roster sequence the way the version literals were derived from the pinned
-  version, or whether a literal is correct here and the tie should be a separate
-  arm asserting the two agree. Do not simply widen the literal - a hand-edited
-  literal is what this row is about.
+- **NEW 2026-09-21. ROUND B IS CALLED AND RSC OWES ITS PART ON 2026-09-22.** LW
+  authored the shared `ops/loop/winmutex.py` carrier-code repair and circulated
+  proposed bytes: 6184 bytes, sha256 `df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7`,
+  removing six bytes so the line reads "Found on review, 2026-07-26." RSC
+  re-hashed from its own disk and CONFIRMED that digest, ACCEPTED the wording,
+  and RULED the empty pin STRICTER by measurement - three re-entry mutants all
+  go red against an emptied pin, and the coupling control confirms neither half
+  may ship alone. WHAT RSC OWES: copy with `shutil.copyfile`, never a text-mode
+  write, hash from its own disk, and land the bytes together with BOTH pin
+  changes in ONE commit. RSC's pin coordinates are NOT the ones LW's note
+  states - `KNOWN_CODE_HITS` does not exist in this tree. RSC pins the digest in
+  `tests/test_loop_concurrency.py` and the code violation as
+  `_KNOWN_CHANNEL_CODE_VIOLATIONS` in `tests/test_no_sibling_names.py`, so RSC's
+  round-B commit touches TWO test files, not one. This trips halt clause (b) by
+  construction, which is expected and is what the round exists to authorise.
+  Silence from any carrier is recorded as PARKED, never as agreement.
 
-- **NEW 2026-09-20. `tests/test_loop_concurrency.py` SAYS "ALL THREE CARRIERS"
-  WHERE THE MEASURED POPULATION IS FOUR.** The phrase appears in that module's
-  comments and prose. The carrier population of `ops/loop/slots.py` measured at
-  `71fa2a68` is FOUR - LW, RC, RSC and SS. The claim is COSMETIC, carried in
-  comment text rather than in any assertion, so nothing goes red and nothing
-  misbehaves. It is filed anyway because it sits in a TRACKED file and a false
-  count in a comment is the cheapest thing in this tree for a later reader to
-  inherit unre-measured. NOT DONE: correct the count and, when correcting it,
-  NAME THE POPULATION - this file's own numbers describe the slots-module
-  carriers and not the channel-document holders, which are a different set of a
-  different size.
+- **NEW 2026-09-21. A FOURTH POPULATION EXISTS AND NONE OF THE FOUR NESTS.**
+  Measured across all six tree roots: `slots.py` carriers are LW, RC, RSC, SS;
+  `winmutex.py` carriers are those four PLUS CS, whose copy is a DIFFERENT file
+  at 7724 bytes / `e0d3ac7d`; `CHANNEL.md` holders are CS, LL, LW, RC, RSC, with
+  LL's copy under a `third_party` vendoring prefix; lane-width declarers are LW,
+  RC, RSC, SS, all at 3, while CS carries an ops/loop/config.json of its own and declares no
+  width at all. CLAUDE.md's directory-scoped phrasing, "byte-identical-by-contract
+  across the carriers", is TRUE of `slots.py` and ALREADY FALSE of `ops/loop/`
+  as a directory. NOT DONE: decide whether that sentence in CLAUDE.md is narrowed
+  to the file it is true of, or states its exception.
+
+- **NEW 2026-09-21. THE CONSTANTS THAT NAME THOSE POPULATIONS CANNOT REDDEN FOR
+  ANOTHER TREE.** `tests/test_loop_concurrency.py` now ties its carrier tuples to
+  THIS tree's own disk, which is the strongest tie available - no test here may
+  read a foreign disk. So CS adopting `slots.py`, LL vendoring either module, SS
+  dropping one, or CS's `winmutex.py` converging would all leave the tuples stale
+  with every arm green. Those rows refresh only when a human re-runs the six-root
+  hash. This is a STATED LIMIT, not a gap to close by reaching across trees.
+
+- **NEW 2026-09-21. `_check_staged` RETURNS 0 ON AN EMPTY SUBJECT.** Separate
+  from the untracked-corpus work, which is done. `tools/precommit_gate.py`
+  already blocks on a zero scan corpus and on an unreadable diff, but with a
+  CLEAN INDEX `staged` is an empty dict rather than None, no violation
+  accumulates, and the gate exits 0. That is an EMPTY subject rather than an
+  INVISIBLE one - a different defect in the same vacuity family, and the
+  untracked reporter does not cover it.
+
+- **NEW 2026-09-21. THE CLAUDE.md LINE CITATION INTO
+  `tests/test_loop_concurrency.py` IS GUARDED ONLY BY A RANGE CHECK.** CLAUDE.md
+  cites lines 145-146 as the sha256 pins. Only ARM 1 of
+  `tests/test_docs_consistency.py` covers it and it merely range-checks; the
+  semantic arm is restricted to `CORPUS_BUILDER_CITATIONS`, three paths that do
+  not include this one. This session grew that file by 168 lines, widening the
+  false-pass window, and only hand-held line-count neutrality kept the citation
+  true. NOT DONE: add this citation to the semantic set, or replace the line
+  cite with a symbol cite.
+
+- **NEW 2026-09-21. THE ops/runtime/inbox_report.txt DROP GOES STALE WHILE THE SESSION
+  HOOK PRESENTS IT AS THE FULL LIST.** Measured today: the file's header read
+  `unread: 171` while the watcher reported 175. The hook's text points a reader
+  at that file for the complete enumeration, so the hook's claim is false
+  whenever the file lags. Derive the population from `unseen_entries` instead.
 
 - **NEW 2026-09-20. `ops/loop/slots.py` SHORT-CIRCUITS ON AGE BEFORE IT EVER
   ASKS WHETHER THE HOLDER IS ALIVE, AND THIS TREE CANNOT MEASURE THE
