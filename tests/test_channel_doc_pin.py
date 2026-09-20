@@ -8,8 +8,9 @@ DOES pin markdown to LF - `.gitattributes` carries `*.md text eol=lf` - so the
 zero-CR arm below is a valid additional check HERE and would not be in a tree
 without that rule. See section 9 of the doc itself.
 
-Seven portable arms, as RC specified, plus one this tree added (arm 3b, byte
-hygiene - see REPAIR 4 below). RC's own gate module is deliberately NOT
+Seven portable arms, as RC specified, plus two this tree added (arm 3b, byte
+hygiene - see REPAIR 4 below; and arm 8, the roster tie - see REPAIR 5).
+RC's own gate module is deliberately NOT
 vendored: it hard-imports RC-only tooling absent from this tree, and a test
 that cannot import is a test that cannot fail. These arms are stdlib only and
 import no sweep module from this tree either, so a refactor of a local sweep
@@ -25,6 +26,11 @@ cannot quietly cancel the pin.
   5.  no heading line carries a date
   6.  every repo-relative path it names resolves, and it cites no file:line
   7.  the filename-variant table is present and parses, every cell pinned
+  8.  the section 0 roster table parses, and BOTH the variant table's responder
+      columns, all nineteen prose roster/carrier numeral sites and the roster
+      CODE-LENGTH claim are DERIVED from it rather than typed, while the nine
+      exempt charter-quote and version-1 numerals are held AT FIVE (added here,
+      not RC's - see REPAIR 5)
 
 THE RE-PIN BLINDNESS, and why this module is shaped the way it is. An
 independent adversary fired 31 disk mutants at the first version of this file.
@@ -224,6 +230,120 @@ had nothing standing in its way. The CHECK was fixed rather than the wording:
 arm 3b asserts every byte is 0x20..0x7E or newline, which is stricter than the
 tree-wide arm (it forbids tab and CR outright) and is satisfied by the current
 bytes - measured, zero offending bytes.
+
+REPAIR 5 - the roster numeral had no mechanical tie. Arm 7 pinned the grammar
+table's header as the literal `| Example | RC gate 6 | RSC | LW | CS | LL | SS |
+Shape |`, and the doc's prose spells the roster size as a WORD in eight
+sentences. Nothing connected either to section 0's roster table. The sixth
+participant was added BY HAND at CHANNEL_VERSION 2 and a seventh would have gone
+in the same way. MEASURED HERE before the repair, in the digest-blind state:
+`roster row added`, `roster row dropped` and `roster code renamed` were caught by
+NO arm at all - `caught == []`, not merely a weak catch.
+
+Arm 8 is the tie, and it is two ties rather than one because they fail on
+different mutations. The COUNT is parsed out of the roster table and the doc's
+numeral words are rebuilt from it, which catches a row added without a prose
+edit and catches a carrier demoted from YES to NO. The CODE SET is parsed out of
+the same table and compared against the responder columns the grammar table's
+own header names, which catches a row added without a column and catches a code
+respelled while every numeral stays correct. Measured after the repair: the
+renamed-code mutant is caught ONLY by the column tie and the demoted-carrier
+mutant ONLY by the numeral tie, so neither half is decoration.
+
+What arm 8 deliberately does NOT do is sweep the doc for the word `five`.
+Section 4 says in capitals that two rows quote charter text saying FIVE and are
+left at FIVE on purpose, because VERBATIM is a measured property of the quote
+against the charter as it exists today. A blanket sweep would demand exactly the
+edit the doc forbids, and would turn a measured status cell into a false one.
+`_EXEMPT_FIVE_NUMERALS` is the other half of that: seven passages that must STILL
+say five, asserted by `test_the_exempt_five_numerals_survive`. Every sweep in
+this tree carries two guards - one that the bad thing is gone, one that the
+legitimate neighbours survived - and that is this one's second.
+
+REPAIR 5b - THE FIRST VERSION OF ARM 8 PINNED EIGHT SENTENCES AND THERE ARE
+NINETEEN. An independent adversary on the scope-and-siblings lens upheld five
+seams and broke this one. Its mutant was an HONEST seven-way re-pin: a seventh
+roster row, a seventh responder column, the module's table literals retyped by
+hand exactly as section 9 says a carrier does, and all eight pinned sentences
+moved to `seven`. NOTHING CAUGHT IT. Eleven roster-bearing numerals across eight
+more sites still read `six`, and the digest is blind by construction in a re-pin
+round - so that was the seventh participant being missed in eight places exactly
+the way the sixth was missed.
+
+Three of those eight are PROVABLY in the defect class rather than exempt, and
+`git diff 8212390 93898dd -- docs/CHANNEL.md` is the evidence: `four of five
+trees`, `five independent pollers would cost five wakeups` and `Five trees
+sharing a prior produce five approvals` were all HAND-EDITED to six at the
+version 1 to version 2 bump. A numeral a human had to hand-edit at the last
+roster change is precisely the population this arm exists to mechanise, and
+calling it illustrative does not survive that diff. Two more - `Editing either
+quote to six` and `which is now six` - are the doc talking ABOUT the exempt
+charter quotes. Meta-commentary on an exempt quote is not itself exempt: the
+quote is frozen at five because VERBATIM is measured against the charter, while
+the sentence describing it names the LIVE roster.
+
+REPAIR 5c - the arm over-fired, and the templates are short because of it. The
+eight pinned sentences were pinned WHOLE, so rewording `Every thread goes to all
+six,` to `Every thread is sent to all six,` reddened the arm while the roster was
+perfectly correct. An arm that reddens for an innocent reword is one a
+contributor learns to route around. Each site is now the shortest phrase that
+still carries the numeral and is still roster-bearing, the failure separates a
+STALE NUMERAL from a moved ANCHOR because those want opposite responses, and
+`test_every_roster_numeral_site_is_unique` guards the shortening by requiring
+every rendered phrase to occur exactly once - a phrase that collided would let a
+stale site hide behind the wrong match.
+
+`EXPECTED_TABLE_HEADER` and `EXPECTED_VARIANT_TABLE` stay literal. They are a
+cross-tree byte contract and a re-pin must still retype them by hand from the
+new doc. Arm 8 is what makes a roster change red WITHOUT a hand edit, and it
+holds no roster literal of its own - re-pinning at a seven-tree roster makes it
+pass again with nothing here to update.
+
+REPAIR 5d - THE EXEMPT SET WAS TWO SHORT, AND THE RULE COULD NOT BE APPLIED BY
+A STRANGER. A third pass built its census BLIND from the doc - it read the
+document and ran its sweep before opening this module - because the previous two
+passes each worked from the other's list, and agreement between two agents that
+share an input is not evidence. The tied set came back byte-for-byte identical,
+with zero over-ties. Two findings stood.
+
+First, `_EXEMPT_FIVE_NUMERALS` held seven entries and the census's exempt set is
+nine. Against a fully honest seven-way re-pin, dragging section 4's header
+sentence (`... SAYS FIVE, AND THEY ARE LEFT AT FIVE ON PURPOSE`) or rule 2's
+quoted example (`Rule 2's "2 of 5 reviews" is an EXAMPLE`) to the live roster
+was caught by NOTHING - `caught == []` - while the same attack on the other
+seven was caught. Rule 6's equivalent sentence WAS pinned and rule 2's twin was
+not; that asymmetry was the finding. Reproduced here before the fix.
+
+Second, the exemption rule as first written - "meta-commentary about an exempt
+quote is NOT exempt" - contradicted this module's own third exempt entry, which
+is meta-commentary about a quote and is exempt. Applied literally by someone who
+was not in that conversation it TIES the header sentence, and the module then
+renders `SAYS SEVEN ... LEFT AT SEVEN ON PURPOSE`: false, and green. An
+ambiguous rule silently becomes a hand judgement, which is the defect class this
+arm exists to remove. The rule is restated at `_EXEMPT_FIVE_NUMERALS` in terms
+of what a sentence REPORTS, and it is shown there discriminating four sites that
+go two each way rather than merely asserted.
+
+REPAIR 5e - a tie can produce a WRONG SENTENCE, and two of them did. `the sixth
+participant's watcher is UNMEASURED here` and `that the sixth is asked to meet`
+are ordinals. They must move when the roster moves, so tying them is right - but
+the mechanical render at seven is `the seventh participant's watcher`, which
+SILENTLY DROPS THE SIXTH. Those two are now graded on the ABSENCE of the stale
+wording and the failure says a human must write the replacement, naming the
+mechanical one as wrong. A red saying "this needs a human" is honest; a green
+that drops a participant is not. The weaker claim that buys is stated at
+`_HUMAN_REWRITE_SITES` rather than left to be discovered.
+
+REPAIR 5f - the last typed literal on the test side is gone. The roster CODE
+shape was `^[A-Z]{2,3}$`, typed. Section 0's own `two-to-three letter CODE` is
+itself a roster-dependent literal, so the bounds are parsed out of that claim
+and the codes are checked against it: a four-letter tree joining, or the prose
+narrowing under the roster, each go red. Deriving the pattern from the codes
+instead would have been tautological. Section 6's `two-to-four character code
+group` is deliberately NOT tied and the reason is recorded at
+`_UNTIED_PARSER_BOUND`: it states what the filename grammar ACCEPTS, not what
+the roster IS, and forcing the two to agree would manufacture a red at the first
+four-letter tree.
 
 WHAT "GRADE" MEANS HERE, because nobody who argued about it had defined it - this
 module included - and two reasonable readings give two different answers. "Reads
@@ -493,6 +613,64 @@ def _variant_table_rows(text: str) -> list[list[str]]:
             continue  # the header separator row
         rows.append(cells)
     return rows
+
+
+def _variant_table_header(text: str) -> list[str]:
+    """The filename-variant table's HEADER cells, which `_variant_table_rows` skips.
+
+    Keyed the same way - `Example` ... `Shape` - so the two functions cannot
+    disagree about which table they are looking at.
+    """
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if cells and cells[0] == "Example" and cells[-1] == "Shape":
+            return cells
+    return []
+
+
+def _roster_table_rows(text: str) -> list[list[str]]:
+    """Rows of the section 0 roster table, keyed on its header cells.
+
+    Same idiom as `_variant_table_rows`, and keyed on `Code` ... `Standing in
+    the channel` rather than on a line number or a section offset, both of which
+    decay on the next re-pin. The seventeen-rule table and the filename-variant
+    table must not be picked up - `test_the_roster_table_parser_can_fail`
+    measures that.
+    """
+    rows: list[list[str]] = []
+    in_table = False
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            in_table = False
+            continue
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if not in_table:
+            if cells and cells[0] == "Code" and cells[-1] == "Standing in the channel":
+                in_table = True
+            continue
+        if all(set(c) <= set("-: ") for c in cells):
+            continue  # the header separator row
+        rows.append(cells)
+    return rows
+
+
+def _roster_codes(text: str) -> list[str]:
+    """The participant CODES, in the order section 0 lists them."""
+    return [row[0] for row in _roster_table_rows(text)]
+
+
+def _carrier_codes(text: str) -> list[str]:
+    """The subset that declares YES in the Carrier column.
+
+    Section 0 is explicit that participation and carriage are different things
+    and that a carrier count must never be written as a roster count, so the two
+    are derived separately here rather than one from the other.
+    """
+    return [row[0] for row in _roster_table_rows(text) if row[1].startswith("YES")]
 
 
 # ---------------------------------------------------------------------------
@@ -1215,10 +1393,15 @@ EXPECTED_VARIANT_TABLE = [
 #: CS reports its own tree catches that mutation and this tree did NOT.
 #:
 #: CHANNEL_VERSION 2 INSERTED AN `SS` COLUMN between `LL` and `Shape`, so both
-#: of these strings changed and every variant row gained an eighth cell. The
-#: roster numeral is STILL frozen inside these literals: nothing ties this
-#: header to a roster list anywhere in the tree, so the next roster change is
-#: caught only by a human remembering that this string exists.
+#: of these strings changed and every variant row gained an eighth cell. That
+#: sixth participant was added BY HAND, and this comment used to end here saying
+#: the roster numeral was still frozen in these literals with nothing tying them
+#: to a roster list anywhere in the tree. THAT IS NO LONGER TRUE: arm 8 parses
+#: the section 0 roster table and requires the responder columns between
+#: `Example` and `Shape` to be exactly that set of CODEs. These strings stay
+#: literal on purpose - they are a cross-tree byte contract and a re-pin must
+#: still retype them by hand - but a seventh roster row now reddens arm 8 on its
+#: own rather than waiting on a human to remember this string exists.
 EXPECTED_TABLE_HEADER = "| Example | RC gate 6 | RSC | LW | CS | LL | SS | Shape |"
 EXPECTED_TABLE_SEPARATOR = "|---|---|---|---|---|---|---|---|"
 
@@ -1334,6 +1517,684 @@ def test_the_variant_table_parser_can_fail():
 
 
 # ---------------------------------------------------------------------------
+# Arm 8 - the roster numeral is DERIVED, not frozen
+# ---------------------------------------------------------------------------
+#
+# THE DEFECT THIS CLOSES. `EXPECTED_TABLE_HEADER` above names the six responder
+# codes as a literal, and the doc's prose spells the roster size as a word in
+# eight places. Before this arm, nothing tied either to section 0's roster
+# table: the sixth participant was added BY HAND at CHANNEL_VERSION 2 and a
+# seventh would have been missed with every arm green. Measured before the
+# repair - `roster row added`, `roster row dropped` and `roster code renamed`
+# were caught by NO arm other than the digest, and the digest is blind by
+# construction in the one round that matters.
+#
+# The tie is mechanical in both directions. The COUNT is parsed out of the
+# roster table and the doc's own numeral words are rebuilt from it, so a row
+# added without a prose edit is red. The CODE SET is parsed out of the same
+# table and compared against the variant table's responder columns, so a row
+# added without a column is red even when every numeral is consistent.
+#
+# Nothing here is a second copy of the digest: every claim is derived from the
+# PARSED table, so re-pinning the doc at a seven-tree roster makes this arm pass
+# again with no literal to retype - which is the whole point.
+
+#: Cardinal numerals, index = value. The doc spells the roster size as a WORD,
+#: never a digit, so a derived claim has to spell it the same way. Sized well
+#: past any plausible roster so a growth step is a doc edit and not a test edit.
+_CARDINALS = (
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+    "nine", "ten", "eleven", "twelve",
+)
+
+#: Ordinals, same indexing. Two sites name the NEWEST participant by ordinal
+#: rather than counting the roster - "the sixth participant's watcher is
+#: UNMEASURED here" - and an ordinal goes stale on a roster change exactly like
+#: a cardinal does.
+_ORDINALS = (
+    "zeroth", "first", "second", "third", "fourth", "fifth", "sixth",
+    "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth",
+)
+
+#: Section 0 says each tree is named by a `two-to-three letter CODE` and by
+#: nothing else. THAT PROSE IS ITSELF A ROSTER-DEPENDENT LITERAL, so the bounds
+#: are parsed out of it rather than typed here - a typed `{2,3}` would go stale
+#: the same way the header literal did, and deriving the bounds from the roster
+#: codes instead would be tautological: a pattern built from the strings it then
+#: validates cannot fail. Parsing the CLAIM and checking the CODES against it is
+#: a real assertion, and it fires in both directions - a four-letter code added
+#: without updating the prose, or the prose narrowed without the roster.
+_CODE_LENGTH_CLAIM = re.compile(r"([a-z]+)-to-([a-z]+) letter CODE")
+
+#: THE DOC'S OTHER CODE-LENGTH NUMBER IS DELIBERATELY NOT TIED, recorded here as
+#: an exclusion with its reason rather than left as an oversight. Section 6 says
+#: a 12-character token "cannot bind a two-to-four character code group". That
+#: reads as a disagreement with section 0's two-to-three and it is not one: the
+#: two sentences have different subjects. Section 0 states what the roster IS
+#: today; section 6 states what the filename grammar's sender-code slot ACCEPTS,
+#: which is deliberately wider so a future four-letter code needs no grammar
+#: change. A parser bound is not a roster fact and must not track the roster, so
+#: tying it would manufacture a red at the first four-letter tree - the opposite
+#: of the defect this module exists to catch. Measured this run: the roster
+#: codes are 2 and 3 characters long, so section 0 is accurate and section 6 is
+#: accurate, and no arm should force them to agree.
+_UNTIED_PARSER_BOUND = "two-to-four character code group"
+
+
+def _declared_code_lengths(text: str) -> tuple[int, int]:
+    """The (low, high) code length section 0 CLAIMS, as words, parsed to ints."""
+    match = _CODE_LENGTH_CLAIM.search(_flat(text))
+    assert match, (
+        "section 0's code-length claim was not found, so the roster-code shape "
+        "check below has nothing to check against and is vacuous. It should "
+        "read like 'two-to-three letter CODE'."
+    )
+    words = match.group(1), match.group(2)
+    for word in words:
+        assert word in _CARDINALS, (
+            f"section 0's code-length claim spells {word!r}, which is not a "
+            f"cardinal this module knows: {_CARDINALS}"
+        )
+    return _CARDINALS.index(words[0]), _CARDINALS.index(words[1])
+
+
+def _declared_code_pattern(text: str) -> re.Pattern[str]:
+    low, high = _declared_code_lengths(text)
+    assert 1 <= low <= high, f"section 0 claims an impossible code length range: {low}..{high}"
+    return re.compile(f"^[A-Z]{{{low},{high}}}$")
+
+_ROSTER_HEADER_CELLS = ["Code", "Carrier of these bytes", "Standing in the channel"]
+
+
+def _flat(text: str) -> str:
+    """Whitespace-collapsed doc text.
+
+    The doc hard-wraps at about 90 columns, so several of the sentences below
+    straddle a newline - `Roster is the six\\ncodes` is one. Matching against
+    the raw text would make those claims depend on where the author's wrap fell,
+    which is not what is being pinned.
+    """
+    return re.sub(r"\s+", " ", text)
+
+
+#: THE NINETEEN ROSTER-BEARING NUMERAL SITES, as `(why, axis, template)`.
+#:
+#: NINETEEN SITES CARRYING TWENTY NUMERALS. Only `{less2} of the {n} trees`
+#: carries two - a corrected figure; this comment first said twenty-one, which
+#: double-counted. The site count is what the arms iterate; the numeral count is
+#: what a reader recounting the doc by hand will arrive at, and the two are
+#: written down separately here so a later reader is not forced to guess which
+#: population a figure refers to.
+#:
+#: HOW A SITE IS PHRASED, and why it is not a whole sentence. The first version
+#: of this arm pinned eight FULL sentences. That over-fires: rewording `Every
+#: thread goes to all six,` to `Every thread is sent to all six,` reddened the
+#: arm while the roster was perfectly correct, and an arm that reddens for an
+#: innocent reword is one a contributor learns to route around. Each template
+#: here is therefore the SHORTEST phrase that still carries the numeral and is
+#: still roster-bearing on its own reading.
+#:
+#: Shortening trades one risk for another: a short phrase could collide with
+#: another passage and a stale site would hide behind the wrong match.
+#: `test_every_roster_numeral_site_is_unique` measures that - every rendered
+#: phrase must occur EXACTLY ONCE - so the trade is guarded rather than assumed.
+#:
+#: AXIS says which count the site tracks. No site mixes the two: the section 0
+#: roster-versus-carrier sentence is split into two entries precisely so that a
+#: carrier promotion and a roster addition redden different rows. Section 0 is
+#: explicit that a carrier count must never be written as a roster count.
+#:
+#: FIELDS: {n} cardinal, {N} capitalised, {NU} upper, {o} ordinal, {less2} the
+#: cardinal of n-2, {c}/{CU} the carrier cardinal.
+_ROSTER_NUMERAL_SITES = (
+    ("section 0 opening sentence",
+     "roster", "{N} participating repositories"),
+    ("section 0 roster-versus-carrier sentence, roster half",
+     "roster", "the roster is {NU}"),
+    ("section 0 roster-versus-carrier sentence, carrier half",
+     "carrier", "the carrier set is {CU}"),
+    ("section 0 address-list sentence",
+     "roster", "all {n}, and the address"),
+    ("section 3 REVIEW- denominator",
+     "roster", "all {n} before the sender"),
+    # {less2} is the remainder after the sender and the one recipient - the doc
+    # says so in the next sentence, and the v1-to-v2 diff shows this read "four
+    # of five trees" and was hand-edited. Both numerals move with the roster.
+    ("section 4 BILATERAL-ORIGIN remainder",
+     "roster", "{less2} of the {n} trees"),
+    ("section 4 BILATERAL-ORIGIN recount",
+     "roster", "counted afresh at {n}"),
+    # Meta-commentary ON the exempt charter quotes. The QUOTES stay at five;
+    # these two sentences are the doc talking ABOUT them and they name the LIVE
+    # roster, so they are tied. See `_EXEMPT_FIVE_NUMERALS` for the other half.
+    ("section 4 commentary on editing the exempt quote",
+     "roster", "Editing either quote to {n}"),
+    ("section 4 reading of the two VERBATIM charter quotes",
+     "roster", "CURRENT ROSTER OF {NU}"),
+    ("section 4 pointer into convention 3",
+     "roster", "where the roster is {n}"),
+    ("section 4 gloss on rule 6's ALL FIVE",
+     "roster", "which is now {n}"),
+    # Ordinals, and the two HUMAN-REWRITE sites - see `_HUMAN_REWRITE_SITES`.
+    ("section 5 unmeasured newest watcher",
+     "roster", "the {o} participant's watcher"),
+    ("section 5 what the newest participant is asked to meet",
+     "roster", "the {o} is asked to meet"),
+    ("section 5 disclaimer on the measured population",
+     "roster", "that {n} were looked at"),
+    # Hand-edited five-to-six at the v1-to-v2 bump; both numerals, both sites.
+    ("section 5 poller-count argument, pollers",
+     "roster", "{n} independent pollers"),
+    ("section 5 poller-count argument, wakeups",
+     "roster", "cost {n} wakeups"),
+    ("section 7 convention 3 denominator",
+     "roster", "Roster is the {n} codes"),
+    ("section 7 convention 4 decorrelation argument, trees",
+     "roster", "{N} trees sharing a prior"),
+    ("section 7 convention 4 decorrelation argument, approvals",
+     "roster", "produce {n} approvals"),
+)
+
+#: SITES WHOSE REPLACEMENT A MACHINE MUST NOT WRITE.
+#:
+#: Both are ORDINALS naming the participants beyond the five watchers measured
+#: at CHANNEL_VERSION 1: `the sixth participant's watcher is UNMEASURED here`
+#: and `that the sixth is asked to meet`. They genuinely move when the roster
+#: moves, so tying them is right - but the mechanical render at a roster of
+#: seven is `the seventh participant's watcher`, which SILENTLY DROPS THE SIXTH.
+#: The honest text is `the sixth and seventh participants' watchers`, and no
+#: template here can produce it.
+#:
+#: So these two are graded on the ABSENCE OF THE STALE WORDING rather than on
+#: the presence of a derived one, and the failure says a human must write the
+#: sentence. A red that says "this needs a human" is honest; a green that
+#: silently drops a participant is not, and a prescriptive message telling the
+#: editor to write the dropping version would be worse than either.
+#:
+#: THE COST, stated rather than discovered later: this is a WEAKER claim than
+#: the other seventeen sites carry. It catches the old wording left in place -
+#: which is the defect that actually happens at a re-pin - but it cannot tell a
+#: good rewrite from a bad one, and deleting the sentence outright would pass.
+#: `test_every_roster_numeral_site_is_unique` requires at most one occurrence
+#: for these rather than exactly one, for the same reason.
+_HUMAN_REWRITE_SITES = frozenset({
+    "section 5 unmeasured newest watcher",
+    "section 5 what the newest participant is asked to meet",
+})
+
+#: What an honest editor leaves behind at a human-rewrite site. It carries no
+#: numeral, no path separator and no date, so it trips none of the other arms.
+_HUMAN_REWRITE_MARKER = "REWRITTEN BY HAND AT THIS RE-PIN"
+
+
+#: ========================= THE EXEMPTION RULE =========================
+#:
+#: THIS IS THE RULE A FUTURE MAINTAINER APPLIES, and it has to decide every case
+#: from the DOCUMENT ALONE - nobody reading it was in the conversation that
+#: produced it. The first wording here failed that test and is recorded below
+#: with its failure, because an ambiguous rule silently becomes a hand
+#: judgement, which is the exact defect class this arm exists to remove.
+#:
+#: THE RULE. Ask what the sentence would be REPORTING if its numeral changed.
+#:
+#:   * If changing it would make the sentence MISQUOTE OR MISREPORT something
+#:     FIXED - a charter's wording, a quoted string, the state of the fleet at
+#:     an earlier CHANNEL_VERSION - the numeral is part of what the sentence
+#:     reports, and the site is EXEMPT. Its subject is text or history, neither
+#:     of which moves when a tree joins.
+#:
+#:   * If changing it would make the sentence STATE A FALSEHOOD ABOUT HOW THE
+#:     CHANNEL WORKS TODAY, the numeral is a live denominator and the site is
+#:     TIED. This holds even when the sentence sits beside a quote, and even
+#:     when it is talking about one.
+#:
+#: WHAT THE FIRST WORDING GOT WRONG. It read "meta-commentary about an exempt
+#: quote is NOT exempt". Applied literally that TIES the section 4 header
+#: sentence, and the module would then render `SAYS SEVEN ... LEFT AT SEVEN ON
+#: PURPOSE` - false, and green. It also contradicted this tuple's own third
+#: entry, which is meta-commentary about a quote and IS exempt. The distinction
+#: being used was sound; only its statement was wrong.
+#:
+#: THE RULE DISCRIMINATING, on the four sites that forced the rewrite. Two go
+#: each way, so this is a demonstration and not an assertion:
+#:
+#:   EXEMPT  s4 header  `... QUOTE CHARTER TEXT THAT SAYS FIVE, AND THEY ARE
+#:           LEFT AT FIVE ON PURPOSE` - its subject is what the two rows SAY.
+#:           At SEVEN it misreports them; they say five.
+#:   EXEMPT  s4 `Rule 2's "2 of 5 reviews" is an EXAMPLE` - the numeral is
+#:           inside the quoted string. At `2 of 7` it misquotes rule 2.
+#:   TIED    s4 `Editing either quote to six would leave the status cell...` -
+#:           SIX is not the quote's wording, it is the value a maintainer would
+#:           wrongly propagate. At five the warning names the wrong number.
+#:   TIED    s4 `Rule 6's ALL FIVE is the charter's wording ... which is now
+#:           six` - ONE sentence, TWO sites. `ALL FIVE` is reported text and is
+#:           exempt below; `which is now six` is a present-tense claim about the
+#:           live roster and is tied above. They are anchored separately for
+#:           exactly this reason.
+#:
+#: THE TUPLE ITSELF is the second guard every sweep in this tree is required to
+#: carry. The derivation arm proves the stale numerals are gone; this one proves
+#: the LEGITIMATE NEIGHBOURS SURVIVED. If a later reader decides to "finish the
+#: job" by mechanising these to the live roster too, that is the doc's own
+#: documented defect and it goes red here rather than passing as tidying.
+#:
+#: MEASURED, and the reason entries 1 and 2 exist: an independent census built
+#: BLIND from the doc found this tuple two short. Against a fully honest
+#: seven-way re-pin, dragging the section 4 header sentence and rule 2's quoted
+#: example to the live roster was caught by NOTHING - `caught == []` on all
+#: fourteen non-digest arms, with the digest blind by construction in a re-pin
+#: round. Rule 6's twin was protected and rule 2's was not; that asymmetry was
+#: the whole finding.
+#:
+#: WRAP TOLERANCE. TWO of these nine straddle the doc's hard wrap and have a RAW
+#: occurrence count of zero while their FLAT count is one - entries 6 and 7,
+#: measured this run. The arm matches against `_flat`, so both are found; a raw
+#: `str.replace` would report them absent and silently guard nothing. Verified
+#: by counting every anchor in the raw text and in the flattened text and
+#: requiring flat == 1 regardless of raw, and the straddling count is asserted
+#: rather than only asserted non-empty - this comment first said three, which
+#: was wrong, and a non-empty check could not see that.
+_EXEMPT_FIVE_NUMERALS = (
+    ("section 4 header sentence governing BOTH quoted rows",
+     "SAYS FIVE, AND THEY ARE LEFT AT FIVE ON PURPOSE"),
+    ("section 4 naming rule 2's quoted string as an example",
+     'Rule 2\'s "2 of 5 reviews" is an EXAMPLE'),
+    ("rule 2's charter quote - VERBATIM status is measured against the charter",
+     "landed with 2 of 5 reviews"),
+    ("rule 6's charter quote - same",
+     "goes to ALL FIVE and the address list"),
+    ("section 4 naming rule 6's quote as a quote",
+     "Rule 6's ALL FIVE is the charter's wording"),
+    ("section 4 historical statement about when the charter was written",
+     "the roster was five and records what was true then"),
+    ("section 5 population measured at CHANNEL_VERSION 1",
+     "the FIVE watchers that were running at CHANNEL_VERSION 1"),
+    ("section 5 what that measured population demonstrated",
+     "properties that the five demonstrated"),
+    ("section 9 quoting the two numbers version 1 carried",
+     '"all five" and "both trees"'),
+)
+
+
+def _render_site(template: str, axis: str, value: int) -> str:
+    """One site's phrase at a given count. No numeral is typed here."""
+    if axis == "carrier":
+        return template.format(c=_CARDINALS[value], CU=_CARDINALS[value].upper())
+    return template.format(
+        n=_CARDINALS[value],
+        N=_CARDINALS[value].capitalize(),
+        NU=_CARDINALS[value].upper(),
+        o=_ORDINALS[value],
+        less2=_CARDINALS[max(value - 2, 0)],
+    )
+
+
+def _site_sizes(text: str) -> dict[str, int]:
+    return {
+        "roster": len(_roster_codes(text)),
+        "carrier": len(_carrier_codes(text)),
+    }
+
+
+def test_the_roster_table_parses():
+    """Section 0's roster table is found and every row is a roster row.
+
+    Asserted BEFORE the two derivation arms below for the reason arm 7 states:
+    a derivation off an empty or drifted parse is vacuously true, and an arm
+    that cannot fire reads as an arm that passed.
+    """
+    text = _doc_text()
+    rows = _roster_table_rows(text)
+    assert rows, (
+        "the section 0 roster table was not found - `_roster_table_rows` keys on "
+        f"{_ROSTER_HEADER_CELLS[0]!r} ... {_ROSTER_HEADER_CELLS[-1]!r}; if the doc "
+        "respelled that header, every derived claim below went vacuous"
+    )
+    # The shape comes from section 0's own `two-to-three letter CODE` claim,
+    # parsed. See `_CODE_LENGTH_CLAIM` for why it is neither typed here nor
+    # derived from the codes themselves.
+    low, high = _declared_code_lengths(text)
+    code_shape = _declared_code_pattern(text)
+    for index, row in enumerate(rows):
+        assert len(row) == len(_ROSTER_HEADER_CELLS), (
+            f"roster row {index} has {len(row)} cells, expected "
+            f"{len(_ROSTER_HEADER_CELLS)}: {row}"
+        )
+        assert code_shape.match(row[0]), (
+            f"roster row {index} does not start with a CODE of the length "
+            f"section 0 itself claims ({low} to {high} letters), so either the "
+            f"parse walked onto another table or a tree joined with a code the "
+            f"doc's own prose does not admit: {row}"
+        )
+        assert row[1].startswith(("YES", "NO")), (
+            f"roster row {index} has an ungradable Carrier cell, so the carrier "
+            f"count derived from it is not a count of anything: {row}"
+        )
+    codes = _roster_codes(text)
+    assert len(set(codes)) == len(codes), f"a roster CODE is listed twice: {codes}"
+    carriers = _carrier_codes(text)
+    assert set(carriers) <= set(codes)
+    assert carriers, "no tree declares YES in the Carrier column"
+    # Section 0 states this as an invariant of CHANNEL_VERSION 2 onward: a
+    # carrier count must never be written as a roster count, and the two were
+    # equal at version 1 and are not equal now.
+    assert len(carriers) <= len(codes)
+
+
+def test_the_variant_table_columns_are_exactly_the_roster():
+    """THE MECHANICAL TIE. One responder column per roster CODE, no literal.
+
+    `EXPECTED_TABLE_HEADER` names the codes as frozen bytes and is still pinned
+    above, because those bytes are a cross-tree contract. This arm is the other
+    half: it reads the roster out of section 0 and the responder columns out of
+    the grammar table's own header, and requires them to be the same set. Add a
+    seventh roster row and this goes red on its own, with no hand edit anywhere.
+
+    The code is the FIRST token of the column label, because RC's column is
+    spelled `RC gate 6` - it names the gate as well as the tree.
+    """
+    text = _doc_text()
+    header = _variant_table_header(text)
+    assert header, "the filename-variant table header was not found"
+    assert header[0] == "Example" and header[-1] == "Shape"
+
+    responder_columns = header[1:-1]
+    responder_codes = [cell.split()[0] for cell in responder_columns if cell.split()]
+    assert len(responder_codes) == len(responder_columns), (
+        f"a responder column is blank, so it names no tree: {responder_columns}"
+    )
+
+    roster = _roster_codes(text)
+    assert set(responder_codes) == set(roster), (
+        "the grammar table's responder columns are not the section 0 roster.\n"
+        f"  roster    : {sorted(roster)}\n"
+        f"  responders: {sorted(responder_codes)}\n"
+        f"  in the roster and not a column: {sorted(set(roster) - set(responder_codes))}\n"
+        f"  a column and not in the roster: {sorted(set(responder_codes) - set(roster))}\n"
+        "A roster row was added or removed without the matching column. Do not "
+        "edit docs/CHANNEL.md to silence this - the bytes are pinned in five "
+        "trees and section 9 makes a change a joint re-pin round."
+    )
+    assert len(set(responder_codes)) == len(responder_codes), (
+        f"a responder column is named twice: {responder_codes}"
+    )
+    # Every variant row therefore carries Example + one cell per tree + Shape.
+    assert len(header) == len(roster) + 2
+    for index, row in enumerate(EXPECTED_VARIANT_TABLE):
+        assert len(row) == len(roster) + 2, (
+            f"pinned variant row {index} has {len(row)} cells but the roster is "
+            f"{len(roster)} trees, so the pin above was retyped without the "
+            "roster change reaching it"
+        )
+
+
+def test_the_roster_numerals_are_derived_from_the_roster_table():
+    """Every prose numeral that states the roster or carrier size, rebuilt.
+
+    This is the arm the module's own comment at `EXPECTED_TABLE_HEADER` said did
+    not exist: "nothing ties this header to a roster list anywhere in the tree,
+    so the next roster change is caught only by a human remembering that this
+    string exists."
+
+    The failure NAMES THE SITE and says what it currently reads, because the
+    first version reported only that some claim did not match, and a re-pin
+    round handed the reader nineteen sentences to eyeball. It also separates the
+    two ways a site can miss: a STALE NUMERAL, where the phrase is present at
+    some other count, and a REWORD, where the anchor itself has moved. Those
+    want opposite responses - fix the doc, versus fix this table - so they are
+    not reported with one message.
+    """
+    text = _doc_text()
+    flat = _flat(text)
+    sizes = _site_sizes(text)
+    roster = _roster_codes(text)
+    carriers = _carrier_codes(text)
+    population = (
+        f"the roster table lists {len(roster)} participants {sorted(roster)} "
+        f"and {len(carriers)} carriers {sorted(carriers)}"
+    )
+
+    for why, axis, template in _ROSTER_NUMERAL_SITES:
+        expected = _render_site(template, axis, sizes[axis])
+        stale = [
+            (count, _render_site(template, axis, count))
+            for count in range(len(_CARDINALS))
+            if count != sizes[axis] and _render_site(template, axis, count) in flat
+        ]
+        if why in _HUMAN_REWRITE_SITES:
+            # Graded on absence of the stale wording. No replacement is
+            # proposed, because the mechanical one drops a participant.
+            if not stale:
+                continue
+            count, found = stale[0]
+            raise AssertionError(
+                f"STALE ORDINAL, AND A HUMAN MUST WRITE THE REPLACEMENT - {why}.\n"
+                f"  it reads: {found!r}  (a {axis} of {count})\n"
+                f"  {population}\n"
+                "This sentence names the participants beyond the five watchers "
+                "measured at CHANNEL_VERSION 1. The mechanical substitution here "
+                f"would be {expected!r}, and that is WRONG: it silently drops "
+                "the tree this sentence already named. The honest text names "
+                "them all. No replacement is proposed on purpose - write it by "
+                "hand in the re-pin round, then this arm goes green because the "
+                "stale wording is gone."
+            )
+            continue
+        if expected in flat:
+            continue
+        if stale:
+            count, found = stale[0]
+            raise AssertionError(
+                f"STALE {axis.upper()} NUMERAL - {why}.\n"
+                f"  it reads    : {found!r}  (a {axis} of {count})\n"
+                f"  it must read: {expected!r}  (a {axis} of {sizes[axis]})\n"
+                f"  {population}\n"
+                "The roster table moved and this sentence did not follow it. "
+                "This is the defect class the sixth participant went in through: "
+                "it was added by hand and ten numerals were hand-edited with it. "
+                "Do not edit docs/CHANNEL.md to silence this - its bytes are "
+                "pinned in five trees and section 9 makes any change a joint "
+                "re-pin round. Fix it IN THAT ROUND, with this arm as the list."
+            )
+        raise AssertionError(
+            f"ANCHOR MOVED - {why}.\n"
+            f"  expected to find: {expected!r}\n"
+            "  and no other count matches either, so this is a REWORD rather "
+            "than a stale numeral: the roster may well be correct.\n"
+            f"  {population}\n"
+            "Re-derive this entry of `_ROSTER_NUMERAL_SITES` from the new doc. "
+            "The template is meant to be the shortest phrase that still carries "
+            "the numeral, so that an innocent reword around it does not fire."
+        )
+
+
+def test_every_roster_numeral_site_is_unique():
+    """The control on SHORTENING. Each rendered phrase occurs exactly once.
+
+    The templates above were deliberately cut down to the shortest roster-
+    bearing phrase, to stop the arm firing on an innocent reword. That trade is
+    only safe while no phrase collides with another passage - a collision would
+    let a stale site hide behind a match somewhere else in the doc. Measured
+    here rather than assumed.
+    """
+    text = _doc_text()
+    flat = _flat(text)
+    sizes = _site_sizes(text)
+    seen: dict[str, str] = {}
+    for why, axis, template in _ROSTER_NUMERAL_SITES:
+        phrase = _render_site(template, axis, sizes[axis])
+        # A human-rewrite site is graded on the ABSENCE of stale wording, so
+        # after an honest hand rewrite its derived phrase is legitimately gone.
+        # At most one, therefore, rather than exactly one.
+        exact = why not in _HUMAN_REWRITE_SITES
+        occurrences = flat.count(phrase)
+        allowed = {1} if exact else {0, 1}
+        assert occurrences in allowed, (
+            f"the phrase for {why} occurs {occurrences} times, expected "
+            f"{'exactly' if exact else 'at most'} one: {phrase!r}. A phrase that "
+            "occurs twice lets one stale site hide behind the other's match; a "
+            "phrase that occurs zero times at a DERIVED site is reported by the "
+            "derivation arm. Lengthen the template until it is unique again."
+        )
+        if occurrences == 0:
+            continue
+        assert phrase not in seen, (
+            f"{why} and {seen[phrase]} render the same phrase {phrase!r}, so one "
+            "of the two sites is not being graded at all"
+        )
+        seen[phrase] = why
+
+
+#: Every field name a template may carry. Used to count numerals rather than
+#: sites, because the two figures differ and both are quoted in this module.
+_NUMERAL_FIELD = re.compile(r"\{(n|N|NU|o|less2|c|CU)\}")
+
+
+def test_the_site_and_numeral_counts_are_what_the_comments_claim():
+    """Guard the two figures, because a comment is not a source of truth.
+
+    This module quotes a SITE count and a NUMERAL count and they are different
+    numbers - nineteen and twenty. An earlier revision of the comment said
+    twenty-one, having double-counted, and nothing would have caught it. Both
+    are now derived from the table and asserted, so the prose cannot drift from
+    what the arms actually iterate.
+    """
+    sites = len(_ROSTER_NUMERAL_SITES)
+    numerals = sum(
+        len(_NUMERAL_FIELD.findall(template))
+        for _why, _axis, template in _ROSTER_NUMERAL_SITES
+    )
+    multi = [
+        template for _why, _axis, template in _ROSTER_NUMERAL_SITES
+        if len(_NUMERAL_FIELD.findall(template)) > 1
+    ]
+    assert sites == 19, f"the site table holds {sites} entries, not nineteen"
+    assert numerals == 20, f"the site table carries {numerals} numerals, not twenty"
+    assert multi == ["{less2} of the {n} trees"], (
+        f"exactly one site should carry two numerals; these do: {multi}"
+    )
+    for _why, _axis, template in _ROSTER_NUMERAL_SITES:
+        assert _NUMERAL_FIELD.search(template), (
+            f"the template {template!r} carries no numeral field at all, so it "
+            "renders identically at every roster size and grades nothing"
+        )
+    assert _HUMAN_REWRITE_SITES <= {why for why, _a, _t in _ROSTER_NUMERAL_SITES}, (
+        "a human-rewrite site names a `why` that is not in the site table, so "
+        "it selects nothing and those sites are being graded as derived"
+    )
+
+
+def test_every_exempt_anchor_is_present_exactly_once_and_wrap_tolerant():
+    """Non-vacuity for the exempt tuple, and the wrap measurement it depends on.
+
+    An exempt entry whose anchor does not occur guards nothing and cannot fail,
+    which is the same no-op failure `_REPIN_MUTANTS` carries a guard for. An
+    anchor that occurs twice is worse: mechanising one copy would still pass.
+
+    The RAW-versus-FLAT count is asserted rather than assumed because several of
+    these straddle the doc's hard wrap. A raw `str.replace` sees zero of those,
+    so a future maintainer who reaches for one instead of `_flat` gets a silent
+    no-op. This records which entries are in that state at measurement time.
+    """
+    text = _doc_text()
+    flat = _flat(text)
+    straddling = []
+    for why, passage in _EXEMPT_FIVE_NUMERALS:
+        assert flat.count(passage) == 1, (
+            f"the exempt anchor for {why} occurs {flat.count(passage)} times, "
+            f"not once: {passage!r}. Zero means it guards nothing; two means "
+            "mechanising one copy would still pass."
+        )
+        if text.count(passage) == 0:
+            straddling.append(why)
+    assert len(_EXEMPT_FIVE_NUMERALS) == 9, (
+        f"the exempt tuple holds {len(_EXEMPT_FIVE_NUMERALS)} entries. It was "
+        "measured at nine by a census built blind from the doc; it went from "
+        "seven to nine when that census found the section 4 header sentence and "
+        "rule 2's quoted example guarded by nothing at all."
+    )
+    assert len(straddling) == 2, (
+        f"{len(straddling)} exempt anchors straddle the doc's wrap, not the two "
+        f"this arm records: {straddling}. The figure is asserted rather than "
+        "merely required non-empty because the comment above first said three "
+        "and a non-empty check could not see that it was wrong."
+    )
+
+
+def test_the_exempt_five_numerals_survive():
+    """THE SWEEP'S OTHER GUARD - the legitimate neighbours must survive.
+
+    A sweep that scores full marks on "no stale numeral" by mechanising the
+    charter quotes too has destroyed what it was protecting. Section 4 of the
+    doc says in capitals that rules 2 and 6 quote charter text saying FIVE and
+    are left at FIVE on purpose, because VERBATIM is a MEASURED property of the
+    quote against the charter as it exists today; editing them to the live
+    roster turns a measured cell into a false one and degrades exactly the
+    honesty guarantee the status column exists for.
+
+    So this arm requires those seven passages to still say five. It is the
+    reason the derivation above is a list of named sites rather than a regex
+    sweep for the word - a sweep cannot tell a live denominator from a quote.
+    """
+    flat = _flat(_doc_text())
+    for why, passage in _EXEMPT_FIVE_NUMERALS:
+        assert passage in flat, (
+            f"an EXEMPT five-numeral is gone - {why}: {passage!r}\n"
+            "These stay at FIVE deliberately. If this went red because somebody "
+            "propagated the live roster into a charter quote or into a sentence "
+            "about CHANNEL_VERSION 1, that is a regression and not tidying: the "
+            "doc's own section 4 forbids it in capitals, and the VERBATIM status "
+            "cell beside rule 2 and rule 6 becomes false the moment it happens."
+        )
+
+
+def test_the_roster_table_parser_can_fail():
+    """Non-vacuity, plus the sweep's two legitimate neighbours SURVIVING.
+
+    The first half proves the parser is a detector at all. The second is the
+    control `_variant_table_rows` carries for the same reason: a table parser
+    that simply returned every table in the doc would make both derivation arms
+    above read whichever table came first and pass on nonsense.
+    """
+    text = _doc_text()
+    rows = _roster_table_rows(text)
+
+    # (1) it fires - drop the last row and the count drops with it.
+    dropped = text.replace(_render_row(rows[-1]) + "\n", "")
+    assert dropped != text, "the last roster row moved - re-derive this control"
+    assert len(_roster_table_rows(dropped)) == len(rows) - 1
+
+    # (2) it fires the other way - a seventh row is seen.
+    grown = text.replace(
+        _render_row(rows[-1]),
+        _render_row(rows[-1]) + "\n" + _render_row(["ZZ", "NO - control", "Control row."]),
+    )
+    assert len(_roster_table_rows(grown)) == len(rows) + 1
+    assert "ZZ" in _roster_codes(grown)
+
+    # (3) the neighbours survive: neither the filename-variant table nor the
+    #     seventeen-rule table is picked up. Both would fail the CODE shape.
+    assert all(_declared_code_pattern(text).match(row[0]) for row in rows)
+    assert not any(row[-1] == "Shape" or row[-1] in {"VERBATIM", "PARAPHRASE"} for row in rows)
+    # The section 6 parser bound is a DIFFERENT subject and stays untied - see
+    # `_UNTIED_PARSER_BOUND`. Asserted present so the exclusion is a recorded
+    # fact about the doc rather than a comment that could quietly go false.
+    assert _UNTIED_PARSER_BOUND in _flat(text)
+    assert _declared_code_lengths(text) == (2, 3), (
+        "section 0's claimed code lengths moved; this control records what was "
+        "measured, and the arm above is what enforces it against the roster"
+    )
+    # ...and the variant parser is still not picking up the roster.
+    assert all(
+        row[-1] == "PRIMARY" or row[-1].startswith("Variant")
+        for row in _variant_table_rows(text)
+    )
+
+    # (4) the header accessor is a detector too, not a constant.
+    assert _variant_table_header(text.replace(EXPECTED_TABLE_HEADER, "| x |")) == []
+
+
+# ---------------------------------------------------------------------------
 # THE RE-PIN REGRESSION. Arm 2 is excluded on purpose: this is the state every
 # CHANNEL_VERSION 2 round is in, and it is the state in which 16 of 31 mutants
 # survived the first version of this module.
@@ -1349,6 +2210,12 @@ _NON_DIGEST_ARMS = (
     test_the_doc_cites_no_line_number,
     test_the_filename_variant_table_parses,
     test_the_variant_table_block_is_present_verbatim,
+    test_the_roster_table_parses,
+    test_the_variant_table_columns_are_exactly_the_roster,
+    test_the_roster_numerals_are_derived_from_the_roster_table,
+    test_every_roster_numeral_site_is_unique,
+    test_the_exempt_five_numerals_survive,
+    test_every_exempt_anchor_is_present_exactly_once_and_wrap_tolerant,
 )
 
 
@@ -1433,6 +2300,126 @@ def _blank_responder_columns(data: bytes) -> bytes:
     return out
 
 
+def _flexible_sub(text: str, phrase: str, replacement: str) -> str:
+    """Replace `phrase` once, tolerating the doc's hard wrap inside it.
+
+    The doc wraps at about 90 columns, so a pinned phrase can straddle a
+    newline - `Roster is the six\\ncodes` and `six\\n   independent pollers` both
+    do. A plain `str.replace` finds neither and would silently produce a NO-OP
+    mutant, which reads as an arm that passed. Matching each inter-word gap as
+    `\\s+` is what makes these mutants actually mutate.
+    """
+    pattern = re.compile(r"\s+".join(re.escape(word) for word in phrase.split(" ")))
+    return pattern.sub(lambda _: replacement, text, count=1)
+
+
+def _stale_numeral_at(index: int):
+    """A mutant that walks ONE numeral site back by one, leaving the table alone.
+
+    The roster table is untouched, so the column tie cannot fire and the numeral
+    arm is the only thing standing. That is what makes this a detector test for
+    the site rather than for the module.
+    """
+    why, axis, template = _ROSTER_NUMERAL_SITES[index]
+
+    def mutate(data: bytes) -> bytes:
+        text = data.decode("ascii")
+        size = _site_sizes(text)[axis]
+        current = _render_site(template, axis, size)
+        stale = _render_site(template, axis, max(size - 1, 0))
+        return _flexible_sub(text, current, stale).encode("ascii")
+
+    mutate.__doc__ = f"walk the numeral at {why} back by one"
+    return mutate
+
+
+def _narrow_the_code_length_claim(data: bytes) -> bytes:
+    """Section 0 claims two-to-TWO letter codes while RSC is three.
+
+    The tie runs both ways: this is the prose narrowing under a roster that did
+    not move. The other direction - a four-letter tree joining while the prose
+    still says two-to-three - is covered by `_add_a_long_code_roster_row`.
+    """
+    text = data.decode("ascii")
+    low, high = _declared_code_lengths(text)
+    before = f"{_CARDINALS[low]}-to-{_CARDINALS[high]} letter CODE"
+    after = f"{_CARDINALS[low]}-to-{_CARDINALS[low]} letter CODE"
+    return _flexible_sub(text, before, after).encode("ascii")
+
+
+def _add_a_long_code_roster_row(data: bytes) -> bytes:
+    """A four-letter tree joins while section 0 still claims two-to-three."""
+    anchor = _roster_row_bytes(data, -1)
+    extra = _render_row(
+        ["ZZZZ", "NO - hypothetical", "Participant. A tree with a four-letter code."]
+    ).encode("ascii")
+    return data.replace(anchor, anchor + b"\n" + extra)
+
+
+def _mechanise_an_exempt_quote(data: bytes) -> bytes:
+    """The NEIGHBOUR-DESTROYING mutant - somebody "finishes the job".
+
+    Rule 2's charter quote is dragged to the live roster, which is precisely the
+    edit section 4 forbids in capitals. A sweep that scored full marks by doing
+    this would have destroyed the VERBATIM guarantee it was meant to protect.
+    """
+    return data.replace(b"landed with 2 of 5 reviews", b"landed with 2 of 6 reviews")
+
+
+# --- The roster mutants. THE DEFECT THEY MEASURE: before these landed, the
+# roster numeral and the variant table's responder columns were frozen literals
+# with nothing tying them to section 0's roster table. A sixth participant was
+# added BY HAND at CHANNEL_VERSION 2; a seventh would have been missed with
+# every arm green. Each mutant is derived from the PARSED roster rather than
+# typed, so it cannot go no-op the way the typed six-column `_drop_variant_row`
+# did the moment the SS column landed.
+
+def _roster_row_bytes(data: bytes, index: int) -> bytes:
+    rows = _roster_table_rows(data.decode("ascii"))
+    return _render_row(rows[index]).encode("ascii")
+
+
+def _add_roster_row(data: bytes) -> bytes:
+    """A seventh participant appears in section 0 and nowhere else.
+
+    This is the exact shape of the next roster change: someone appends a row and
+    forgets the prose numeral, the address-list sentence and the variant table's
+    responder column. Nothing in this module caught it before the derivation.
+    """
+    anchor = _roster_row_bytes(data, -1)
+    extra = _render_row(
+        ["ZZ", "NO - hypothetical", "Participant. A seventh tree, added for this control."]
+    ).encode("ascii")
+    return data.replace(anchor, anchor + b"\n" + extra)
+
+
+def _drop_roster_row(data: bytes) -> bytes:
+    """The last roster row is deleted and every numeral is left at six."""
+    anchor = _roster_row_bytes(data, -1)
+    return data.replace(anchor + b"\n", b"")
+
+
+def _rename_roster_code(data: bytes) -> bytes:
+    """A code is respelled in the roster only, so the two tables disagree.
+
+    Row count, column count and every numeral in the doc stay correct, which is
+    what a count-only tie would miss.
+    """
+    rows = _roster_table_rows(data.decode("ascii"))
+    cells = list(rows[-1])
+    cells[0] = "ZZ"
+    return data.replace(_render_row(rows[-1]).encode("ascii"), _render_row(cells).encode("ascii"))
+
+
+def _demote_a_carrier(data: bytes) -> bytes:
+    """One YES becomes NO, so the carrier numeral FIVE is stale and the roster is not."""
+    rows = _roster_table_rows(data.decode("ascii"))
+    carrier = next(row for row in rows if row[1].startswith("YES"))
+    cells = list(carrier)
+    cells[1] = "NO - hypothetical demotion"
+    return data.replace(_render_row(carrier).encode("ascii"), _render_row(cells).encode("ascii"))
+
+
 def _drop_table_separator(data: bytes) -> bytes:
     return data.replace(
         (EXPECTED_TABLE_HEADER + "\n" + EXPECTED_TABLE_SEPARATOR + "\n").encode("ascii"),
@@ -1471,6 +2458,13 @@ _REPIN_MUTANTS = {
     "primary verdict flipped to refuse": _flip_primary_verdict,
     "responder columns blanked": _blank_responder_columns,
     "table separator row dropped": _drop_table_separator,
+    "roster row added": _add_roster_row,
+    "roster row dropped": _drop_roster_row,
+    "roster code renamed": _rename_roster_code,
+    "carrier demoted to non-carrier": _demote_a_carrier,
+    "exempt charter quote mechanised to the live roster": _mechanise_an_exempt_quote,
+    "code length claim narrowed below the roster": _narrow_the_code_length_claim,
+    "four letter code joins a two-to-three roster": _add_a_long_code_roster_row,
     "bel byte": lambda data: data + bytes([0x07]),
     "del byte": lambda data: data + bytes([0x7F]),
     "crlf conversion": lambda data: data.replace(b"\n", b"\r\n"),
@@ -1493,6 +2487,188 @@ def test_every_repin_mutant_is_caught_without_the_digest(monkeypatch, tmp_path, 
         f"mutant {label!r} survives every arm except the digest - in a "
         "CHANNEL_VERSION 2 re-pin round, where the digest is recomputed over the "
         "new bytes, nothing would catch it"
+    )
+
+
+_NUMERAL_ARM = "test_the_roster_numerals_are_derived_from_the_roster_table"
+
+
+@pytest.mark.parametrize("index", range(len(_ROSTER_NUMERAL_SITES)))
+def test_every_roster_numeral_site_is_a_detector(monkeypatch, tmp_path, index):
+    """Each of the nineteen sites, walked back one, must redden the numeral arm.
+
+    A site that cannot fire is a row in a table measuring nothing - the exact
+    failure mode the module docstring warns about for `_REPIN_MUTANTS`, and the
+    exact reason this arm names the numeral arm specifically rather than
+    accepting any catch. The roster table is untouched by these mutants, so a
+    catch cannot come from the column tie by accident.
+    """
+    why, axis, _template = _ROSTER_NUMERAL_SITES[index]
+    original = _doc_bytes()
+    mutant = _stale_numeral_at(index)(original)
+    assert mutant != original, (
+        f"NO-OP mutant for {why} - its phrase does not occur in the doc even "
+        "with the wrap-tolerant match, so this site is pinned to text that is "
+        "not there and the derivation arm has already reported it"
+    )
+    caught = [
+        arm.__name__ for arm in _NON_DIGEST_ARMS
+        if _run_arm_against(monkeypatch, tmp_path, arm, mutant) is not None
+    ]
+    assert _NUMERAL_ARM in caught, (
+        f"a stale numeral at {why} is NOT caught by the derivation arm - it is "
+        f"caught only by {caught}. That site is pinned but not graded."
+    )
+
+
+def _honest_repin_leaving_one_stale(index: int) -> tuple[bytes, dict[str, object], bool]:
+    """An HONEST seven-way re-pin with exactly one numeral site left behind.
+
+    This is the generalised form of the mutant that refuted the first version of
+    this slice. That one added a seventh roster row, added the seventh responder
+    column, retyped the module's table literals by hand exactly as the re-pin
+    ritual says to, and updated the eight sentences the first version happened
+    to pin - and NOTHING CAUGHT IT, because eleven other roster-bearing numerals
+    had no tie at all. The digest is blind by construction in a re-pin round, so
+    that was the seventh participant being missed in eleven places exactly the
+    way the sixth was missed in ten.
+
+    Everything here is derived, so it stays honest as the doc moves: the roster
+    row, the new column and every numeral come from the pins and the parse.
+    """
+    data = _add_roster_row(_doc_bytes())
+    text = data.decode("ascii")
+    sizes_after = _site_sizes(text)
+
+    # Every site EXCEPT `index` follows the new roster - an honest editor.
+    # `left_stale` records whether skipping `index` actually left anything
+    # behind. The new row joins as a NON-carrier, so the CARRIER sites do not
+    # move at all and skipping one of those leaves a perfectly honest re-pin.
+    # Reporting that rather than assuming it is what keeps the caller from
+    # demanding a catch where there is nothing to catch.
+    left_stale = False
+    sizes_before = _site_sizes(_doc_text())
+    for position, (why, axis, template) in enumerate(_ROSTER_NUMERAL_SITES):
+        before = _render_site(template, axis, sizes_before[axis])
+        after = _render_site(template, axis, sizes_after[axis])
+        if before == after:
+            continue
+        if position == index:
+            left_stale = True
+            continue
+        if why in _HUMAN_REWRITE_SITES:
+            # An honest editor at one of these does NOT paste the mechanical
+            # render - that is the sentence that drops a participant. It writes
+            # something by hand. The marker stands in for that, and carries no
+            # numeral, so the site's own arm sees no stale wording.
+            text = _flexible_sub(text, before, _HUMAN_REWRITE_MARKER)
+            continue
+        text = _flexible_sub(text, before, after)
+
+    # The grammar table gains the seventh responder column, and the module's
+    # literals are retyped to match - which is what section 9 says a carrier
+    # does in a re-pin round.
+    header_cells = _variant_table_header(_doc_text())
+    # The CODE is the first token of the column label - RC's reads `RC gate 6`.
+    # Comparing against the raw cells instead counted RC as a new code.
+    present = {cell.split()[0] for cell in header_cells[1:-1] if cell.split()}
+    new_code = [code for code in _roster_codes(text) if code not in present]
+    assert len(new_code) == 1, f"expected exactly one new code, got {new_code}"
+    new_header = _render_row(header_cells[:-1] + new_code + header_cells[-1:])
+    new_separator = EXPECTED_TABLE_SEPARATOR + "---|"
+    new_rows = [row[:-1] + ["UNMEASURED"] + row[-1:] for row in EXPECTED_VARIANT_TABLE]
+
+    text = text.replace(
+        EXPECTED_TABLE_HEADER + "\n" + EXPECTED_TABLE_SEPARATOR,
+        new_header + "\n" + new_separator,
+    )
+    for old, new in zip(EXPECTED_VARIANT_TABLE, new_rows):
+        text = text.replace(_render_row(old), _render_row(new))
+
+    patches = {
+        "EXPECTED_TABLE_HEADER": new_header,
+        "EXPECTED_TABLE_SEPARATOR": new_separator,
+        "EXPECTED_VARIANT_TABLE": new_rows,
+    }
+    return text.encode("ascii"), patches, left_stale
+
+
+@pytest.mark.parametrize("index", range(len(_ROSTER_NUMERAL_SITES)))
+def test_an_honest_repin_is_caught_when_one_numeral_is_left_stale(
+    monkeypatch, tmp_path, index
+):
+    """THE REGRESSION FOR THE REFUTATION. Reproduce that mutant, then fail it.
+
+    Nineteen cases, one per site. Each is a re-pin that is correct in every
+    respect except one sentence, with the module's own table literals retyped
+    the way the ritual demands - so the column tie is satisfied and the digest
+    is recomputed. The numeral arm is the only thing left, which is the whole
+    point of the arm.
+    """
+    why, axis, _template = _ROSTER_NUMERAL_SITES[index]
+    mutant, patches, left_stale = _honest_repin_leaving_one_stale(index)
+    for name, value in patches.items():
+        monkeypatch.setattr(sys.modules[__name__], name, value)
+    caught = [
+        arm.__name__ for arm in _NON_DIGEST_ARMS
+        if _run_arm_against(monkeypatch, tmp_path, arm, mutant) is not None
+    ]
+    if not left_stale:
+        # The seventh tree joins as a NON-carrier, so a CARRIER site is
+        # unaffected and nothing was left behind. This case is not a weaker
+        # test, it is the TWO-POPULATIONS control: it proves a roster addition
+        # does not drag the carrier numeral with it, which is the conflation
+        # section 0 forbids in capitals.
+        assert axis == "carrier", (
+            f"{why} did not move on a roster change, but it is a {axis} site - "
+            "either the template carries no numeral or it is pinned to the "
+            "wrong axis, and it is measuring nothing in this harness"
+        )
+        assert caught == [], (
+            f"nothing was left stale, yet {caught} reddened - a roster addition "
+            "is dragging the carrier numeral with it"
+        )
+        return
+    assert _NUMERAL_ARM in caught, (
+        f"an otherwise-honest re-pin that left {why} stale was caught by "
+        f"{caught or 'NOTHING'}. This is the exact shape that refuted the first "
+        "version of this arm: roster row added, column added, literals retyped, "
+        "digest recomputed, and one sentence still naming the old roster."
+    )
+
+
+def test_the_honest_repin_harness_is_honest(monkeypatch, tmp_path):
+    """Guard the guard: with NO site left stale, the same re-pin must be GREEN.
+
+    Without this, `_honest_repin_leaving_one_stale` could be reddening the
+    numeral arm through some incidental damage it does - a mangled table, a
+    broken path, a stray numeral - and all nineteen cases above would pass while
+    measuring that damage instead of the stale sentence. Index -1 is not a site,
+    so every site follows the new roster and the result must be a clean re-pin.
+    """
+    mutant, patches, left_stale = _honest_repin_leaving_one_stale(-1)
+    assert not left_stale, "index -1 is not a site; nothing should be left behind"
+    # ...and the harness must actually be exercising most of the table. If a
+    # refactor made every site render identically at six and seven, all
+    # nineteen cases above would pass vacuously.
+    moved = sum(
+        1 for index in range(len(_ROSTER_NUMERAL_SITES))
+        if _honest_repin_leaving_one_stale(index)[2]
+    )
+    assert moved == len(_ROSTER_NUMERAL_SITES) - 1, (
+        f"{moved} of {len(_ROSTER_NUMERAL_SITES)} sites move when the roster "
+        "gains a tree; exactly one - the carrier half - should not"
+    )
+    for name, value in patches.items():
+        monkeypatch.setattr(sys.modules[__name__], name, value)
+    caught = [
+        arm.__name__ for arm in _NON_DIGEST_ARMS
+        if _run_arm_against(monkeypatch, tmp_path, arm, mutant) is not None
+    ]
+    assert caught == [], (
+        "a fully honest seven-way re-pin reddens "
+        f"{caught} - so the nineteen cases above are measuring collateral damage "
+        "from the harness rather than the one stale sentence each leaves behind"
     )
 
 
