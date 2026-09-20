@@ -98,6 +98,50 @@ is a directory under `tmp_path`. No arm delivers: the two arms that reach as far
 as note selection stop at `GATE:no-destination` and `GATE:armed`, both of which
 return before `deliver` is called. `Bounds(armed=True)` appears in exactly one
 arm, where the FIRST gate in the function refuses it immediately.
+
+THIS MODULE MUST NEVER READ THE RESPONDER'S SOURCE TEXT, and that is a hard
+constraint rather than a preference. `tools/gate_mutation_runner.py` refuses to
+run a campaign while any module that grades the target file's SHAPE is
+undeclared, because such a module reddens over syntax and would be scored as a
+KILL while saying nothing about whether a gate is driven. Its detector,
+`_binds_and_reads_responder`, is a CONJUNCTION of two criteria, both verified
+here by reading it rather than inferred:
+
+  1. a MODULE-LEVEL assignment to a plain `Name` whose value mentions
+     `moon_sync_responder` - which `MODULE` below satisfies and must, since the
+     fixture needs the path;
+  2. that same name LATER being the RECEIVER of `.read_text`, `.read_bytes` or
+     `.open` - `_READ_ATTRS` at `tools/gate_mutation_runner.py:712`.
+
+Criterion 2 is what this module must not satisfy. Passing `MODULE` to
+`importlib.util.spec_from_file_location` does NOT satisfy it: the bound name is
+an ARGUMENT there and never the receiver of an attribute access. That is the
+detector's own documented blind spot, and it is the reason the four existing
+behavioural modules that import the responder - `test_moon_sync_responder.py`,
+`test_responder_broadcast_refusal.py`, `test_responder_delivery_gates.py` and
+`test_responder_refusal_gates.py` - are correctly not candidates. This module is
+deliberately the fifth of that shape.
+
+AN ARM WAS DELETED HERE, NOT MOVED, AND THE DIFFERENCE IS THE POINT. The first
+version of this file carried
+`test_every_gate_driven_here_is_one_the_census_names`, which did
+`MODULE.read_text(...)` to check that the six names driven below are real tags.
+That single line satisfied criterion 2 and made this WHOLE FILE a candidate for
+exclusion - which would have removed the ten behavioural arms from the campaign
+they exist to feed, the exact opposite of this module's purpose. The obvious
+repair, declaring the file in `SHAPE_GRADER_MODULES`, is therefore the wrong
+one. Relocating the arm into `tests/test_responder_gate_census.py` was also
+wrong, because it is REDUNDANT there: `tests/test_gate_name_bindings.py:251`
+already asserts `set(_ANCHORS) == live` - the tag-name set by EQUALITY, not a
+subset - and its `_ANCHORS` table binds all six of these names to their exact
+statement text. A strictly weaker duplicate is deleted rather than rehoused, so
+nothing was lost and this file stays inside the campaign.
+
+A NEW TEST FILE IS NOT GRADED UNTIL IT IS TRACKED. This defect reached a commit
+because `missing_exclusions` derives its corpus from `git ls-files`, so while
+this file was untracked the guard could not see it BY CONSTRUCTION and every
+suite run over it was vacuous for that guard. Staging is part of proving a fix
+here, not a formality.
 """
 
 from __future__ import annotations
@@ -342,41 +386,3 @@ def test_the_armed_gate_holds_a_deliverable_note_on_a_disarmed_cycle(rsp, tmp_pa
         "a DISARMED cycle wrote into the destination it was only supposed to "
         f"name: {sorted(p.name for p in (root / 'moon_sync_inbox').iterdir())}"
     )
-
-
-# ---------------------------------------------------------------------------
-# THE SEAM WITH THE CENSUS, asserted rather than left to a reader.
-# ---------------------------------------------------------------------------
-
-
-def test_every_gate_driven_here_is_one_the_census_names(rsp):
-    """The two modules must be talking about the same gates.
-
-    This is the ONE arm in this file that reads source, and it is deliberately
-    not the judgement: it pins the OVERLAP so that a gate renamed in the
-    responder cannot leave this file exercising a name nothing tags. The
-    behavioural arms above stand entirely without it.
-
-    It is a SUBSET check and not an equality: this file drives the gates that
-    are reachable without arming the fleet, spawning a session or corrupting a
-    record, which is fewer than the responder carries. The census's own `_FLOOR`
-    is what pins the total.
-    """
-    from tests.test_responder_gate_census import _tags
-
-    tagged = {name for _, name in _tags(MODULE.read_text(encoding="ascii"))}
-    driven = {
-        "counterparty-agreement",
-        "trial-window",
-        "hop-budget",
-        "empty-queue",
-        "no-destination",
-        "armed",
-    }
-
-    assert driven <= tagged, (
-        f"this file drives gates the census does not name: {sorted(driven - tagged)}. "
-        "Either a gate was renamed in tools/moon_sync_responder.py without this "
-        "file following, or a name here was never a gate."
-    )
-    assert len(driven) == 6, sorted(driven)
