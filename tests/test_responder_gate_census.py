@@ -303,6 +303,34 @@ name-grammar class above.
      35 mutants over the 18 tagged sites: 27 killed, 8 survived. So the answer
      to "is this gate exercised" is NO for eight of them, and it is the runner's
      report that says so rather than anything here.
+     THE CEILING IS NOT MERELY NOTED, IT IS MEASURED, AND IT IS EXPLOITABLE BY
+     RELOCATION. Measured 2026-09-20 on a scratchpad copy with `__pycache__`
+     purged on both sides and `-p no:cacheprovider`: the `GATE:trial-window`
+     refusal was moved out of `_run_once` into a module-level helper
+     `_trial_window_refusal(bounds, started, result)`, behaviour preserved
+     exactly, leaving `_run_once` holding only
+     `if (refusal := _trial_window_refusal(...)) is not None: return refusal`
+     under the same unmoved tag. The sole call to `window_open(bounds,
+     now=started)` - the predicate consult the gate IS - then occurred nowhere
+     inside `_run_once`. THIS FILE DID NOT MOVE: 80 nodes collected and 79
+     passed 1 skipped before, and 80 nodes collected and 79 passed 1 skipped
+     after. Not a dropped arm, not a silent count fall - no change at all,
+     because a null-check on a helper's return is the same `ast.If` as the gate
+     it replaced. Behaviour was confirmed identical by running
+     `pytest tests -k responder` on both copies: 355 passed on each, with the
+     same two pre-existing no-repository failures on both sides.
+     REMOVAL IS A DIFFERENT CASE AND THIS MODULE DOES CATCH IT: deleting that
+     branch and its tag outright gave 10 failed, 68 passed, 1 skipped here. The
+     blind spot is RELOCATION specifically, and stating it the other way round
+     would overclaim in both directions.
+     THE REPAIR SITS BESIDE THIS FILE AND NOT INSTEAD OF IT.
+     `tests/test_responder_refusal_gates_fire.py` drives `_run_once` in process
+     against six refusal gates and observes the CYCLE'S OWN RESULT - the
+     `termination` label and the `delivered` flag - so it stays green under the
+     relocation above and goes red on the deletion, reporting
+     `termination='no-destination'` where `'window'` was required. A syntax
+     census is still the cheap tripwire that catches an untagged new gate
+     without importing anything, which is why it is kept.
      ONE COUPLING RUNS THE OTHER WAY AND IS RECORDED HERE BECAUSE IT IS THIS
      MODULE'S DOING. This module reads the responder AT IMPORT and grades its
      AST SHAPE, so a mutant that DROPS A BoolOp OPERAND reddens it for a reason
