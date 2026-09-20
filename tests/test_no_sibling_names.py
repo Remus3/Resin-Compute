@@ -44,11 +44,12 @@ while it is being IMPORTED, typically to build a `parametrize` argument list.
 Nothing at module scope here reaches git: the corpus is built inside two test
 bodies, and the other arms in this file - the planted-offender controls, the
 codenamed-neighbour control, the comment-break pair, the stripped-view
-equivalence and the documented-blindness arm - all work on `tmp_path` fixtures
-or on this module's own constants. An import-time whole-module skip would throw
-those working guards away for a dependency they do not have. Measured under the
-absence mechanism in `tests/test_conftest_git_gate_sites.py`: 2 of 19 nodes
-reach git, so 17 keep running.
+equivalence, the documented-blindness arm, the scoped channel-code pin and its
+red control - all work on `tmp_path` fixtures, on two files read by path, or on
+this module's own constants. An import-time whole-module skip would throw those
+working guards away for a dependency they do not have. Measured 2026-09-20 with
+git made unrunnable by stripping it from PATH: 2 of 23 nodes skip, so 21 keep
+running.
 
 The gate sits in the helper rather than being repeated at the top of each of the
 two callers, so a third caller added later cannot forget it.
@@ -88,8 +89,16 @@ _PAIRED = re.compile(
 )
 
 # One-word names.
+#
+# `substrate` is the sixth fleet member, joined 2026-09-20. Its false-positive
+# cost over the tracked corpus was MEASURED before the literal went in, not
+# assumed: 0 hits across 239 examined files. The nearest word in this Genshin
+# domain tree is `substats`, which diverges after `subst`, and no tracked file
+# contains the substring at all. Its two-letter channel code is deliberately
+# NOT here - a word-boundary IGNORECASE match on two letters false-positives
+# across a Python tree, and the neighbour-survival arm below pins that choice.
 _SOLO = re.compile(
-    r"clockspeed|lanternlight|amberstone|legionwallpaper|redmoon",
+    r"clockspeed|lanternlight|amberstone|legionwallpaper|redmoon|substrate",
     re.IGNORECASE,
 )
 
@@ -221,13 +230,23 @@ def test_no_tracked_file_names_a_sibling_project():
         "a generated daemon_slayer_bundle.d.ts inside a mirror",
         "# ported from Riot\n# Commander, which asserts this",
         "vendored from Clockspeed on 2026-09-06",
+        # The sixth fleet member, joined 2026-09-20. Not one of the four
+        # escapes - added because the matcher was measured blind to it while
+        # both shared re-pinned files already sit in the corpus.
+        "the slot bucket is shared with Substrate as of 2026-09-20",
     ],
 )
 def test_the_scan_fires_on_a_planted_offender(tmp_path: Path, planted: str):
     """Without a positive control, a clean result and an unarmed check are the same.
 
-    Each case is one of the four real escapes. A guard that catches only the
-    obvious spelling would report clean on three of them.
+    The first four cases are the four real escapes. A guard that catches only
+    the obvious spelling would report clean on three of them. The fifth is the
+    sixth fleet member, which was not an escape but a measured blind spot.
+
+    Every case here goes through `_scan`, the SWEEP the real corpus test calls,
+    and not through `_SOLO` or `_PAIRED` directly. An arm that matched the
+    pattern by hand would pass while the sweep stayed blind, which is the
+    failure shape this tree has already been bitten by.
     """
     (tmp_path / "innocent.md").write_bytes(
         b"This file mentions Sibling-C and Sibling-F and is entirely fine.\n"
@@ -253,6 +272,9 @@ def test_the_scan_does_not_flag_a_codenamed_neighbour(tmp_path: Path):
         b"Sibling-A through Sibling-F, short codes sa sb sc sd se sf.\n"
         b"The RC_DATA_DIR prefix is this repository's own and is not a sibling.\n"
         b"A red herring, a legion of tests, and a moon phase are all fine.\n"
+        b"Bare two-letter channel codes are NOT matched, on purpose: a word-\n"
+        b"boundary IGNORECASE match on two letters would fire on ordinary\n"
+        b"prose and identifiers. artifact substats, a class, a pass, ss.\n"
     )
     checked, offenders = _scan(["a.md"], tmp_path)
     assert checked == 1
@@ -274,6 +296,7 @@ def test_the_scan_does_not_flag_a_codenamed_neighbour(tmp_path: Path):
         ("clock#speed", 0),
         ("lantern//light", 0),
         ("amber#stone", 0),
+        ("sub//strate", 0),
         # ...except where a solo name happens to decompose into the paired
         # product, which two of the five do. _PAIRED catches these; _SOLO does
         # not, and moving _SOLO to the stripped view did not change that.
@@ -351,3 +374,118 @@ def test_the_guard_states_what_it_cannot_catch():
         "the module docstring must keep stating the class this guard does not "
         "cover, so a reader does not mistake a green run for anonymity"
     )
+
+
+# The two files below are byte-identical-by-contract across six repositories and
+# are pinned by sha256 in tests/test_loop_concurrency.py. NEVER edit them here.
+_SHARED_FILES = ("ops/loop/slots.py", "ops/loop/winmutex.py")
+
+# Uppercase channel codes only. Case sensitivity is the whole false-positive
+# control and is not a style choice: measured this run over the two files, the
+# case-SENSITIVE pattern returns 1 hit and the IGNORECASE pattern returns 7,
+# the extra 6 being ordinary lowercase tokens such as the `rc` wait-result
+# variable in winmutex. Corpus-wide was rejected before it was written: the
+# same codes over the whole `git ls-files` corpus, measured 2026-09-20 across
+# the 239 files outside this module, return 1621 case-sensitive and 1831
+# IGNORECASE hits. Either figure is a matcher that can only be turned off.
+# A brief handed to this slice quoted 1540 and 173 for that pair; those did NOT
+# reproduce here and are recorded as not reproduced. The verdict is unchanged,
+# the magnitudes are not the brief's.
+# RSC leads the alternation so the longer code wins.
+_CHANNEL_CODES = ("RSC", "RC", "CS", "LW", "LL", "SS", "RM", "DS")
+_CHANNEL = re.compile(r"\b(" + "|".join(_CHANNEL_CODES) + r")\b")
+
+# PINNED BY (file, code) AND BY MULTIPLICITY, NOT BY LINE NUMBER.
+#
+# A line number decays: these files change only in a joint re-pin round, and
+# such a round rewrites bytes wholesale, so an unrelated re-pin would turn this
+# arm red for a reason that has nothing to do with a channel code and train a
+# reader to bump the number without reading it. (file, code) survives that.
+#
+# The cost of dropping the line is that a SECOND occurrence of an
+# already-pinned code would be invisible to a set comparison - so this is a
+# sorted LIST including duplicates, not a set, and a second `RC` in winmutex
+# lengthens it and goes red.
+# The one real violation, verified this run at ops/loop/winmutex.py:118, which
+# reads "Found by RC on review, 2026-07-26." The line number is recorded here in
+# prose deliberately and is NOT part of the comparison.
+_KNOWN_CHANNEL_CODE_VIOLATIONS: list[tuple[str, str]] = [
+    ("ops/loop/winmutex.py", "RC"),
+]
+
+_CHANNEL_MESSAGE = (
+    "The two shared loop files are byte-identical-by-contract across SIX "
+    "repositories and are pinned by sha256, so DO NOT EDIT EITHER FILE HERE. "
+    "A local edit desynchronises every carrier that has not moved, and the "
+    "sha256 pin then goes red in every one of them. The only fix is a JOINT "
+    "RE-PIN ROUND agreed with the other carriers, and this pin is updated in "
+    "that same round.\n"
+    "If the list GREW, a new channel code entered a shared file and must come "
+    "out in that round. If it SHRANK, the known violation was fixed upstream "
+    "and this pin is now stale - delete the entry, do not re-add the code."
+)
+
+
+def _channel_code_hits(root: Path) -> list[tuple[str, str]]:
+    """Every uppercase channel-code occurrence in the two shared files."""
+    hits: list[tuple[str, str]] = []
+    for rel in _SHARED_FILES:
+        body = (root / rel).read_text(encoding="utf-8", errors="replace")
+        for match in _CHANNEL.finditer(body):
+            hits.append((rel, match.group(1)))
+    return sorted(hits)
+
+
+def test_the_shared_files_name_no_sibling_channel_code():
+    """A KNOWN-VIOLATION PIN, not a clean-tree assertion.
+
+    The scoped scan is green today only because it pins the one violation this
+    repository cannot fix alone. Asserting zero would land a permanently red
+    arm on a defect owned by six carriers jointly, and a red arm nobody can
+    close is an arm that gets skipped.
+
+    DELIBERATELY UNGATED. `_channel_code_hits()` reads two files from disk by
+    path and never shells git, so this arm holds in a git-less checkout - a ZIP
+    download, an sdist, a `git archive` extract - and gating it would skip a
+    working guard for a dependency it does not have. That is the same reasoning
+    the module docstring gives for the run-time shape, applied in the other
+    direction. The conservation check in
+    `tests/test_conftest_git_gate_sites.py` measures this: with the gate call
+    present it reported this module as having 3 git-or-gate-reaching nodes
+    against a row that selects 2.
+    """
+    hits = _channel_code_hits(REPO_ROOT)
+    expected = sorted(_KNOWN_CHANNEL_CODE_VIOLATIONS)
+    assert hits == expected, (
+        f"the scoped channel-code scan returned {hits}, pinned {expected}.\n"
+        + _CHANNEL_MESSAGE
+    )
+
+
+def test_the_scoped_channel_code_scan_can_actually_go_red(tmp_path: Path):
+    """Prove the predicate fires, WITHOUT touching the real shared files.
+
+    The real bytes are copied out and a second code is injected into the copy.
+    Nothing imports the copies - they are read as text - so no bytecode of
+    theirs exists on either side of the control and a stale-pycache read is
+    structurally impossible here rather than merely unobserved.
+    """
+    for rel in _SHARED_FILES:
+        dest = tmp_path / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes((REPO_ROOT / rel).read_bytes())
+
+    clean = _channel_code_hits(tmp_path)
+    assert clean == sorted(_KNOWN_CHANNEL_CODE_VIOLATIONS), (
+        f"the copy disagrees with the real tree: {clean}"
+    )
+
+    injected = tmp_path / "ops/loop/slots.py"
+    injected.write_bytes(
+        injected.read_bytes() + b"\n# re-pinned with LW on 2026-09-20\n"
+    )
+    dirty = _channel_code_hits(tmp_path)
+
+    assert dirty != clean, "injecting a second channel code changed nothing"
+    assert ("ops/loop/slots.py", "LW") in dirty, dirty
+    assert (REPO_ROOT / "ops/loop/slots.py").read_bytes() != injected.read_bytes()
