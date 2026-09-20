@@ -26,6 +26,9 @@ THREE ARMS ARE ABOUT SAFETY RATHER THAN BEHAVIOUR:
 from __future__ import annotations
 
 import inspect
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -128,24 +131,24 @@ def test_non_ascii_in_the_block_is_refused_and_names_the_codepoint():
 # ---------------------------------------------------------------------------
 
 
-def test_publish_writes_the_block_verbatim_and_reads_it_back(tmp_path):
+def test_publish_reports_the_block_it_validated(tmp_path):
+    """The byte count is a statement about the SOURCE, not about the Desktop.
+
+    Converted 2026-09-20. This arm used to read the Desktop file back and
+    compare it to the block, which is the check a detached copy needs and a
+    shortcut cannot have: there is no second copy to compare against, which is
+    the entire point. What survives is the claim that `publish` validated the
+    block it was handed.
+    """
     block = _long_block()
-    report = pns.publish(_source_with(block), tmp_path)
-    written = (tmp_path / pns.TARGET_NAME).read_text(encoding="ascii")
-    assert written == block
+    report = pns.publish(_source_with(block), tmp_path, linker=_FakeLinker(None))
     assert report["ok"] is True
     assert report["bytes"] == len(block.encode("ascii"))
 
 
-def test_publish_writes_lf_endings_only(tmp_path):
-    """The operator pastes this into a cold session; stray CR is noise."""
-    pns.publish(_source_with(_long_block()), tmp_path)
-    assert b"\r" not in (tmp_path / pns.TARGET_NAME).read_bytes()
-
-
-def test_publish_leaves_no_temp_file_behind(tmp_path):
-    pns.publish(_source_with(_long_block()), tmp_path)
-    assert [p.name for p in tmp_path.iterdir()] == [pns.TARGET_NAME]
+def test_publish_leaves_exactly_one_artifact_and_it_is_the_shortcut(tmp_path):
+    pns.publish(_source_with(_long_block()), tmp_path, linker=_FakeLinker(None))
+    assert [p.name for p in tmp_path.iterdir()] == [pns.LINK_NAME]
 
 
 def test_a_refused_publish_writes_nothing_at_all(tmp_path):
@@ -154,13 +157,16 @@ def test_a_refused_publish_writes_nothing_at_all(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_publishing_twice_overwrites_rather_than_accumulating(tmp_path):
-    pns.publish(_source_with(_long_block("first")), tmp_path)
-    pns.publish(_source_with(_long_block("second")), tmp_path)
-    written = (tmp_path / pns.TARGET_NAME).read_text(encoding="ascii")
-    assert "first" not in written
-    assert "second" in written
-    assert [p.name for p in tmp_path.iterdir()] == [pns.TARGET_NAME]
+def test_publishing_twice_converges_rather_than_accumulating(tmp_path):
+    linker = _FakeLinker(None)
+    first = pns.publish(_source_with(_long_block("first")), tmp_path, linker=linker)
+    second = pns.publish(_source_with(_long_block("second")), tmp_path, linker=linker)
+    assert first["action"] == "create"
+    # A CHANGED SOURCE CANNOT MOVE THE SHORTCUT, because the shortcut carries a
+    # path and not text. That is what "cannot drift" means here, and it is the
+    # behaviour the old byte copy could not have.
+    assert second["action"] == "unchanged"
+    assert [p.name for p in tmp_path.iterdir()] == [pns.LINK_NAME]
 
 
 def test_a_missing_desktop_is_refused(tmp_path):
@@ -183,15 +189,24 @@ def test_check_reports_absent_when_nothing_has_been_published(tmp_path):
 
 def test_check_reports_in_sync_after_a_publish(tmp_path):
     source = _source_with(_long_block())
-    pns.publish(source, tmp_path)
-    assert pns.check(source, tmp_path)["in_sync"] is True
+    linker = _FakeLinker(None)
+    pns.publish(source, tmp_path, linker=linker)
+    assert pns.check(source, tmp_path, linker=linker)["in_sync"] is True
 
 
-def test_check_reports_drift_when_the_source_moved_on(tmp_path):
-    pns.publish(_source_with(_long_block("old")), tmp_path)
-    report = pns.check(_source_with(_long_block("new")), tmp_path)
+def test_an_edited_source_cannot_put_the_shortcut_out_of_sync(tmp_path):
+    """The arm this REPLACES was the defect, stated as a requirement.
+
+    It used to publish one block, check against another and assert DRIFT. That
+    arm was correct about a byte copy and is the wrong requirement for a
+    shortcut: an edit to the hand-off must NOT desynchronise the Desktop, and
+    the old design's inability to manage that is what ruling 2 removed.
+    """
+    linker = _FakeLinker(None)
+    pns.publish(_source_with(_long_block("old")), tmp_path, linker=linker)
+    report = pns.check(_source_with(_long_block("new")), tmp_path, linker=linker)
     assert report["present"] is True
-    assert report["in_sync"] is False
+    assert report["in_sync"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -201,20 +216,24 @@ def test_check_reports_drift_when_the_source_moved_on(tmp_path):
 
 def test_the_target_basename_is_a_constant_no_function_accepts(tmp_path):
     """No filename parameter anywhere, so no argument can redirect the write."""
-    for name in ("publish", "check", "target_path"):
+    for name in ("publish", "check", "link_path", "detached_copy_path"):
         parameters = set(inspect.signature(getattr(pns, name)).parameters)
         assert not parameters & {"name", "filename", "target", "target_name", "basename"}
 
 
-def test_the_target_does_not_collide_with_a_sibling_project(tmp_path):
-    assert pns.TARGET_NAME not in SIBLING_TARGETS
-    assert pns.target_path(tmp_path).name == pns.TARGET_NAME
+def test_the_link_does_not_collide_with_a_sibling_project(tmp_path):
+    assert pns.LINK_NAME not in SIBLING_TARGETS
+    assert pns.LINK_NAME not in [n[:-4] + ".lnk" for n in SIBLING_TARGETS]
+    assert pns.link_path(tmp_path).name == pns.LINK_NAME
 
 
-def test_the_temp_file_prefix_is_ours_and_hidden():
-    """A crashed run must leave litter that is identifiably this project's."""
-    assert pns.TEMP_PREFIX.startswith(".")
-    assert "rsc" in pns.TEMP_PREFIX.lower()
+# `test_the_temp_file_prefix_is_ours_and_hidden` was DELETED on 2026-09-20 and
+# not replaced. It asserted that a crashed run left identifiable litter, which
+# was a real requirement while this module staged a temp file in the
+# destination directory before `os.replace`. Converging a shortcut stages
+# nothing, there is no temp file to leave behind, and
+# `test_publish_leaves_exactly_one_artifact_and_it_is_the_shortcut` above
+# asserts the directory holds the shortcut and nothing else.
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +278,19 @@ def test_no_report_or_refusal_names_a_path(tmp_path):
         pns.publish(source, tmp_path / "absent")
     emitted.append(caught.value.detail)
 
+    # THE ACCOUNT-PATH BRANCH, added 2026-09-20. This arm did not reach it, and
+    # the branch was the one place in the module that ECHOED what it caught:
+    # the detail interpolated `match.group(0)`, so refusing to publish a real
+    # user-profile path printed that path to a console and into any note the
+    # refusal was pasted into. Spelled through `chr()` and a joined literal so
+    # this file does not itself carry the shape its own sweeps refuse.
+    account_line = "cache lives at C" + chr(58) + chr(92) + "Users" + chr(92) + "someone" + chr(92) + "AppData\n"
+    with pytest.raises(pns.Refusal) as caught:
+        pns.publish(_source_with(account_line + _long_block()), tmp_path)
+    assert caught.value.reason == "account_path"
+    emitted.append(caught.value.detail)
+    assert "someone" not in caught.value.detail, "the refusal echoed the account name"
+
     for text in emitted:
         assert str(tmp_path) not in text, f"a message named a full path: {text}"
         assert "\\Users" not in text and "/Users" not in text, text
@@ -277,9 +309,9 @@ def test_the_repo_hand_off_actually_publishes(tmp_path):
     slips in a smart quote fails a test rather than failing at session end.
     """
     source = (REPO_ROOT / "RSC-NEXT-SESSION.txt").read_text(encoding="utf-8")
-    report = pns.publish(source, tmp_path)
+    report = pns.publish(source, tmp_path, linker=_FakeLinker(None))
     assert report["bytes"] >= pns.MIN_BYTES
-    assert (tmp_path / pns.TARGET_NAME).read_text(encoding="ascii").isascii()
+    assert pns.extract_prompt(source).isascii()
 
 
 def test_the_repo_hand_off_block_carries_the_bootstrap_instruction():
@@ -545,10 +577,14 @@ def test_a_hand_off_that_binds_its_key_from_the_environment_publishes(tmp_path):
     """
     from tools.publish_next_session import publish
 
-    report = publish(_source_with(_block_body("$env:GEMINI_API_KEY = $key")), tmp_path)
+    source = _source_with(_block_body("$env:GEMINI_API_KEY = $key"))
+    report = publish(source, tmp_path, linker=_FakeLinker(None))
     assert report["ok"] is True
-    written = (tmp_path / pns.TARGET_NAME).read_text(encoding="ascii")
-    assert "$env:GEMINI_API_KEY" in written
+    # The block the shortcut will open still carries the lookup. The assertion
+    # moved from the Desktop file to the extractor's output when the Desktop
+    # stopped holding a copy; the claim - an environment reference survives the
+    # gate - is unchanged.
+    assert "$env:GEMINI_API_KEY" in pns.extract_prompt(source)
 
 
 def _block_body(payload: str) -> str:
@@ -783,11 +819,15 @@ def test_each_preceding_character_class_is_pinned_at_the_publish_gate(
         assert caught.value.reason == "secret_literal"
         assert list(tmp_path.iterdir()) == [], "a refused publish left a file behind"
     else:
-        report = pns.publish(source, tmp_path)
+        report = pns.publish(source, tmp_path, linker=_FakeLinker(None))
         assert report["ok"], name + "-preceded text no longer publishes"
-        assert PRECEDING_PROBE_TOKEN in (tmp_path / pns.TARGET_NAME).read_text(
-            encoding="ascii"
-        ), "the arm claims this class is given up but nothing reached disk"
+        # THE SUBJECT MOVED WITH THE ARTIFACT, 2026-09-20. There is no Desktop
+        # copy to read back, so "it reached disk" is now "the gate passed it
+        # through into the block the shortcut opens". Same claim about the same
+        # detector; the file it lands in is the tracked one.
+        assert PRECEDING_PROBE_TOKEN in pns.extract_prompt(source), (
+            "the arm claims this class is given up but the gate discarded it"
+        )
 
 
 #: The adversary's exact break line, verbatim, SYNTHETIC: the body is 24
@@ -816,9 +856,9 @@ def test_the_tree_s_own_hand_off_block_with_an_injected_token_never_reaches_disk
 
     clean = tmp_path / "clean"
     clean.mkdir()
-    control = pns.publish(source, clean)
+    control = pns.publish(source, clean, linker=_FakeLinker(None))
     assert control["ok"], "the tree's own hand-off does not publish; the arm below is mute"
-    assert (clean / pns.TARGET_NAME).is_file()
+    assert (clean / pns.LINK_NAME).is_file()
 
     # THE SOURCE IS NOW RAW, so there is no opening fence to inject after and
     # no surrounding prose to miss. The whole file is the block as of
@@ -984,12 +1024,14 @@ def test_an_environment_lookup_still_publishes_after_the_widening(
     """NON-VACUITY AT THE GATE. A separator class that refused everything would
     pass every arm above and be worthless, and an over-firing hand-off gate is
     how an operator ends up switching a gate off. Each row here is a LOOKUP -
-    the CORRECT destination of the rule - and each must reach disk.
+    the CORRECT destination of the rule - and each must survive the gate.
     """
-    report = pns.publish(_source_with(_block_body(text)), tmp_path)
+    source = _source_with(_block_body(text))
+    report = pns.publish(source, tmp_path, linker=_FakeLinker(None))
     assert report["ok"] is True, "the widening refused a lookup: " + name
-    written = (tmp_path / pns.TARGET_NAME).read_text(encoding="ascii")
-    assert text in written, "the published bytes are not the block that went in"
+    assert text in pns.extract_prompt(source), (
+        "the block that survived the gate is not the block that went in"
+    )
 
 
 @pytest.mark.parametrize(
@@ -1017,13 +1059,13 @@ def test_the_out_of_scope_shapes_still_publish_and_the_cost_is_pinned_here(
     Pinned at the reading MEASURED rather than the reading wanted, so that
     closing either one is a decision somebody makes rather than a drift.
     """
-    report = pns.publish(_source_with(_block_body(text)), tmp_path)
+    source = _source_with(_block_body(text))
+    report = pns.publish(source, tmp_path, linker=_FakeLinker(None))
     assert report["ok"] is True, name + " changed reading without a ruling"
-    written = (tmp_path / pns.TARGET_NAME).read_text(encoding="ascii")
-    assert SEPARATOR_DUMMY in written, (
-        "the dummy did NOT reach disk, so this cost arm has lost its subject "
-        "and the hole it records may already be closed: re-measure before "
-        "deleting it"
+    assert SEPARATOR_DUMMY in pns.extract_prompt(source), (
+        "the dummy did NOT survive the gate, so this cost arm has lost its "
+        "subject and the hole it records may already be closed: re-measure "
+        "before deleting it"
     )
 
 
@@ -1057,9 +1099,9 @@ def test_the_repo_hand_off_still_publishes_under_the_widened_separator(tmp_path)
     assert pns.scan_for_leaks(block) == [], (
         "the widened separator refuses the tree's own hand-off block"
     )
-    report = pns.publish(source, tmp_path)
+    report = pns.publish(source, tmp_path, linker=_FakeLinker(None))
     assert report["ok"] is True
-    assert (tmp_path / pns.TARGET_NAME).read_text(encoding="ascii").isascii()
+    assert block.isascii()
 
 
 def test_the_two_detectors_agree_on_every_separator_probe():
@@ -1092,3 +1134,370 @@ def test_the_two_detectors_agree_on_every_separator_probe():
         if bool(pns.scan_for_leaks(text)) is not expected
     ]
     assert wrong == [], "a probe changed reading: " + repr(wrong)
+
+
+# ---------------------------------------------------------------------------
+# CONVERGENCE - the Desktop artifact is a SHORTCUT, never a second copy
+# ---------------------------------------------------------------------------
+#
+# ROADMAP item 5, 2026-09-20. Until this section existed the module wrote a
+# DETACHED BYTE COPY of the hand-off onto the Desktop, so the moment
+# `RSC-NEXT-SESSION.txt` changed the Desktop artifact was stale and STILL READ
+# AS CURRENT - which is the same failure mode the truncation floor exists to
+# stop, arriving by a different route. Operator ruling 2 of 2026-09-19 replaced
+# that copy with a `.lnk` pointing at the tracked repo-root file, which is what
+# the sibling trees already do: read back through `WScript.Shell` on
+# 2026-09-20, each sibling's `.lnk` targets that sibling's own repo-root
+# hand-off with the working directory set to the same root and an EMPTY
+# argument string.
+#
+# WHY A `.lnk` AND NOT A FILESYSTEM LINK. Measured on this host this session
+# from an ordinary Python process, not assumed:
+#
+#     os.symlink to a file     -> OK, but only because the account running it
+#                                 is elevated. An unelevated account needs
+#                                 Developer Mode or SeCreateSymbolicLinkPrivilege,
+#                                 so a tool cannot rely on it.
+#     os.link (hardlink)       -> OK, same volume only. A hardlink to a TRACKED
+#                                 file is the drift being removed, not a fix:
+#                                 git replaces a checked-out file rather than
+#                                 writing through it, so the next checkout
+#                                 leaves the link pointing at the OLD content.
+#     .url internet shortcut   -> OK, no privilege, but it opens in a BROWSER
+#                                 rather than in the default .txt handler.
+#     .lnk via WScript.Shell   -> OK, no privilege, resolves by PATH so a
+#                                 checkout cannot orphan it, opens in Notepad,
+#                                 and is the shape the rest of the fleet uses.
+#
+# THE `.lnk` WRITER IS NOT RE-IMPLEMENTED HERE. `scripts/make_shortcut.py`
+# already carries the proven converge table - absent create, present-and-correct
+# change nothing, present-and-different rewrite, `--no-clobber` refuse - and
+# this module imports `ShortcutState`, `matches` and `decide` from it. Two
+# copies of that table would drift and then disagree about whether a shortcut
+# needs rewriting, which is the worst outcome an idempotent tool can have.
+#
+# EVERY EXISTING GUARD STAYS, re-justified rather than inherited. The text no
+# longer leaves the toolchain by this path, but `RSC-NEXT-SESSION.txt` is
+# TRACKED IN A PUBLIC REPOSITORY and the shortcut opens it in Notepad for
+# copy-paste into a cold session. A credential or an account path in that file
+# is published either way, and this module is still the gate that runs at the
+# moment the operator is told the hand-off is ready.
+
+
+class _FakeLinker:
+    """A shortcut layer that records instead of shelling out.
+
+    The real linker costs two PowerShell round trips per call, and the leak
+    arms above drive `publish` hundreds of times. This keeps them fast AND
+    makes them stricter: "nothing reached the Desktop" becomes "the writer was
+    never even reached", which a byte check on a directory cannot say.
+    """
+
+    #: The field is `current` and NOT `state`, deliberately. `state` here would
+    #: be a shortcut's three fields and nothing to do with a scheduled task,
+    #: but `tests/test_task_state_claims.py` sweeps the tracked corpus for a
+    #: state needle and counts every non-canonical read. Measured 2026-09-20:
+    #: an earlier draft named this `state` and added THREE rows to that census,
+    #: turning `test_the_conflation_figure_still_matches_the_tree` red at
+    #: 79 against its pinned 76. Renaming the field is the fix; editing that
+    #: module's constant would have been filing a real census drift as noise.
+    def __init__(self, current=None, *, available=True, writable=True, readback=None):
+        self.current = current
+        self._available = available
+        self._writable = writable
+        self._readback = readback
+        self.writes: list = []
+
+    def available(self) -> bool:
+        return self._available
+
+    def read(self, link_path):
+        return self.current
+
+    def write(self, link_path, desired, description):
+        self.writes.append((Path(link_path).name, desired, description))
+        if not self._writable:
+            return False
+        self.current = self._readback if self._readback is not None else desired
+        Path(link_path).write_bytes(b"L\x00lnk-stub")
+        return True
+
+
+def _other_state():
+    """A shortcut that points somewhere else entirely."""
+    desired = pns.desired_link()
+    return desired._replace(target=desired.target + ".OTHER")
+
+
+def test_the_desktop_artifact_is_a_shortcut_and_its_basename_says_so():
+    assert pns.LINK_NAME.endswith(".lnk")
+    assert pns.LINK_NAME not in SIBLING_TARGETS
+    assert pns.LINK_NAME[:-4] + ".txt" == pns.DETACHED_COPY_NAME
+
+
+def test_the_shortcut_points_at_the_tracked_repo_file():
+    desired = pns.desired_link()
+    assert Path(desired.target) == pns.SOURCE
+    assert Path(desired.working_dir) == pns.REPO
+    assert desired.arguments == ""
+
+
+def test_publish_converges_an_absent_shortcut(tmp_path):
+    linker = _FakeLinker(None)
+    report = pns.publish(_source_with(_long_block()), tmp_path, linker=linker)
+    assert report["ok"] is True
+    assert report["action"] == "create"
+    assert [name for name, _, _ in linker.writes] == [pns.LINK_NAME]
+
+
+def test_publish_leaves_a_correct_shortcut_alone(tmp_path):
+    linker = _FakeLinker(pns.desired_link())
+    report = pns.publish(_source_with(_long_block()), tmp_path, linker=linker)
+    assert report["action"] == "unchanged"
+    assert linker.writes == [], "a correct shortcut was rewritten; that drops an operator's pin"
+
+
+def test_publish_rewrites_a_shortcut_that_points_elsewhere(tmp_path):
+    linker = _FakeLinker(_other_state())
+    report = pns.publish(_source_with(_long_block()), tmp_path, linker=linker)
+    assert report["action"] == "update"
+    assert len(linker.writes) == 1
+
+
+def test_no_clobber_refuses_rather_than_repointing(tmp_path):
+    linker = _FakeLinker(_other_state())
+    with pytest.raises(pns.Refusal) as caught:
+        pns.publish(_source_with(_long_block()), tmp_path, linker=linker, no_clobber=True)
+    assert caught.value.reason == "link_exists"
+    assert linker.writes == []
+
+
+def test_publish_writes_no_copy_of_the_hand_off_text(tmp_path):
+    """THE WHOLE POINT. No second copy of the text exists to go stale."""
+    source = _source_with(_long_block("verbatim-marker"))
+    pns.publish(source, tmp_path, linker=_FakeLinker(None))
+    for entry in tmp_path.iterdir():
+        body = entry.read_bytes().decode("ascii", errors="replace")
+        assert "verbatim-marker" not in body, f"{entry.name} carries a detached copy"
+    assert not (tmp_path / pns.DETACHED_COPY_NAME).exists()
+
+
+def test_a_detached_copy_is_not_convergence(tmp_path):
+    """NON-VACUITY FOR THE WHOLE SECTION - this is the reversion arm.
+
+    Restore the old detached-copy behaviour and this arm goes RED: the old
+    `check` compared the Desktop `.txt` against the block and reported
+    `present True, in_sync True` for exactly this directory. A byte copy that
+    happens to agree today is not convergence, because nothing holds it in
+    agreement tomorrow.
+    """
+    source = _source_with(_long_block())
+    stale = tmp_path / pns.DETACHED_COPY_NAME
+    stale.write_text(pns.extract_prompt(source), encoding="ascii", newline="\n")
+
+    report = pns.check(source, tmp_path, linker=_FakeLinker(None))
+    assert report["present"] is False, "a detached copy was counted as the artifact"
+    assert report["in_sync"] is False
+    assert report["detached_copy"] is True, "the stale copy went unreported"
+
+
+def test_check_reports_a_converged_shortcut_and_writes_nothing(tmp_path):
+    linker = _FakeLinker(pns.desired_link())
+    report = pns.check(_source_with(_long_block()), tmp_path, linker=linker)
+    assert report["present"] is True
+    assert report["in_sync"] is True
+    assert report["detached_copy"] is False
+    assert list(tmp_path.iterdir()) == []
+    assert linker.writes == []
+
+
+def test_check_reports_drift_when_the_shortcut_points_elsewhere(tmp_path):
+    report = pns.check(_source_with(_long_block()), tmp_path, linker=_FakeLinker(_other_state()))
+    assert report["present"] is True
+    assert report["in_sync"] is False
+
+
+def test_an_absent_shell_is_a_friendly_refusal_that_names_no_path(tmp_path):
+    with pytest.raises(pns.Refusal) as caught:
+        pns.publish(_source_with(_long_block()), tmp_path, linker=_FakeLinker(None, available=False))
+    assert caught.value.reason == "no_powershell"
+    assert caught.value.detail == pns.NO_POWERSHELL
+    assert "\\Users" not in caught.value.detail and "/Users" not in caught.value.detail
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_failed_write_degrades_without_falling_back_to_a_copy(tmp_path):
+    """A silent fallback to the old detached copy would reopen the defect."""
+    with pytest.raises(pns.Refusal) as caught:
+        pns.publish(_source_with(_long_block()), tmp_path, linker=_FakeLinker(None, writable=False))
+    assert caught.value.reason == "write_failed"
+    assert caught.value.detail == pns.WRITE_FAILED
+    assert not (tmp_path / pns.DETACHED_COPY_NAME).exists()
+
+
+def test_a_shortcut_that_reads_back_wrong_is_refused(tmp_path):
+    """Written is not the same as correct. The read-back is the only proof."""
+    linker = _FakeLinker(None, readback=_other_state())
+    with pytest.raises(pns.Refusal) as caught:
+        pns.publish(_source_with(_long_block()), tmp_path, linker=linker)
+    assert caught.value.reason == "verify_failed"
+
+
+def test_the_module_has_no_code_path_that_writes_the_hand_off_text_out(tmp_path):
+    """Shape arm, paired with the behavioural one above.
+
+    The old module reached the Desktop through `tempfile.mkstemp` and
+    `os.replace`. Both are gone, and their absence is pinned so a future edit
+    cannot quietly reintroduce the copy beside the shortcut.
+    """
+    text = (REPO_ROOT / "tools" / "publish_next_session.py").read_text(encoding="utf-8")
+    for banned in ("mkstemp", "os.replace"):
+        assert banned not in text, f"{banned} is back; the detached copy is back with it"
+
+
+def test_a_real_publish_leaves_the_shortcut_and_nothing_else(tmp_path):
+    """REPAIR 1. THE CLAIM RESTS ON THIS ARM, not on the substring one above.
+
+    MEASURED REFUTATION, 2026-09-20. The arm above is a NAME FILTER over the
+    module's own source text, and an adversary walked past it: appending a
+    `Copy-Item` to the PowerShell script inside `PowerShellLinker.write`
+    produced `{"ok": true, "action": "create", "detached_copy": false}`, rc 0,
+    and an 8005-byte copy of the hand-off on disk beside the `.lnk` - with the
+    WHOLE SUITE GREEN. Two things hid it. The behavioural arms drive a fake
+    linker, so a copy made on the PowerShell side is invisible to them; and
+    `detached_copy` is NAME-KEYED, so a copy called anything other than
+    `RSC-NEXT-SESSION.txt` is not looked for at all.
+
+    So this arm asserts over the ARTIFACTS rather than over the source: after a
+    REAL publish the directory holds exactly the shortcut, whatever else might
+    have been written and whatever it might have been called. An assertion over
+    what is on disk cannot be walked past by renaming the thing that writes.
+    """
+    if not pns.PowerShellLinker().available():
+        pytest.skip("no PowerShell on PATH, so the real writer cannot be exercised")
+
+    report = pns.publish(_source_with(_long_block()), tmp_path)
+    assert report["ok"] is True
+    assert sorted(p.name for p in tmp_path.iterdir()) == [pns.LINK_NAME], (
+        "the real publish path put something other than the shortcut on the "
+        "desktop: " + repr(sorted(p.name for p in tmp_path.iterdir()))
+    )
+
+
+def _standalone_tree(root: Path, *, worktree: bool) -> Path:
+    """A minimal copy of this tree that the module can actually run from.
+
+    NOT A MOCK. `.git` is created with git's own two shapes - a DIRECTORY for a
+    main checkout, a regular FILE holding a `gitdir:` pointer for a linked
+    worktree - so the guard under test reads the same bytes it reads in
+    anger. Measured in an agent worktree of this tree on 2026-09-20: a 64-byte
+    regular `.git` file.
+    """
+    repo = root / "repo"
+    (repo / "tools").mkdir(parents=True)
+    (repo / "scripts").mkdir(parents=True)
+    for rel in ("tools/publish_next_session.py", "scripts/make_shortcut.py"):
+        (repo / rel).write_bytes((REPO_ROOT / rel).read_bytes())
+    (repo / "RSC-NEXT-SESSION.txt").write_bytes(
+        (REPO_ROOT / "RSC-NEXT-SESSION.txt").read_bytes()
+    )
+    if worktree:
+        (repo / ".git").write_text("gitdir: " + str(root / "elsewhere") + "\n", encoding="ascii")
+    else:
+        (repo / ".git").mkdir()
+    return repo
+
+
+def _run_cli(repo: Path, desktop: Path, *args: str, cwd: Path) -> dict:
+    completed = subprocess.run(
+        [sys.executable, str(repo / "tools" / "publish_next_session.py"), *args,
+         "--desktop", str(desktop)],
+        capture_output=True,
+        cwd=str(cwd),
+        shell=False,
+        check=False,
+        timeout=180,
+    )
+    stderr = completed.stderr.decode("utf-8", errors="replace")
+    assert "Traceback" not in stderr, "the command line crashed:\n" + stderr
+    return json.loads(completed.stdout.decode("utf-8", errors="replace"))
+
+
+def test_a_linked_worktree_is_told_apart_by_gits_own_on_disk_shape(tmp_path):
+    """The predicate, over both real shapes. No mocking, no path spelling."""
+    assert pns.is_linked_worktree(_standalone_tree(tmp_path / "w", worktree=True)) is True
+    assert pns.is_linked_worktree(_standalone_tree(tmp_path / "m", worktree=False)) is False
+
+
+def test_running_from_a_worktree_refuses_rather_than_repointing(tmp_path):
+    """REPAIR 2, found by an adversary 2026-09-20 - it could damage live state.
+
+    `REPO` is `__file__`'s parent, so a run from an agent worktree makes
+    `desired_link()` name the WORKTREE's hand-off. `decide` would read the
+    operator's correct Desktop shortcut, call it an UPDATE, and repoint it at a
+    directory that is deleted when the slice merges. There was no guard.
+
+    The arm runs the REAL command line out of a tree whose `.git` is a real
+    `gitdir:` file, and it fails if the guard is removed: without it the CLI
+    returns `ok true` and writes a shortcut into the desktop directory.
+    """
+    repo = _standalone_tree(tmp_path, worktree=True)
+    desktop = tmp_path / "desktop"
+    desktop.mkdir()
+
+    report = _run_cli(repo, desktop, cwd=tmp_path)
+    assert report["ok"] is False
+    assert report["reason"] == "worktree_checkout"
+    assert report["detail"] == pns.WORKTREE_CHECKOUT
+    assert list(desktop.iterdir()) == [], "a worktree run reached the desktop"
+
+    # --check is guarded too. A drift report derived from a doomed path is a
+    # statement about nothing, and it is what an operator would act on.
+    assert _run_cli(repo, desktop, "--check", cwd=tmp_path)["reason"] == "worktree_checkout"
+
+
+def test_the_module_runs_as_the_ritual_actually_invokes_it(tmp_path):
+    """THE ARM NO IN-PROCESS TEST CAN REPLACE, and it caught a real crash.
+
+    MEASURED 2026-09-20. The converted module imports the shortcut layer from
+    `scripts/make_shortcut.py`. Under pytest the repo root is already on
+    `sys.path`, so that import resolves and 200 arms passed. Run as
+    `python tools/publish_next_session.py`, `sys.path[0]` is `tools/` and the
+    import raised `ModuleNotFoundError` before `main` was reached - so
+    `.claude/commands/done.md` section 9 would have crashed on a green suite.
+    Every arm above is in-process and none of them could see it.
+
+    The subprocess runs from a DIFFERENT working directory on purpose: a
+    bootstrap that only works when the shell happens to sit in the repo root
+    would pass a same-directory arm and fail the ritual. It runs out of a
+    CANONICAL synthetic tree so the arm says the same thing here, where this
+    module is checked out in an agent worktree, and in the main checkout it
+    merges into.
+    """
+    repo = _standalone_tree(tmp_path, worktree=False)
+    desktop = tmp_path / "desktop"
+    desktop.mkdir()
+    report = _run_cli(repo, desktop, "--check", cwd=tmp_path)
+    assert report["ok"] is True
+    assert report["link"] == pns.LINK_NAME
+
+
+def test_the_real_shell_writes_a_shortcut_that_resolves_to_the_source(tmp_path):
+    """THE ONE ARM THAT USES THE REAL MECHANISM, end to end into a temp dir.
+
+    Everything above runs on a fake linker for speed, and a fake linker proves
+    nothing about whether a `.lnk` can be written at all. This one does, and it
+    skips rather than fails where there is no shell to drive.
+    """
+    linker = pns.PowerShellLinker()
+    if not linker.available():
+        pytest.skip("no PowerShell on PATH, so the real mechanism cannot be exercised")
+
+    report = pns.publish(_source_with(_long_block()), tmp_path)
+    assert report["ok"] is True
+    assert (tmp_path / pns.LINK_NAME).is_file()
+
+    observed = linker.read(tmp_path / pns.LINK_NAME)
+    assert observed is not None
+    assert Path(observed.target) == pns.SOURCE
+    assert pns.check(_source_with(_long_block()), tmp_path)["in_sync"] is True
