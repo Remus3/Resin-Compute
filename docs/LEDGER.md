@@ -6841,3 +6841,64 @@ Files written: `ROADMAP.md`, `docs/LEDGER.md`. No shared byte moved; no code
 changed. The only write outside this repository root was the machine-wide Task
 Scheduler namespace, for RSC's own task, under an explicit operator instruction
 to decide and act.
+
+## 2026-09-20 / 2026-09-21 - four guards that could not catch their own defect
+
+Four slices landed, `c4cf858..709cfe0`. Suite 3003 -> 3092 passed, 3 -> 4
+skipped; the extra skip is deliberate and loud, not contamination. pity_engine
+80, ruff clean, mypy 38 source files, licence 47, docs 34, qa 17 passed 2
+skipped 3 noted, shell node 52, headless smoke rc 0.
+
+**What actually repeated across all four slices.** Every one of them shipped an
+arm that could not fail, and in every case the cause was the same: THE FIXTURE
+EXCLUDED THE DEFECT, or THE DETECTOR COULD NOT SEE THE SHAPE THE FIX CREATED.
+
+- The roster tie covered eight sites and called the rest illustrative. An
+  adversary found eight more, three of them provably hand-edited five-to-six at
+  the v1-to-v2 bump. A blind census then found two more that the first two
+  agents had both missed, because each worked from the other's list. Final: 19
+  sites, 20 numerals, 9 exemptions.
+- The untracked-corpus helper declared two git variables inert. Its fixture had
+  NO TRACKED FILES, so `GIT_DIR` and `GIT_INDEX_FILE` had nothing to relabel.
+  With a tracked file present both hijack, reporting a TRACKED file as
+  untracked - the module's whole subject.
+- The interpreter fix introduced a module-level tuple, and its own detector read
+  `argv[0]` at the call site, so reinstating the exact defect passed all 14
+  arms. The fix moved the defect out of its own detector's reach.
+- The carrier-population repair declined to build a guard, arguing one would be
+  vacuous. The guard was then built in about 20 lines and discriminated 18 hits
+  to 0. The self-exclusion objection dissolves once the scanner reads its target
+  as a string.
+
+**A no-op mutant read as a kill, and the producer caught the adversary.** An
+adversary's kill table credited an arm with killing a `sorted()` -> `list()`
+mutation. Adjudicated by measurement: `git ls-files` already emits byte-sorted
+output, so that mutation is undetectable against any real fixture. The arm was a
+statement about git's incidental behaviour. Grading instruments need their own
+non-vacuity controls.
+
+**A measurement slice contaminated its own control.** Building a 3.11 venv put
+an interpreter on PATH, a host-capability arm skipped that otherwise passes, and
+the run reported `3002 passed, 4 skipped` against a true `3003 / 3`. It was
+presented as a correction to the hand-off docs. The docs were right. Caught by
+re-measuring in a clean shell before writing it anywhere. RULE ADOPTED: a SKIP
+delta is a statement about the environment, a PASS delta about the tree; compare
+skip REASONS with `-rs`, never counts.
+
+**The interpreter question is settled by measurement, not by amendment.** The
+3.11 pin STANDS. Equipped 3.11.9 agrees with 3.14.4 on both suites, ruff, mypy,
+qa_companion and the headless smoke, on an identical collection total, with
+exactly one Windows-only `pathlib` difference in a positive-control arm whose
+own docstring documents the asymmetry. What was never true is that this tree's
+reported figures are 3.11 figures. CLAUDE.md now says so.
+
+**Round B has an author and a date.** LW authored the `winmutex.py` repair,
+landing 2026-09-22. RSC confirmed `df0a7a40` from its own disk, accepted the
+wording, and ruled the empty pin STRICTER by measurement. RSC's pin coordinates
+are not the ones the circulating note states - RSC's round-B commit touches two
+test files.
+
+**Inbox.** 137 of 175 entries triaged. The 38 remaining are 37 RSC-authored
+`[sent]` records and exactly ONE inbound note, already answered. Watermark
+deliberately NOT advanced - an inflated watermark is worse than none. Two owed
+outbound items delivered and verified by reading back the RECIPIENT's copy.
