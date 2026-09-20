@@ -3,10 +3,10 @@ r"""Cross-repo parity guard for the vendored headless-loop concurrency governor.
 WHAT IS BEING GUARDED.
 
 `ops/loop/slots.py` and `ops/loop/winmutex.py` are BYTE-IDENTICAL-BY-CONTRACT
-across three repositories - Sibling-E, Sibling-C and Resin Compute.
-The two sibling codenames are opaque here on purpose; they resolve only in the
-GITIGNORED `ops/moon_sync_repos.json`, which is where a maintainer acting on any
-assertion message below goes first.
+but NOT by the same population, so NO CLAIM HERE MAY SCOPE TO THE DIRECTORY.
+`slots.py` has FOUR carriers - LW, RC, RSC, SS - all agreeing. `winmutex.py`
+has FIVE, those four plus CS, and CS's copy DIVERGES. See `SLOTS_CARRIERS` and
+`WINMUTEX_CARRIERS` below. RSC is this tree; Sibling-* resolves in a gitignored map.
 The participating loops do not talk to each other over any API. They coordinate
 THROUGH the on-disk protocol in `slots.py`, against ONE shared token bucket at
 `C:\ProgramData\lw-loop\slots`, and through the Win32 named-mutex namespace in
@@ -15,8 +15,8 @@ participants agree, so a divergence produces no error anywhere. It produces a
 silent concurrency bug - two loops that each believe they are inside the bound
 while together they are outside it.
 
-ALL THREE ACTUALLY ACQUIRE. Sibling-E and Sibling-C both call `slots.hold()`
-from their loop controllers against the live bucket, and SO DOES THIS REPO: since
+THREE OF THE FOUR slots.py CARRIERS ARE MEASURED ACQUIRERS. Sibling-E and
+Sibling-C both call `slots.hold()` against the LIVE bucket, and SO DOES THIS REPO: since
 `1a6d8da`, `run_daemon` in `headless/runner.py` wraps each LIVE pass in a held
 slot. No Claude-executor loop was invented to justify the vendored file - the
 daemon loop was already this tree's one repeated executor and gained the governor
@@ -49,16 +49,16 @@ sibling moves first - which is the normal, correct order of a joint re-pin, and
 also happens for reasons that are none of this repo's business (a sibling being
 mid-edit, checked out to a branch, archived, or simply absent on this machine).
 Every constant below is therefore self-contained: this repo's CI can prove
-parity from ONE checkout, against a value all three sides agreed to.
+parity from ONE checkout, against values whose populations are named below.
 
 WHAT A DIGEST STRUCTURALLY CANNOT COVER.
 
 The lane width is not in either file. `slots.py` takes `max_slots` as an
 argument, by design - "nothing here may reference any of them: every
 project-specific value arrives as an argument". So the number each repo passes
-is a separate agreement, pinned separately at the bottom of this file. If the
-two sides ever disagree, the effective ceiling on the box becomes the LARGER
-value and the governor is theatre.
+is a separate agreement with its OWN population - FOUR declarers, listed in
+`LANE_WIDTH_DECLARERS` below. If any two disagree, the effective ceiling on the
+box becomes the LARGER value and the governor is theatre.
 """
 from __future__ import annotations
 
@@ -90,7 +90,7 @@ LOOP_DIR = ROOT / "ops" / "loop"
 SHARED_BUCKET = Path(r"C:\ProgramData\lw-loop\slots")
 
 # The shared mutex names, restated for the same reason. These are OS namespace
-# keys: two repos spelling them differently do not collide and do not error -
+# keys: a pair of repos spelling them differently do not collide or error -
 # they serialize against nothing at all, each holding a private lock while
 # believing it holds the shared one.
 # ROTATED 2026-09-07 in the joint round Sibling-E announced at 04:15. The retired
@@ -124,26 +124,109 @@ VENDORED_MODULES = ("slots.py", "winmutex.py")
 # ---------------------------------------------------------------------------
 
 # RE-PINNING IS A JOINT ACT. These are not local checksums to be regenerated
-# when they go red. See the assertion message below for the procedure - the
-# short version is that all three repos change in ONE round, each re-hashing
-# from its OWN disk, and nobody trusts a digest quoted in a hand-off note.
+# when they go red. See the assertion message below for the procedure - the short
+# version is that every carrier OF THE MODULE CONCERNED changes in ONE round (the
+# two modules have DIFFERENT carrier sets), each re-hashing from its OWN disk.
 SHARED_SHA256 = {
     # Vendored 2026-09-06, when Resin Compute took the slot vacated by the
     # archived Sibling-B. Sibling-E authored the bytes and carried the
     # red window; this repo copied them BYTE-WISE off the live tree and these
     # digests were re-hashed from this repo's own disk, not copied from the
-    # hand-off note. The bucket stays at 3 participants because it models
-    # ANTHROPIC ACCOUNT concurrency and the participant count did not change.
+    # hand-off note. The bucket WIDTH stayed 3 because it models ANTHROPIC
+    # ACCOUNT concurrency. A WIDTH is not a PARTICIPANT COUNT - see below.
     #
     # RE-PINNED 2026-09-07 in a joint round Sibling-C proposed and this repo
     # authored, so THIS repo carries the red window. Only the docstring's
-    # opening paragraph moved: it named two sibling repos in plain text one
-    # line above the sentence forbidding exactly that, and all three carriers
-    # are published. The mechanism is untouched. Carriers copy the new bytes
+    # opening paragraph moved: it named a pair of siblings in plain text one
+    # line above the sentence forbidding exactly that, and every carrier of
+    # either module is a published repo. Carriers copy the new bytes
     # BYTE-WISE and re-hash from their own disk; a digest quoted in a note is
-    # not acceptance. Before this round all three hashed 629c3d51.
+    # not acceptance. Every tree in THAT round had hashed 629c3d51 before it.
     "slots.py": "71fa2a683f2eaa04dd61feb2bebc646b5f9086e692c5acc05a9239de49d07d1b",
     "winmutex.py": "0b112a4f6bfa88cf5f537f8869225c1821ebfe97428b1e899979797ddd71a61e",
+}
+
+# ---------------------------------------------------------------------------
+# 1a. The populations - FOUR of them, and no two are the same set
+# ---------------------------------------------------------------------------
+#
+# NEVER CITE A CARRIER NUMERAL WITHOUT NAMING THE POPULATION IT COUNTS, AND
+# NEVER SCOPE A SAMENESS CLAIM TO THE ops/loop DIRECTORY. Measured across all
+# six fleet roots on 2026-09-20 with sha256, and every figure below is from
+# that run rather than from anyone's hand-off note:
+#
+#   ops/loop/slots.py      FOUR carriers, all agreeing at 71fa2a68, 9627 bytes:
+#                          LW, RC, RSC, SS. CS and LL hold no copy.
+#   ops/loop/winmutex.py   FIVE carriers. The same four agree at 0b112a4f,
+#                          6190 bytes; CS carries a DIVERGENT 7724-byte file
+#                          at e0d3ac7d. LL holds no copy.
+#   docs/CHANNEL.md        FIVE carriers: CS, LL, LW, RC, RSC - SS holds none.
+#                          LW, RC, RSC and LL agree at fc22e86e, 25425 bytes
+#                          (LL's copy sits under a third_party vendoring
+#                          prefix, not at docs/CHANNEL.md); CS is still at the
+#                          v1 899f6eb9, 20633 bytes.
+#   the LANE WIDTH         FOUR declarers, all at 3: LW and RC and SS in
+#                          ops/loop/config.json, RSC in core/config.py, listed
+#                          in LANE_WIDTH_DECLARERS below. This is
+#                          a FOURTH population and the one this file used to
+#                          give two different sizes eight lines apart. CS holds
+#                          an ops/loop/config.json that declares NO lane width
+#                          at all, so it carries the file and is not a declarer;
+#                          LL has no such file. A WIDTH IS NOT A PARTICIPANT
+#                          COUNT. The width is 3 and the declarers are 4, and
+#                          they were equal once, which is how they got conflated.
+#
+# THIS IS WHY A DIRECTORY-WIDE SENTENCE IS THE BUG. A sentence of the form
+# <the directory> is the same everywhere across <N> trees is FALSE AT EVERY N:
+# its binding condition is the four-tree slots.py set while its wording reaches
+# a directory whose other module has a fifth, divergent carrier. The exception sets do not nest - CS is out of
+# slots.py and in winmutex.py, LL is out of both and in CHANNEL.md, SS is in
+# both modules and out of CHANNEL.md - which is why no one of these numbers ever
+# corrected another and the four-versus-five dispute survived as a dispute.
+#
+# WHAT THESE CONSTANTS DO AND DO NOT BUY. They stop a numeral and its names
+# drifting apart in the assertion messages below, which interpolate the phrases
+# rather than retyping either. They are NOT mechanically tied to anything: the
+# codename map is the GITIGNORED `ops/moon_sync_repos.json` and no guard may
+# read it, and no tree reads another tree's disk from a test. A carrier joining
+# or diverging is still a hand edit here, the same hand-maintained-literal shape
+# that `tests/test_channel_doc_pin.py`'s roster numeral is filed against. Do not
+# read a mechanical tie into them.
+
+#: Carriers of `ops/loop/slots.py`. All four agree at the digest pinned above.
+SLOTS_CARRIERS: tuple[str, ...] = ("LW", "RC", "RSC", "SS")
+
+#: Carriers of `ops/loop/winmutex.py` - a DIFFERENT and larger set.
+WINMUTEX_CARRIERS: tuple[str, ...] = ("CS", "LW", "RC", "RSC", "SS")
+
+#: The winmutex.py carriers whose bytes do NOT match the digest pinned above.
+#: Measured, not predicted. A repair to that module has been circulated by LW
+#: and CONFIRMED BY NOBODY, and no tree's bytes have moved, so this stays.
+WINMUTEX_DIVERGENT: tuple[str, ...] = ("CS",)
+
+#: Trees that DECLARE a lane width. A fourth population, and not a carrier set:
+#: CS carries `ops/loop/config.json` and declares no width in it, so it is a
+#: carrier of that file and not a declarer. The measured values are all 3, which
+#: is `EXPECTED_LANES`. Do not restate that 3 as a participant count.
+LANE_WIDTH_DECLARERS: tuple[str, ...] = ("LW", "RC", "RSC", "SS")
+
+#: This tree's own code, as the four populations above claim it. Used by a
+#: PREDICATE below, which is the only reason any of these tuples is more than a
+#: comment. See that test for exactly how much it can and cannot catch.
+THIS_TREE = "RSC"
+
+#: Per-module phrases. Keyed by module so no message can make a claim about the
+#: directory, which is the one claim that is false however it is counted.
+CARRIERS_BY_MODULE = {
+    "slots.py": (
+        f"the {len(SLOTS_CARRIERS)} slots.py carriers "
+        f"({', '.join(SLOTS_CARRIERS)}), which all agree"
+    ),
+    "winmutex.py": (
+        f"the {len(WINMUTEX_CARRIERS)} winmutex.py carriers "
+        f"({', '.join(WINMUTEX_CARRIERS)}) - a DIFFERENT set from slots.py's, "
+        f"and {', '.join(WINMUTEX_DIVERGENT)} already carries a divergent copy"
+    ),
 }
 
 
@@ -151,8 +234,8 @@ def test_the_vendored_governor_is_present():
     """Absence must be RED, never a skip.
 
     Every other guard in this file is downstream of these two files existing.
-    If a missing vendor drop were allowed to skip, deleting `ops/loop/` would
-    take the entire parity contract green-and-silent, which is precisely the
+    If a missing vendor drop were allowed to skip, deleting the vendor drop
+    would take the entire parity contract green-and-silent, which is precisely the
     renamed-directory failure described in the module docstring.
     """
     missing = [name for name in sorted(VENDORED_MODULES) if not (LOOP_DIR / name).is_file()]
@@ -197,15 +280,86 @@ def test_the_pin_covers_every_vendored_module_and_nothing_was_added():
         f"{sorted(VENDORED_MODULES)}. Do not resolve this by editing whichever side "
         "is convenient: removing a digest disarms both the presence and the byte "
         "guard for that file. A module joins or leaves this set only in a joint "
-        "round with Sibling-E and Sibling-C. Resolve the codenames in the "
+        f"round with every carrier OF THAT MODULE - {CARRIERS_BY_MODULE['slots.py']}, "
+        f"and {CARRIERS_BY_MODULE['winmutex.py']}. Resolve the codenames in the "
         "gitignored ops/moon_sync_repos.json and coordinate through moon_sync_inbox/."
     )
     on_disk = sorted(path.name for path in LOOP_DIR.glob("*.py"))
     assert on_disk == sorted(VENDORED_MODULES), (
-        f"{LOOP_DIR} holds {on_disk}, expected {sorted(VENDORED_MODULES)}. This "
-        "directory is a byte-identical mirror of two sibling trees, so an EXTRA file "
+        f"{LOOP_DIR} holds {on_disk}, expected {sorted(VENDORED_MODULES)}. Each module "
+        "here mirrors its OWN set of sibling trees - the directory as a whole mirrors "
+        "nothing, see CARRIERS_BY_MODULE - so an EXTRA file "
         "here is drift even when every pinned digest still matches - including an "
         "__init__.py, which would also change how the modules import."
+    )
+
+
+def test_this_tree_s_own_membership_matches_this_tree_s_own_disk():
+    """The PREDICATE that stops the population tuples being decorative.
+
+    WHY THIS ARM EXISTS. An adversarial pass established that every reference to
+    `SLOTS_CARRIERS`, `WINMUTEX_CARRIERS` and `CARRIERS_BY_MODULE` was a
+    docstring, a comment, or the `msg` operand of an `assert` - never a
+    predicate. A tuple no predicate reads is a comment with a colon in it, and
+    the failure it lets through is not cosmetic: when the digest arm finally
+    fires it prints the re-pinning procedure, so a stale tuple tells a
+    maintainer to run a joint round that EXCLUDES A REAL CARRIER.
+
+    WHAT IT CHECKS, all of it from THIS tree's own disk:
+
+      1. `CARRIERS_BY_MODULE` covers exactly `VENDORED_MODULES`. This is the
+         sharpest arm here. The digest arm indexes that dict INSIDE its own
+         assertion message, so a module joining the vendor drop without a phrase
+         replaces the one diagnostic that matters with a KeyError traceback, at
+         the exact moment somebody needs to read it.
+      2. This tree's membership in each module's carrier tuple agrees with
+         whether the module is on this disk.
+      3. This tree is not listed as DIVERGENT for a module whose pinned digest
+         this suite also asserts it matches - two arms that cannot both be right.
+      4. This tree declares a lane width if and only if it claims to.
+
+    WHAT IT STRUCTURALLY CANNOT CATCH, and this is most of it. Every row about
+    ANOTHER tree is unguarded, because no test here may read a foreign disk -
+    the module docstring records what a cross-tree read cost the last time it
+    was tried. So CS adopting `slots.py`, LL vendoring either module, SS
+    dropping one, or CS's divergent `winmutex.py` converging would all leave
+    these tuples stale and every arm here green. Those rows are hand-maintained
+    against a measurement taken once, and the only thing that refreshes them is
+    a human re-running the six-root hash. Do not read this arm as parity.
+    """
+    assert sorted(CARRIERS_BY_MODULE) == sorted(VENDORED_MODULES), (
+        f"CARRIERS_BY_MODULE describes {sorted(CARRIERS_BY_MODULE)} but the vendored set "
+        f"is {sorted(VENDORED_MODULES)}. The digest arm indexes this dict inside its own "
+        "assertion message, so a module missing here turns that arm's diagnostic into a "
+        "KeyError at the moment it fires. Add the module's carrier population, measured "
+        "from disk, rather than deleting the arm that noticed."
+    )
+
+    carriers_of = {"slots.py": SLOTS_CARRIERS, "winmutex.py": WINMUTEX_CARRIERS}
+    for name in sorted(VENDORED_MODULES):
+        present = (LOOP_DIR / name).is_file()
+        claimed = THIS_TREE in carriers_of[name]
+        assert present == claimed, (
+            f"{name}: this tree is {'listed' if claimed else 'NOT listed'} in its carrier "
+            f"tuple but the file is {'present' if present else 'ABSENT'} at {LOOP_DIR}. "
+            f"One of the two is wrong. Fix the side that disagrees with disk - and if the "
+            f"file genuinely left this tree, {THIS_TREE} leaves that tuple in the same "
+            "edit, which is a joint round, not a local one."
+        )
+
+    assert THIS_TREE not in WINMUTEX_DIVERGENT, (
+        f"{THIS_TREE} is listed as carrying a DIVERGENT winmutex.py, but this suite also "
+        "asserts this tree's copy matches the pinned digest. Both cannot hold. If this "
+        "tree really has diverged, the digest arm is the one that must go red first."
+    )
+
+    declares = hasattr(core_config, "MAX_CONCURRENT_LANES")
+    assert declares == (THIS_TREE in LANE_WIDTH_DECLARERS), (
+        f"LANE_WIDTH_DECLARERS {'includes' if THIS_TREE in LANE_WIDTH_DECLARERS else 'omits'} "
+        f"{THIS_TREE}, but core.config "
+        f"{'declares' if declares else 'does not declare'} MAX_CONCURRENT_LANES. Declaring a "
+        "width is what makes a tree a declarer; carrying ops/loop/ is not, and CS is the "
+        "measured example of the difference."
     )
 
 
@@ -223,17 +377,21 @@ def test_vendored_module_matches_the_pinned_cross_repo_digest(name: str):
         f"  actual   {actual}\n"
         f"  file     {path}\n"
         "\n"
-        "ops/loop/ is BYTE-IDENTICAL-BY-CONTRACT across all three repos. They coordinate "
+        f"{name} is BYTE-IDENTICAL-BY-CONTRACT across {CARRIERS_BY_MODULE[name]}. Scope "
+        "this to the FILE and never to the ops/loop directory: the two modules have "
+        "DIFFERENT carrier sets and a directory-wide claim is false at every count. "
+        "They coordinate "
         "through this file's on-disk protocol against ONE shared bucket, so a divergence "
         "is not a merge conflict anybody sees - it is a silent concurrency bug.\n"
         "\n"
         "DO NOT re-hash the local file to make this green. A local regeneration launders "
         "a unilateral drift into 'agreed' and turns this guard into a rubber stamp. "
-        "RE-PINNING IS A JOINT ACT, all three repos in ONE round: agree the new bytes; "
+        f"RE-PINNING IS A JOINT ACT across {CARRIERS_BY_MODULE[name]}, in ONE round: "
+        "agree the new bytes; "
         "copy them BYTE-WISE into every tree (a text write CRLF-mangles them on Windows "
         "and this pin is on bytes); re-hash from EACH tree's OWN disk rather than "
-        "trusting the digest in anyone's hand-off note; confirm all three agree; then "
-        "update this dict and its counterpart in the other two repos in the same round."
+        "trusting the digest in anyone's hand-off note; confirm EVERY carrier agrees; then "
+        "update this dict and its counterpart in every other carrier tree in the same round."
     )
 
 
@@ -302,8 +460,9 @@ def test_vendored_module_carries_no_carriage_return(name: str):
 def test_the_carriage_return_detector_actually_fires(tmp_path: Path):
     """Non-vacuity, against the REAL bytes, without touching the real files.
 
-    `ops/loop/` is byte-identical-by-contract across the carriers and is frozen
-    here, so the mutation happens on a tmp_path COPY. Both arms are needed: the
+    Each vendored module is byte-identical-by-contract across ITS OWN carriers,
+    never the whole directory across one set, and both are frozen here, so
+    the mutation happens on a tmp_path COPY. Both arms are needed: the
     first proves the detector can go red, the second proves it is not simply
     red on everything - a detector that fires on the untouched bytes too would
     score full marks on the first arm and guard nothing.
@@ -377,7 +536,9 @@ def slot_root(tmp_path: Path) -> Path:
     """A private, empty bucket for one test - never the real one.
 
     THE HAZARD THIS CLOSES. The bucket is machine-wide and live: a real headless
-    cycle in any of the three repos may be holding slots in it right now. A test
+    cycle in any of the three MEASURED ACQUIRERS - LW, RC and this tree; a
+    population distinct from every carrier set above - may be holding slots in it
+    right now. A test
     that acquired there would take a lane away from production work, and a test
     that reaped there would hand a second repo a slot the first still believes
     it holds - the exact double-booking this whole module exists to prevent.
@@ -456,9 +617,10 @@ def test_contending_threads_never_exceed_max_slots(slots, slot_root: Path):
     vendored `hold()` leaks lockfiles - see the release tests below for the
     uncontended contract, and the slice report for the mechanism. Asserting a
     drained bucket here would make this suite red for a defect in a file this
-    repo is forbidden to edit unilaterally, which is a three-repo change, not a
-    test fix. `entered == workers` is left out for the same reason: it fails
-    outright once every slot has leaked.
+    repo is forbidden to edit unilaterally, which is a change every `SLOTS_CARRIERS`
+    tree has to make - `hold()` lives in `slots.py` - not a test fix. `entered ==
+    workers` is left out for the same reason: it fails outright once every slot
+    has leaked.
     """
     max_slots = 2
     workers = 2 * max_slots
@@ -546,7 +708,8 @@ def test_a_slot_is_released_after_use(slots, slot_root: Path):
 def test_a_slot_is_released_even_when_the_body_raises(slots, slot_root: Path):
     """Release lives in a `finally`, and this is why that matters.
 
-    A leaked lock permanently narrows a bucket THREE repos draw from - this one
+    A leaked lock permanently narrows a bucket the three measured acquirers draw
+    from - LW, RC and this one,
     included, since `1a6d8da` put the daemon loop's live passes inside a held
     slot - and it is reclaimed only by the stale sweep, which is deliberately set
     to three cycle deadlines, so the damage outlives the run that caused it by
@@ -587,7 +750,7 @@ def test_timeout_raises_rather_than_proceeding_unslotted(slots, slot_root: Path)
 
 
 def test_a_lock_held_by_a_dead_pid_is_reaped(slots, slot_root: Path):
-    """Fail-open: a crashed holder must not deadlock the other two repos.
+    """Fail-open: a crashed holder must not deadlock the other two acquirers.
 
     The timestamp is FRESH, so age cannot explain the reap. Only pid liveness
     can, which is what makes this a test of the liveness arm rather than of the
@@ -614,7 +777,7 @@ def test_a_lock_held_by_a_live_pid_is_not_reaped(slots, slot_root: Path):
 
     removed = slots.reap(slot_root, 2, slots.DEFAULT_STALE_AFTER)
 
-    assert removed == 0, "a live holder's lock was stolen; two repos now believe they hold it"
+    assert removed == 0, "a live holder's lock was stolen; two acquirers now believe they hold it"
     assert lock.exists()
 
 
@@ -675,7 +838,8 @@ def test_a_corrupt_but_recent_lock_is_left_alone(slots, slot_root: Path):
 def test_the_lock_payload_identifies_the_holder(slots, slot_root: Path):
     """Cross-repo debugging depends entirely on this.
 
-    The bucket is one directory shared by three repositories. When it is full,
+    The bucket is one directory the three measured acquirers share - LW, RC and
+    this tree, which is not the same population as any carrier set. When it is full,
     the only way to learn WHO is holding a lane - and whether that holder is
     still alive - is to read the lockfile. A payload missing `repo` turns
     "which project is starving the others" into guesswork.
@@ -828,15 +992,19 @@ def test_the_lane_width_matches_the_other_repos():
     parity of the NUMBER.
 
     This is the non-vacuous half of the lane guard: it reads a constant that
-    exists in this tree today. If the two sides ever disagree, the effective
+    exists in this tree today. If any two of `LANE_WIDTH_DECLARERS` disagree, the
     machine-wide ceiling becomes the LARGER of the values - each repo is
     correctly bounded by its own belief, and the bucket is bounded by nobody.
     """
     assert core_config.MAX_CONCURRENT_LANES == EXPECTED_LANES, (
-        f"core.config.MAX_CONCURRENT_LANES is {core_config.MAX_CONCURRENT_LANES}, but "
-        f"Sibling-C and Sibling-E both pass {EXPECTED_LANES}. Changing this is a "
-        "three-repo agreement, not a local tuning knob: the bucket models ANTHROPIC ACCOUNT "
-        "concurrency, which is one pool for all three. The codenames resolve in the "
+        f"core.config.MAX_CONCURRENT_LANES is {core_config.MAX_CONCURRENT_LANES}, but the "
+        f"{len(LANE_WIDTH_DECLARERS)} lane-width declarers "
+        f"({', '.join(LANE_WIDTH_DECLARERS)}) all pass {EXPECTED_LANES}. Changing this is "
+        f"an agreement across all {len(LANE_WIDTH_DECLARERS)} of them, not a local tuning "
+        "knob: the bucket models ANTHROPIC ACCOUNT concurrency, which is ONE pool for every "
+        "tree that acquires against it - SS included, which joined the bucket 2026-09-20. "
+        "That population is NOT the slots.py carrier set and NOT the bucket width, both of "
+        "which this file used to conflate with it. The codenames resolve in the "
         "gitignored ops/moon_sync_repos.json; the round runs through moon_sync_inbox/."
     )
 
