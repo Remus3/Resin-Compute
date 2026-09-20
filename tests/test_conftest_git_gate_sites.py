@@ -633,6 +633,21 @@ _SITES: tuple[Site, ...] = (
             "tests/test_precommit_gate_corpus.py::test_git_returns_str_on_success",
             "tests/test_precommit_gate_corpus.py"
             "::test_check_staged_passes_a_clean_repo_with_nothing_staged",
+            # The three subject-report arms, added when the staged lane learned
+            # to state the corpus it read. WIDENED ONCE, DELIBERATELY, and the
+            # widening is legitimate: each of the three stands up a real
+            # throwaway repo through `_init_repo`, which calls
+            # `require_git_repository()`, so they genuinely joined the derived
+            # population rather than the row having been loosened to quiet it.
+            # That distinction is the whole claim this row can support. A
+            # SECOND widening here is the signal to stop and ask what the
+            # mechanism is measuring instead of extending the tuple again.
+            "tests/test_precommit_gate_corpus.py"
+            "::test_an_empty_staged_corpus_states_its_subject_instead_of_passing_silently",
+            "tests/test_precommit_gate_corpus.py"
+            "::test_the_subject_report_counts_the_fixture_and_not_a_constant",
+            "tests/test_precommit_gate_corpus.py"
+            "::test_the_subject_is_stated_on_a_blocking_exit_too",
         ),
         gate="require_git_repository",
     ),
