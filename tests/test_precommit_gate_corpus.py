@@ -53,6 +53,7 @@ regression in this gating.
 from __future__ import annotations
 
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -318,4 +319,158 @@ def test_a_named_mode_still_scans(tmp_path):
     assert out.returncode == 0, f"--scan-files on a clean file failed: {_err(out)!r}"
     assert b"1 file(s) scanned" in out.stdout, (
         f"--scan-files reported no scan: {out.stdout!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE SUBJECT REPORT. A THIRD defect of the SAME family as the two above, and
+# the one neither of them closed.
+#
+# The corpus arms fixed `None` vs `{}`: an UNREAD corpus now blocks, and a READ
+# but empty one still passes. The refusal arms fixed an input the tool did not
+# UNDERSTAND reaching the hook lane. What is left is an input the tool
+# understood perfectly, over a corpus it really did read, that happens to be
+# EMPTY - and `_check_staged` answered it by returning 0 having written not one
+# byte anywhere. `echo "git commit" | python tools/precommit_gate.py` in a tree
+# with a clean index and the same line in a tree with forty staged files
+# produced BYTE-IDENTICAL output: nothing at all, rc 0.
+#
+# WHY "BLOCK ON AN EMPTY INDEX" IS THE WRONG ANSWER, and this is a DECISION
+# rather than a deduction. An empty staged corpus is a genuine fact about the
+# tree, `git commit --allow-empty` is a legitimate invocation that fires
+# .githooks/pre-commit with exactly that corpus, and
+# `test_check_staged_passes_a_clean_repo_with_nothing_staged` above already
+# pins the pass. Blocking would wedge the hook and would contradict
+# `_staged_added`'s own recorded distinction. The defect is not that emptiness
+# PASSES; it is that emptiness is INVISIBLE.
+#
+# The scan lanes solved this for themselves and the staged lane never got the
+# same treatment: `_check_scan_files` prints `selected= scanned= exempt=` on
+# every clean exit, so a zero there is legible. The fix gives the staged lane
+# the same arithmetic, on EVERY exit including a blocking one.
+#
+# THE NON-VACUITY SHAPE THESE ARMS USE. A single arm asserting "some report
+# line is present" would be a FORMAT arm, and this tree has a recorded finding
+# that a shape arm pins format and not input: a mutant printing a fixed
+# `staged=0 added-lines=0` without ever consulting the corpus would satisfy it.
+# So every arm below parses the two integers back out and compares them against
+# WHAT THE FIXTURE ACTUALLY STAGED - zero files in one, two files and seven
+# added lines in another, one file and one added line in a third. No constant
+# satisfies all three.
+# ---------------------------------------------------------------------------
+
+#: Parsed rather than matched whole, so the arms assert on the COUNTS and not
+#: on the sentence carrying them.
+_STAGED_SUBJECT = re.compile(rb"precommit_gate: staged=(\d+) added-lines=(\d+)")
+
+
+def _subject(out: subprocess.CompletedProcess) -> tuple[int, int]:
+    """(files, added lines) as the gate REPORTED them, or fail saying so."""
+    match = _STAGED_SUBJECT.search(out.stdout)
+    assert match is not None, (
+        "the staged lane stated no subject at all, so a corpus of zero files "
+        "and a corpus of forty are indistinguishable to the caller. "
+        f"stdout={out.stdout!r} stderr={out.stderr!r}"
+    )
+    return int(match.group(1)), int(match.group(2))
+
+
+def _commit_stdin(root: pathlib.Path) -> bytes:
+    """The command string the staged lane really carries, with a -C root."""
+    return f'git -C "{root}" commit -m x'.encode()
+
+
+def _stage(root: pathlib.Path, name: str, payload: bytes) -> None:
+    """Write a file and put it in the index of the throwaway repo."""
+    (root / name).write_bytes(payload)
+    subprocess.run(
+        ["git", "add", "--", name], cwd=str(root), capture_output=True, timeout=60,
+    )
+
+
+def test_an_empty_staged_corpus_states_its_subject_instead_of_passing_silently(
+    tmp_path,
+):
+    """THE DEFECT ITSELF, reinstated: a real repo whose index is really clean.
+
+    No monkeypatch and no stub - `git diff --cached` genuinely answers with an
+    empty diff here, which is the `{}` the arm above proves must keep passing.
+    What must change is that the pass now SAYS the corpus was empty.
+    """
+    _init_repo(tmp_path)
+    out = _run([], stdin=_commit_stdin(tmp_path))
+    assert out.returncode == 0, (
+        "a clean index was blocked, which would wedge `git commit "
+        f"--allow-empty` and every hook firing on one: {_err(out)!r}"
+    )
+    files, lines = _subject(out)
+    assert (files, lines) == (0, 0), (
+        f"reported staged={files} added-lines={lines} for an index holding "
+        "nothing - the report is not reading the corpus"
+    )
+
+
+def test_the_subject_report_counts_the_fixture_and_not_a_constant(tmp_path):
+    """THE NON-VACUITY ARM. A hardcoded zero cannot survive this one.
+
+    Two files, three added lines and four, so both integers are pinned to a
+    fixture value no constant shared with the arm above can satisfy. `.txt` on
+    purpose: the py_compile and net-new-ruff halves key on `.py` and would
+    otherwise decide this arm's exit code for it.
+    """
+    _init_repo(tmp_path)
+    _stage(tmp_path, "alpha.txt", b"one\ntwo\nthree\n")
+    _stage(tmp_path, "beta.txt", b"four\nfive\nsix\nseven\n")
+    out = _run([], stdin=_commit_stdin(tmp_path))
+    assert out.returncode == 0, f"two clean ASCII files were blocked: {_err(out)!r}"
+    files, lines = _subject(out)
+    assert (files, lines) == (2, 7), (
+        f"reported staged={files} added-lines={lines} for a fixture staging 2 "
+        "files and 7 added lines"
+    )
+
+
+def test_the_subject_is_stated_on_a_blocking_exit_too(tmp_path):
+    """The report is UNCONDITIONAL, not bolted onto the success path.
+
+    A gate that states its subject only when it passes still leaves a blocked
+    caller unable to tell how much was looked at. The banned glyph is written
+    as raw UTF-8 BYTES from ASCII escapes, because a literal em-dash in this
+    file would make the module violate the very rule it is testing.
+    """
+    _init_repo(tmp_path)
+    _stage(tmp_path, "bad.txt", b"a \xe2\x80\x94 b\n")
+    out = _run([], stdin=_commit_stdin(tmp_path))
+    assert out.returncode == 1, (
+        f"a staged em-dash was not blocked: {out.stdout!r} {_err(out)!r}"
+    )
+    files, lines = _subject(out)
+    assert (files, lines) == (1, 1), (
+        f"a BLOCKING run reported staged={files} added-lines={lines} for a "
+        "fixture staging 1 file and 1 added line"
+    )
+
+
+def test_the_non_commit_lane_says_it_scanned_nothing():
+    """The SIBLING case, same root cause: another `return 0` written in silence.
+
+    `git status` on stdin is understood and is a genuine no-op, and
+    `test_a_non_commit_command_on_stdin_still_exits_zero` above pins that it
+    keeps exiting 0. But rc 0 with empty output carries the same ambiguity: a
+    caller reading it cannot tell a gate that DECLINED to scan from one that
+    scanned and found nothing. It must say which.
+
+    The second clause is the direction arm. Without it the lane could satisfy
+    the first by printing a staged subject it never read, which would be a
+    worse lie than the silence.
+    """
+    out = _run([], stdin=b"git status\n")
+    assert out.returncode == 0, f"a non-commit command was refused: {_err(out)!r}"
+    assert out.stdout.strip(), (
+        "the non-commit lane exited 0 having written nothing, so declining to "
+        "scan and scanning cleanly are indistinguishable"
+    )
+    assert _STAGED_SUBJECT.search(out.stdout) is None, (
+        f"the non-commit lane reported a STAGED subject it never read: "
+        f"{out.stdout!r}"
     )
