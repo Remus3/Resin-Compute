@@ -189,24 +189,37 @@ Check `~/.claude/projects/C--Resin-Compute/memory/` for
 anything written this session, and confirm `MEMORY.md` indexes it. A memory
 file with no index line is invisible to the next session.
 
-## 9. Publish the Desktop backup - BEFORE the banner, not after
+## 9. Publish the Desktop shortcut - BEFORE the banner, not after
 
 ```
-python tools/publish_next_session.py --check
+python tools/publish_next_session.py
 ```
 
-**DO NOT RUN THE BARE PUBLISH UNTIL THE PUBLISHER IS CONVERTED.** Operator
-ruling 2026-09-19: the Desktop no longer holds a detached COPY of the hand-off,
-it holds `RSC-NEXT-SESSION.lnk` POINTING AT the tracked repo-root
-`RSC-NEXT-SESSION.txt` - the shape the sibling trees already use. A bare
-`python tools/publish_next_session.py` still writes the old detached copy and
-would recreate exactly the stale artifact that ruling removed. `--check` reports
-drift and writes nothing, so it is safe and is what this section now runs.
+**THE BARE RUN IS WHAT THIS SECTION RUNS, AS OF 2026-09-20 AT `8433eba`.** This
+section used to run `--check` only, and the restriction existed for exactly one
+reason: the publisher wrote a DETACHED Desktop COPY of the hand-off, so a bare
+run recreated the stale artifact operator ruling 2 removed. THE MODULE NO LONGER
+WRITES A COPY. It CONVERGES `RSC-NEXT-SESSION.lnk` onto the tracked repo-root
+`RSC-NEXT-SESSION.txt` - the shape the sibling trees already use - reusing the
+idempotent converge table imported from `scripts/make_shortcut.py`: absent
+create, present-and-correct change nothing, present-and-different rewrite. The
+reason for the restriction is gone, so the restriction is gone with it.
 
-The conversion of the publisher to converge the shortcut instead of writing a
-copy is an OPEN ROADMAP ROW. Until it lands, this section verifies rather than
-publishes.
+Operator ruling 2026-09-19 still governs WHAT is on the Desktop: a pointer and
+never a second copy of the hand-off text. That ruling is an explicit
+authorization for that ONE write outside the repo root and for nothing else.
 
+- **RUN IT FROM THE CANONICAL CHECKOUT, NEVER FROM A LINKED WORKTREE.** `main()`
+  refuses HARD from a worktree, by exit code, because `REPO` resolves from the
+  module's own location and a worktree run would aim the operator's shortcut at
+  a file that disappears when the worktree is cleaned up. That refusal is the
+  correct outcome, not a failure of the ritual - re-run from the canonical
+  checkout.
+- A converged run prints `"action"` and a false `"detached_copy"`. `"unchanged"`
+  is the ordinary result once the shortcut already resolves, and it means the
+  pointer was verified rather than that nothing was checked.
+- `--check` still exists, still writes nothing, and is the right call when you
+  want the drift report without the write.
 - There is now only ONE copy of the hand-off text anywhere: the tracked
   `RSC-NEXT-SESSION.txt` in the repo root. The inline block in section 11 is
   read out of that same file, so the printed block and the file cannot
@@ -216,8 +229,11 @@ publishes.
   `LW-`, `RC-` and `RM-` prefixes - those five basenames are observed on disk
   and are deliberately not codenamed, because a guard that compares against
   invented filenames is vacuous. `RSC-` is unconfusable with any of them.
-- If `--check` refuses, that is a failure of the ritual - fix
+- If the publish refuses, that is a failure of the ritual - fix
   `RSC-NEXT-SESSION.txt` and re-run. Never hand-write anything onto the Desktop.
+  The one refusal that is NOT a ritual failure is the linked-worktree refusal
+  above, which is the module declining to publish a pointer at bytes no guard
+  read.
 
 ## 10. Banner
 
