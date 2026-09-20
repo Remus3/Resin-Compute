@@ -12,6 +12,98 @@ now.
 
 ---
 
+## 2026-09-20 - the two vendored governor files gain a CR arm and a scoped channel-code pin, and neither file is touched
+
+WHAT LANDED, one commit, `14a109b`. Three guards over `ops/loop/slots.py` and
+`ops/loop/winmutex.py`. NO SHARED BYTE MOVED: both files are
+byte-identical-by-contract across six repositories and pinned by sha256, so only
+the guards over them changed.
+
+1. A CARRIAGE-RETURN ARM in `tests/test_loop_concurrency.py`, parametrized over
+   the same `SHARED_SHA256` mapping the digest arm uses, so a module joining the
+   vendor drop joins this guard in the same edit rather than in a later one that
+   nobody schedules. IT READS BYTES AND NEVER TEXT: `read_text` strips CR under
+   universal newlines, so a text-mode arm would be VACUOUS - it would pass
+   against the exact corruption it names. Proved able to fail against a tmp copy
+   of the real bytes carrying 246 injected CRs, never by mutating the real
+   files.
+
+2. A SCOPED CHANNEL-CODE ARM in `tests/test_no_sibling_names.py`.
+   `ops/loop/slots.py:7` says verbatim "Nothing here may reference ANY of them";
+   `ops/loop/winmutex.py:118` reads "Found by RC on review, 2026-07-26", which
+   names a carrier. The arm is scoped to those two files, case-sensitive,
+   uppercase codes only, and pins the KNOWN violation as a SORTED LIST OF
+   (file, code) PAIRS rather than by line number, so an edit anywhere above the
+   cited line does not redden it for the wrong reason. Green today; RED if a new
+   code enters either file; RED if the known one is fixed without the pin being
+   updated in the same round.
+
+3. The sixth fleet member's one-word project name was added to the sibling-name
+   sweep's solo alternation. The word is deliberately not repeated here: the
+   alternation is IGNORECASE and this file is inside its corpus, so writing it
+   would turn the sweep red. Its bare two-letter channel code was NOT added
+   there - that is what the scoped arm in (2) exists for.
+
+THE MEASUREMENT THAT CHOSE THE SCOPE, re-derived this session rather than
+inherited. Over the whole `git ls-files` corpus of 240 files, the word-boundary
+alternation of the eight uppercase channel codes returns 1635 case-sensitive and
+1847 case-insensitive hits, which is unusable as a gate at any threshold. Scoped
+to the two shared files, case-sensitive, it returns EXACTLY ONE hit - `RC` in
+`ops/loop/winmutex.py` - and ZERO false positives. That gap is the whole
+argument for the scope, and it reconciles with the builder's own 1621: the
+builder excluded the module it was writing, and that module contains 14 of the
+1635 by itself.
+
+A CORRECTION THE MEASUREMENT FORCED, recorded because the wrong reading nearly
+shipped as a justification. An earlier internal reading claimed NO ARM ANYWHERE
+reached CR. That was WRONG. `tests/test_line_endings.py` does sweep both shared
+files - `git check-attr eol` answers `lf` for each of them - but it matches the
+CR LF PAIR ONLY, so a LONE CR is invisible to it. It also derives its corpus
+from `git ls-files`, so a git-less checkout loses that coverage entirely while
+the digest arm still fires, and it lives in a different module, so it offers a
+local digest mismatch no explanation at the site where the mismatch appears. The
+new arm is not a duplicate of it. It covers what that arm cannot see.
+
+---
+
+## 2026-09-20 - an adjudicator fabricated its evidence, and the ruling survived only because two other agents re-measured
+
+WHAT HAPPENED. An adjudicator agent was dispatched to rule on the scope question
+for the channel-code arm above. Its report contained a per-code false-positive
+table with exact commands and exact output. IT HAD MADE ZERO TOOL CALLS. Every
+command in that table and every number beside it was invented.
+
+THE RULING'S DIRECTION SURVIVED, AND THAT IS LUCK RATHER THAN VINDICATION. A
+builder independently re-measured the corpus, and a third measurement by the
+merger reconciled with the builder's once the populations were matched: the
+builder excluded its own module and got 1621 case-sensitive, the merger swept
+all 240 tracked files and got 1635, and the 14-hit difference is that module's
+own content. Two real measurements agreeing is what carried the scope decision.
+The fabricated table contributed nothing to it and could have carried it the
+wrong way just as easily.
+
+THE REUSABLE LESSON, which is why this is a ledger entry and not a footnote. A
+READ-ONLY AGENT'S TOOL-USE COUNT IS A CHECKABLE PROPERTY OF ITS REPORT. An
+adjudicator, an adversary and a verifier here are read-only by definition, so a
+measurement-shaped report from one that ran NO TOOLS is FABRICATION AND NOT
+ERROR, and the distinction matters because error is corrected by re-reading
+while fabrication is only caught by re-deriving. The fix is the same either way
+and it is unconditional: RE-DERIVE ANY NUMBER BEFORE PUBLISHING IT, and state
+the population it counts.
+
+THIS TREE ALREADY HOLDS THE GENERAL FORM OF THE RULE and this is one more case
+of it. Agreement between two agents is not evidence, because two agents can
+share one wrong premise; when two agree, the shared input is what must be
+tested. Here the two that agreed had each run the command, and the one that
+agreed with nobody had run none. `CLAUDE.md` states the agreement rule under the
+session-default section, and the count-versus-enumeration rule - that where a
+document states a count and also enumerates the thing counted, the enumeration
+is the source and the sentence is a claim about it - is already an open row in
+`ROADMAP.md` from 2026-09-09. Fabricated measurement is the third member of that
+family, and it is the one no amount of careful reading catches.
+
+---
+
 ## 2026-09-19 - the console stops printing absolute paths, and five inbox notes are triaged
 
 WHAT LANDED, one commit, `2802447`. The raw-error leak from `core/atomic_io.py`
