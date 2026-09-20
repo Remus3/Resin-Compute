@@ -1,6 +1,19 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-09-21, at commit 7fbbaf0 on main. Everything below is a READING
-taken that day, not a promise about now. Re-measure before citing.
+Stamped 2026-09-20T23:41:45Z, on the round-B branch whose base commit is
+ef17cc8 - NOT on main. Everything below is a READING taken at that instant, not
+a promise about now. Re-measure before citing.
+
+READ THIS BEFORE YOU TRUST A WORD BELOW. THIS FILE IS UNGUARDED, AND NOT BY
+ACCIDENT OF ANYONE'S CARE. tests/test_docs_consistency.py builds its citation
+corpus from _tracked_markdown(), which filters on name.endswith(".md"). This
+file is tracked, is the first thing a cold session reads, and is a .txt - so
+every backticked-path check, every line-citation check and every pointer check
+in that module is blind to it BY SUFFIX. A SUFFIX-KEYED GUARD WITH A
+SUFFIX-EXCLUDED DEFECT. It has already cost once: this file spent a session
+telling readers that round B was open, highest-priority work, after round B had
+landed, and nothing in the tree could have gone red over it. Treat every claim
+here as hand-maintained prose, because that is all it is. A claim that must be
+guarded has to live in a .md file or in a test.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -109,8 +122,15 @@ TRAPS MEASURED IN THIS TREE - EACH ONE HAS ACTUALLY BITTEN
     line, so a count comes back as 1. Translate the NUL to a newline instead.
   - THE DOCS GUARD REFUSES A BACKTICKED PATH GIT DOES NOT TRACK. Write
     gitignored, sibling-only and nonexistent paths in PLAIN TEXT.
-  - A LINE-NUMBER CITATION INTO A DOC DECAYS. CLAUDE.md cites
-    tests/test_loop_concurrency.py:145-146 and only a RANGE check guards it.
+  - A LINE-NUMBER CITATION INTO A DOC DECAYS, AND THIS ENTRY IS ITS OWN PROOF.
+    It used to say CLAUDE.md cites tests/test_loop_concurrency.py:145-146. By
+    the time anyone read that, CLAUDE.md said 156-157; inserting one import
+    line then moved the pin again and CLAUDE.md now says 157-158. Three values
+    in three sittings, with only a RANGE check guarding any of them - and a
+    range check cannot tell a right line from a wrong one inside the same file,
+    so every one of those readings stayed green. CLAUDE.md now names the
+    SHARED_SHA256 symbol beside the number so a reader who finds it shifted can
+    re-locate. VERIFY THE NUMBER BEFORE YOU REPEAT IT; do not carry it forward.
   - Path.write_text emits CRLF on Windows and eol=lf in .gitattributes hides it
     from every diff. Byte-copy vendored artifacts; shutil.copyfile, never a
     text-mode write.
@@ -127,19 +147,35 @@ TRAPS MEASURED IN THIS TREE - EACH ONE HAS ACTUALLY BITTEN
     Brief them to trust their own probe.
 
 OPEN WORK, HIGHEST PRIORITY FIRST - full text in ROADMAP.md, cited by heading
-  1. ROUND B LANDS 2026-09-22 AND RSC OWES ITS PART. LW authored the shared
-     ops/loop/winmutex.py repair: 6184 bytes, sha256
-     df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7. RSC has
-     already re-hashed it from its own disk, CONFIRMED the digest, ACCEPTED the
-     wording, and RULED the empty pin STRICTER by measurement. What remains is
-     the act: copy the bytes with shutil.copyfile, hash from your own disk, and
-     land them with BOTH pin changes in ONE commit. RSC's pin coordinates are
-     NOT the ones LW's note states - KNOWN_CODE_HITS does not exist here. RSC
-     pins the digest in tests/test_loop_concurrency.py and the code violation as
-     _KNOWN_CHANNEL_CODE_VIOLATIONS in tests/test_no_sibling_names.py, so RSC's
-     commit touches TWO test files. This trips halt clause (b) by construction,
-     which is what the round exists to authorise. Moving either half alone reds
-     a guard, and that coupling is the guard working.
+  1. ROUND B IS LANDED. DO NOT DISPATCH ANYONE AGAINST IT. This item used to
+     read "ROUND B LANDS 2026-09-22 AND RSC OWES ITS PART", and it was already
+     false when written - a cold session reading it would have been sent to do
+     work that exists. It landed in commit ef17cc8, "fix(loop): land round B on
+     winmutex.py and move every pin with it". ops/loop/winmutex.py moved from
+     0b112a4f..., 6190 bytes, to
+     df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7, 6184
+     bytes - ONE comment line reworded, no behaviour - with the sha256 pin in
+     tests/test_loop_concurrency.py, the digest in docs/LICENSE_NOTES.md and
+     _KNOWN_CHANNEL_CODE_VIOLATIONS in tests/test_no_sibling_names.py all
+     moving in that one commit. ops/loop/slots.py did NOT move in round B.
+
+     WHAT ACTUALLY REMAINS, and it is short:
+       a. ef17cc8 is on a WORKTREE BRANCH, not on main. The mainline checkout
+          still has 0b112a4f, 6190 bytes, on disk. Until a merger lands the
+          branch, anyone who hashes the repository root gets the SUPERSEDED
+          digest and is not wrong to. Say which you measured.
+       b. CARRIERS STILL OUTSTANDING, measured 2026-09-20T23:41:45Z by hashing
+          each root's own disk: SS still holds 0b112a4f, 6190 bytes. LW and RC
+          have landed df0a7a40 and are done. CS is not outstanding and never
+          will be by this route - its copy is a DIFFERENT FILE at e0d3ac7d,
+          7724 bytes, divergent before round B and untouched by it. LL carries
+          no copy. THAT ROW IS A SNAPSHOT OF FOREIGN DISKS AND DECAYS: it was
+          measured minutes after a verifier had checked a different answer.
+          Re-hash before citing it. The roster and its stamp live in
+          tests/test_loop_concurrency.py as WINMUTEX_DIVERGENT and
+          WINMUTEX_DIVERGENT_MEASURED_UTC; nothing refreshes them but a person.
+       c. Nothing here owes LW, RC or CS an act. Round B is not RSC's work any
+          more.
   2. THE SS AGE ITEM. ops/loop/slots.py short-circuits on AGE before pid_alive,
      so a LIVE holder past the 16200-second window is declared stale. This tree
      now runs a governed live daemon, so it can finally produce the hold()
@@ -150,10 +186,23 @@ OPEN WORK, HIGHEST PRIORITY FIRST - full text in ROADMAP.md, cited by heading
   4. INBOX: 38 entries remain untriaged, named in the scratchpad file the ledger
      cites. 37 are RSC's own sent records; exactly ONE is inbound and is already
      answered. The watermark was deliberately NOT advanced.
-  5. Four open rows from this session in ROADMAP.md: the fourth population and
-     CLAUDE.md's directory-scoped phrasing; the carrier constants that cannot
-     redden for another tree; the clean-index hole in the staged-diff check; and
-     the range-only guard on the CLAUDE.md line citation.
+  5. Open rows in ROADMAP.md, with what the round-B follow-up changed:
+     - CLAUDE.md's directory-scoped phrasing: CLOSED. CLAUDE.md, README.md,
+       ROADMAP.md and this file now state the FOUR pin carriers of
+       ops/loop/slots.py and the FIVE of ops/loop/winmutex.py separately, each
+       with the names and the 2026-09-20T23:41:45Z stamp.
+     - The carrier constants that cannot redden for another tree: STILL OPEN,
+       and it is a STATED LIMIT rather than a gap to close by reaching across
+       trees. What changed is that each cross-tree row now carries its
+       measurement instant, its sweep command and its swept root list, and the
+       diagnostic quotes the instant - so an overtaken row reads as a dated
+       record rather than as a false present tense. It still goes stale
+       silently, and no arm can catch that.
+     - The clean-index hole in the staged-diff check: STILL OPEN, untouched.
+     - The range-only guard on the CLAUDE.md line citation: STILL OPEN, and it
+       decayed twice more this session. See the trap entry above.
+     - NEW, and the one to act on first: the citation guard's corpus is
+       SUFFIX-KEYED and this file is excluded by it. See the header.
 
 STANDING DIRECTIVES - THESE ARE NOT UP FOR RE-ASKING
   Nothing waits for operator approval. Adjudicate a contested call, act on the

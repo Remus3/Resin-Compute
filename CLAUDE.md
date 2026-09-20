@@ -303,7 +303,10 @@ operative rule and neither candidate is.
 
 **Why the boundary exists at all** - the mechanism, which is the reusable part
 and is measured rather than feared. `ops/loop/slots.py:39` puts `DEFAULT_ROOT` in
-a MACHINE-WIDE bucket under `C:\ProgramData` that two sibling repos hold against
+a MACHINE-WIDE bucket under `C:\ProgramData`. TWO SIBLING REPOS - the population
+being sibling trees that ACQUIRE against that bucket at runtime, which is the
+pair named in the presence arm of `tests/test_loop_concurrency.py`, and which is
+a claim about THEIR runtime that no test in this tree can check - hold against it
 live, and **since `1a6d8da` this repo holds against it too** - `run_daemon` in
 `headless/runner.py` wraps each LIVE pass in `slots.hold()`, so any statement
 elsewhere in this tree that the governor is vendored-but-inert is stale. The old
@@ -316,9 +319,23 @@ clause (a) above therefore now has a LIVE subject in this repo rather than a
 hypothetical one. `reap()` in that same file
 unlinks a stale lock without ever consulting the repo field it logs, so it will
 reclaim a lock a SIBLING owns; `ops/loop/winmutex.py:37-38` are `Global\`
-kernel-namespace mutexes; and `tests/test_loop_concurrency.py:156-157` pin both
-files by SHA256 as byte-identical across three repos, so "hardening" either one
+kernel-namespace mutexes; and `tests/test_loop_concurrency.py:157-158` - the
+`SHARED_SHA256` dict, named here as well as cited, because a line number decays
+and a symbol does not - pin both files by SHA256, so "hardening" either one
 desynchronises every carrier that has not moved.
+
+**THE TWO MODULES HAVE DIFFERENT CARRIER SETS, so one numeral over the `loop/`
+directory is false at every value it can take.** Measured 2026-09-20T23:41:45Z
+by hashing each fleet root's own disk and running `git ls-files` inside it:
+`ops/loop/slots.py` has FOUR PIN CARRIERS - LW, RC, RSC, SS - and CS holds the
+identical bytes UNTRACKED, which makes CS a disk holder of that module and not
+a pin carrier, because a sha256 pin can only act on bytes git stores.
+`ops/loop/winmutex.py` has FIVE PIN CARRIERS - CS, LW, RC, RSC, SS - and CS's
+copy there is a DIFFERENT FILE rather than a lagging one. LL carries neither.
+Those two rows are a SNAPSHOT OF OTHER REPOSITORIES' DISKS and they decay:
+nothing in this tree can poll a foreign disk, so the stamp, the sweep command
+and the per-name status live in `tests/test_loop_concurrency.py` and are
+refreshed only by a person re-running the sweep. Re-measure before citing.
 
 **OPEN, not settled - the NO-ANSWER RULE.** Three of the five participants are on
 ORDERED STANDBY and cannot reply, so a bilateral arming agreement is unreachable.
