@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import configparser
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -60,6 +61,28 @@ DARK_BY_DESIGN = {
 #: holds the guards - the gates, the hand-off writer, the claim gate - and
 #: because adding it cost nothing: it was measured clean at 0 errors.
 REQUIRED_ROOTS = ("core/", "engines/", "ingest/", "agents/pity_engine/", "tools/")
+
+#: The argv this module shells out with. `sys.executable` and NOT a bare
+#: "python", because a bare name asks a different question than this arm means
+#: to ask: "does SOME python agree with my arithmetic" rather than "does THIS
+#: python agree". Measured 2026-09-20 from inside a venv, where the two come
+#: apart and a third answer appears:
+#:
+#:     sys.executable              <venv>\Scripts\python.exe
+#:     shutil.which("python")      ...\Programs\Python\Python314\python.EXE
+#:     subprocess.run(["python"])  ...\Python\pythoncore-3.11-64\python.exe
+#:
+#: The interpreter that actually ran was not the one `shutil.which` names, so
+#: reasoning about PATH gives the wrong answer here; on Windows `CreateProcess`
+#: resolves a bare name against the calling image's directory FIRST. The
+#: failure mode was `No module named mypy` - this arm going red while mypy was
+#: clean - but the quiet mode is worse: a different interpreter means a
+#: different `site-packages`, so the count this arm compares against could come
+#: from a different set of installed stubs and agree for the wrong reason.
+#:
+#: `tests/test_interpreter_pinning.py` keeps every launch site in this tree
+#: pinned, and records what that sweep can and cannot see.
+MYPY_ARGV = (sys.executable, "-m", "mypy")
 
 
 def _git_python_files(*args: str) -> tuple[str, ...]:
@@ -175,7 +198,7 @@ def test_mypy_reports_the_number_of_files_the_partition_predicts():
     assert covered, "the covered set emptied out, so the comparison is vacuous"
 
     run = subprocess.run(
-        ["python", "-m", "mypy"],
+        list(MYPY_ARGV),
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
