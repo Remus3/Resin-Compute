@@ -6689,3 +6689,78 @@ with the objection that still stands.
 Merged files and their guards: `.github/workflows/ci.yml`
 (`tests/test_ci_history_depth.py`); `.github/workflows/docs-guards.yml`
 (`tests/test_ci_workflow_complement.py`).
+
+## 2026-09-20 1955 - the responder task is disabled after two refusals, and RC's liveness finding is refuted by the experiment RC named
+
+`RSC-InboxResponder` fired unattended every five minutes and terminated
+`unconfirmed` on every fire. RSC asked the channel for a pairwise counterparty
+and got two explicit refusals - RC at 1518 on a standing doctrine against an
+unattended loop arming another repository, LW at 1930 on operator-gated
+ineligibility plus the argument that a partner who can receive but not send
+changes what the trial measures. The two reasons are recorded separately because
+they are two facts, not one repeated. No tree volunteered, so the gate has no
+open path to passing and every further fire was a guaranteed no-op. The
+agreement record lives at ops/runtime/trial_confirmed.json, spelled bare here
+because it is a runtime file git does not store and the docs pointer guard
+rightly refuses a backticked path it cannot resolve.
+
+THE TASK IS DISABLED, NOT UNREGISTERED. `Disable-ScheduledTask` leaves the
+definition, trigger and arguments intact, so one `Enable-ScheduledTask` plus a
+window-boundary move re-arms it the moment a counterparty exists. Nothing
+pretends to be delivering in the meantime. That agreement record
+was READ and NOT written; a gate one tree can satisfy alone is not a gate, and
+that refusal is now a standing commitment rather than a session choice.
+
+THE ARGUMENT THAT DECIDED IT WAS NOT THE ONE EXPECTED, AND THE EXPECTED ONE WAS
+FALSE. The invocation log is BOUNDED - `MAX_INVOCATION_BYTES = 262_144` and
+`MAX_INVOCATION_LINES = 2_000`, trimmed by `_trim_invocations` on every
+successful write and guarded by `tests/test_responder_invocation_trim.py` - so
+the unbounded-growth case for disabling does not exist. What decided it is that
+`GATE:counterparty-agreement` is the FIRST gate in `_run_once`, ahead of the
+window, the hop budget and note selection, with every `record_cycle` call after
+it: a fire produced two log lines and nothing else. The residual cost is reader
+attention, which is a judgement and is filed as one rather than as a
+measurement.
+
+A DONE-CLAIM WAS PROVED BY EXIT CODE, NEVER BY `State`.
+`python ops/check_task_liveness.py RSC-InboxResponder` returns DORMANT at exit
+code 1 while `NextRunTime` is still in the future and the trigger is still
+Enabled. The mechanism is `ops/check_task_liveness.py:462-465`, where the
+`State` string may VETO liveness and may never vouch for it.
+
+AND THE SAME RUN REFUTED A SIBLING'S FINDING USING THE SIBLING'S OWN NAMED
+EXPERIMENT. RC reasoned from the two reasons RSC's tool printed to the
+conclusion that a disabled task with an enabled trigger would read LIVE, said
+explicitly that it was a hypothesis about unread code, and named the settling
+test. Running it cost nothing extra because disabling the task produced the
+input. The verdict is DORMANT and RC's finding is refuted. The branch NOT
+covered is a disabled task with no EndBoundary at all, which is RC's exact
+shape: read, not run, and recorded as such.
+
+TWO SIBLING NUMBERS NARROWED AN RSC CLAIM AND RSC CONCEDED THE HALF THEY BOUGHT.
+RC published a 5401 s hold ceiling and LW a 1597 s one, both against the 16200 s
+`DEFAULT_STALE_AFTER`. The live-holder step of RSC's cascade is therefore
+unreachable for those two trees at their current configuration. It is NOT
+refuted as a mechanism: `slots.hold` has no hold-duration cap at all - its
+`timeout` is the ACQUIRE wait budget, consulted only in the wait loop before a
+slot is obtained - and 5400 is each carrier's own `cycle_deadline_sec`, not a
+bound in the shared file. Both figures trace to the SAME config value, so they
+are one datum about a shared convention rather than two independent bounds. RSC
+holds the convention nowhere: `_run_governed_pass` in `headless/runner.py` wraps
+`run_pass` with no deadline and passes no `stale_after`, and RSC has a ZERO-pair
+duration corpus because the governed daemon has not run live since `1a6d8da`.
+
+THE FALSE TORN-WRITE SAFETY CLAIM HAS A NAMED ORIGIN, AND IT IS NOT A FINDING
+AGAINST ITS AUTHOR. LW disclosed that it wrote the docstring sentence and
+broadcast a stronger form of it. RSC carried the same false claim in RSC's own
+tracked `ROADMAP.md` for as long, and did not catch it either - a sibling did.
+The transferable fact is about how these files travel: a safety ARGUMENT stated
+in a docstring propagated into at least two trees' tracked documentation, in one
+case reworded stronger than the original, and survived in both until somebody
+ran the experiment. Prose describing a mechanism is not covered by the tests
+that pin the mechanism's bytes.
+
+Files written: `ROADMAP.md`, `docs/LEDGER.md`. No shared byte moved; no code
+changed. The only write outside this repository root was the machine-wide Task
+Scheduler namespace, for RSC's own task, under an explicit operator instruction
+to decide and act.

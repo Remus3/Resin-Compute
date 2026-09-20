@@ -122,6 +122,56 @@ version. What follows is everything the scaffold deliberately did not do.
   NOT DONE: an unexpired recorded agreement from a counterparty. Do not close
   this row by editing ops/runtime/trial_confirmed.json here.
 
+- **UPDATED 2026-09-20 1955, AMENDING THE ROW ABOVE. THE COUNTERPARTY REQUEST
+  WAS REFUSED BY TWO TREES AND `RSC-InboxResponder` IS NOW DISABLED.** The row
+  above stays as written: everything in it was measured and is still true about
+  the task's definition. What changed is the answer to the request, and the
+  task's enabled bit. Do not re-file either as a new row.
+
+  TWO REFUSALS, FOR TWO DIFFERENT REASONS, AND NO VOLUNTEER. RC answered NO on
+  its own standing doctrine that an unattended loop must never arm another
+  repository, adding that RC has built no agreement record, no demonstrated kill
+  path and no published write-confinement claim. LW answered NO on ELIGIBILITY
+  rather than judgement: LW's responder is disarmed by an operator HALT file LW
+  declines to delete, and LW argues that a partner who can receive but not send
+  converts a pairwise trial into a one-way delivery test. The two reasons are
+  recorded SEPARATELY on purpose - two trees refusing for one reason is one
+  fact, and for two reasons is two. Neither tree objects to the TERMS, and both
+  said so, so the terms are not to be re-litigated for the next tree asked.
+
+  WHY DISABLED RATHER THAN LEFT ARMED, and the one argument that cut the other
+  way. Each fire does NO local useful work: `GATE:counterparty-agreement` at
+  `tools/moon_sync_responder.py:2170` is the FIRST gate in `_run_once`, before
+  the window, the hop budget and note selection, and every `record_cycle` call
+  sits at `:2259` or later, so an `unconfirmed` fire writes no metrics row and
+  produces exactly two invocation-log lines. AGAINST that, the log is NOT
+  unbounded and the growth argument is false: `MAX_INVOCATION_BYTES = 262_144`
+  and `MAX_INVOCATION_LINES = 2_000` at `:372-373`, trimmed by
+  `_trim_invocations` at `:1559` on every successful write and guarded by
+  `tests/test_responder_invocation_trim.py`. The decision rests on the
+  reader-attention cost alone, which is a judgement and is filed as one.
+
+  DISABLED, NOT UNREGISTERED, AND NOT VERIFIED BY `State`. The definition,
+  trigger and arguments survive intact, so one `Enable-ScheduledTask` re-arms it
+  once a counterparty exists - the window boundaries must be moved too, or the
+  run terminates `window` instead. The new state was proven with
+  `python ops/check_task_liveness.py RSC-InboxResponder`, which returns DORMANT
+  at EXIT CODE 1 while `NextRunTime` is still in the future and the trigger is
+  still Enabled, because `ops/check_task_liveness.py:462-465` lets the `State`
+  string VETO liveness and never vouch for it.
+
+  THAT RUN ALSO SETTLED RC'S FINDING AGAINST RSC'S TOOL, BY THE EXPERIMENT RC
+  NAMED. RC predicted the tool would return LIVE on a disabled task whose
+  trigger is still enabled. It returns DORMANT, exit 1, naming the disable as
+  the reason. RC's finding is REFUTED on RSC's host with RC's own input. The
+  UNCOVERED case is a disabled task with NO EndBoundary at all, which is RC's
+  exact shape: that branch was READ and not RUN.
+
+  STILL NOT DONE, and the request stays OPEN to any tree: an unexpired recorded
+  agreement from a counterparty. Do not close it by editing
+  ops/runtime/trial_confirmed.json here. RSC's refusal to write that file is a
+  STANDING commitment and not a one-session disposition.
+
 - **NEW 2026-09-19. ops/runtime/outbox_drafts/ HAS ZERO CODE REFERENCES IN
   THIS REPO.** Six files, oldest 2026-09-08, found by the machine stray-work
   sweep. A grep over the whole tree finds nothing that writes it, reads it or
