@@ -275,10 +275,19 @@ operative rule and neither candidate is.
 **Why the boundary exists at all** - the mechanism, which is the reusable part
 and is measured rather than feared. `ops/loop/slots.py:39` puts `DEFAULT_ROOT` in
 a MACHINE-WIDE bucket under `C:\ProgramData` that two sibling repos hold against
-live, while this repo has no executor loop at all; `reap()` in that same file
+live, and **since `1a6d8da` this repo holds against it too** - `run_daemon` in
+`headless/runner.py` wraps each LIVE pass in `slots.hold()`, so any statement
+elsewhere in this tree that the governor is vendored-but-inert is stale. The old
+warning against inventing a Claude-executor loop merely to justify the vendored
+file was HONOURED, not quietly dropped: `run_daemon` already ran `run_pass` on an
+interval and was this tree's one repeated executor, so an existing loop gained
+the governor and no loop was invented to carry one. A dry run still takes no
+slot, a `SlotTimeout` is a failed pass and never permission to run unslotted, and
+clause (a) above therefore now has a LIVE subject in this repo rather than a
+hypothetical one. `reap()` in that same file
 unlinks a stale lock without ever consulting the repo field it logs, so it will
 reclaim a lock a SIBLING owns; `ops/loop/winmutex.py:37-38` are `Global\`
-kernel-namespace mutexes; and `tests/test_loop_concurrency.py:141-142` pin both
+kernel-namespace mutexes; and `tests/test_loop_concurrency.py:145-146` pin both
 files by SHA256 as byte-identical across three repos, so "hardening" either one
 desynchronises every carrier that has not moved.
 

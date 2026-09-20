@@ -12,6 +12,171 @@ now.
 
 ---
 
+## 2026-09-20 - the daemon loop becomes a real slot acquirer, and no loop was invented to justify the vendored file
+
+WHAT LANDED, one commit, `1a6d8da`, two files: `headless/runner.py` and
+`tests/test_headless_runner_slots.py`. Verified against `git show --stat` and
+the diff rather than against the commit message. `ops/loop/slots.py` and
+`ops/loop/winmutex.py` were NOT touched, so the sha256 pins in
+`tests/test_loop_concurrency.py` are unchanged and every carrier stays
+byte-identical.
+
+THE ACQUIRER IS A LOOP THAT ALREADY EXISTED, and that is the load-bearing fact.
+`ROADMAP.md` had warned for a fortnight that no loop controller should be
+invented in order to justify the vendored governor. NONE WAS. `run_daemon` in
+`headless/runner.py` has always run `run_pass` on an interval - a real repeated
+executor - and it gained the governor rather than the governor gaining a
+caller. The old roadmap wording that called it "not a Claude-executor loop" was
+a statement about what it SPAWNS, not a statement that it was too small to
+govern, and the corrected rows now say so.
+
+THE SHAPE OF THE CRITICAL SECTION, per the vendored module's own rule that a
+slot is "HELD ONLY AROUND THE EXECUTOR CALL". Each LIVE pass runs inside
+`slots.hold(...)` through a helper. The lane-width read, the signal handlers and
+the shutdown health write all sit OUTSIDE it. A `SlotTimeout` is converted to a
+FAILED PASS - never a success, never permission to proceed unslotted, and never
+a raw error string on a user-facing surface.
+
+A DRY RUN TAKES NO SLOT, and the reason is a contract and not a convenience.
+The module docstring promises a dry run writes nothing, and A SLOT IS A LOCK
+FILE. So the once-and-dry-run smoke path stays write-free on a machine with no
+machine-wide bucket at all.
+
+THE REPO LABEL IS `resin-compute`, held in one named module-level constant, for
+two reasons that are worth keeping because either one alone is weaker. It is
+ALREADY the spelling at every existing call site in this tree, so adopting it
+leaves ONE spelling rather than adding a second. And the short three-letter
+alternative is also this tree's cross-repo CODENAME, which must not be written
+into a machine-wide artifact that other trees read - the same roster leak
+`tests/test_no_sibling_names.py` exists to prevent. The field is free-form and
+nothing in the governor branches on it.
+
+LANE WIDTH COMES FROM `core.config.MAX_CONCURRENT_LANES` WITH NO FALLBACK. An
+unreadable constant fails loudly rather than inventing a width, because every
+participant must read the SAME number or the bucket bounds nothing. The two
+numbers that look like defaults are not governing values: the shared module's
+own signature default is 2, and the roadmap's old snippet carried a `dict.get`
+default of 2. The governing value is 3.
+
+TESTS CAN NEVER REACH THE LIVE BUCKET, and that is ENFORCED rather than
+promised. `tests/test_headless_runner_slots.py` AST-PARSES ITS OWN SOURCE for
+`run_daemon` call sites and asserts each one passes an isolated `slot_root`,
+with a non-vacuity arm proving the detector fires. Asking the arms nicely would
+have left one forgotten call site free to take a lane a sibling repository
+holds. `slot_root` and `slot_timeout` were appended to `run_daemon` at the END
+with defaults, per this tree's convention.
+
+A CAVEAT RECORDED BECAUSE IT IS EXACTLY THE KIND THIS TREE REFUSES TO LET PASS.
+`python -m mypy` reports Success and says NOTHING about this change: `headless/`
+is not in `mypy.ini`'s `files=` roots, so it opened none of these bytes. That is
+zero out of zero reading as a pass, and mypy is NOT evidence for this work.
+
+---
+
+## 2026-09-20 - the inbox responder is armed and proven to fire, and the gate it now stops at is one this tree deliberately cannot open alone
+
+WHAT IS REGISTERED, measured on this host through PowerShell.
+`Get-ScheduledTask` shows `RSC-InboxResponder` Ready at the root TaskPath,
+alongside `LW-InboxResponder` Ready and `RC-InboxResponder` Disabled.
+`schtasks` through Git Bash CANNOT SEE these tasks at all; PowerShell is the
+probe that works, and a session that tries the other one and finds nothing will
+conclude the opposite of the truth.
+
+THE TRIGGER, with its boundaries. One `MSFT_TaskTimeTrigger`, Enabled,
+StartBoundary `2026-09-20T15:00:00`, EndBoundary `2026-09-21T15:00:00`,
+repeating every `PT5M` for `P1D`. `Get-ScheduledTaskInfo` reports
+`LastTaskResult` 0, `LastRunTime` 2026-09-20T15:10:10 and `NumberOfMissedRuns`
+0. So it has already fired unattended and the fire succeeded.
+
+LIVENESS WAS PROVEN BY A FUTURE `NextRunTime`, NEVER BY THE `State` STRING.
+`python ops/check_task_liveness.py RSC-InboxResponder` exits 0 LIVE, printing
+`State` under a heading that reads REPORTED, NOT THE VERDICT, and resting the
+verdict instead on `NextRunTime` 2026-09-20T15:15:15-05:00 being in the future
+and the trigger's EndBoundary being still ahead. THE REASON THAT DISTINCTION IS
+BUILT INTO THE TOOL: A TASK WHOSE TRIGGERS HAVE EXPIRED READS Ready FOREVER
+WHILE NEVER FIRING AGAIN. This tree measured exactly that state on the older
+`ResinCompute-Responder` task, which the checker called DORMANT at exit 1 with
+its sole trigger expired 2026-09-07T21:00. A State string names a state, not a
+capability.
+
+THE REMAINING BLOCKER, and it is a gate rather than a bug. Every fire terminates
+at `counterparty_agreed` in `tools/moon_sync_responder.py:1068`, reading
+ops/runtime/trial_confirmed.json. That record is WELL FORMED - `confirmed_by`
+RC, a note filename, a scope of LATENCY-ONLY, and an `expires` of 1788832800.0,
+which is 2026-09-07T21:00 local. ONLY THE CLOCK RAN OUT. No repair to the file's
+SHAPE would move this, and none should be attempted.
+
+THE REUSABLE PART. RSC DELIBERATELY DID NOT RENEW THAT FILE ITSELF. A GATE ONE
+TREE CAN SATISFY ALONE IS NOT A GATE - a tree that writes its own counterparty's
+agreement has manufactured a standing self-authorisation and called it consent,
+which is precisely the failure mode the expiry field exists to prevent. The
+function's own docstring says the same thing about prose: it refuses to decide
+agreement by parsing a sibling's note, because that would key on exactly the
+sender-supplied text the design refuses to trust. A counterparty request went to
+all six trees instead, and the row stays open until an unexpired agreement
+arrives from someone who is not us.
+
+---
+
+## 2026-09-20 - a safety claim this tree carried in its own tracked roadmap is withdrawn after a sibling refuted it
+
+WHAT WAS WITHDRAWN. `ROADMAP.md` asserted, in the row flagging `release` in
+`ops/loop/slots.py` to the operator, that "The same file's `is_stale` is
+explicitly GUARDED by a documented mtime fallback, so only `release` is
+implicated." That reasoning is FALSE. It was withdrawn PUBLICLY on 2026-09-20 in
+a note delivered to five sibling trees, after a sibling refuted it, and the
+roadmap row now carries the correction rather than a hole.
+
+WHERE THE CLAIM CAME FROM. It was inherited, not invented here. The `release`
+docstring at `ops/loop/slots.py:156-157` says a torn write "is safe in this one
+direction - `_read` returns {} and `is_stale` falls back to mtime, which reports
+stale too". The roadmap repeated it as though a docstring settled it.
+
+THE TRUTH CONDITION, stated exactly and measured this session against a
+`tmp_path` bucket, never against the shared one. `is_stale` reaches its mtime
+arm at `ops/loop/slots.py:101` only when `_read` is falsy, and that arm answers
+STALE IF AND ONLY IF `time.time() - st_mtime > stale_after`. The neutralising
+write at `ops/loop/slots.py:171` is IN PLACE, so TEARING IT SETS mtime TO THE
+MOMENT OF THE TEAR. A freshly torn lock therefore has an age near zero against a
+`DEFAULT_STALE_AFTER` of 16200.0 seconds, and the arm answers NOT STALE - the
+OPPOSITE of what the docstring claims. Observed directly: `_read` returned an
+empty dict, age 0.0003s, `is_stale` False, `reap` removed 0, and the lockfile
+was still on disk. The fallback does eventually become true, but only once
+16200 seconds have elapsed FROM THE TEAR, which is LATER than the same clock
+would have expired had nothing been written at all. The mtime fallback is not a
+guard against the torn write; it is a 4.5-hour floor that the torn write itself
+pushes forward.
+
+NO FIX HERE, AND THAT IS NOT TIMIDITY. The lines are inside a file that is
+byte-identical-by-contract across six repositories and pinned by sha256 in
+`tests/test_loop_concurrency.py`. A one-tree edit desynchronises every carrier
+that has not moved. It belongs in whatever JOINT RE-PIN ROUND next moves those
+bytes, alongside the `ops/loop/winmutex.py:118` carrier-name row.
+
+A SECOND CORRECTION MADE IN THE SAME PASS, because it is the same file and the
+same habit. It was asserted this session that `slots.hold()` reaps before
+acquiring. IT DOES NOT. `try_acquire` runs FIRST at `ops/loop/slots.py:225`,
+breaks on success at `ops/loop/slots.py:226-227`, and `reap` runs only after
+that pass has FAILED, at `ops/loop/slots.py:228`. So reaping happens ONLY UNDER
+CONTENTION: a run that gets a free slot on its first pass never reaps, and a
+stale lock in a bucket that is not full is never reclaimed by that run. Neither
+`ROADMAP.md` nor this file implied the wrong order - grepped, not assumed - so
+the correction is recorded rather than applied. Also recorded while the file is
+in view: this tree has NO ops/loop/config.json, the governing width is
+`MAX_CONCURRENT_LANES` at `core/config.py:113` and it is 3, and the shared
+module's own `hold()` default of 2 is a different number that does not govern.
+
+THE REUSABLE LESSON, which is why this is a ledger entry and not a footnote. A
+SAFETY ARGUMENT IN A DOCSTRING IS A CLAIM AND NOT A GUARANTEE. This one read
+like a reassurance, was phrased with the confidence of a measurement, had never
+been run, and was carried in THIS TREE'S OWN TRACKED ROADMAP - promoted from a
+comment to something a reader would take as settled - until a sibling refuted
+it. The rule is the same one this file already holds in other shapes: re-derive
+the claim before repeating it, and state the condition under which it is true
+rather than the direction in which it feels safe.
+
+---
+
 ## 2026-09-20 - the two vendored governor files gain a CR arm and a scoped channel-code pin, and neither file is touched
 
 WHAT LANDED, one commit, `14a109b`. Three guards over `ops/loop/slots.py` and
@@ -5595,7 +5760,10 @@ That also explained an unrelated-looking red:
 `test_contending_threads_never_exceed_max_slots` failed once with a SlotTimeout
 during a full-suite run and passed six times in isolation immediately after. It
 was the leak surfacing as a flaky test under load, in a repository that does
-not even acquire a slot - the tests are the only callers here. Ten consecutive
+not even acquire a slot - the tests are the only callers here. [SUPERSEDED
+2026-09-20 at `1a6d8da`: that clause was true when written and is false now.
+This repository acquires for real; see the entry for that commit at the top of
+this file. The measurement above is unaffected and stands as read.] Ten consecutive
 runs since adopting the fix: zero failures. Sibling-C was right to refuse the
 `slots.py` bytes until they were announced; the announcement arrived and both
 rounds are now three-way equal, verified by hashing all three disks directly.
@@ -5658,7 +5826,11 @@ calls `slots.hold()`; the only callers are inside `tests/test_loop_concurrency.p
 against a `tmp_path` bucket. `headless/runner.py` is a job runner whose daemon
 mode runs in-process job passes - verified by reading `run_daemon`, not assumed.
 This is a parity contract joined ahead of need. Two of the three participants
-acquire for real; this one's lane is reserved and unclaimed.
+acquire for real; this one's lane is reserved and unclaimed. [SUPERSEDED 2026-09-20 at
+`1a6d8da`: correct as of this entry's date and WRONG NOW. `run_daemon` is the
+acquirer, the need the parity contract was joined ahead of has arrived, and this
+tree's lane is claimed. The reading of `run_daemon` recorded above was accurate
+about what that function did; what changed is the function, not the reading.]
 
 **Two of three adversaries returned REFUTED, and they were right.**
 
