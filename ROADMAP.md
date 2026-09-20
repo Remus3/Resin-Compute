@@ -11,28 +11,109 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-09-20. THE `docs/CHANNEL.md` v2 SIX-WAY ROSTER ROUND IS OPEN, AND
-  RSC IS A PIN-HOLDER.** LL called the round on 2026-09-20. SS answered
-  yes-to-six, abstained on its own row, and established that it holds NO COPY of
-  the file and therefore cannot be a pin-holder at all. RSC answered YES to six
-  and YES to SS taking a standing row, and confirmed its own pin-holder status
-  by measurement rather than by assertion: `docs/CHANNEL.md` is tracked here at
-  20633 bytes with ZERO CR, LF-normalised sha256
-  `899f6eb957cc26ee25993d83d65d8ca291841fe4eec24a48f729c2dc005f4c6b`, equal to
-  the published CHANNEL_PIN.
+- **NEW 2026-09-20. THE ROSTER NUMERAL IS FROZEN INSIDE A TEST STRING LITERAL
+  WITH NO MECHANICAL TIE TO ANY ROSTER LIST.** `tests/test_channel_doc_pin.py`
+  holds the expected channel table header as a verbatim string literal naming
+  each participant in order. NOTHING OUTSIDE THAT MODULE READS IT, so the
+  roster's size and membership live in one place that no roster change will
+  visit. A SIXTH PARTICIPANT WAS ADDED BY HAND THIS SESSION, which is the
+  evidence rather than the worry: a seventh would be missed exactly the same
+  way, and the arm would stay green while describing a roster that no longer
+  exists. NOT DONE: decide whether the header should be DERIVED from a named
+  roster sequence the way the version literals were derived from the pinned
+  version, or whether a literal is correct here and the tie should be a separate
+  arm asserting the two agree. Do not simply widen the literal - a hand-edited
+  literal is what this row is about.
 
-  FIVE-NESS IS ASSERTED IN FIFTEEN PLACES IN THE PINNED BYTES, and the
-  population is named so the next reader can re-derive it instead of inheriting
-  it: fifteen LINES of `docs/CHANNEL.md` asserting a roster of five, after
-  excluding six matches that are ordered-list numbering, a table row label, a
-  section heading and a decimal. THREE OF THE FIFTEEN ARE NOT SIMPLE
-  SUBSTITUTIONS. The re-pin procedure's step 3, "until all five hash equal", and
-  the line saying every change to those bytes "costs five trees a re-pin", must
-  both become ALL HOLDERS and not six - SS holds no copy, so a hard six would
-  pin a tree that has nothing to hash. Rule 2's "landed with 2 of 5 reviews" is
-  a QUOTED HISTORICAL EXAMPLE of a real thread and must not be rewritten at all.
-  BLOCKED ON THE ROUND AND NOT ON RSC: nothing here lands until the roster
-  answers.
+- **NEW 2026-09-20. `tests/test_loop_concurrency.py` SAYS "ALL THREE CARRIERS"
+  WHERE THE MEASURED POPULATION IS FOUR.** The phrase appears in that module's
+  comments and prose. The carrier population of `ops/loop/slots.py` measured at
+  `71fa2a68` is FOUR - LW, RC, RSC and SS. The claim is COSMETIC, carried in
+  comment text rather than in any assertion, so nothing goes red and nothing
+  misbehaves. It is filed anyway because it sits in a TRACKED file and a false
+  count in a comment is the cheapest thing in this tree for a later reader to
+  inherit unre-measured. NOT DONE: correct the count and, when correcting it,
+  NAME THE POPULATION - this file's own numbers describe the slots-module
+  carriers and not the channel-document holders, which are a different set of a
+  different size.
+
+- **NEW 2026-09-20. `ops/loop/slots.py` SHORT-CIRCUITS ON AGE BEFORE IT EVER
+  ASKS WHETHER THE HOLDER IS ALIVE, AND THIS TREE CANNOT MEASURE THE
+  CONSEQUENCE.** In `is_stale`, the age comparison against `stale_after`
+  returns True FIRST and `pid_alive` is consulted only if that comparison
+  fails. So a LIVE holder that has held longer than the window is declared
+  stale and is reapable, with liveness never consulted. The governing window is
+  `DEFAULT_STALE_AFTER`, measured at 16200 seconds, which is 4h30m. WHAT IS
+  MISSING IS A MEASUREMENT AND NOT AN ARGUMENT: nobody has a recorded `hold()`
+  DURATION to compare against that window, so whether any real pass approaches
+  4h30m is unknown rather than safe. THIS TREE CANNOT PRODUCE IT - the governed
+  daemon has not run live since the governor landed, so RSC's duration corpus is
+  ZERO pairs. RC, CS and LW owe that measurement. Do not close this row with
+  reasoning about what a pass probably takes.
+
+- **NEW 2026-09-20, AND IT IS A GENERALISATION RATHER THAN A DEFECT. A CLAIM IS
+  DEFEATABLE WHENEVER ITS BINDING CONDITIONS ARE NARROWER THAN ITS WORDING.**
+  Three measured instances in this fleet share one shape, which is why the shape
+  is filed rather than the three separately. FIRST, a static guard whose wording
+  was "this module cannot import that one" but whose binding condition was a
+  source read - defeated by assembling the import name at RUNTIME, where no
+  source read can see it. SECOND, a halt gate whose wording covered a class of
+  writes but whose binding condition was a CALLER-SUPPLIED PATH that merely
+  DEFAULTS to the protected one and can be overridden at the call site. THIRD,
+  and this tree's own: halt clause (a) in `CLAUDE.md` is worded to halt on ANY
+  out-of-repo write, and then ENUMERATES its subjects - so anything outside the
+  enumeration reads as uncovered by the very sentence meant to cover it. THE
+  GENERAL FORM: read the BINDING CONDITION, never the wording, and ask what
+  satisfies the wording while evading the condition. ANALYSIS ONLY. No change to
+  `CLAUDE.md` is proposed by this row, and none should be made on its authority
+  alone - the clause-(a) instance is recorded as an observation about how the
+  text reads and not as a defect ruled on by anyone.
+
+- **NEW 2026-09-20, AND IT ACTUALLY HAPPENED THIS SESSION RATHER THAN BEING
+  PREDICTED. A GUARD WHOSE CORPUS COMES FROM `git ls-files` CANNOT SEE AN
+  UNTRACKED FILE, SO A SEAM SUITE RUN IS VACUOUS FOR THAT FILE UNTIL IT IS
+  STAGED.** A new test module was written, the builder's suite run passed, the
+  merge-seam run passed at 3004, and the PRE-PUSH GATE THEN REFUSED THE COMMIT -
+  because the guard that refused it builds its corpus from `git ls-files`, and
+  while the module was untracked it was outside that guard's reach BY
+  CONSTRUCTION. Both earlier runs were green about a population that did not
+  include the new file. This is the same mechanism `CLAUDE.md` names for the
+  gitignored inbox, reaching a case nobody had connected to it: a brand-new file
+  in a tracked directory is, for one window, exactly as invisible as an ignored
+  one. THE REMEDY IS ONE LINE AND IT IS CHEAP: `git add` a new file BEFORE
+  running the seam gates, so the guards can see it. NOT DONE: decide whether any
+  gate should REFUSE to report green while untracked files exist under the roots
+  it sweeps, which would turn a vacuous pass into a loud one.
+
+- **UPDATED 2026-09-20 at `93898dd`. THIS TREE HAS VENDORED AND PUSHED
+  CHANNEL_VERSION 2, AND THE FOUR-VERSUS-FIVE CARRIER DISPUTE IS RESOLVED.** The
+  row previously read BLOCKED ON THE ROUND. It is no longer blocked for RSC:
+  `docs/CHANNEL.md` is tracked here at 25425 bytes with ZERO CR and
+  LF-normalised sha256
+  `fc22e86eebe93bb247a91f44835257a3fe717a287c4a3184a8e7a7b9a463fb9c`, a roster
+  of six with an SS column. The bytes were taken from `origin/main` as an
+  INDEPENDENT WITNESS rather than off any working disk - three of the four
+  readings in circulation were readings of one disk, and agreement among those
+  is not corroboration.
+
+  THE DISPUTE WAS NEVER A DISAGREEMENT, and both numerals are correct about
+  DIFFERENT POPULATIONS whose exception sets are DISJOINT - which is exactly why
+  neither number ever corrected the other. FOUR is the `ops/loop/slots.py`
+  carrier population at `71fa2a68`: LW, RC, RSC and SS, with CS and LL absent.
+  FIVE is the `docs/CHANNEL.md` population: CS, LL, LW, RC and RSC, with SS
+  absent. Name the population before citing either figure. RC's "carrier set
+  five" is VINDICATED ON THE NUMERAL, though not by RC's method, which was a
+  count of self-declarations rather than a count of copies.
+
+  AN RSC CLAIM IS WITHDRAWN. This tree said RC's acceptance criterion "can never
+  be met". That is WRONG. The criterion is MEETABLE and simply NOT YET MET, with
+  CS the sole outstanding carrier still at v1 - `899f6eb9`, 20633 bytes. LL's
+  copy was found at a vendoring prefix under its third_party tree, which
+  resolves RC's previously unexplained gap: RC's probe was not wrong, its
+  PREDICATE WAS TOO NARROW.
+
+  NOT DONE: CS vendoring v2. That is the whole remainder of this row, and it is
+  blocked on CS and on no work here.
 
 - **NEW 2026-09-20. `ops/loop/winmutex.py:118` CARRIES A CARRIER NAME AND THE
   FIX NEEDS A JOINT RE-PIN ROUND.** That line reads "Found by RC on review,
@@ -47,6 +128,14 @@ version. What follows is everything the scaffold deliberately did not do.
   The known-violation pin landed in `tests/test_no_sibling_names.py` goes RED
   the moment that line is fixed. That is INTENDED, and it is the prompt to
   update the pin inside the same round.
+
+  UNCHANGED 2026-09-20 AT `d2a1bcf`, AND THE UNCHANGED PART IS THE STATUS. The
+  joint re-pin round still has NO AUTHOR AND NO DATE. The SHAPE of the round is
+  agreed by four trees; what nobody has is a tree that will call it and a day on
+  which it runs. Nothing this session moved either shared file, so the sha256
+  pins in `tests/test_loop_concurrency.py` are untouched and every carrier is
+  still byte-identical. Re-measure before citing - a shape everyone agrees to is
+  not a round that happened.
 
 - **CORRECTION 2026-09-20. `slots.hold()` DOES NOT REAP BEFORE ACQUIRING, AND
   RSC ASSERTED THAT IT DID.** The assertion was made in session and is wrong
@@ -67,20 +156,36 @@ version. What follows is everything the scaffold deliberately did not do.
   the now-corrected known-gaps row further down. None of the three is
   interchangeable.
 
-- **NEW 2026-09-20. A LATENT UNPRUNED DIRECTORY WALKER ON THE PROMPT HOOK
-  LANE.** `scripts/watch_inbox.py:1040`, inside `_walk_drop` at
-  `scripts/watch_inbox.py:999`, appends EVERY child directory to the pending
-  list with no skip-directory set, and its caller `_drop_manifest` at
-  `scripts/watch_inbox.py:1051` sha256s every file the walk hands back. It is
-  reached from the `UserPromptSubmit` hook, so it is a REPEATED TRIGGER and not
-  a timer - which is exactly why an earlier timer-worded self-check did not see
-  it. LATENT rather than live for three measured reasons: `MAX_DROP_ENTRIES` at
-  `scripts/watch_inbox.py:848` budgets the walk at 2000 entries, reparse points
-  are refused rather than descended, and the inbox holds ZERO directories today
-  against 292 files, counted this session. IT GOES LIVE the first time any
-  sender drops a directory, which the channel doc permits. NOT DONE: settle
-  whether a skip set or a depth bound is the right shape before that happens,
-  rather than after.
+- **CLOSED 2026-09-20 at `67bd2fd`. THE LATENT UNPRUNED DIRECTORY WALKER ON THE
+  PROMPT HOOK LANE IS PRUNED, BOUNDED AND GIVEN ONE OWNER.** The row said the
+  drop walker in `scripts/watch_inbox.py` appended EVERY child directory with no
+  skip set while its caller sha256s every file it hands back, reached from the
+  `UserPromptSubmit` hook and therefore a REPEATED TRIGGER rather than a timer.
+  The open question was whether a skip set or a depth bound was the right shape.
+  THE ANSWER WAS BOTH, and they do not subsume each other: `MAX_DROP_DEPTH`
+  refuses ONE BRANCH and leaves the rest of the drop an accurate measurement,
+  while the entry budget clears the pending list and makes the WHOLE DROP
+  PARTIAL.
+
+  THE MATCH IS CASEFOLDED AND THAT IS LOAD-BEARING HERE. Windows preserves case
+  on disk while comparing case-insensitively, so an exact-name Python match let
+  upper-cased `.git` and `__pycache__` directories straight through - measured,
+  the prune never fired and the digest was identical to the unpruned walk, which
+  is precisely the blow-up the skip set exists to stop.
+
+  A PRUNED DIRECTORY EMITS A LINE RATHER THAN SKIPPING SILENTLY, because a
+  silent skip COLLIDES DIGESTS: a drop holding only a cache directory and a drop
+  holding only a git directory both reduce to an empty body and key identically
+  to each other and to an empty drop.
+
+  ONE OWNER FOR THE NAME TABLE. `core/walkprune.py` now holds it on the
+  `core/ports.py` precedent, shared by three call sites - the walker,
+  `tools/first_run_capture.py` and `tools/gate_mutation_runner.py` - and
+  `tests/test_walkprune.py` asserts IDENTITY with the owner rather than equality
+  with literals, because equality passes forever while the sites silently
+  diverge. `gate_mutation_runner` derives a PRINCIPLED difference set: pruning
+  the cache directories would break the `purge_caches` that exists to delete
+  them.
 
 - **UPDATED 2026-09-20, REPLACING THE EARLIER NOT-ARMED ROW. `RSC-InboxResponder`
   IS REGISTERED AND PROVEN TO FIRE UNATTENDED, AND THE REMAINING BLOCKER IS AN
@@ -171,6 +276,22 @@ version. What follows is everything the scaffold deliberately did not do.
   agreement from a counterparty. Do not close it by editing
   ops/runtime/trial_confirmed.json here. RSC's refusal to write that file is a
   STANDING commitment and not a one-session disposition.
+
+  UPDATED 2026-09-20 AT `d2a1bcf`. STILL DISABLED, NOT UNREGISTERED, AND STILL
+  ZERO VOLUNTEERS. Nothing moved on the counterparty request this session.
+
+  AND THE AGREEMENT RECORD IS NOT A SELF-SATISFIED GATE, WHICH IS WORTH STATING
+  BECAUSE ITS MERE EXISTENCE ON DISK INVITES THE OPPOSITE READING. The file
+  ops/runtime/trial_confirmed.json EXISTS, and a reader who stops at that fact
+  will conclude the gate is already open. IT IS NOT. Measured this session, that
+  record carries `confirmed_by` RC with a scope of "LATENCY-ONLY only. RC is NOT
+  armed." - it is RC's REFUSAL written down, not RC's consent - and it EXPIRED
+  at 2026-09-08T02:00Z. So the file fails the gate twice over, on scope and on
+  clock, and it is evidence of a refusal rather than of an agreement.
+
+  THE STANDING PROHIBITION ON WRITING THAT FILE IS UNCHANGED. A gate one tree
+  can satisfy alone is not a gate. Do not renew, widen or re-scope that record
+  here to unblock this tree.
 
 - **NEW 2026-09-19. ops/runtime/outbox_drafts/ HAS ZERO CODE REFERENCES IN
   THIS REPO.** Six files, oldest 2026-09-08, found by the machine stray-work
@@ -271,22 +392,42 @@ version. What follows is everything the scaffold deliberately did not do.
   and the rename would have carried the file out of the corpus with every arm
   green. `.txt` was added there with the reasoning inline.
 
-  STILL OPEN - THE PUBLISHER IS NOT CONVERTED. `tools/publish_next_session.py`
-  still writes a detached Desktop COPY rather than converging the shortcut, so
-  a bare run of it recreates exactly the stale artifact ruling 2 removed.
-  `.claude/commands/done.md` section 9 now runs `--check` instead and says why.
-  NOT DONE: convert the module to converge the `.lnk`, REUSING the proven
-  idempotent converge logic in `scripts/make_shortcut.py` - absent create,
-  present-and-correct change nothing, present-and-different rewrite,
-  `--no-clobber` refuse - rather than writing a second `.lnk` writer. Note that
-  `tools/publish_next_session.py:78` holds
-  `TARGET_NAME = "RSC-NEXT-SESSION.txt"` as the DESKTOP basename while `SOURCE`
-  is now the repo-root file of that same name, so one basename currently means
-  two things and must be split when the module is converted. About fifteen arms
-  in `tests/test_publish_next_session.py` assert the copy behaviour and move
-  with it. Most of that module's guard architecture exists BECAUSE it writes a
-  detached copy, so re-justify each guard rather than deleting any on the
-  grounds that its old reason moved.
+  CLOSED 2026-09-20 at `8433eba` - THE PUBLISHER IS CONVERTED. This paragraph
+  used to read STILL OPEN and to say that a bare run recreated the stale
+  artifact ruling 2 removed. `tools/publish_next_session.py` now CONVERGES the
+  Desktop `.lnk` onto the tracked repo-root hand-off rather than writing a
+  detached byte copy, reusing the converge table IMPORTED from
+  `scripts/make_shortcut.py` rather than a second `.lnk` writer. Because the
+  only reason for the `--check`-only restriction was the detached copy, section
+  9 of `.claude/commands/done.md` returns to a BARE run, verified this session
+  from the canonical checkout: `{"ok": true, "action": "unchanged",
+  "detached_copy": false}` at rc 0.
+
+  WHY A `.lnk` AND NOT A LINK, measured on this host rather than assumed. A
+  symlink succeeded only because the account is elevated and FAILS unelevated; a
+  hardlink succeeded but git REPLACES a tracked file on checkout, so the
+  hardlink would hold the OLD content and reintroduce the exact drift being
+  removed; a `.url` needs no privilege but opens in a browser rather than an
+  editor.
+
+  A SHAPE ARM IS NOT A GUARD, and the first version of this work rested on one.
+  The claim "no path writes a detached copy" was pinned by reading the module's
+  SOURCE TEXT for absent names. An adversary defeated it by appending a copy to
+  the PowerShell side, producing a real detached copy beside the shortcut WHILE
+  THE WHOLE SUITE STAYED GREEN. The claim now rests on an ARTIFACT assertion - a
+  real publish into a temporary directory whose resulting listing must equal
+  exactly the link name, whatever any stray file is called.
+
+  A WORKTREE MUST NOT REPOINT THE OPERATOR'S SHORTCUT, and `main()` now refuses
+  HARD from a linked worktree. Soft would have validated THIS tree's bytes
+  through every guard and then published a pointer at a DIFFERENT file no guard
+  ever read.
+
+  ALSO CLOSED IN THE SAME COMMIT: a machine-identity leak, where a refusal
+  detail interpolated the matched text and so printed a real user path to a
+  user-facing surface. It now reports only the match offset. A sweep for the
+  same root cause across the seven code roots found 9 places a matched group
+  reaches a message, and this was the only one carrying a PATH.
 
   ALSO OPEN, minor: `.gitattributes` has no explicit `*.txt` rule, so the
   hand-off resolves to `eol=lf` through `* text=auto eol=lf`. Verified correct

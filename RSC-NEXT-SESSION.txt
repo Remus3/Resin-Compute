@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-09-20, at commit d3a963d on main. Everything below is a READING
+Stamped 2026-09-20, at commit d2a1bcf on main. Everything below is a READING
 taken that day, not a promise about now. Re-measure before citing.
 
 BOOTSTRAP - READ IN THIS ORDER
@@ -35,91 +35,119 @@ It says NOTHING about headless/, ops/, surface/, scripts/ or tests/, so never
 cite its Success as evidence about code outside those roots. Never run
 pytest . from the root; the two suites run separately.
 
-STATE OBSERVED 2026-09-20 AT d3a963d
-  tests 2949 passed 3 skipped; pity_engine 80 passed; shell node 52 passed;
-  ruff clean; headless smoke exit 0; three QA gates green.
+STATE OBSERVED 2026-09-20 AT d2a1bcf
+  tests 3003 passed 3 skipped; pity_engine 80 passed; shell node 52 passed;
+  ruff clean; mypy 37 source files; headless smoke exit 0; licence 47;
+  docs 34; qa_companion 17 passed 2 skipped 3 noted.
   Working tree clean, all work pushed.
 
-WHAT LANDED THIS SESSION
-  14a109b  CR arm and a scoped channel-code pin over the two vendored governor
-           files. Neither shared file was touched.
-  1a6d8da  run_daemon now holds a machine-wide lane slot around each LIVE pass.
-           This repository is a REAL acquirer for the first time.
-  853e9a0  Retired the inert-governor prose across six files; withdrew a false
-           safety claim; recorded the responder arming.
-  d3a963d  Responder task disabled after two refusals.
+WHAT LANDED THIS SESSION - five commits, 963cda1..d2a1bcf, all pushed
+  67bd2fd  The inbox drop walker is pruned with a casefolded name match, given
+           a depth bound, and the name table moved to one owner in
+           core/walkprune.py shared by three call sites.
+  8433eba  tools/publish_next_session.py converges the Desktop .lnk onto the
+           tracked hand-off instead of writing a detached copy. A machine
+           identity leak in a refusal detail was closed in the same commit.
+  93898dd  CHANNEL_VERSION 2 vendored: docs/CHANNEL.md at 25425 bytes, 0 CR,
+           LF sha256 fc22e86eebe93bb247a91f44835257a3fe717a287c4a3184a8e7a7b9a463fb9c,
+           taken from origin/main as an independent witness. Thirteen pinned
+           constructs moved; eight v1 literals are now derived.
+  3f47b1a  tests/test_responder_refusal_gates_fire.py drives six refusal gates
+           in process and asserts on the RESULT, beside the syntax census that
+           a gate RELOCATION defeats.
+  d2a1bcf  The duplicate syntax arm dropped, so the behavioural module stays
+           inside the mutation campaign instead of being excluded whole.
 
-FIVE CLAIMS RETRACTED ON 2026-09-20 - DO NOT RESURRECT ANY OF THEM
-  1. "is_stale is GUARDED by a documented mtime fallback." FALSE. The mtime arm
-     is reached only when _read is falsy, and the neutralising write is IN
-     PLACE, so tearing it sets mtime to the moment of the tear. Measured: _read
-     empty, age 0.00034s, is_stale False, reap removed 0, lockfile still on
-     disk. It reads NOT stale for the next 4.5 hours. The claim originated at a
-     sibling and was carried in this tree's own tracked ROADMAP until refuted.
-  2. "slots.hold() reaps before acquiring." FALSE. try_acquire runs first and
-     reap runs only after it fails, so reaping happens under contention alone.
-  3. "This repository contributed nine files to the git installation root."
-     It is SIX, 10889 bytes. The largest file claimed, 170803 bytes, belongs to
-     another carrier. A widened pattern gives seven and 20548 bytes; the extra
-     file names four trees and is attributable to none.
-  4. "Unbounded log growth justifies disabling the responder." FALSE. The
-     invocation log is capped and trimmed, guarded by
-     tests/test_responder_invocation_trim.py. The real reason is that the
-     counterparty gate is the FIRST gate in _run_once, so a fire produced two
-     log lines and nothing else.
-  5. An adjudicator returned a per-code measurement table having made ZERO tool
-     calls. Every command and number in it was invented. A read-only agent's
-     tool-use count is a checkable property of its report.
+CORRECTIONS MADE THIS SESSION - DO NOT RESURRECT EITHER
+  1. "RC's commit is UNPUSHED" was the stated blocker on holding CHANNEL v2.
+     FALSE. git branch -r --contains answers origin/main. The claim had simply
+     DECAYED - RC's note said not-pushed as that note was written, and every
+     reader since carried it forward unre-measured. A fact with a timestamp is
+     not a fact with a lifetime.
+  2. "RC's acceptance criterion can never be met." WITHDRAWN. The criterion is
+     MEETABLE and not yet met. CS is the sole outstanding carrier at v1,
+     899f6eb9 / 20633 bytes. LL's copy sits at a vendoring prefix under its
+     third_party tree, which resolves RC's previously unexplained gap: the
+     probe was not wrong, its predicate was too narrow.
+
+THE FOUR-VERSUS-FIVE CARRIER DISPUTE IS RESOLVED AND WAS NEVER A DISAGREEMENT
+  FOUR is the ops/loop/slots.py carrier population at 71fa2a68 - LW, RC, RSC,
+  SS, with CS and LL absent. FIVE is the docs/CHANNEL.md population - CS, LL,
+  LW, RC, RSC, with SS absent. The two exception sets are DISJOINT, which is
+  why neither number ever corrected the other. Name the population before
+  citing either figure.
 
 TRAPS MEASURED IN THIS TREE - EACH ONE HAS ACTUALLY BITTEN
+  - A GUARD WHOSE CORPUS COMES FROM git ls-files CANNOT SEE AN UNTRACKED FILE.
+    This bit this session: a new test module passed the builder's suite run and
+    the merge-seam run at 3004, then the pre-push gate REFUSED the commit,
+    because the guard builds its corpus from git ls-files and the module was
+    untracked. Both green runs were vacuous for that file. Remedy: git add a
+    new file BEFORE running the seam gates.
+  - THE PRE-PUSH HOOK REPORTS A DIFFERENT SKIP COUNT THAN AN INTERACTIVE RUN -
+    4 rather than 3. That is EXPECTED, not a defect. git prepends its own PATH
+    for hooks, so arms keyed on resolving a tool answer a different question
+    there. It is documented in .githooks/pre-push. Do not file the two counts
+    as a conflict.
   - A scheduled task reads Ready forever once its triggers expire. Prove
     liveness with ops/check_task_liveness.py and a future NextRunTime, never
     with the State string. State can VETO liveness and can never vouch for it.
   - schtasks invoked through Bash cannot see these tasks at all, so reach for
     the PowerShell cmdlets instead - but treat whatever they print as
     REPORTED and never as liveness, because that is the same trap again.
-    Liveness comes only from the exit code of ops/check_task_liveness.py.
+  - Path.write_text emits CRLF on Windows and eol=lf in .gitattributes hides it
+    from every diff, so a clean-looking diff proves nothing. Read bytes, write
+    bytes to a temp, replace, then verify the CR count on disk.
   - A quoted heredoc still mangles backslashes. Use the Write or Edit tool for
     content containing them. This has put a stray control byte into the ledger.
   - Under Git Bash a lone /F is rewritten to F:/ by MSYS path conversion, so
     write taskkill //F //PID <pid>. It fails SILENTLY when redirected.
   - Never Stop-Process on Windows.
   - A line-number citation into a doc decays the moment a file above it grows.
-    tests/test_docs_consistency.py catches it; re-derive rather than revert.
+    tests/test_docs_consistency.py catches it; cite by heading or by text.
   - The docs guard REFUSES a backticked path that git does not track. Write
     gitignored and nonexistent paths in plain text, no backticks.
   - A commit message file must live in the SESSION SCRATCHPAD. A shared Git tmp
     path was overwritten by a concurrent session and a commit once landed
     carrying another tree's message. No gate exists for this.
+  - A SHAPE ARM IS NOT A GUARD. An arm that reads a module's SOURCE TEXT for an
+    absent name is defeated by a runtime-assembled name or by a second
+    language. Assert on the ARTIFACT - a directory listing, a return value -
+    not on what the source looks like.
   - Writing an outbound note into this tree's own inbox is AUTHORING, not
     DELIVERING. Verify by reading the RECIPIENT'S copy.
-  - Subagents contradicted this session's briefs on measured points at least
-    six times and were right every time. Brief them to trust their own probe.
+  - Subagents contradicted this session's briefs on measured points repeatedly
+    and were right. Brief them to trust their own probe over the brief.
 
 OPEN WORK, HIGHEST PRIORITY FIRST
-  1. CHANNEL_VERSION 2, six-participant roster. RC accepted authorship. This
-     tree voted YES and IS a pin-holder: docs/CHANNEL.md tracked, 20633 bytes,
-     0 CR, LF-normalised sha256 899f6eb957cc26ee25993d83d65d8ca291841fe4eec24a48f729c2dc005f4c6b.
-     Five-ness is asserted in 15 places and three are NOT simple substitutions.
-     Blocked on RC, not on this tree.
-  2. A carrier name sits in the shared winmutex module at line 118 while the
-     shared slots module says nothing may reference any of them. INERT - no
-     value, no behaviour, no byte-identity break. Fix belongs to a JOINT re-pin
-     round across every carrier, never a unilateral edit. The known-violation
-     pin in tests/test_no_sibling_names.py goes RED when it is fixed, which is
-     the prompt to update the pin in that same round.
-  3. A LATENT unpruned walker at scripts/watch_inbox.py:1040 - every child
-     directory is appended with no skip set, reached from a per-prompt hook,
-     and its caller hashes every file returned. Latent only because the inbox
-     holds zero directories and MAX_DROP_ENTRIES budgets the walk.
-  4. The responder re-arms the moment any tree volunteers as a counterparty.
-     The task is DISABLED, not unregistered, so one Enable plus a window move
-     restores it. NEVER write ops/runtime/trial_confirmed.json to unblock this
-     tree - a gate one tree can satisfy alone is not a gate, and two trees have
-     now explicitly declined.
-  5. tools/publish_next_session.py still writes a detached Desktop COPY. It
-     must be converted to converge the shortcut instead. Until then /done runs
-     only its --check mode.
+  1. CS is the sole outstanding CHANNEL v2 carrier, still at v1. Blocked on CS,
+     not on this tree. RSC has vendored and pushed.
+  2. The joint re-pin round for ops/loop/slots.py and ops/loop/winmutex.py has
+     NO AUTHOR AND NO DATE. Shape agreed by four trees; nobody has called it.
+     Never edit either file unilaterally - both are byte-identical-by-contract
+     and pinned by sha256, and the known-violation pin in
+     tests/test_no_sibling_names.py goes RED when the carrier name is fixed,
+     which is the prompt to re-pin inside that same round.
+  3. The responder is DISABLED, not unregistered, and there are ZERO
+     volunteers. ops/runtime/trial_confirmed.json EXISTS on disk, which invites
+     the wrong reading: it records RC's REFUSAL, scope "LATENCY-ONLY only. RC
+     is NOT armed.", and it EXPIRED at 2026-09-08T02:00Z. It is not a
+     self-satisfied gate. NEVER write that file to unblock this tree - a gate
+     one tree can satisfy alone is not a gate.
+  4. The roster numeral is frozen in a test string literal in
+     tests/test_channel_doc_pin.py with no mechanical tie to any roster list.
+     A sixth participant was added by hand; a seventh would be missed the same
+     way, with every arm green.
+  5. ops/loop/slots.py short-circuits on AGE before pid_alive, so a LIVE holder
+     past the window is declared stale. The window is 16200 seconds, 4h30m.
+     Needs a measured hold() duration against it. RC, CS and LW owe that
+     measurement; this tree's duration corpus is ZERO pairs.
+  6. tests/test_loop_concurrency.py says "all three carriers" where the
+     measured population is four. Tracked file, cosmetic but false.
+  7. A GENERALISED finding, analysis only: a claim is defeatable whenever its
+     BINDING CONDITIONS are narrower than its WORDING. Three measured
+     instances are recorded in ROADMAP.md. Do not propose a CLAUDE.md change on
+     that row's authority alone.
 
 STANDING DIRECTIVES - THESE ARE NOT UP FOR RE-ASKING
   Nothing waits for operator approval. Adjudicate a contested call, act on the

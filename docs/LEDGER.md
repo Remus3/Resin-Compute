@@ -12,6 +12,83 @@ now.
 
 ---
 
+## 2026-09-20 - five slices land: the drop walker is pruned, the hand-off publisher converges a shortcut, CHANNEL v2 is vendored, and a syntax census gains a behavioural arm beside it
+
+WHAT LANDED, five commits from `67bd2fd` through `d2a1bcf`, all pushed. Each is
+summarised here against its diff rather than against its own message.
+
+THE DROP WALKER IS PRUNED, BOUNDED, AND GIVEN ONE OWNER, at `67bd2fd`. The
+walker in `scripts/watch_inbox.py` appended EVERY child directory with no skip
+set, reached from a per-prompt hook whose caller sha256s every file returned - a
+single dropped git directory would have digested an entire object store. THE
+CASEFOLD IS LOAD-BEARING ON THIS PLATFORM: Windows preserves case on disk while
+comparing case-insensitively, so an exact-name Python match let upper-cased
+cache and git directories straight through, measured, with the digest identical
+to the unpruned walk. The depth bound and the entry budget do NOT subsume each
+other - the bound refuses one branch and leaves the rest accurate, the budget
+makes the whole drop partial. `core/walkprune.py` now owns the name table for
+three call sites on the `core/ports.py` precedent, with its test asserting
+IDENTITY with the owner rather than equality with literals, because equality
+passes forever while the sites silently diverge. Two false sentences were struck
+from authored text rather than reworded, both found by adversarial passes.
+
+THE HAND-OFF PUBLISHER CONVERGES A SHORTCUT INSTEAD OF COPYING BYTES, at
+`8433eba`. `tools/publish_next_session.py` wrote a DETACHED Desktop copy that
+went stale the moment the repo file changed, which is the only reason `/done`
+ran it in `--check` mode. The `.lnk` shape was chosen by MEASUREMENT on this
+host, not by preference: a symlink succeeds only because the account is
+elevated, and a hardlink holds the OLD content because git REPLACES a tracked
+file on checkout, reintroducing the exact drift being removed. A SHAPE ARM IS
+NOT A GUARD - the first version pinned "no path writes a detached copy" by
+reading the module's own source for absent names, and an adversary defeated it
+with a PowerShell-side copy while the whole suite stayed green. The claim now
+rests on a directory LISTING after a real publish.
+
+CHANNEL_VERSION 2 IS VENDORED, at `93898dd`. `docs/CHANNEL.md` moves to 25425
+bytes, LF sha256 `fc22e86eebe93bb247a91f44835257a3fe717a287c4a3184a8e7a7b9a463fb9c`,
+a roster of six. THE BYTES CAME FROM A REMOTE OBJECT and not from any working
+disk: three of the four readings in circulation were readings of ONE disk, and
+agreement among those is not corroboration. COPIED AS BYTES, NEVER WRITTEN AS
+TEXT, because `Path.write_text` emits CRLF on Windows and `eol=lf` hides it from
+every diff - verified after landing at 0 CR and 0 non-ASCII.
+
+A CORRECTION THAT IS THE REUSABLE PART OF THAT SLICE. The hand-off recorded RC's
+commit as UNPUSHED, and that was the stated blocker for holding. IT IS FALSE -
+`git branch -r --contains` answers `origin/main`. The claim had simply DECAYED:
+RC's note said not-pushed AS THAT NOTE WAS WRITTEN, and every reader since
+carried it forward without re-measuring. A fact with a timestamp is not a fact
+with a lifetime, and a hand-off is exactly where that difference gets lost.
+
+A SYNTAX CENSUS GAINED A BEHAVIOURAL ARM BESIDE IT, at `3f47b1a` and `d2a1bcf`.
+The census asserts the responder's refusal gates are consulted by counting AST
+node types inside one function. A real behaviour-preserving RELOCATION of one
+gate into a helper left the count IDENTICAL - 79 passed 1 skipped before and
+after - because a null-check on a helper's return is the same node as the gate
+it replaced. The census is a real tripwire against DELETION and is kept for
+that; what it cannot see is a gate that MOVED.
+`tests/test_responder_refusal_gates_fire.py` drives the function in process over
+six refusal gates and asserts on the RESULT, each arm paired with a
+neighbour-survived control. Its own expected value was WRONG when first written
+and was corrected AGAINST THE MEASUREMENT rather than quietly adjusted.
+`tools/moon_sync_responder.py` is deliberately UNCHANGED - no source defect was
+found, and the defect was in what the guard could observe.
+
+AND THE GUARD COULD NOT SEE THAT NEW MODULE UNTIL IT WAS TRACKED. The mutation
+runner builds its corpus from `git ls-files`, so while the module was untracked
+it was outside the guard's reach BY CONSTRUCTION, and both the builder's suite
+run and the merge-seam run were VACUOUS for it. The pre-push gate refused the
+commit. The remedy is one line - stage a new file BEFORE running the seam gates
+- and the fix was therefore verified STAGED.
+
+Files written this session by the merged slices: `scripts/watch_inbox.py`,
+`core/walkprune.py`, `tools/publish_next_session.py`, `docs/CHANNEL.md`,
+`tests/test_channel_doc_pin.py`, `tests/test_responder_refusal_gates_fire.py`,
+and their neighbouring tests and docs. No shared governor byte moved: both
+`ops/loop/slots.py` and `ops/loop/winmutex.py` are untouched and every sha256
+pin in `tests/test_loop_concurrency.py` is unchanged.
+
+---
+
 ## 2026-09-20 - the daemon loop becomes a real slot acquirer, and no loop was invented to justify the vendored file
 
 WHAT LANDED, one commit, `1a6d8da`, two files: `headless/runner.py` and
