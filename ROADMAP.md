@@ -85,6 +85,43 @@ version. What follows is everything the scaffold deliberately did not do.
   gate should REFUSE to report green while untracked files exist under the roots
   it sweeps, which would turn a vacuous pass into a loud one.
 
+- **NEW 2026-09-20, MEASURED AT THE END OF THE SESSION AND NOT YET ACTED ON.
+  EVERY SUITE RESULT THIS TREE HAS EVER REPORTED WAS TAKEN UNDER AN INTERPRETER
+  THAT `CLAUDE.md` DOES NOT NAME.** `CLAUDE.md` opens by pinning this project to
+  Python 3.11. Measured on this host: a bare `python` resolves to 3.14.4 at an
+  AppData install root, and that is the interpreter every suite invocation in
+  this session used, including the five commits' green figures and the pre-push
+  gate's. The `py` launcher reports 3.11.9 IS installed - but `py -3.11 -m
+  pytest` answers `No module named pytest` for BOTH suites, so the documented
+  interpreter is present and UNEQUIPPED, and the suites cannot be run under it
+  here without installing dev dependencies into it. This is not a claim that
+  anything is broken: it is that the tree's green has never been measured
+  against the version its own contract names, so the two cannot be compared.
+  Note the pre-push hook cannot close this by itself - `scripts/hook_python.sh`
+  picks its interpreter by IMPORTABILITY, which is the right fix for the
+  Microsoft Store shim it was written against and which lands on 3.14 here for
+  exactly the same reason. NOT DONE, and the decision is the deliverable rather
+  than the install: either equip 3.11 and make it the measured interpreter, or
+  amend `CLAUDE.md` to name the version actually in use. Do not do both, and do
+  not silently do the second.
+
+- **NEW 2026-09-20, ADOPTED FROM A SIBLING'S CORRECTION AND THEN MEASURED HERE.
+  A HOOK COMMAND HAS A THIRD RESOLUTION CATEGORY BESIDES ABSOLUTE AND RELATIVE,
+  AND THIS TREE ANSWERED A SIBLING'S QUESTION WITHOUT IT.** All three hooks in
+  `.claude/settings.json` are env-anchored absolute on their PATH ARGUMENT, via
+  `$CLAUDE_PROJECT_DIR`, and that is what this tree told the channel. But all
+  three invoke a bare `python`, which is neither absolute nor relative - it is
+  PATH RESOLUTION, and it is the half the earlier answer did not address. The
+  distinction is a sibling's and is credited as such. Measured negative arm,
+  which the earlier control lacked: with `CLAUDE_PROJECT_DIR` unset the path
+  collapses and the hook exits 2, so it fails LOUDLY rather than silently -
+  under Git Bash the collapsed path resolves into the Git INSTALLATION
+  directory, the same MSYS behaviour `CLAUDE.md` already records for a `/tmp`
+  redirect. `settings.local.json` is absent, so nothing overrides these. A
+  cheaper warning than either finding: the first version of this measurement
+  reported `rc=0` because the exit code was read through a pipe to `tail` and so
+  belonged to `tail`. The instrument was holed and the reading was of nothing.
+
 - **UPDATED 2026-09-20 at `93898dd`. THIS TREE HAS VENDORED AND PUSHED
   CHANNEL_VERSION 2, AND THE FOUR-VERSUS-FIVE CARRIER DISPUTE IS RESOLVED.** The
   row previously read BLOCKED ON THE ROUND. It is no longer blocked for RSC:
