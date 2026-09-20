@@ -233,6 +233,108 @@ def test_vendored_module_matches_the_pinned_cross_repo_digest(name: str):
     )
 
 
+def _carriage_return_offsets(data: bytes) -> list[int]:
+    """Byte offsets of every 0x0D in `data`.
+
+    ANY 0x0D, not just the CRLF pair. `tests/test_line_endings.py` counts
+    `b"\\r\\n"`, so a LONE CR - which a botched normalisation produces, and which
+    changes the digest exactly as much - is invisible there and visible here.
+    """
+    return [i for i, byte in enumerate(data) if byte == 0x0D]
+
+
+@pytest.mark.parametrize("name", sorted(SHARED_SHA256))
+def test_vendored_module_carries_no_carriage_return(name: str):
+    """Names the ONE cause that makes the digest arm above unreadable.
+
+    The pin is on BYTES. A TEXT-mode copy of a shared file on Windows rewrites
+    every LF to CRLF, producing a file that READS identically to the sibling's,
+    diffs identically, and hashes DIFFERENTLY. Without this arm that presents as
+    an unexplained digest mismatch, and the first response to an unexplained
+    mismatch is to re-hash locally - which the digest arm's own message forbids,
+    because it launders a mangled copy into "agreed".
+
+    WHY THE EXISTING COVERAGE DOES NOT REACH THIS, measured 2026-09-20.
+
+      * `tools/precommit_gate.py` scans these files - they are tracked, and
+        `--scan-files` on the pair reports `selected=2 scanned=2 exempt=0` - but
+        its predicate is `ord(c) > 127` at :267 and CR is 0x0D. It also reads
+        STAGED content, which `.gitattributes` has already normalised to LF.
+      * `.gitattributes` forces `eol=lf` for `.py`, which is precisely what HIDES
+        a working-tree CRLF from every diff rather than preventing it.
+      * `tests/test_line_endings.py` does sweep these two files - `git check-attr
+        eol` answers `lf` for both - but it derives its corpus from `git
+        ls-files` and SKIPS when git is unusable, so a git-less checkout loses
+        that coverage while this digest arm still fires. It also counts the CRLF
+        PAIR only. This arm is git-independent and inherits its file list from
+        `SHARED_SHA256`, the same source the digest arm parametrizes over, so a
+        module joining the vendor drop joins this guard in the same edit.
+
+    NO NON-ASCII ARM HERE, DELIBERATELY. That byte class is already caught twice
+    - at commit time by the glyph gate and in the CI drift sweep - and unlike a
+    CR it is VISIBLE: it shows in the diff and the gate reports it as file:line.
+    A CR earns a named arm because the ordinary diagnostics are blind to it; a
+    third copy of the ASCII predicate would only suggest this file owns it.
+    """
+    path = LOOP_DIR / name
+    offsets = _carriage_return_offsets(path.read_bytes())
+    assert not offsets, (
+        f"{path} carries {len(offsets)} carriage-return byte(s), first at offset "
+        f"{offsets[0] if offsets else -1}. This is almost certainly a CRLF WORKING-TREE "
+        "COPY: the file was copied in TEXT mode from a sibling tree, so Windows rewrote "
+        "every LF to CRLF. It reads identically to the sibling's copy and `git diff` "
+        "shows nothing, because .gitattributes declares eol=lf and the index normalises "
+        "it - but the cross-repo pin in SHARED_SHA256 is on BYTES, so the digest arm is "
+        "red for a reason no diff can display.\n"
+        "\n"
+        "FIX: re-copy from the sibling tree in BINARY mode - `copy /b`, `shutil.copyfile`, "
+        "`git show <ref>:ops/loop/" + name + " > " + name + "` with a binary redirect, or "
+        "`Path(dst).write_bytes(Path(src).read_bytes())`. NEVER `read_text()`/`write_text()`, "
+        "which is what produced this. Do NOT re-hash the local file to make the digest arm "
+        "green: that pins the mangled bytes and desynchronises every other carrier."
+    )
+
+
+def test_the_carriage_return_detector_actually_fires(tmp_path: Path):
+    """Non-vacuity, against the REAL bytes, without touching the real files.
+
+    `ops/loop/` is byte-identical-by-contract across the carriers and is frozen
+    here, so the mutation happens on a tmp_path COPY. Both arms are needed: the
+    first proves the detector can go red, the second proves it is not simply
+    red on everything - a detector that fires on the untouched bytes too would
+    score full marks on the first arm and guard nothing.
+    """
+    source = LOOP_DIR / sorted(SHARED_SHA256)[0]
+    original = source.read_bytes()
+    assert b"\n" in original, "the sample has no LF to mangle, so the control proves nothing"
+
+    clean = tmp_path / "clean.py"
+    clean.write_bytes(original)
+    assert _carriage_return_offsets(clean.read_bytes()) == [], (
+        "the survivor arm: a byte-wise copy of the real file must stay clean, or this "
+        "detector is reporting on itself rather than on line endings"
+    )
+
+    mangled = tmp_path / "mangled.py"
+    mangled.write_bytes(original.replace(b"\n", b"\r\n"))
+    assert _carriage_return_offsets(mangled.read_bytes()), (
+        "a CRLF copy of the real file was not detected; the guard above is vacuous"
+    )
+
+    # And the reason the arm above reads BYTES. `read_text` strips CR through
+    # universal newlines, so a text-mode read of the mangled copy is
+    # indistinguishable from the clean one - the exact blindness that would
+    # make the guard pass on a file that hashes wrong.
+    assert mangled.read_text(encoding="utf-8") == clean.read_text(encoding="utf-8"), (
+        "universal newlines no longer hide CR; the read_bytes() above is still correct, "
+        "but this comment's premise has changed and the arm should be revisited"
+    )
+    assert hashlib.sha256(mangled.read_bytes()).hexdigest() != SHARED_SHA256[source.name], (
+        "a CRLF copy must not hash to the pinned digest; if it did, the byte pin would "
+        "not be distinguishing line endings at all"
+    )
+
+
 # ---------------------------------------------------------------------------
 # 2. Loading the vendored modules
 # ---------------------------------------------------------------------------

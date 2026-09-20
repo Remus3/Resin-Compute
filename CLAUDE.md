@@ -365,7 +365,7 @@ and RESPONDS. Reading the filename list is not reviewing it.
   they look at from `git ls-files`, so an untracked path is outside their reach
   by construction. The glyph gate builds its corpus at
   `tools/precommit_gate.py:414`, the sibling-name sweep builds its corpus at
-  `tests/test_no_sibling_names.py:117`, and the docs pointer guard resolves
+  `tests/test_no_sibling_names.py:126`, and the docs pointer guard resolves
   tracked-ness from the same command at `tests/test_docs_consistency.py:171`. Do
   not write the universal "no guard reads it" - that is a claim about guards
   nobody enumerated. Do not assume a note in that directory is a guarded
