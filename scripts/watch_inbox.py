@@ -197,6 +197,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from core.atomic_io import atomic_write_json, atomic_write_text, read_json  # noqa: E402
+from core.walkprune import NEVER_WALKED_DIR_NAMES, is_pruned_dir_name  # noqa: E402
 # `ENV_RUNTIME_DIR` IS RE-EXPORTED ON PURPOSE and is not dead. It is this
 # module's statement of which variable isolates a CHILD of this script, and a
 # caller that spelled the literal itself would go stale silently the day the
@@ -847,13 +848,68 @@ _UNREADABLE = "unreadable:"
 #: stops walking and says so rather than reporting a partial payload as whole.
 MAX_DROP_ENTRIES = 2000
 
-#: Why an entry could not be digested. These are digest INPUTS and they are also
-#: printed - an anomaly is the one thing that must reach the report every run,
-#: so its reason is written to be read. They carry no bytes of any payload.
+#: Ceiling on how deep the walk descends inside ONE drop. The drop itself is
+#: depth 0, so a file at depth `MAX_DROP_DEPTH` is still digested and a
+#: DIRECTORY at that depth is refused.
+#:
+#: THIS IS NOT THE SAME GUARD AS `MAX_DROP_ENTRIES`, and the two are not
+#: interchangeable. The entry budget is a GLOBAL counter: the moment it trips it
+#: clears `pending`, so ONE pathological branch costs the measurement of every
+#: sibling branch and the whole drop reports as partial. The depth bound refuses
+#: exactly the branch that is too deep and leaves the rest of the drop measured
+#: accurately.
+#:
+#: AN EARLIER VERSION OF THIS COMMENT ALSO CLAIMED THE BOUND STOPS THE WALK
+#: BEFORE WINDOWS PATH LENGTH RAISES. THAT CLAIM IS STRUCK AS UNMEASURED. 16
+#: segments of long names exceed 260 characters well before depth 16 is
+#: reached, so the bound does not in general get there first, and nothing here
+#: depends on it doing so. A path that does blow MAX_PATH still surfaces
+#: honestly as `REASON_UNWALKABLE`.
+#:
+#: 16 is well past anything correspondence carries. The deepest path in this
+#: repo's own tracked tree is shallower than that, and a drop is a copied
+#: subtree rather than a whole checkout.
+MAX_DROP_DEPTH = 16
+
+#: Directory names the walk refuses to descend, and the casefolded match that
+#: consults them. BOTH ARE IMPORTED RATHER THAN RESTATED - `core/walkprune.py`
+#: is the single owner, because three sites in this tree prune against this
+#: list and three hand-maintained lists that must agree is the defect. See that
+#: module for why the match is casefolded, why it is an exact name match and
+#: never a substring, and for what is and is not true about `.gitignore`.
+PRUNED_DIR_NAMES = NEVER_WALKED_DIR_NAMES
+
 REASON_REPARSE = "reparse-point-not-followed"
 REASON_UNCLASSIFIABLE = "neither-file-nor-directory"
 REASON_UNWALKABLE = "directory-could-not-be-listed"
 REASON_BUDGET = "entry-budget-exhausted"
+
+#: A directory refused by NAME, against `PRUNED_DIR_NAMES`.
+#:
+#: IT CONTRIBUTES AN ANOMALY LINE RATHER THAN BEING INVISIBLE, and that is the
+#: load-bearing call rather than a detail. Three reasons, in order of weight.
+#: (1) This module's rule is that what cannot be digested is forced into every
+#: report with its reason, never keyed silently and never dropped - a pruned
+#: directory is refused payload, exactly as a reparse point is. (2) A silent
+#: skip COLLIDES facts onto one digest: a drop holding only `__pycache__/` and a
+#: drop holding only `.git/` would both reduce to zero digested files and key
+#: identically, and identically to an empty drop. The anomaly line carries the
+#: relative path, so they stay apart. (3) The digest cost of the anomaly is
+#: zero for the drops that matter. The skip fires only on a name IN the set, so
+#: a drop of ordinary files and ordinary subdirectories hashes to the
+#: byte-identical value it hashed to before any of this existed - the invariant
+#: Sibling-D named and this repo measured the cost of breaking at 88 notes. A
+#: drop that DOES carry a skippable directory moves its key exactly once, which
+#: it would have done under a silent skip too, because the files behind that
+#: directory stop being digested either way. Moving once and saying why beats
+#: moving once in silence.
+REASON_SKIPPED = "directory-not-descended-by-policy"
+
+#: A directory sitting at `MAX_DROP_DEPTH`. Same two-halves rule: NOT descended
+#: and NOT ignored. Distinct from `REASON_BUDGET` because the operator acts on
+#: them differently - budget means the whole drop is a partial measurement,
+#: depth means one branch was refused and everything else is accurate.
+REASON_DEPTH = "directory-deeper-than-the-depth-bound"
 
 
 class InboxUnlistable(Exception):
@@ -1000,16 +1056,34 @@ def _walk_drop(drop: Path) -> tuple[list[Path], list[tuple[str, str]]]:
     """(files under `drop` in a stable order, (relative path, reason) anomalies).
 
     ITERATIVE AND PRUNED, because `rglob` cannot be told not to follow a
-    junction. Every entry the walk refuses to digest - a reparse point, an
-    unlistable directory, something that is neither a file nor a directory, or
-    the point at which the budget ran out - comes back as an anomaly rather
-    than as silence. That is Sibling-C's rule: WHAT CANNOT BE DIGESTED IS
-    FORCED INTO EVERY REPORT WITH ITS REASON, never keyed silently and never
-    dropped.
+    junction. Every entry the walk refuses to digest - a reparse point, a
+    directory refused by name, a directory past the depth bound, an unlistable
+    directory, something that is neither a file nor a directory, or the point
+    at which the budget ran out - comes back as an anomaly rather than as
+    silence. That is Sibling-C's rule: WHAT CANNOT BE DIGESTED IS FORCED INTO
+    EVERY REPORT WITH ITS REASON, never keyed silently and never dropped.
+
+    THE NAME AND DEPTH PRUNES ARE NEW AND BOTH ARE SCOPED TO DIRECTORIES. They
+    run AFTER `_classify`, so a FILE called `.git` - which is exactly what a
+    git worktree root holds - is ordinary payload and is digested. See
+    `PRUNED_DIR_NAMES`, `MAX_DROP_DEPTH` and `REASON_SKIPPED` for why a pruned
+    directory is reported rather than made invisible.
+
+    WHICH PRUNE CAN MOVE A DIGEST, STATED PER PRUNE BECAUSE THE UNSCOPED
+    VERSION OF THIS SENTENCE WAS MEASURED FALSE. The NAME prune cannot move the
+    digest of a drop containing no name from `PRUNED_DIR_NAMES`: it fires on a
+    name match and on nothing else. The DEPTH prune CAN, and does, for a drop
+    that contains no skippable name at all. Measured on this host 2026-09-20: a
+    drop of 20 nested PLAIN directories holding one `.md` leaf hashes to
+    `3ad39c51...` with both prunes disabled and to `3bf2207b...` with them
+    live, because the leaf sits past depth 16 and stops being digested. That is
+    the intended trade and it is cheap here: the format is local, digests live
+    in gitignored `ops/runtime/` and never travel to a sibling, and the real
+    inbox holds zero drop directories today, so the backfill cost is zero.
     """
     files: list[Path] = []
     anomalies: list[tuple[str, str]] = []
-    pending = [drop]
+    pending = [(drop, 0)]
     visited = 0
 
     def rel_of(path: Path) -> str:
@@ -1019,7 +1093,7 @@ def _walk_drop(drop: Path) -> tuple[list[Path], list[tuple[str, str]]]:
             return path.name
 
     while pending:
-        current = pending.pop()
+        current, depth = pending.pop()
         try:
             children = sorted(current.iterdir(), key=lambda p: p.name)
         except OSError:
@@ -1037,7 +1111,16 @@ def _walk_drop(drop: Path) -> tuple[list[Path], list[tuple[str, str]]]:
                 continue
             kind, reason = _classify(child)
             if kind == "dir":
-                pending.append(child)
+                # Casefolded EXACT name match. NTFS preserves case while
+                # comparing case-insensitively, so `.GIT/` is the same
+                # directory as `.git/` and must prune; `pycache/` and `git/`
+                # are different names and must survive.
+                if is_pruned_dir_name(child.name):
+                    anomalies.append((rel_of(child), REASON_SKIPPED))
+                elif depth + 1 >= MAX_DROP_DEPTH:
+                    anomalies.append((rel_of(child), REASON_DEPTH))
+                else:
+                    pending.append((child, depth + 1))
             elif kind == "file":
                 files.append(child)
             else:

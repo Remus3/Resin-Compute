@@ -89,6 +89,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from core.walkprune import NEVER_WALKED_DIR_NAMES, is_pruned_dir_name  # noqa: E402
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 #: The file whose tags this tool consumes.
 RESPONDER = REPO_ROOT / "tools" / "moon_sync_responder.py"
@@ -281,8 +287,20 @@ EXCLUDED_MODULES: tuple[str, ...] = (SELF_TEST_MODULE, *SHAPE_GRADER_MODULES)
 #: Directories whose contents are compiled or cached artefacts of source.
 _CACHE_DIRS = frozenset({"__pycache__", ".pytest_cache"})
 
-#: Never walked. `.git` is large and holds nothing importable.
-_WALK_SKIP = frozenset({".git", ".venv", "venv", "node_modules", ".mypy_cache", ".ruff_cache"})
+#: Never walked. DERIVED from the single owner rather than restated, minus the
+#: cache names above - and that subtraction is the ONE principled divergence
+#: among this tree's three prune sites. `purge_caches` exists to DELETE
+#: `__pycache__` and `.pytest_cache`, so pruning them would stop it finding its
+#: own targets and reinstate the stale-bytecode defect its docstring records.
+#: Every other name is shared, which is why the relationship is written as
+#: arithmetic here instead of as a second hand-maintained list that drifts.
+#:
+#: `.claude` ARRIVES HERE BY THAT ARITHMETIC AND THE BEHAVIOUR CHANGE IS THE
+#: POINT. `purge_caches` walks the repo root, and `.claude/worktrees/` holds
+#: other concurrent sessions' checkouts - 834 files in this checkout. Deleting
+#: their `__pycache__` mid-campaign is cross-session interference, and this
+#: campaign's own bytecode never lives under `.claude`.
+_WALK_SKIP = NEVER_WALKED_DIR_NAMES - _CACHE_DIRS
 
 
 #: Printed beside a kill site the parser could not read. Never a guess.
@@ -656,7 +674,7 @@ def purge_caches(root: Path) -> int:
     """
     doomed: list[Path] = []
     for dirpath, dirnames, _ in os.walk(root):
-        dirnames[:] = [name for name in dirnames if name not in _WALK_SKIP]
+        dirnames[:] = [name for name in dirnames if not is_pruned_dir_name(name, _WALK_SKIP)]
         for name in list(dirnames):
             if name in _CACHE_DIRS:
                 doomed.append(Path(dirpath) / name)

@@ -38,6 +38,12 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from core.walkprune import NEVER_WALKED_DIR_NAMES, is_pruned_dir_name  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Where things are
 # ---------------------------------------------------------------------------
@@ -69,12 +75,14 @@ WATCH_TREES: list[tuple[str, Path, int]] = [
 # Directory names skipped during a recursive walk. Path.rglob("*") cannot
 # prune - it always descends into every subdirectory, and post-filtering the
 # yielded paths still pays the full descent. Only os.walk with an in-place
-# dirnames[:] assignment actually avoids descending. Same shape as
-# tools/gate_mutation_runner.py's purge_caches.
-_WALK_SKIP_DIRS = frozenset({
-    "__pycache__", ".git", ".mypy_cache", ".pytest_cache", ".ruff_cache",
-    "node_modules", ".venv", "venv", ".claude",
-})
+# dirnames[:] assignment actually avoids descending.
+#
+# THE NAMES ARE IMPORTED, NOT RESTATED. This list, gate_mutation_runner's and
+# watch_inbox's all had to agree and were three separate hand-maintained
+# frozensets; the newest one was missing `.claude`. core/walkprune.py is now
+# the single owner and tests/test_walkprune.py goes red if a site stops
+# deriving from it.
+_WALK_SKIP_DIRS = NEVER_WALKED_DIR_NAMES
 
 # Individual files polled by exact path.
 WATCH_FILES: list[tuple[str, Path]] = [
@@ -301,7 +309,7 @@ def poll_tree(store: CaptureStore, label: str, root: Path, max_bytes: int) -> in
         return 0
     new = 0
     for dirpath, dirnames, filenames in os.walk(root, followlinks=True):
-        dirnames[:] = [name for name in dirnames if name not in _WALK_SKIP_DIRS]
+        dirnames[:] = [name for name in dirnames if not is_pruned_dir_name(name, _WALK_SKIP_DIRS)]
         for filename in filenames:
             path = Path(dirpath) / filename
             try:
@@ -387,7 +395,7 @@ def write_manifest(store: CaptureStore, started: str) -> None:
     counts: dict[str, int] = {}
     total = 0
     for dirpath, dirnames, filenames in os.walk(store.blobs, followlinks=True):
-        dirnames[:] = [name for name in dirnames if name not in _WALK_SKIP_DIRS]
+        dirnames[:] = [name for name in dirnames if not is_pruned_dir_name(name, _WALK_SKIP_DIRS)]
         for filename in filenames:
             if filename.endswith(".tmp"):
                 continue
