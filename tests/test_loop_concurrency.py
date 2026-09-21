@@ -4,9 +4,11 @@ WHAT IS BEING GUARDED.
 
 `ops/loop/slots.py` and `ops/loop/winmutex.py` are BYTE-IDENTICAL-BY-CONTRACT
 but NOT by the same population, so NO CLAIM HERE MAY SCOPE TO THE DIRECTORY.
-`slots.py` has FOUR carriers - LW, RC, RSC, SS - all agreeing. `winmutex.py`
-has FIVE, those four plus CS, and CS's copy DIVERGES. See `SLOTS_CARRIERS` and
-`WINMUTEX_CARRIERS` below. RSC is this tree; Sibling-* resolves in a gitignored map.
+BOTH SETS NOW MEASURE FIVE AND THEY ARE STILL DIFFERENT SETS, so equal sizes
+must not be read as one population. `slots.py` has FIVE carriers - CS, LW, RC,
+RSC, SS - all agreeing. `winmutex.py` has FIVE carriers whose names happen to
+match that list while CS's copy there is a DIFFERENT FILE that diverges. See
+`SLOTS_CARRIERS` and `WINMUTEX_CARRIERS` below. RSC is this tree; Sibling-* resolves in a gitignored map.
 The participating loops do not talk to each other over any API. They coordinate
 THROUGH the on-disk protocol in `slots.py`, against ONE shared token bucket at
 `C:\ProgramData\lw-loop\slots`, and through the Win32 named-mutex namespace in
@@ -15,7 +17,7 @@ participants agree, so a divergence produces no error anywhere. It produces a
 silent concurrency bug - two loops that each believe they are inside the bound
 while together they are outside it.
 
-THREE OF THE FOUR slots.py CARRIERS ARE MEASURED ACQUIRERS. Sibling-E and
+THREE OF THE FIVE slots.py CARRIERS ARE MEASURED ACQUIRERS. Sibling-E and
 Sibling-C both call `slots.hold()` against the LIVE bucket, and SO DOES THIS REPO: since
 `1a6d8da`, `run_daemon` in `headless/runner.py` wraps each LIVE pass in a held
 slot. No Claude-executor loop was invented to justify the vendored file - the
@@ -127,7 +129,8 @@ VENDORED_MODULES = ("slots.py", "winmutex.py")
 # RE-PINNING IS A JOINT ACT. These are not local checksums to be regenerated
 # when they go red. See the assertion message below for the procedure - the short
 # version is that every carrier OF THE MODULE CONCERNED changes in ONE round (the
-# two modules have DIFFERENT carrier sets), each re-hashing from its OWN disk.
+# two modules have SEPARATELY MEASURED carrier populations, which coincide in
+# membership today and are still not one list), each re-hashing from its OWN disk.
 SHARED_SHA256 = {
     # Vendored 2026-09-06, when Resin Compute took the slot vacated by the
     # archived Sibling-B. Sibling-E authored the bytes and carried the
@@ -159,7 +162,8 @@ SHARED_SHA256 = {
 }
 
 # ---------------------------------------------------------------------------
-# 1a. The populations - FOUR of them, and no two are the same set
+# 1a. The populations - FOUR of them, separately measured, and never
+#     interchangeable even where their memberships coincide
 # ---------------------------------------------------------------------------
 #
 # NEVER CITE A CARRIER NUMERAL WITHOUT NAMING THE POPULATION IT COUNTS, AND
@@ -198,28 +202,38 @@ SHARED_SHA256 = {
 # correct record of its own moment, and that is the strongest property available
 # to a claim about a disk this repository cannot poll. The figures follow:
 #
-#   ops/loop/slots.py      FOUR carriers, all agreeing at 71fa2a68, 9627 bytes:
-#                          LW, RC, RSC, SS. LL holds no copy. CS DOES HOLD the
-#                          file and is still NOT in that tuple, which is the
-#                          one row here that needs its mechanism spelled out.
-#                          Measured this run: CS's own copy of that module is
-#                          on its disk at 9627 bytes and 71fa2a68, the same
-#                          bytes this pin names, but `git ls-files` over that
-#                          directory in CS does not list it and
-#                          `git check-ignore -v ops/loop/slots.py` there exits
-#                          1 with no output - untracked AND not ignored. THE
-#                          MECHANISM: this tuple counts PIN carriers, and the
-#                          pin is on TRACKED bytes. An untracked file is
-#                          outside every `git ls-files` corpus by construction,
-#                          so no guard in CS reaches it and no joint round can
-#                          re-pin it there. CS is a DISK HOLDER of that module
-#                          and not a pin carrier. Same shape as LL's CHANNEL.md
-#                          below, which is on LL's disk but under a vendoring
-#                          prefix instead of the pinned path. If CS ever tracks
-#                          it, CS joins the tuple in that same round - and the
-#                          rule-C expectation in tests/test_carrier_population
-#                          _prose.py moves with it, because that arm pins this
-#                          tuple's LENGTH.
+#   ops/loop/slots.py      FIVE carriers, all agreeing at 71fa2a68, 9627 bytes:
+#                          CS, LW, RC, RSC, SS. LL holds no copy. CS JOINED
+#                          THIS TUPLE ON A RE-MEASUREMENT, and the row it
+#                          replaces is written out below because the mechanism
+#                          is the reusable part and the reversal is the
+#                          evidence that the row decays.
+#                          RE-MEASURED 2026-09-21T00:50:57Z against CS's own
+#                          disk, read-only, by two independent methods.
+#                          Method one: `git ls-files --error-unmatch
+#                          ops/loop/slots.py` exits 0, which is git saying it
+#                          stores the path, with `git status --porcelain`
+#                          empty. Method two: `git log -1 --
+#                          ops/loop/slots.py` names commit
+#                          e5395d5418605e91967d26d9a622dbf728cf4f7d of Sun Sep
+#                          20 19:02:15 2026 -0500, and the file on that disk is
+#                          9627 bytes hashing to 71fa2a68 - the digest this pin
+#                          names. Git STORES those bytes in CS, so CS is a PIN
+#                          CARRIER of this module.
+#                          THE SUPERSEDED ROW SAID CS HELD THOSE BYTES
+#                          UNTRACKED, which put them outside every `git
+#                          ls-files` corpus and so outside any joint re-pin,
+#                          making CS a DISK HOLDER and not a pin carrier. That
+#                          was measured and it was true at the stamp above;
+#                          CS committed the file in the interval. THE
+#                          PREDICATE DID NOT CHANGE - a sha256 pin can only act
+#                          on bytes git stores - only CS's side of it did, and
+#                          the disk-holder shape is still live elsewhere in
+#                          this block: see LL's CHANNEL.md row, on LL's disk
+#                          but under a vendoring prefix instead of the pinned
+#                          path. The rule-C expectation in
+#                          tests/test_carrier_population_prose.py moves with
+#                          this tuple, because that arm pins its LENGTH.
 #   ops/loop/winmutex.py   FIVE carriers of that module, and round B opened a
 #                          window in which they do not agree: CS, LW, RC, RSC,
 #                          SS. LL holds no copy.
@@ -227,11 +241,15 @@ SHARED_SHA256 = {
 #                          HERE TOO, and this row states it per name instead of
 #                          for one name. CS, LW, RC, RSC and SS each TRACK this
 #                          module in their own git, so each is a pin carrier of
-#                          it. CS is a pin carrier HERE and only a disk holder
-#                          of the module above - the same codename, opposite
-#                          status, one module apart. That is why the predicate
-#                          has to be applied name by name and can never be read
-#                          off the directory.
+#                          it. THIS SET AND THE ONE ABOVE NOW HAPPEN TO LIST
+#                          THE SAME NAMES AND ARE STILL NOT THE SAME SET: they
+#                          were measured separately, they move separately, and
+#                          CS is at the pinned bytes above while holding a
+#                          DIFFERENT FILE here. Equal membership today is a
+#                          coincidence of two snapshots, not a directory-wide
+#                          fact, which is why the predicate has to be applied
+#                          name by name and module by module and can never be
+#                          read off the directory.
 #                          THE SNAPSHOT, at the stamp above and decaying from
 #                          it. LW and RC hold the newly pinned df0a7a40 at 6184
 #                          bytes, having landed round B after authoring and
@@ -267,13 +285,20 @@ SHARED_SHA256 = {
 #                          COUNT. The width is 3 and the declarers are 4, and
 #                          they were equal once, which is how they got conflated.
 #
-# THIS IS WHY A DIRECTORY-WIDE SENTENCE IS THE BUG. A sentence of the form
-# <the directory> is the same everywhere across <N> trees is FALSE AT EVERY N:
-# its binding condition is the four-tree slots.py set while its wording reaches
-# a directory whose other module has a fifth, divergent carrier. The exception sets do not nest - CS is out of
-# slots.py and in winmutex.py, LL is out of both and in CHANNEL.md, SS is in
-# both modules and out of CHANNEL.md - which is why no one of these numbers ever
-# corrected another and the four-versus-five dispute survived as a dispute.
+# THIS IS WHY A DIRECTORY-WIDE SENTENCE IS THE BUG, AND THE ARITHMETIC IS NOT
+# WHAT CARRIES THE ARGUMENT. A sentence of the form <the directory> is the same
+# everywhere across <N> trees is FALSE AT EVERY N, and it stayed false when the
+# two module rows stopped disagreeing on size. The membership happens to match
+# today; the AGREEMENT does not, because CS sits at the pinned bytes for one
+# module and holds a different file for the other, so no <N> makes the
+# directory-wide sentence true about bytes. The populations also still fail to
+# nest across the four rows here - LL is out of both modules and in CHANNEL.md,
+# SS is in both modules and out of CHANNEL.md, CS carries the lane-width file
+# and declares no width - which is why no one of these numbers ever corrected
+# another and the four-versus-five dispute survived as a dispute for weeks.
+# Two sets of equal size that were measured separately and move separately are
+# two sets, and collapsing them to one numeral is the same defect wearing a
+# number that now happens to agree.
 #
 # WHAT THESE CONSTANTS DO AND DO NOT BUY. They stop a numeral and its names
 # drifting apart in the assertion messages below, which interpolate the phrases
@@ -285,13 +310,16 @@ SHARED_SHA256 = {
 # read a mechanical tie into them.
 
 #: PIN carriers of `ops/loop/slots.py` - the trees where git STORES that file,
-#: which is the only population a sha256 pin can act on. All four agree at the
-#: digest pinned above. CS holds the same bytes on disk and git does not store
-#: them there, so CS is a disk holder and stays out of this tuple; the
-#: measurement and the mechanism are in the population block above.
-SLOTS_CARRIERS: tuple[str, ...] = ("LW", "RC", "RSC", "SS")
+#: which is the only population a sha256 pin can act on. All five agree at the
+#: digest pinned above. CS entered this tuple on the 2026-09-21T00:50:57Z
+#: re-measurement, having been a disk holder at the previous stamp and having
+#: committed the file in between; the two commands that establish it and the
+#: predicate that did not change are in the population block above.
+SLOTS_CARRIERS: tuple[str, ...] = ("CS", "LW", "RC", "RSC", "SS")
 
-#: Carriers of `ops/loop/winmutex.py` - a DIFFERENT and larger set.
+#: Carriers of `ops/loop/winmutex.py` - a DIFFERENT set that currently lists the
+#: same names. Measured separately, moved separately, and CS's copy here is a
+#: different file. Do not merge the two tuples because their lengths agree.
 WINMUTEX_CARRIERS: tuple[str, ...] = ("CS", "LW", "RC", "RSC", "SS")
 
 #: WHEN THE FOREIGN HALF OF THIS FILE WAS LAST MEASURED, as an instant rather
@@ -348,7 +376,9 @@ CARRIERS_BY_MODULE = {
     ),
     "winmutex.py": (
         f"the {len(WINMUTEX_CARRIERS)} winmutex.py carriers "
-        f"({', '.join(WINMUTEX_CARRIERS)}) - a DIFFERENT set from slots.py's, "
+        f"({', '.join(WINMUTEX_CARRIERS)}) - a SEPARATELY MEASURED population "
+        f"from slots.py's, which currently lists the same names and is still "
+        f"not the same set, "
         f"and, AS MEASURED AT {WINMUTEX_DIVERGENT_MEASURED_UTC} AND NOT SINCE, "
         f"{', '.join(WINMUTEX_DIVERGENT)} did not match the pinned digest. That "
         "is a snapshot of foreign disks which nothing here refreshes, so "
@@ -619,7 +649,9 @@ def test_vendored_module_matches_the_pinned_cross_repo_digest(name: str):
         "\n"
         f"{name} is BYTE-IDENTICAL-BY-CONTRACT across {CARRIERS_BY_MODULE[name]}. Scope "
         "this to the FILE and never to the ops/loop directory: the two modules have "
-        "DIFFERENT carrier sets and a directory-wide claim is false at every count. "
+        "SEPARATELY MEASURED carrier populations that move independently, so a "
+        "directory-wide claim is false at every count even when the two happen to "
+        "list the same names. "
         "They coordinate "
         "through this file's on-disk protocol against ONE shared bucket, so a divergence "
         "is not a merge conflict anybody sees - it is a silent concurrency bug.\n"

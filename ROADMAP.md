@@ -159,6 +159,23 @@ version. What follows is everything the scaffold deliberately did not do.
   authorise.
 
 - **NEW 2026-09-21. A FOURTH POPULATION EXISTS AND NONE OF THE FOUR NESTS.**
+  **SUPERSEDED IN ITS FIRST CLAUSE, 2026-09-21T00:50:57Z, and the heading is now
+  wrong in a way worth leaving visible.** This row was written when `slots.py`
+  carried FOUR carriers and `winmutex.py` those four PLUS CS. CS has since
+  committed `ops/loop/slots.py` - `git ls-files --error-unmatch
+  ops/loop/slots.py` exits 0 in that tree and `git log -1 -- ops/loop/slots.py`
+  names `e5395d54` of Sun Sep 20 19:02:15 2026 -0500 at 9627 bytes and
+  `71fa2a68`, the pinned digest. So the two module populations are now the SAME
+  FIVE NAMES, CS LW RC RSC SS, and they NEST TRIVIALLY because they are equal.
+  The part of the heading that survives is the part about the OTHER two
+  populations, which still do not nest with them. The part that does not survive
+  is the claim that the two `loop/` modules are told apart by their MEMBERSHIP:
+  they are now told apart only by their BYTES, since every `slots.py` carrier
+  sits at the pinned digest while CS's `winmutex.py` is a different file. A
+  reader who needs one sentence should take that one, and should re-measure
+  before citing it - this row flipped inside a single day, which is the standing
+  argument against trusting any cross-tree row without re-running its command.
+  The original reading follows, left standing as the reading it was:
   Measured across all six tree roots: `slots.py` carriers are LW, RC, RSC, SS;
   `winmutex.py` carriers are those four PLUS CS, whose copy is a DIFFERENT file
   at 7724 bytes / `e0d3ac7d`; `CHANNEL.md` holders are CS, LL, LW, RC, RSC, with
@@ -350,7 +367,17 @@ version. What follows is everything the scaffold deliberately did not do.
   neither number ever corrected the other. FOUR is the `ops/loop/slots.py`
   carrier population at `71fa2a68`: LW, RC, RSC and SS, with CS and LL absent.
   FIVE is the `docs/CHANNEL.md` population: CS, LL, LW, RC and RSC, with SS
-  absent. Name the population before citing either figure. RC's "carrier set
+  absent. Name the population before citing either figure.
+  **THE SLOTS FIGURE IN THIS PARAGRAPH IS SUPERSEDED AS OF
+  2026-09-21T00:50:57Z, and the paragraph is left standing because the dispute
+  it records is the point.** `ops/loop/slots.py` now has FIVE pin carriers -
+  CS, LW, RC, RSC, SS - CS having committed the file it previously held
+  untracked; re-measured on CS's own disk read-only, where
+  `git ls-files --error-unmatch ops/loop/slots.py` exits 0 and
+  `git log -1 -- ops/loop/slots.py` names `e5395d54` of Sun Sep 20 19:02:15
+  2026 -0500 at 9627 bytes and `71fa2a68`. The lesson survives the numeral: the
+  two populations are still different populations, and they are now both five,
+  so a bare "five" identifies neither. RC's "carrier set
   five" is VINDICATED ON THE NUMERAL, though not by RC's method, which was a
   count of self-declarations rather than a count of copies.
 
@@ -410,10 +437,13 @@ version. What follows is everything the scaffold deliberately did not do.
   The violation is INERT - no value, no behaviour, no break in byte identity -
   and has been carried since 2026-07-26. IT MUST NOT BE FIXED UNILATERALLY:
   each file is byte-identical-by-contract across ITS OWN carrier set and pinned
-  by sha256, and the two sets differ - `ops/loop/slots.py` has FOUR PIN CARRIERS
-  (LW, RC, RSC, SS; CS holds those bytes untracked and is a disk holder, not a
-  pin carrier) and `ops/loop/winmutex.py` has FIVE PIN CARRIERS (CS, LW, RC,
-  RSC, SS), measured 2026-09-20T23:41:45Z and decaying from that stamp. The
+  by sha256, and the two sets are measured separately - `ops/loop/slots.py` has
+  FIVE PIN CARRIERS (CS, LW, RC, RSC, SS), re-measured 2026-09-21T00:50:57Z
+  after CS committed bytes it had held untracked, and `ops/loop/winmutex.py`
+  has FIVE PIN CARRIERS (CS, LW, RC, RSC, SS) measured 2026-09-20T23:41:45Z
+  with CS's copy a DIFFERENT FILE there. Both rows decay from their own stamp,
+  and the matching numerals are a coincidence of two sweeps rather than one
+  population - a round must still be convened per module. The
   "six repositories" this row used to claim counted the FLEET, which is a third
   population again and carries neither file in full - LL carries neither module
   at all. So a one-tree edit desynchronises every carrier that has not moved
@@ -2293,12 +2323,17 @@ version. What follows is everything the scaffold deliberately did not do.
   logs - so a neutralised orphan is reaped with its owner unnamed. NO CHANGE IS
   PROPOSED AND NONE SHOULD BE MADE WITHOUT THE OPERATOR: halt ruling clause (b)
   names that file, and `tests/test_loop_concurrency.py` pins it by sha256 as
-  byte-identical across the FOUR PIN CARRIERS OF `ops/loop/slots.py` - LW, RC,
-  RSC, SS, measured 2026-09-20T23:41:45Z - so hardening it DESYNCHRONISES every
-  carrier that has not moved. The "three carriers" this row used to say named no
-  population and was wrong against every one it could have meant; CS holds those
-  same bytes untracked, which makes it a disk holder outside the pin, and LL
-  holds none. A SECOND CLAIM IN THIS ROW IS WITHDRAWN
+  byte-identical across the FIVE PIN CARRIERS OF `ops/loop/slots.py` - CS, LW,
+  RC, RSC, SS, re-measured 2026-09-21T00:50:57Z - so hardening it
+  DESYNCHRONISES every carrier that has not moved. The "three carriers" this row
+  used to say named no population and was wrong against every one it could have
+  meant. A SECOND SUPERSEDE, 2026-09-21T00:50:57Z: this row also used to say CS
+  held those same bytes untracked and was therefore a disk holder outside the
+  pin. CS has since committed the file - `git ls-files --error-unmatch
+  ops/loop/slots.py` exits 0 there and `git log -1 -- ops/loop/slots.py` names
+  `e5395d54` of Sun Sep 20 19:02:15 2026 -0500 at 9627 bytes and `71fa2a68` -
+  so CS is now a pin carrier and belongs in any round that moves these bytes.
+  LL still holds none. A SECOND CLAIM IN THIS ROW IS WITHDRAWN
   AS OF 2026-09-20. This row used to end by saying that the same file's
   `is_stale` is explicitly GUARDED by a documented mtime fallback, so that only
   `release` was implicated. THAT REASONING IS FALSE AND RSC WITHDREW IT
@@ -2327,9 +2362,10 @@ version. What follows is everything the scaffold deliberately did not do.
   returning to it does not re-derive the false comfort. Both `release` and the
   docstring's safety claim are implicated, not `release` alone. NO FIX BELONGS
   IN A ROUND OF ITS OWN: the affected lines are inside `ops/loop/slots.py`,
-  which is byte-identical-by-contract across its FOUR PIN CARRIERS - LW, RC,
-  RSC, SS, measured 2026-09-20T23:41:45Z, with CS holding the same bytes
-  untracked and LL holding none - and pinned by sha256 in
+  which is byte-identical-by-contract across its FIVE PIN CARRIERS - CS, LW,
+  RC, RSC, SS, re-measured 2026-09-21T00:50:57Z, CS having committed bytes it
+  held untracked at the 2026-09-20T23:41:45Z stamp, and LL holding none - and
+  pinned by sha256 in
   `tests/test_loop_concurrency.py`, so no single tree may edit them. The "six
   repositories" this row used to claim counted the fleet and not the carriers.
   It belongs in whatever JOINT RE-PIN ROUND next moves those bytes. A SAFETY
