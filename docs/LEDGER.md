@@ -12,6 +12,65 @@ now.
 
 ---
 
+## 2026-09-20 - a correcting entry: three present-tense sentences in this ledger describe a state that round B ended, and a carrier numeral in two of them never named its population
+
+APPENDED RATHER THAN EDITED IN PLACE, AND THE CHOICE IS THE POINT. This file
+says at its head that it is append-only and newest first. Every sentence
+corrected below was a TRUE record of what its author had measured on the day
+that entry was written; rewriting one in place would make a dated entry describe
+a state its author never observed, which is a worse artifact than a stale
+sentence with a correction above it. The cost of appending is real and is stated
+rather than waved away: a reader who lands on the old sentence directly has no
+signal that this entry exists. THEY ARE CITED BY ENTRY HEADING AND NOT BY LINE
+NUMBER, because a line number in an append-only file that grows at the top decays
+on the very next append - which is the same defect class this entry corrects.
+
+WHAT IS NOW FALSE, and what it should be read as.
+
+1. IN THE ENTRY HEADED "the two vendored governor files gain a CR arm and a
+   scoped channel-code pin, and neither file is touched": the sentence saying
+   that `ops/loop/winmutex.py:118` READS "Found by RC on review, 2026-07-26".
+   The present tense is now wrong. Round B landed that repair. Measured
+   2026-09-20T23:41:45Z, that line reads "call would then pass green. Found on
+   review, 2026-07-26" - the codename removed, the file still 137 lines, the
+   citation still resolving. READ THAT SENTENCE AS: "read, until round B". The
+   entry is otherwise an accurate record of the day it describes, and the arm it
+   records going RED when the line was fixed is exactly what happened.
+
+2. IN THAT SAME ENTRY, and again in the entry headed "a safety claim this tree
+   carried in its own tracked roadmap is withdrawn after a sibling refuted it":
+   the phrase "byte-identical-by-contract across six repositories". THE NUMERAL
+   NAMED NO POPULATION AND IS WRONG AGAINST EVERY POPULATION IT COULD HAVE
+   MEANT. Six is the fleet root count, and the fleet is not a carrier set.
+   Measured 2026-09-20T23:41:45Z by hashing each root's own disk and running
+   `git ls-files` inside it: `ops/loop/slots.py` has FOUR PIN CARRIERS - LW, RC,
+   RSC, SS - with CS holding identical bytes UNTRACKED, so CS is a disk holder
+   and outside a pin that can only act on bytes git stores. `ops/loop/winmutex.py`
+   has FIVE PIN CARRIERS - CS, LW, RC, RSC, SS - and CS's copy there is a
+   different file rather than a lagging one. LL carries neither module. The two
+   sets DIFFER, so no single numeral over the `loop/` directory is true at any
+   value, which is the whole reason `tests/test_carrier_population_prose.py`
+   exists.
+
+WHY BOTH DEFECTS ARE ONE DEFECT. A sentence about another repository's disk is a
+SNAPSHOT, and this ledger wrote them as standing facts. The first is a snapshot
+that an event overtook; the second is a snapshot whose subject was never stated,
+so nothing could overtake it visibly and it survived as prose for weeks. The
+durable repair landed in `tests/test_loop_concurrency.py`, which now carries the
+measurement instant, the sweep command and the swept root list beside every
+cross-tree row, and interpolates that instant into the diagnostic an arm prints
+so the emitted message dates itself instead of asserting a bare present tense.
+`WINMUTEX_DIVERGENT_MEASURED_UTC` is that instant and a new arm keeps it
+well-formed and quoted.
+
+WHAT THIS ENTRY DOES NOT DO. It does not touch either shared module - neither
+moved here - and it closes no open row. The `ops/loop/slots.py` torn-write
+hazard recorded in `ROADMAP.md` is still open and still has no scheduled joint
+round; round B moved `ops/loop/winmutex.py` only, so that hazard's vehicle has
+not departed, only its travelling companion.
+
+---
+
 ## 2026-09-20 - five slices land: the drop walker is pruned, the hand-off publisher converges a shortcut, CHANNEL v2 is vendored, and a syntax census gains a behavioural arm beside it
 
 WHAT LANDED, five commits from `67bd2fd` through `d2a1bcf`, all pushed. Each is

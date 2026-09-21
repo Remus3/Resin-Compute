@@ -376,24 +376,97 @@ def test_the_guard_states_what_it_cannot_catch():
     )
 
 
-# The two files below are byte-identical-by-contract across six repositories and
-# are pinned by sha256 in tests/test_loop_concurrency.py. NEVER edit them here.
+# The two files below are byte-identical-by-contract with OTHER CARRIERS OF THE
+# SAME MODULE and are pinned by sha256 in tests/test_loop_concurrency.py. NEVER
+# edit them here.
+#
+# NO SINGLE NUMERAL COVERS BOTH FILES, so this comment states neither. The two
+# modules have DIFFERENT carrier sets, and a directory-wide sameness claim is
+# therefore false at every value it can take - which is exactly what the
+# superseded wording here ("across six repositories") asserted. Measured
+# 2026-09-20T23:41:45Z by hashing each fleet root's own disk and running
+# `git ls-files` inside it, the populations were:
+#
+#   ops/loop/slots.py     FOUR PIN CARRIERS - LW, RC, RSC, SS - plus CS, which
+#                         holds the identical bytes UNTRACKED and is therefore
+#                         a DISK HOLDER and not a pin carrier, because a sha256
+#                         pin can only act on bytes git stores. LL holds none.
+#   ops/loop/winmutex.py  FIVE PIN CARRIERS - CS, LW, RC, RSC, SS - and CS's
+#                         copy is a DIFFERENT FILE at 7724 bytes rather than a
+#                         lagging one. LL holds none.
+#
+# BOTH ROWS ARE A DATED SNAPSHOT OF FOREIGN DISKS AND DECAY FROM THE STAMP.
+# Nothing in this suite can poll another tree, so they are refreshed only by a
+# person re-running the sweep. `tests/test_loop_concurrency.py` is where the
+# stamp, the sweep command and the per-name status are maintained - read the
+# `SLOTS_CARRIERS`, `WINMUTEX_CARRIERS` and `WINMUTEX_DIVERGENT_MEASURED_UTC`
+# symbols there rather than citing a numeral from here. RE-MEASURE BEFORE YOU
+# CITE EITHER ROW.
 _SHARED_FILES = ("ops/loop/slots.py", "ops/loop/winmutex.py")
 
-# Uppercase channel codes only. Case sensitivity is the whole false-positive
-# control and is not a style choice: measured this run over the two files, the
-# case-SENSITIVE pattern returns 1 hit and the IGNORECASE pattern returns 7,
-# the extra 6 being ordinary lowercase tokens such as the `rc` wait-result
-# variable in winmutex. Corpus-wide was rejected before it was written: the
-# same codes over the whole `git ls-files` corpus, measured 2026-09-20 across
-# the 239 files outside this module, return 1621 case-sensitive and 1831
-# IGNORECASE hits. Either figure is a matcher that can only be turned off.
-# A brief handed to this slice quoted 1540 and 173 for that pair; those did NOT
-# reproduce here and are recorded as not reproduced. The verdict is unchanged,
-# the magnitudes are not the brief's.
-# RSC leads the alternation so the longer code wins.
+#: The directory `_SHARED_FILES` claims to enumerate. Read as a SECOND WITNESS
+#: below, off this tree's own disk, so the tuple cannot silently shrink.
+_SHARED_DIR = REPO_ROOT / "ops" / "loop"
+
+# Uppercase channel codes only, on a SEPARATOR boundary rather than a word
+# boundary. RSC leads the alternation so the longer code wins.
 _CHANNEL_CODES = ("RSC", "RC", "CS", "LW", "LL", "SS", "RM", "DS")
-_CHANNEL = re.compile(r"\b(" + "|".join(_CHANNEL_CODES) + r")\b")
+
+# WHY NOT `\b`, WHICH IS WHAT THIS PATTERN USED UNTIL 2026-09-21. Python's `\b`
+# treats `_` as a WORD character, so `_RC_` and `OWNER_RC_NOTE` sit between two
+# word characters and produce NO boundary - they were STRUCTURALLY INVISIBLE to
+# this scan. That is not an exotic shape: underscore-joining is ESCAPE CLASS 2
+# in this module's own docstring, one of the four that got past the original
+# one-off sweep, and `_SEP` in the sibling-name matcher above has treated `_`
+# as a separator since the day this module was written. The channel-code scan
+# was added later and did not inherit that, so one matcher in this file
+# honoured the docstring and the other did not.
+#
+# THE FALSE-POSITIVE COST WAS MEASURED BEFORE THE CHANGE, NOT PREDICTED, and
+# the population measured is THE POPULATION THIS SCAN ACTUALLY READS - the two
+# files in `_SHARED_FILES`, which is all `_channel_code_hits` ever opens.
+# Measured 2026-09-21T00:01:11Z over those two files at ef17cc8 bytes:
+#
+#   case-sensitive `\b`  ...  0 hits      case-sensitive separator  ...  0 hits
+#   IGNORECASE     `\b`  ...  6 hits      IGNORECASE     separator  ...  6 hits
+#
+# So widening to a separator boundary costs ZERO false positives on this scan's
+# own subject, and the arm below plants an underscore-joined defect to prove it
+# now fires. For scale only, and NOT as this scan's population: over the 248
+# tracked files outside this module, measured in the same run, the separator
+# form returns 2044 case-sensitive hits against the word-boundary form's 1962.
+# Corpus-wide was rejected before it was written and stays rejected at either
+# magnitude - a matcher returning four figures is one that can only be turned
+# off. Two earlier figure pairs for that corpus-wide comparison are in
+# circulation and NEITHER REPRODUCED HERE: a brief quoted 1540 and 173, and
+# this comment itself previously carried 1621 and 1831 over 239 files. The
+# corpus has grown to 248 files since, which is enough to explain the drift and
+# is the reason the figures above carry an instant and a named population.
+#
+# WHAT REMAINS INVISIBLE, STATED SO THE WORDING AND THE BINDING CONDITION
+# AGREE. This guard reads SOURCE BYTES off two files on disk. It is not a claim
+# that these files cannot name a carrier; it is a claim that they do not name
+# one IN A FORM A SOURCE READ CAN SEE. Three shapes defeat it and are ACCEPTED,
+# not fixed:
+#
+#   1. LOWERCASE - `rc = 1`, `rc=$?`. A deliberate tradeoff, measured above:
+#      IGNORECASE returns 6 hits on these two files where the case-sensitive
+#      form returns 0, and all 6 are ordinary lowercase tokens such as the `rc`
+#      wait-result variable in winmutex. Case sensitivity IS the false-positive
+#      control here and is not a style choice.
+#   2. RUNTIME CONCATENATION - `"R" + "C"`, or a name assembled from parts at
+#      run time. Unreachable in principle by anything that reads source text.
+#   3. A SPLIT ACROSS A LINE CONTINUATION or an adjacent string-literal pair.
+#      Same root cause as 2: the token exists only after the interpreter joins
+#      the fragments, and this scan never runs the file.
+#
+#   A code wedged between two LETTERS or DIGITS - `aRCb`, `XRCY` - also does not
+#   match, and that one is deliberate rather than residual: matching it would
+#   fire on ordinary identifiers and prose. `X_RC_Y` DOES match, because `_` is
+#   now a separator.
+_CHANNEL = re.compile(
+    r"(?<![0-9A-Za-z])(" + "|".join(_CHANNEL_CODES) + r")(?![0-9A-Za-z])"
+)
 
 # PINNED BY (file, code) AND BY MULTIPLICITY, NOT BY LINE NUMBER.
 #
@@ -406,16 +479,26 @@ _CHANNEL = re.compile(r"\b(" + "|".join(_CHANNEL_CODES) + r")\b")
 # already-pinned code would be invisible to a set comparison - so this is a
 # sorted LIST including duplicates, not a set, and a second `RC` in winmutex
 # lengthens it and goes red.
-# The one real violation, verified this run at ops/loop/winmutex.py:118, which
-# reads "Found by RC on review, 2026-07-26." The line number is recorded here in
-# prose deliberately and is NOT part of the comparison.
-_KNOWN_CHANNEL_CODE_VIOLATIONS: list[tuple[str, str]] = [
-    ("ops/loop/winmutex.py", "RC"),
-]
+# THE ONE REAL VIOLATION WAS REPAIRED ON ROUND B, 2026-09-20, and this list is
+# now EMPTY. It held one entry: a comment line in ops/loop/winmutex.py that
+# named a sibling by channel code. LW authored the repair, this tree confirmed
+# the digest and landed the bytes byte-wise, and the joint re-pin moved in
+# tests/test_loop_concurrency.py in the same commit. ONE COMMENT LINE moved and
+# no behaviour. Verified this run: the scoped scan over the two shared files
+# returns nothing.
+#
+# AN EMPTY LIST IS THE STRICTER PIN, not a weaker one. The comparison is now
+# against zero, so a FIRST occurrence of any channel code in either shared file
+# goes red; while the entry stood, only a SECOND one did.
+_KNOWN_CHANNEL_CODE_VIOLATIONS: list[tuple[str, str]] = []
 
 _CHANNEL_MESSAGE = (
-    "The two shared loop files are byte-identical-by-contract across SIX "
-    "repositories and are pinned by sha256, so DO NOT EDIT EITHER FILE HERE. "
+    "Each of the two shared loop files is byte-identical-by-contract with the "
+    "OTHER CARRIERS OF THAT MODULE - a different set per module, four pin "
+    "carriers for slots.py and five for winmutex.py as at "
+    "2026-09-20T23:41:45Z, so there is no one numeral for the pair and this "
+    "message states none - and both are pinned by sha256, so DO NOT EDIT "
+    "EITHER FILE HERE. "
     "A local edit desynchronises every carrier that has not moved, and the "
     "sha256 pin then goes red in every one of them. The only fix is a JOINT "
     "RE-PIN ROUND agreed with the other carriers, and this pin is updated in "
@@ -437,12 +520,24 @@ def _channel_code_hits(root: Path) -> list[tuple[str, str]]:
 
 
 def test_the_shared_files_name_no_sibling_channel_code():
-    """A KNOWN-VIOLATION PIN, not a clean-tree assertion.
+    """A CLEAN-TREE ASSERTION since round B, and a known-violation pin before it.
 
-    The scoped scan is green today only because it pins the one violation this
-    repository cannot fix alone. Asserting zero would land a permanently red
-    arm on a defect owned by six carriers jointly, and a red arm nobody can
-    close is an arm that gets skipped.
+    It was a pin because the one violation lived in `ops/loop/winmutex.py`, a
+    file FIVE PIN CARRIERS hold jointly - CS, LW, RC, RSC, SS as at
+    2026-09-20T23:41:45Z, which is that module's own carrier set and not the
+    directory's - and which this repository could not fix alone: asserting zero then
+    would have landed a permanently red arm on a defect owned by all of them,
+    and a red arm nobody can close is an arm that gets skipped. Round B closed
+    the defect instead - LW authored the repair, this tree landed the bytes and
+    moved the sha256 pin in the same commit - so
+    `_KNOWN_CHANNEL_CODE_VIOLATIONS` is empty and the comparison is against
+    zero, which is strictly stronger than what it replaces.
+
+    THE PIN SHAPE IS KEPT rather than collapsed into `assert not hits`. A
+    future joint round may have to admit a violation it cannot close the same
+    day, and the reasoning above the list - (file, code) rather than line
+    number, a sorted list rather than a set, scoped to the two shared files -
+    is what makes that admission safe. It costs one empty literal to keep.
 
     DELIBERATELY UNGATED. `_channel_code_hits()` reads two files from disk by
     path and never shells git, so this arm holds in a git-less checkout - a ZIP
@@ -475,6 +570,38 @@ def test_the_scoped_channel_code_scan_can_actually_go_red(tmp_path: Path):
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes((REPO_ROOT / rel).read_bytes())
 
+    # THE FIXTURE MUST BE PROVED REAL WITHOUT CONSULTING THE PIN. Until
+    # 2026-09-21 the only thing asserting the copy had produced anything at all
+    # was the `clean == sorted(_KNOWN_CHANNEL_CODE_VIOLATIONS)` comparison
+    # below, which worked ONLY while the pin held its one entry: a fixture that
+    # copied nothing returned `[]` and disagreed with `[("ops/loop/winmutex.py",
+    # "RC")]`. Round B emptied the pin - correctly, the violation was fixed -
+    # and that same comparison silently became `[] == []`. Reproduced: replace
+    # the copy above with `dest.write_bytes(b"")` and this arm passed, rc=0.
+    # That is vacuity shape (i), THE FIXTURE EXCLUDES THE DEFECT, and it is the
+    # shape that has defeated several slices in this tree.
+    #
+    # So the fixture's reality is now DERIVED FROM THE FILES THEMSELVES and the
+    # pin's contents are irrelevant to it. The pin is legitimately empty, will
+    # stay empty, and no arm here may depend on it being otherwise.
+    for rel in _SHARED_FILES:
+        src_bytes = (REPO_ROOT / rel).read_bytes()
+        dest = tmp_path / rel
+        assert dest.is_file(), (
+            f"the fixture did not produce {rel}, so this control is testing an "
+            "empty directory and cannot fail"
+        )
+        copied = dest.read_bytes()
+        assert copied, (
+            f"the fixture produced {rel} EMPTY, so the scan below reads zero "
+            "bytes and reports clean no matter what the predicate does"
+        )
+        assert copied == src_bytes, (
+            f"the fixture's {rel} is {len(copied)} bytes against the real "
+            f"file's {len(src_bytes)}, so this control is not testing the "
+            "shared files it claims to test"
+        )
+
     clean = _channel_code_hits(tmp_path)
     assert clean == sorted(_KNOWN_CHANNEL_CODE_VIOLATIONS), (
         f"the copy disagrees with the real tree: {clean}"
@@ -489,3 +616,120 @@ def test_the_scoped_channel_code_scan_can_actually_go_red(tmp_path: Path):
     assert dirty != clean, "injecting a second channel code changed nothing"
     assert ("ops/loop/slots.py", "LW") in dirty, dirty
     assert (REPO_ROOT / "ops/loop/slots.py").read_bytes() != injected.read_bytes()
+
+
+def test_the_scoped_scan_covers_every_shared_loop_module_and_nothing_was_added():
+    """Guards the guard: `_SHARED_FILES` is the scan's whole population.
+
+    `_channel_code_hits` opens exactly the paths in `_SHARED_FILES` and nothing
+    else, so that tuple IS the scan's population and a silent edit to it is a
+    silent edit to what the guard covers. Nothing asserted it. Reproduced
+    2026-09-21: reduce the tuple to `("ops/loop/slots.py",)` - dropping
+    winmutex.py - with a real channel code restored in `ops/loop/winmutex.py`,
+    and this module reported 23 passed, exit 0. The defect was outside the
+    population, so every arm agreed the tree was clean.
+
+    That is the same family as the vacuous-fixture defect above: a guard whose
+    SUBJECT can shrink to exclude the offender scores perfectly on an empty
+    question. `tests/test_loop_concurrency.py` solved the identical problem for
+    the sha256 pin with an independent second witness, and its docstring
+    records three measured ways the contract rots with every other arm green.
+    The shape is borrowed; the witness is not. THIS ARM READS THIS TREE'S OWN
+    DISK rather than importing that module's constant - a second witness that
+    is the same object is not a witness, and a cross-module import would also
+    make either file's edit silently re-point the other's population.
+
+    Both directions are checked in one comparison, because both are real:
+
+      - A SHRINK means a module this tree holds is no longer scanned for
+        channel codes. That is the reproduction above.
+      - A GROWTH, or an `__init__.py` dropped into the vendor directory, means
+        a file is being scanned or shipped that no carrier agreed to. The
+        directory is a VERBATIM VENDOR DROP with its own joint re-pin contract,
+        so an extra local file there is drift even while every pinned digest
+        still matches.
+    """
+    on_disk = sorted(
+        path.relative_to(REPO_ROOT).as_posix() for path in _SHARED_DIR.glob("*.py")
+    )
+    assert on_disk, (
+        f"{_SHARED_DIR} holds no .py file at all, so this comparison would be "
+        "an empty list against an empty list and could not fail. The vendor "
+        "drop is missing, which is a larger problem than a channel code."
+    )
+    assert sorted(_SHARED_FILES) == on_disk, (
+        f"the scoped channel-code scan covers {sorted(_SHARED_FILES)} but "
+        f"{_SHARED_DIR} holds {on_disk}.\n"
+        "DO NOT resolve this by editing whichever side is convenient. Dropping "
+        "a name from _SHARED_FILES does not make that file clean - it makes it "
+        "UNSCANNED, and every arm in this module then goes green over a defect "
+        "that is still on disk. A module joins or leaves this set only in a "
+        "joint round with every carrier OF THAT MODULE; the per-module carrier "
+        "sets differ and are maintained in tests/test_loop_concurrency.py.\n"
+        + _CHANNEL_MESSAGE
+    )
+
+
+@pytest.mark.parametrize(
+    ("planted", "expected"),
+    [
+        # ESCAPE CLASS 2 from this module's docstring, CLOSED 2026-09-21. Each
+        # of these was structurally invisible to the `\b` form of _CHANNEL,
+        # because Python's `\b` treats `_` as a word character.
+        (b"\nOWNER_RC_NOTE = 1\n", 1),
+        (b"\n# owner _RC_ today\n", 1),
+        (b"\n# see X_LW_Y for the detail\n", 1),
+        (b"\n_RSC_ = None\n", 1),
+        # The plain-word shape, which the previous pattern already caught. It
+        # is the CONTROL: without it a dead matcher and a fixed one read the
+        # same, so it lives in this arm rather than in a separate one.
+        (b"\n# re-pinned with LW on 2026-09-20\n", 1),
+        # ACCEPTED RESIDUALS, pinned as behaviour so a later widening has to
+        # come here and change them on purpose rather than by accident.
+        # Lowercase is the false-positive control - see the comment on
+        # _CHANNEL.
+        (b"\nrc = wait_result()\n", 0),
+        # Runtime concatenation and a line-continuation split are unreachable
+        # by anything that reads source text. The guard is WORDED to match that
+        # binding condition and does not pretend to close them.
+        (b'\nname = "R" + "C"\n', 0),
+        (b'\nname = "R" \\n    "C"\n', 0),
+        # Letter-adjacent is deliberate, not residual: matching it would fire
+        # on ordinary identifiers and prose.
+        (b"\nvalue = aRCb\n", 0),
+        (b"\nXRCY = 1\n", 0),
+    ],
+)
+def test_the_channel_scan_sees_an_underscore_joined_code(
+    tmp_path: Path, planted: bytes, expected: int
+):
+    """Prove the underscore repair fires, WITHOUT touching the real files.
+
+    The real bytes are copied out and the probe is appended to the copy, so the
+    hit count is measured as a DELTA against the same fixture the red control
+    above uses. Nothing imports the copies - they are read as text - so no
+    bytecode of theirs exists on either side and a stale-pycache read is
+    structurally impossible here rather than merely unobserved.
+    """
+    for rel in _SHARED_FILES:
+        dest = tmp_path / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes((REPO_ROOT / rel).read_bytes())
+
+    for rel in _SHARED_FILES:
+        copied = (tmp_path / rel).read_bytes()
+        assert copied == (REPO_ROOT / rel).read_bytes(), (
+            f"the fixture's {rel} is not the real file, so this arm is not "
+            "measuring a delta against the shared bytes it claims to"
+        )
+
+    before = _channel_code_hits(tmp_path)
+    target = tmp_path / "ops/loop/winmutex.py"
+    target.write_bytes(target.read_bytes() + planted)
+    after = _channel_code_hits(tmp_path)
+
+    assert len(after) - len(before) == expected, (
+        f"{planted!r} moved the hit count from {len(before)} to {len(after)}, "
+        f"expected a delta of {expected}. before={before} after={after}"
+    )
+    assert (REPO_ROOT / "ops/loop/winmutex.py").read_bytes() != target.read_bytes()

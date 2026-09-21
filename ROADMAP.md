@@ -186,14 +186,59 @@ version. What follows is everything the scaffold deliberately did not do.
   NOT DONE: CS vendoring v2. That is the whole remainder of this row, and it is
   blocked on CS and on no work here.
 
-- **NEW 2026-09-20. `ops/loop/winmutex.py:118` CARRIES A CARRIER NAME AND THE
-  FIX NEEDS A JOINT RE-PIN ROUND.** That line reads "Found by RC on review,
-  2026-07-26", which names a carrier inside a file whose sibling
+- **NEW 2026-09-20. THE CITATION GUARD'S CORPUS IS SUFFIX-KEYED, AND THE
+  TREE'S ENTRY-POINT FILE IS EXCLUDED BY THAT SUFFIX.** `_tracked_markdown()`
+  in `tests/test_docs_consistency.py` builds the corpus for every line-citation
+  and backticked-path arm in that module by filtering `name.endswith(".md")`.
+  `RSC-NEXT-SESSION.txt` is TRACKED, is the first file a cold session reads, and
+  is a `.txt`. So every arm in that module is blind to it by suffix - a
+  SUFFIX-KEYED GUARD WITH A SUFFIX-EXCLUDED DEFECT, the same shape this tree has
+  already recorded for a suffix rename emptying a sweep.
+
+  THIS IS NOT HYPOTHETICAL AND THE COST IS MEASURED. That file spent a session
+  asserting that round B was OPEN WORK, HIGHEST PRIORITY, and that what remained
+  was to copy the bytes and land them - after round B had landed in `ef17cc8`.
+  It also asserted a `CLAUDE.md` line citation that was two revisions out of
+  date. A cold session reads that file FIRST and would have been dispatched
+  against work that exists. Nothing in the tree could have gone red.
+
+  DECIDED: IMPLEMENT, NOT FILE-AND-FORGET. The blast radius was measured before
+  deciding - `git ls-files | grep '\.txt$'` returns exactly `RSC-NEXT-SESSION.txt`,
+  `requirements.txt` and `requirements-dev.txt`, and the two requirements files
+  carry no backticked citations at all. So widening the corpus from `.md` to
+  `.md` plus `.txt` brings in one real document and two inert ones. The narrow
+  alternative - hard-coding this one filename - was rejected: it reproduces the
+  defect for the next tracked `.txt` and teaches nothing.
+
+  FILED AS A SEAM REQUEST RATHER THAN DONE. `tests/test_docs_consistency.py` was
+  outside the write-list of the slice that found this, and editing a file off
+  the list is what makes parallel slices collide. THE WORK: widen
+  `_tracked_markdown()`'s filter, rename it so the name stops claiming markdown,
+  and pair the change with a non-vacuity arm that plants an unresolvable
+  citation in a tracked `.txt` fixture and shows the sweep firing on it - a
+  widened corpus whose fixture holds no `.txt` defect is a corpus that cannot
+  fail. Also confirm the existing `.md` arms stay green, which is the survivor
+  half.
+
+- **NEW 2026-09-20. `ops/loop/winmutex.py:118` CARRIED A CARRIER NAME AND THE
+  FIX NEEDED A JOINT RE-PIN ROUND.** PAST TENSE THROUGHOUT THIS OPENING, and
+  the tense is the correction: round B repaired that line and the LANDED
+  paragraph at the foot of this row is the current status. As at
+  2026-09-20T23:41:45Z the line reads "call would then pass green. Found on
+  review, 2026-07-26" - the codename is gone and the citation still resolves,
+  the file being unchanged at 137 lines. What it USED TO READ was "Found by RC
+  on review, 2026-07-26", which named a carrier inside a file whose sibling
   `ops/loop/slots.py:7` says verbatim "Nothing here may reference ANY of them".
   The violation is INERT - no value, no behaviour, no break in byte identity -
   and has been carried since 2026-07-26. IT MUST NOT BE FIXED UNILATERALLY:
-  both files are byte-identical-by-contract across six repositories and pinned
-  by sha256, so a one-tree edit desynchronises every carrier that has not moved
+  each file is byte-identical-by-contract across ITS OWN carrier set and pinned
+  by sha256, and the two sets differ - `ops/loop/slots.py` has FOUR PIN CARRIERS
+  (LW, RC, RSC, SS; CS holds those bytes untracked and is a disk holder, not a
+  pin carrier) and `ops/loop/winmutex.py` has FIVE PIN CARRIERS (CS, LW, RC,
+  RSC, SS), measured 2026-09-20T23:41:45Z and decaying from that stamp. The
+  "six repositories" this row used to claim counted the FLEET, which is a third
+  population again and carries neither file in full - LL carries neither module
+  at all. So a one-tree edit desynchronises every carrier that has not moved
   and converts a comment into an unexplained digest mismatch elsewhere. It
   belongs in whatever round next moves those bytes, never in a round of its own.
   The known-violation pin landed in `tests/test_no_sibling_names.py` goes RED
@@ -207,6 +252,20 @@ version. What follows is everything the scaffold deliberately did not do.
   pins in `tests/test_loop_concurrency.py` are untouched and every carrier is
   still byte-identical. Re-measure before citing - a shape everyone agrees to is
   not a round that happened.
+
+  LANDED 2026-09-20 AS ROUND B, AND THE TWO PARAGRAPHS ABOVE ARE NOW RECORD
+  RATHER THAN STATUS. The round happened: LW called it and authored the bytes,
+  and this tree landed them in one commit. `ops/loop/winmutex.py` moved from
+  `0b112a4f`, 6190 bytes, to `df0a7a40`, 6184 bytes - ONE COMMENT LINE
+  reworded, no behaviour, verified by hashing this tree's own disk after the
+  copy. In that same commit the sha256 pin in `tests/test_loop_concurrency.py`
+  and the digest in `docs/LICENSE_NOTES.md` moved, and
+  `_KNOWN_CHANNEL_CODE_VIOLATIONS` in `tests/test_no_sibling_names.py` became
+  EMPTY - the stricter pin, not a relaxed one, because the comparison is now
+  against zero. WHAT REMAINS IS NOT THIS TREE'S WORK: LW, RC and SS still hold
+  the superseded bytes and are listed in `WINMUTEX_DIVERGENT` until each lands
+  the same file, which is a round window rather than drift. CS is unaffected -
+  its copy is a different file at `e0d3ac7d`, 7724 bytes.
 
 - **CORRECTION 2026-09-20. `slots.hold()` DOES NOT REAP BEFORE ACQUIRING, AND
   RSC ASSERTED THAT IT DID.** The assertion was made in session and is wrong
@@ -2041,8 +2100,12 @@ version. What follows is everything the scaffold deliberately did not do.
   logs - so a neutralised orphan is reaped with its owner unnamed. NO CHANGE IS
   PROPOSED AND NONE SHOULD BE MADE WITHOUT THE OPERATOR: halt ruling clause (b)
   names that file, and `tests/test_loop_concurrency.py` pins it by sha256 as
-  byte-identical across three carriers, so hardening it DESYNCHRONISES every
-  carrier that has not moved. A SECOND CLAIM IN THIS ROW IS WITHDRAWN
+  byte-identical across the FOUR PIN CARRIERS OF `ops/loop/slots.py` - LW, RC,
+  RSC, SS, measured 2026-09-20T23:41:45Z - so hardening it DESYNCHRONISES every
+  carrier that has not moved. The "three carriers" this row used to say named no
+  population and was wrong against every one it could have meant; CS holds those
+  same bytes untracked, which makes it a disk holder outside the pin, and LL
+  holds none. A SECOND CLAIM IN THIS ROW IS WITHDRAWN
   AS OF 2026-09-20. This row used to end by saying that the same file's
   `is_stale` is explicitly GUARDED by a documented mtime fallback, so that only
   `release` was implicated. THAT REASONING IS FALSE AND RSC WITHDREW IT
@@ -2070,12 +2133,30 @@ version. What follows is everything the scaffold deliberately did not do.
   THE HAZARD IS THEREFORE LIVE AND UNGUARDED, and this row exists so a reader
   returning to it does not re-derive the false comfort. Both `release` and the
   docstring's safety claim are implicated, not `release` alone. NO FIX BELONGS
-  IN A ROUND OF ITS OWN: the affected lines are inside a file that is
-  byte-identical-by-contract across six repositories and pinned by sha256 in
-  `tests/test_loop_concurrency.py`, so no single tree may edit them. It belongs
-  in whatever JOINT RE-PIN ROUND next moves those bytes, alongside the
-  `ops/loop/winmutex.py:118` carrier-name row above. A SAFETY ARGUMENT IN A
-  DOCSTRING IS A CLAIM AND NOT A GUARANTEE.
+  IN A ROUND OF ITS OWN: the affected lines are inside `ops/loop/slots.py`,
+  which is byte-identical-by-contract across its FOUR PIN CARRIERS - LW, RC,
+  RSC, SS, measured 2026-09-20T23:41:45Z, with CS holding the same bytes
+  untracked and LL holding none - and pinned by sha256 in
+  `tests/test_loop_concurrency.py`, so no single tree may edit them. The "six
+  repositories" this row used to claim counted the fleet and not the carriers.
+  It belongs in whatever JOINT RE-PIN ROUND next moves those bytes. A SAFETY
+  ARGUMENT IN A DOCSTRING IS A CLAIM AND NOT A GUARANTEE.
+
+  **STATUS RE-STATED 2026-09-20 AFTER ROUND B, AND THIS ROW IS STILL OPEN.**
+  Round B ran and this row did not ride it. IT DID NOT NEED TO, and the reason
+  is a fact rather than a judgement: round B moved `ops/loop/winmutex.py` only.
+  `ops/loop/slots.py` did not move in it - the digest
+  `71fa2a683f2eaa04dd61feb2bebc646b5f9086e692c5acc05a9239de49d07d1b` is the same
+  before and after, and at the stamp above every root that holds that module
+  still hashes to it. The hazard this row describes is in `ops/loop/slots.py`,
+  so round B was not "the round that next moves those bytes" and the stated
+  vehicle has NOT departed. WHAT HAS DEPARTED IS THE TRAVELLING COMPANION. This
+  row used to end by saying the fix would ride "alongside the
+  `ops/loop/winmutex.py:118` carrier-name row above"; that row rode round B and
+  landed, so this one is now alone with no round scheduled, no author and no
+  date. THE ROW IS NOT CLOSED AND MUST NOT BE CLOSED BY REASONING - the hazard
+  is unchanged, unguarded, and still needs a joint round over
+  `ops/loop/slots.py` that nobody has called.
 
 - **INBOX TRIAGE 2026-09-13 OF LW'S NOTE OF 2026-09-10 22:35 - FOUR-BUCKET
   VERDICTS RECORDED, AND ONE OF OUR OWN RETRACTIONS IS NOW DISPROVED RATHER THAN

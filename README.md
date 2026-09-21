@@ -440,7 +440,7 @@ Resin-Compute/
     install_scheduled_task.ps1     registers it - removal is documented above
     ResinCompute-Responder.xml     hidden windowed task, least privilege, PT30M
     install_responder_task.ps1     registers it - -Remove is its kill switch
-    loop/                          BYTE-IDENTICAL across three repos, never edit alone
+    loop/                          sha256-pinned; slots.py has 4 pin carriers and winmutex.py 5, DIFFERENT sets, never edit alone
   scripts/
     install_hooks.py               FIRST thing to run in a fresh clone
     bootstrap_data.py              runnable data bootstrap
@@ -464,6 +464,18 @@ Resin-Compute/
   tests/                           the application suite
     _parked/                       quarantined tests, deliberately not collected
 ```
+
+**On `ops/loop/` and the two carrier counts above.** They count DIFFERENT SETS,
+so a single numeral over the directory is false at every value it can take.
+Measured 2026-09-20T23:41:45Z by hashing each fleet root's own disk and running
+`git ls-files` inside it: `ops/loop/slots.py` has four pin carriers, and a fifth
+root holds identical bytes UNTRACKED - a disk holder, outside a pin that can act
+only on bytes git stores. `ops/loop/winmutex.py` has five pin carriers, one of
+which holds a different file rather than a lagging copy. A sixth root carries
+neither module. Those rows are a SNAPSHOT OF OTHER REPOSITORIES' DISKS and they
+decay; nothing in this tree can poll a foreign disk. The per-name status, the
+stamp and the sweep command are in `tests/test_loop_concurrency.py`, and only a
+person re-running the sweep refreshes them.
 
 </details>
 

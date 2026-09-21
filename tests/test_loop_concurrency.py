@@ -63,6 +63,7 @@ box becomes the LARGER value and the governor is theatre.
 from __future__ import annotations
 
 import dataclasses
+import datetime
 import hashlib
 import importlib.util
 import json
@@ -142,8 +143,19 @@ SHARED_SHA256 = {
     # either module is a published repo. Carriers copy the new bytes
     # BYTE-WISE and re-hash from their own disk; a digest quoted in a note is
     # not acceptance. Every tree in THAT round had hashed 629c3d51 before it.
+    #
+    # RE-PINNED 2026-09-20 in round B. LW proposed the round AND AUTHORED the
+    # bytes, so LW carries the red window; this repo confirmed the digest off
+    # the authored file and copied it BYTE-WISE with shutil.copyfile, then
+    # re-hashed from its OWN disk. `winmutex.py` moved from
+    # 0b112a4f6bfa88cf5f537f8869225c1821ebfe97428b1e899979797ddd71a61e, 6190
+    # bytes, to the digest below at 6184 bytes. ONE COMMENT LINE moved and NO
+    # BEHAVIOUR: the line named a sibling by channel code inside a file every
+    # carrier holds, which is the same defect class the 2026-09-07 round
+    # closed. Carriers re-hash from their own disk; a digest quoted in a note
+    # is not acceptance. `slots.py` did not move in this round.
     "slots.py": "71fa2a683f2eaa04dd61feb2bebc646b5f9086e692c5acc05a9239de49d07d1b",
-    "winmutex.py": "0b112a4f6bfa88cf5f537f8869225c1821ebfe97428b1e899979797ddd71a61e",
+    "winmutex.py": "df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7",
 }
 
 # ---------------------------------------------------------------------------
@@ -151,15 +163,94 @@ SHARED_SHA256 = {
 # ---------------------------------------------------------------------------
 #
 # NEVER CITE A CARRIER NUMERAL WITHOUT NAMING THE POPULATION IT COUNTS, AND
-# NEVER SCOPE A SAMENESS CLAIM TO THE ops/loop DIRECTORY. Measured across all
-# six fleet roots on 2026-09-20 with sha256, and every figure below is from
-# that run rather than from anyone's hand-off note:
+# NEVER SCOPE A SAMENESS CLAIM TO THE ops/loop DIRECTORY.
+#
+# EVERY ROW BELOW THAT DESCRIBES A TREE OTHER THAN THIS ONE IS A DATED SNAPSHOT
+# OF A FOREIGN DISK, NOT A STANDING FACT. Read each as "this was so at the stamp
+# below", never as "this is so". Nothing in this suite can refresh one: no test
+# here reads another tree's disk, so the only thing that moves a foreign row is
+# a person re-running the sweep by hand and editing this file. A row is
+# therefore overtaken by any round that has landed since its stamp, and it goes
+# on reading as confident prose while it is overtaken. RE-MEASURE BEFORE YOU
+# CITE ONE, and prefer the stamp to the sentence when the two disagree.
+#
+#   MEASURED AT     2026-09-20T23:41:45Z.
+#   MEASURED WITH   sha256 and byte length taken over ops/loop/slots.py and
+#                   ops/loop/winmutex.py under EACH fleet root - hashing the
+#                   file on that root's own disk, never a digest quoted in a
+#                   hand-off note - plus git ls-files ops/loop and
+#                   git check-ignore -v on each module run INSIDE that root,
+#                   which is the tracked-versus-untracked half that separates a
+#                   pin carrier from a disk holder.
+#   ROOTS SWEPT     CS, LL, LW, RC, RSC, SS. Naming them is part of the record:
+#                   a sweep is only as wide as its root list, and an absent root
+#                   reads exactly like a root that holds nothing.
+#   DECAYS BECAUSE  five of those six are other repositories' working trees,
+#                   which commit on their own schedule and owe this file no
+#                   notice.
+#
+# THE PREVIOUS VERSION OF THIS BLOCK IS THE WHOLE ARGUMENT FOR THE STAMP. It
+# said in the present tense that LW and RC held superseded bytes. That was true
+# when an independent verifier checked it and FALSE FIFTEEN MINUTES LATER,
+# because both landed round B in the interval. Carrying no date, the sentence
+# had no way to read as stale - it simply read as wrong, and a reader had no
+# handle for telling which. A stamped row that is overtaken still reads as a
+# correct record of its own moment, and that is the strongest property available
+# to a claim about a disk this repository cannot poll. The figures follow:
 #
 #   ops/loop/slots.py      FOUR carriers, all agreeing at 71fa2a68, 9627 bytes:
-#                          LW, RC, RSC, SS. CS and LL hold no copy.
-#   ops/loop/winmutex.py   FIVE carriers. The same four agree at 0b112a4f,
-#                          6190 bytes; CS carries a DIVERGENT 7724-byte file
-#                          at e0d3ac7d. LL holds no copy.
+#                          LW, RC, RSC, SS. LL holds no copy. CS DOES HOLD the
+#                          file and is still NOT in that tuple, which is the
+#                          one row here that needs its mechanism spelled out.
+#                          Measured this run: CS's own copy of that module is
+#                          on its disk at 9627 bytes and 71fa2a68, the same
+#                          bytes this pin names, but `git ls-files` over that
+#                          directory in CS does not list it and
+#                          `git check-ignore -v ops/loop/slots.py` there exits
+#                          1 with no output - untracked AND not ignored. THE
+#                          MECHANISM: this tuple counts PIN carriers, and the
+#                          pin is on TRACKED bytes. An untracked file is
+#                          outside every `git ls-files` corpus by construction,
+#                          so no guard in CS reaches it and no joint round can
+#                          re-pin it there. CS is a DISK HOLDER of that module
+#                          and not a pin carrier. Same shape as LL's CHANNEL.md
+#                          below, which is on LL's disk but under a vendoring
+#                          prefix instead of the pinned path. If CS ever tracks
+#                          it, CS joins the tuple in that same round - and the
+#                          rule-C expectation in tests/test_carrier_population
+#                          _prose.py moves with it, because that arm pins this
+#                          tuple's LENGTH.
+#   ops/loop/winmutex.py   FIVE carriers of that module, and round B opened a
+#                          window in which they do not agree: CS, LW, RC, RSC,
+#                          SS. LL holds no copy.
+#                          THE DISK-HOLDER VERSUS PIN-CARRIER PREDICATE APPLIES
+#                          HERE TOO, and this row states it per name instead of
+#                          for one name. CS, LW, RC, RSC and SS each TRACK this
+#                          module in their own git, so each is a pin carrier of
+#                          it. CS is a pin carrier HERE and only a disk holder
+#                          of the module above - the same codename, opposite
+#                          status, one module apart. That is why the predicate
+#                          has to be applied name by name and can never be read
+#                          off the directory.
+#                          THE SNAPSHOT, at the stamp above and decaying from
+#                          it. LW and RC hold the newly pinned df0a7a40 at 6184
+#                          bytes, having landed round B after authoring and
+#                          proposing it. SS still holds the superseded 0b112a4f
+#                          at 6190 bytes. CS holds e0d3ac7d at 7724 bytes,
+#                          which is a DIFFERENT FILE rather than a lagging copy
+#                          of this one, divergent before round B and untouched
+#                          by it.
+#                          THIS REPOSITORY'S OWN ROW IS A BRANCH CLAIM, NOT A
+#                          TREE CLAIM, and collapsing the two is how a green
+#                          suite can describe bytes nobody has. At the stamp,
+#                          df0a7a40 is on the round-B WORKTREE BRANCH that
+#                          carries this edit; the MAINLINE CHECKOUT at the
+#                          repository root still has 0b112a4f at 6190 bytes on
+#                          disk and keeps it until the merger lands the branch.
+#                          A passer-by who hashes the repository root therefore
+#                          gets the superseded digest and is not wrong to. Say
+#                          which of the two you measured whenever you restate
+#                          this. See WINMUTEX_DIVERGENT.
 #   docs/CHANNEL.md        FIVE carriers: CS, LL, LW, RC, RSC - SS holds none.
 #                          LW, RC, RSC and LL agree at fc22e86e, 25425 bytes
 #                          (LL's copy sits under a third_party vendoring
@@ -193,16 +284,49 @@ SHARED_SHA256 = {
 # that `tests/test_channel_doc_pin.py`'s roster numeral is filed against. Do not
 # read a mechanical tie into them.
 
-#: Carriers of `ops/loop/slots.py`. All four agree at the digest pinned above.
+#: PIN carriers of `ops/loop/slots.py` - the trees where git STORES that file,
+#: which is the only population a sha256 pin can act on. All four agree at the
+#: digest pinned above. CS holds the same bytes on disk and git does not store
+#: them there, so CS is a disk holder and stays out of this tuple; the
+#: measurement and the mechanism are in the population block above.
 SLOTS_CARRIERS: tuple[str, ...] = ("LW", "RC", "RSC", "SS")
 
 #: Carriers of `ops/loop/winmutex.py` - a DIFFERENT and larger set.
 WINMUTEX_CARRIERS: tuple[str, ...] = ("CS", "LW", "RC", "RSC", "SS")
 
-#: The winmutex.py carriers whose bytes do NOT match the digest pinned above.
-#: Measured, not predicted. A repair to that module has been circulated by LW
-#: and CONFIRMED BY NOBODY, and no tree's bytes have moved, so this stays.
-WINMUTEX_DIVERGENT: tuple[str, ...] = ("CS",)
+#: WHEN THE FOREIGN HALF OF THIS FILE WAS LAST MEASURED, as an instant rather
+#: than a day, because the row this stamp exists for was overtaken inside a
+#: quarter of an hour. Every claim here about a tree other than this one is a
+#: snapshot taken at this instant off that tree's own disk, and it has been
+#: decaying ever since. The interpolated message below QUOTES this value, so
+#: the diagnostic a maintainer reads when an arm fires dates itself instead of
+#: asserting a bare present tense - which is the single change that would have
+#: made the superseded version of this block read as stale rather than as
+#: wrong. Move this stamp in the same edit that moves any name below it; a
+#: refreshed roster under an old stamp is worse than neither.
+WINMUTEX_DIVERGENT_MEASURED_UTC = "2026-09-20T23:41:45Z"
+
+#: The winmutex.py carriers whose bytes did NOT match the digest pinned above
+#: AS AT `WINMUTEX_DIVERGENT_MEASURED_UTC`. A SNAPSHOT OF FOREIGN DISKS, hashed
+#: at that instant off each root's own copy rather than predicted from a note,
+#: and refreshed by nothing - no arm in this suite can reach another tree, so
+#: this roster is exactly as current as a person last made it.
+#:
+#: THIS IS A ROUND WINDOW, NOT PERMANENT DRIFT, and the two must not be read
+#: the same way. Round B moved the pin to df0a7a40 on bytes LW authored, so
+#: every carrier still holding 0b112a4f became divergent AGAINST THE PIN at the
+#: moment it moved and by no act of its own. A name leaves this roster as that
+#: carrier lands the same bytes, and the window shuts when the last one does.
+#: At the stamp, LW and RC had already landed and left; SS had not. CS is the
+#: exception that never closes this way: its copy is a DIFFERENT FILE at
+#: e0d3ac7d, 7724 bytes, divergent before round B and untouched by it.
+#:
+#: NAMES LEAVE THIS ROSTER WITHOUT ANYTHING HERE GOING RED, which is the limit
+#: to hold in mind before citing it. LW and RC left it by committing in their
+#: own trees, and this file learned of that only because a person re-ran the
+#: sweep. Treat a name's presence as evidence about the stamp and not about
+#: today.
+WINMUTEX_DIVERGENT: tuple[str, ...] = ("CS", "SS")
 
 #: Trees that DECLARE a lane width. A fourth population, and not a carrier set:
 #: CS carries `ops/loop/config.json` and declares no width in it, so it is a
@@ -225,7 +349,11 @@ CARRIERS_BY_MODULE = {
     "winmutex.py": (
         f"the {len(WINMUTEX_CARRIERS)} winmutex.py carriers "
         f"({', '.join(WINMUTEX_CARRIERS)}) - a DIFFERENT set from slots.py's, "
-        f"and {', '.join(WINMUTEX_DIVERGENT)} already carries a divergent copy"
+        f"and, AS MEASURED AT {WINMUTEX_DIVERGENT_MEASURED_UTC} AND NOT SINCE, "
+        f"{', '.join(WINMUTEX_DIVERGENT)} did not match the pinned digest. That "
+        "is a snapshot of foreign disks which nothing here refreshes, so "
+        "re-hash before acting on it - see WINMUTEX_DIVERGENT for which of "
+        "those names is a round window and which is a different file"
     ),
 }
 
@@ -360,6 +488,118 @@ def test_this_tree_s_own_membership_matches_this_tree_s_own_disk():
         f"{'declares' if declares else 'does not declare'} MAX_CONCURRENT_LANES. Declaring a "
         "width is what makes a tree a declarer; carrying ops/loop/ is not, and CS is the "
         "measured example of the difference."
+    )
+
+
+#: The stamp shape a foreign-disk snapshot must carry: an INSTANT in UTC, to the
+#: second. A bare day is not enough, and the reason is measured rather than
+#: stylistic - the roster this arm exists for was correct when an independent
+#: verifier checked it and false a quarter of an hour later, so a stamp at day
+#: resolution would have dated both states identically and separated nothing.
+_SNAPSHOT_STAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+
+def _snapshot_stamp_defects(stamp: str, message: str) -> list[str]:
+    """Defects in a foreign-disk snapshot's stamp and in the message quoting it.
+
+    WHY A FUNCTION AND NOT INLINE ASSERTS. Written over its arguments rather
+    than over the module constants, the non-vacuity arm below can plant each
+    defect in a value IT owns. Mutating this tracked file to watch an arm go red
+    is the move that has produced a false red here before, and another agent may
+    be hashing these bytes at the same moment.
+
+    WHAT IT CANNOT DO, said plainly so the arm is not over-read: it cannot tell
+    whether the stamp is HONEST. A person who edits the roster and moves the
+    stamp to now, having measured nothing, passes every check here. The stamp
+    makes an overtaken row legible as a record of its own moment; it is not
+    evidence that a sweep happened.
+    """
+    defects: list[str] = []
+    try:
+        moment = datetime.datetime.strptime(stamp, _SNAPSHOT_STAMP_FORMAT)
+    except ValueError:
+        defects.append(
+            f"{stamp!r} is not an instant in UTC to the second. A snapshot of a "
+            "disk this repository cannot poll needs a time and not a day."
+        )
+    else:
+        if moment.replace(tzinfo=datetime.UTC) > datetime.datetime.now(datetime.UTC):
+            defects.append(
+                f"{stamp!r} is in the future, so nothing can have been measured at it."
+            )
+    if stamp not in message:
+        defects.append(
+            "the emitted diagnostic does not quote the stamp, so it states a bare "
+            "present tense about disks nothing here reads and leaves a reader no "
+            "handle on the claim's age."
+        )
+    return defects
+
+
+def test_the_foreign_disk_snapshot_dates_itself():
+    """The roster of other trees' bytes must carry its own measurement instant.
+
+    This is the arm the round-B decay produced. The roster it guards was true,
+    then false, and the prose stating it never changed shape - so the fix is not
+    a fresher value but a value that says when it was taken, in the message a
+    maintainer actually reads when something fires.
+    """
+    defects = _snapshot_stamp_defects(
+        WINMUTEX_DIVERGENT_MEASURED_UTC, CARRIERS_BY_MODULE["winmutex.py"]
+    )
+    assert not defects, (
+        "the foreign-disk snapshot no longer dates itself:\n  "
+        + "\n  ".join(defects)
+        + "\nMove WINMUTEX_DIVERGENT_MEASURED_UTC in the SAME edit that moves any "
+        "name in WINMUTEX_DIVERGENT, and keep the interpolated phrase quoting it. "
+        "A refreshed roster under an old stamp is worse than neither."
+    )
+
+
+@pytest.mark.parametrize(
+    ("label", "stamp", "message"),
+    [
+        (
+            "a day rather than an instant",
+            "2026-09-20",
+            "as measured at 2026-09-20, CS and SS did not match",
+        ),
+        (
+            "an instant nobody can have measured",
+            "2099-01-01T00:00:00Z",
+            "as measured at 2099-01-01T00:00:00Z, CS and SS did not match",
+        ),
+        (
+            "a stamp the diagnostic never quotes",
+            "2026-09-20T23:41:45Z",
+            "CS and SS do not match the pinned digest today",
+        ),
+    ],
+)
+def test_the_stamp_detector_fires_on_a_planted_defect(label: str, stamp: str, message: str):
+    """Non-vacuity, each case a shape that was live in this file before the fix.
+
+    The third case is the exact wording this module carried: a correct roster
+    under the word "today", which is precisely the sentence that decayed.
+    """
+    assert _snapshot_stamp_defects(stamp, message), (
+        f"the detector accepted {label}: stamp {stamp!r} with message {message!r}"
+    )
+
+
+def test_the_stamp_detector_passes_a_well_formed_pair_it_did_not_ship():
+    """The survivor arm: a detector that fires on everything guards nothing.
+
+    Deliberately NOT the shipped constants - the live arm above already reads
+    those, and an arm that only ever sees the values it was written against
+    cannot distinguish a working detector from one that always answers clean.
+    """
+    assert (
+        _snapshot_stamp_defects(
+            "2026-01-02T03:04:05Z",
+            "as measured at 2026-01-02T03:04:05Z and not since, SS did not match",
+        )
+        == []
     )
 
 

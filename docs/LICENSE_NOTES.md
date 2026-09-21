@@ -122,7 +122,10 @@ inside it, and no per-directory licence file over `docs/`. So it is covered.
 - `ops/loop/slots.py` - sha256
   `71fa2a683f2eaa04dd61feb2bebc646b5f9086e692c5acc05a9239de49d07d1b`.
 - `ops/loop/winmutex.py` - sha256
-  `0b112a4f6bfa88cf5f537f8869225c1821ebfe97428b1e899979797ddd71a61e`.
+  `df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7`, moved on
+  round B, 2026-09-20, from
+  `0b112a4f6bfa88cf5f537f8869225c1821ebfe97428b1e899979797ddd71a61e`. One
+  comment line was reworded and no behaviour changed.
   Both loop modules are pinned by `tests/test_loop_concurrency.py`, and
   re-pinning either is a joint act across every carrier rather than a local
   checksum regeneration.
