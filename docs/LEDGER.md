@@ -12,6 +12,198 @@ now.
 
 ---
 
+## 2026-09-21 - CI goes green by making the shortcut writer's availability a platform claim, and both Linux workflows were red for one root cause
+
+Landed at `a0963ca`. CI had been red since before the previous session with
+three failures in `tests/test_publish_next_session.py`, every one raising
+`Refusal: write_failed`.
+
+MEASURED ROOT CAUSE, not inferred. `_POWERSHELL_NAMES` in
+`scripts/make_shortcut.py` includes the bare name `pwsh`, and ubuntu-latest
+carries `pwsh` on PATH, so `_resolve_powershell` resolved there and
+`PowerShellLinker.available()` returned True. The `.lnk` is written through
+`New-Object -ComObject WScript.Shell`, which has no implementation off Windows,
+so `write` returned False and `publish` refused. The two arms carrying an
+availability guard therefore never skipped on Linux: they were asking whether a
+SHELL was present, not whether this host can write a SHORTCUT. `available()`
+now requires `os.name == "nt"` alongside a resolvable shell.
+
+The third failure was a different defect in the same file.
+`test_no_report_or_refusal_names_a_path` asserts over report and refusal TEXT,
+so it had no business driving the real writer; it now uses the `_FakeLinker`
+double at all five call sites, with no assertion weakened.
+
+VERIFICATION POINTER: `tests/test_publish_next_session.py`, arms
+`test_available_is_false_where_no_windows_shortcut_can_be_written` and its
+non-vacuity control `test_available_is_true_on_windows_with_a_resolvable_shell`.
+
+AN ADVERSARY REPRODUCED THE CI SYMPTOM RATHER THAN REASONING ABOUT IT, by
+forcing the two conditions the mechanism reads: 3 failed, all `write_failed`,
+byte-for-byte the CI failure, then 204 passed 2 skipped against the candidate
+under the same simulation. It also measured that NO Linux pass became a skip -
+all three dispositions that moved started FAILED. Two findings came back and
+were repaired: both skip reasons said "no PowerShell on PATH" on the one
+platform where PowerShell IS present, and `monkeypatch.setattr(pns.os, "name", ...)`
+mutated the GLOBAL `os` module, since `pns.os is os`. The reasons now name the
+condition observed, and the stand-in is patched onto the module's own binding.
+
+DECISION, recorded so it is not re-litigated: no `skipif` marker was added to
+the two real-mechanism arms. Their existing `available()` guard becomes correct
+once the predicate is right, and a second guard would hide a future regression
+in `available()` itself.
+
+MEASURED AFTERWARDS, and it was not predicted: `docs-guards` was red for the
+SAME three arms, because that workflow's md-reading guard subset includes this
+module. One root cause held both Linux gates down. Both reported `success` on
+this session's pushes - reading taken 2026-09-21.
+
+NOT VERIFIED FROM THIS HOST: no Linux runner was exercised locally. Every local
+Linux figure is a simulation of the two conditions the mechanism reads. The
+green is CI's own.
+
+## 2026-09-21 - CS committed slots.py, so that pin population is five, and the arithmetic that headed the CLAUDE.md paragraph collapsed while its claim did not
+
+Landed at `f989ffa`. 24 sites across eight files.
+
+MEASURED on CS's own tree, read-only, 2026-09-21T00:50:57Z, by two methods so
+neither stands alone: `git ls-files --error-unmatch ops/loop/slots.py` exits 0
+with `git status --porcelain` empty, and `git log -1 -- ops/loop/slots.py` names
+`e5395d54` of Sun Sep 20 19:02:15 2026 -0500 at 9627 bytes and `71fa2a68`, the
+pinned digest. CS crossed from disk holder to PIN CARRIER. The predicate did not
+change - a sha256 pin can only act on bytes git stores - only CS's side of it
+did. CS's `ops/loop/winmutex.py` is untouched at 7724 bytes / `e0d3ac7d`, a
+DIFFERENT file rather than a lagging one.
+
+THE REUSABLE PART. Both populations now read five, so the numeral that headed
+the `CLAUDE.md` paragraph collapsed. The claim did not: computed off the live
+tuples the two sets are EQUAL and LL is in neither, so the modules are no longer
+told apart by MEMBERSHIP but by BYTES - every `slots.py` carrier sits at the
+pinned digest while CS's `winmutex.py` does not. A reader who collapses the pair
+to one numeral throws away the only distinction the pin acts on.
+
+VERIFICATION POINTER: `tests/test_carrier_population_prose.py`, arm
+`test_rule_c_reads_the_live_tuples_and_not_a_frozen_number`, which was the seam
+this change had to cross - it hardcoded `{"slots.py": 4, "winmutex.py": 5}`.
+
+BOTH VALUES ARE NOW FIVE, so every arm whose discriminating power rested on
+4 != 5 was RE-RUN rather than assumed. The generated rule-C mutants and the
+literal parametrize table all still fire, each contributing a genuinely new
+offender against a clean baseline. A structural guard was added so the mutant
+generator cannot degenerate into a no-op at any tuple length. ONE LATENT NO-OP
+IS FLAGGED AND NOT FIXED: the `"wrong slots count"` case hardcodes "three" and
+would stop firing if the tuple ever held exactly three names.
+
+DECISION: `docs/LEDGER.md` was APPENDED, not rewritten. The original FOUR
+reading stands as the reading it was. A ledger edited to agree with today can no
+longer show a row flipping, and a row flipping inside a single day is the most
+useful thing this unit learned.
+
+A SWEEP THAT HAD ALREADY BEEN WRONG TWICE ABOUT ITS OWN EXTENT WAS WRONG A THIRD
+TIME. It reported 5 regions, then 18, then 24, and an independent sweep by a
+different method still found `ROADMAP.md`'s "A FOURTH POPULATION EXISTS AND NONE
+OF THE FOUR NESTS" row untouched - a row whose first clause the change had
+falsified, since two of its four populations are now equal and nest trivially.
+Corrected in the same commit. THE LESSON IS THE METHOD, NOT THE COUNT: the
+second sweep found it only because it was forbidden to reuse the first sweep's
+grep patterns.
+
+## 2026-09-21 - the bare path citations in tracked plain-text prose are guarded, and the obvious widening would have shipped an arm that could not fail
+
+Landed at `264d9bd`. `tests/test_docs_consistency.py` built its citation corpus
+from `_tracked_markdown()`, which filters `.md`, so `RSC-NEXT-SESSION.txt` - the
+file a cold session reads first, regenerated every session - was outside the
+guard entirely.
+
+THE MEASUREMENT THAT KILLED THE OBVIOUS FIX: `grep -c '`' RSC-NEXT-SESSION.txt`
+returns 0. THE FILE CARRIES NO BACKTICKS AT ALL, and both existing extractors
+are backtick-keyed, so adding `.txt` to the corpus would have added ZERO
+citations and produced an arm that cannot fail. A bare-path extractor and a
+directory extractor were added instead, resolving each citation as tracked OR
+deliberately ignored. `git check-ignore` RETURNS ITS ANSWER IN THE EXIT CODE, so
+0 is ignored, 1 is not, and 128 RAISES rather than folding an error into "not
+ignored".
+
+VERIFICATION POINTER: `tests/test_docs_consistency.py`, arms
+`test_every_bare_path_citation_in_plain_text_prose_resolves` and
+`test_the_bare_path_sweep_walked_a_real_corpus`.
+
+REFUTED ON FIRST SUBMISSION by an adversary on the scope-and-siblings lens, and
+the three repairs are the load-bearing part, each with a measured red against an
+injected defect. The character class began `[A-Za-z0-9_]`, so
+`.claude/commands/done.md` extracted as `claude/commands/done.md` and resolved
+to nothing - A FALSE RED on a valid citation, in a file rewritten at the end of
+every session, naming one of this module's own `GOVERNING_DOCS`. Six live
+DIRECTORY citations sat in the guarded file while `_is_tracked` already resolved
+directories, so the capability was being thrown away rather than missing.
+Renaming the hand-off to `.text` left three of four arms green against the two
+requirements files, reproducing the suffix-rename failure this tree has already
+recorded; the corpus now asserts the hand-off is in it BY NAME.
+
+A CORRECTION TO THE DISPATCH BRIEF, made by the builder and worth keeping: the
+brief asserted the two requirements files carry no citations and the blast
+radius was one file. They carry 5 between them and the radius is three files.
+All 5 resolve.
+
+DECISION, and it is a constraint rather than a preference: the limit text sits
+at `LIMITS OF THE BARE CITATION RULE` and NOT in the module docstring, because
+`CLAUDE.md` cites this file at line 171 and an arm resolves that citation - a
+9-line docstring addition moved the `git ls-files` call to 180 and reddened it,
+measured. The revert to net-zero lines above 171 is deliberate.
+
+FOUR HOLES STAY OPEN, measured rather than hand-waved, and are filed in
+`ROADMAP.md` rather than claimed closed.
+
+## 2026-09-21 - three pytest temp-retention remedies are measured as no-ops here, and the pile was drained by a sweep nobody in this tree changed
+
+Landed at `a7fbf20`. NO SETTING WAS CHANGED. What landed is a comment block
+recording the three no-ops and an arm that reds if anyone adds the count line
+believing it works.
+
+THE REPORTED PREMISE WAS WRONG IN A WAY THAT MOVED THE FIX. The operator
+reported a base directory "accumulating since 2026-04-22". A sibling measured
+nothing in it older than about 29 hours: the DIRECTORY dates from April, its
+CONTENTS do not. It is churn produced faster than any cutoff expressed in days
+can match, so a shorter cutoff is a backstop racing churn it cannot win.
+
+WHY ROOT PRUNING DOES NOT BOUND THE TOTAL, and it is not candidacy. A probe
+found `numbered_dirs=14 keep=3 max_delete=2809`, so 12 of 14 were candidates,
+and EVERY ONE was `deletable=False`, held by a `.lock` aged 0.03h to 4.17h
+against `LOCK_TIMEOUT = 259200` seconds - 72 hours - a module constant in
+`_pytest.pathlib` that NO INI KEY REACHES. A control in a private root with ten
+dirs removed exactly the unlocked candidates and spared the newest three, so the
+mechanism works and the locks are the refusal. Stale locks come from killed
+pytest processes; a clean exit unlinks its own.
+
+THE THREE REMEDIES, each measured. `tmp_path_retention_count` is a NO-OP,
+because pytest's own `addini` default in `_pytest/tmpdir.py` is already `"3"`
+and candidacy was never the block. `policy = none` destroys the directory a
+failing test leaves as evidence and still cannot touch a locked root. A
+repo-scoped basetemp BREAKS THE SUITE: same suite, only `PYTEST_DEBUG_TEMPROOT`
+changed, 3114 passed became 5 failed / 3103 passed / 6 errors, every one
+`git add -A exited 128, unable to write file .git/objects/...: Filename too
+long`. The breakage is path length, not an assertion about the root.
+
+THIS TREE IS NOT THE SOURCE. Measured into a private root, its full suite leaves
+163 files across 2 numbered directories.
+
+VERIFICATION POINTER: `tests/test_pytest_temp_hygiene.py`, whose arms red both
+when the policy line is deleted and when a `tmp_path_retention_count` line is
+added.
+
+A SIBLING'S ATTRIBUTION DID NOT SURVIVE THE SHARED INPUT. LW attributed a
+46-to-12 drop in that base to its own `pytest.ini` change. The machine sweep at
+`C:\Tools\ops\Temp-Hygiene.ps1` had already been fixed by another session to a
+3-hour cutoff, and its 20:01 run removed 25 stale run dirs and recovered 27.5GB
+- which is what took the base from 42 children to 12. Post-change figures taken
+with NO change made here land within noise of the sibling's. AGREEMENT BETWEEN
+TWO PARTIES WAS NOT THE EVIDENCE; the shared base directory was.
+
+FOUR COUNTS OF THAT BASE NOW EXIST from four instants in THREE DIFFERENT
+QUANTITIES - 192,202 reported, 266,336 from a sibling, 653,092 counted here with
+`rglob` which counts directories too, and 65,352 files at 20:18. They are not
+reconcilable and should not be reconciled. A count from a SHARED directory
+carries the timestamp of the read and nothing more.
+
 ## 2026-09-20 - the channel-code guard is given a subject it cannot lose, and the commit that called it stricter had shipped an arm that could not fail
 
 ORDERING NOTE, STATED BECAUSE THIS BLOCK IS NOT IN COMMIT ORDER. The correcting
