@@ -111,6 +111,18 @@ TRAPS MEASURED IN THIS TREE - none of these are hypothetical
   datefmt at :228 and :260 to one-second resolution, so a corpus parsed from
   the log reads 59 of 60 real holds as 0.0s. Read LogRecord.created instead.
 
+CI IS RED AND HAS BEEN SINCE BEFORE THIS SESSION. Measured at 694cfbf: 3 failed,
+3093 passed, 20 skipped. The same three failed at 08f1de7 with 3073 passed, so
+this session added 20 passing arms on Linux and introduced NOTHING. The three
+are test_the_real_shell_writes_a_shortcut_that_resolves_to_the_source,
+test_a_real_publish_leaves_the_shortcut_and_nothing_else and
+test_no_report_or_refusal_names_a_path - all publish_next_session shortcut arms,
+all raising Refusal: write_failed because a Linux runner has no Desktop to write
+a shortcut to. They pass on Windows. This is a PLATFORM-DIVERGENT arm, not a
+broken publisher: the local gate cannot see it because the local gate is the
+platform where it works. FIX THIS FIRST NEXT SESSION - a permanently red CI is
+an alarm nobody reads, and it is the only Linux gate this tree has.
+
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md, cited by heading
   1. The 4h30m staleness row is AMENDED, NOT CLOSED. 60 governed passes gave 60
      pairs, 0 unpaired, max 0.012126s against DEFAULT_STALE_AFTER of 16200.0s -
