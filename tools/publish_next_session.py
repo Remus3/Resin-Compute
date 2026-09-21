@@ -97,6 +97,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -774,7 +775,18 @@ class PowerShellLinker:
         self._powershell = _resolve_powershell()
 
     def available(self) -> bool:
-        return self._powershell is not None
+        """Whether THIS PROCESS can actually write a Windows shortcut.
+
+        BOTH CONDITIONS, and the platform one is not redundant. A resolvable
+        shell is necessary and not sufficient: the writer goes through
+        `New-Object -ComObject WScript.Shell`, and that COM object exists only
+        on Windows. Measured on CI, ubuntu-latest, 2026-09-20 - the runner
+        carries `pwsh` on PATH, so a presence-only answer said True, the arms
+        that guard on this did not skip, the COM call failed, and `publish`
+        raised `Refusal: write_failed` on three of them. A shell that is
+        present but cannot do the job is not availability.
+        """
+        return self._powershell is not None and os.name == "nt"
 
     def _run(self, script: str) -> subprocess.CompletedProcess[bytes]:
         assert self._powershell is not None

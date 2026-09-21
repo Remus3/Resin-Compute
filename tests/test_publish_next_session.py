@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -259,23 +260,29 @@ def test_every_module_constant_is_seven_bit_ascii():
 
 
 def test_no_report_or_refusal_names_a_path(tmp_path):
-    """Reports carry the basename and a byte count. Never a full path."""
+    """Reports carry the basename and a byte count. Never a full path.
+
+    ON THE TEST DOUBLE, since 2026-09-20. This arm drove the REAL writer for no
+    reason - its subject is the module's message strings, not the shell - and
+    that made it platform-divergent on CI, where a resolvable `pwsh` met a COM
+    object Linux does not have and it raised `Refusal: write_failed`.
+    """
     emitted = []
 
     source = _source_with(_long_block())
-    emitted.extend(str(v) for v in pns.publish(source, tmp_path).values())
-    emitted.extend(str(v) for v in pns.check(source, tmp_path).values())
+    emitted.extend(str(v) for v in pns.publish(source, tmp_path, linker=_FakeLinker(None)).values())
+    emitted.extend(str(v) for v in pns.check(source, tmp_path, linker=_FakeLinker(None)).values())
 
     for bad_source, _reason in (
         ("short raw source\n", "prompt_too_short"),
         (_source_with("short\n"), "prompt_too_short"),
     ):
         with pytest.raises(pns.Refusal) as caught:
-            pns.publish(bad_source, tmp_path)
+            pns.publish(bad_source, tmp_path, linker=_FakeLinker(None))
         emitted.append(caught.value.detail)
 
     with pytest.raises(pns.Refusal) as caught:
-        pns.publish(source, tmp_path / "absent")
+        pns.publish(source, tmp_path / "absent", linker=_FakeLinker(None))
     emitted.append(caught.value.detail)
 
     # THE ACCOUNT-PATH BRANCH, added 2026-09-20. This arm did not reach it, and
@@ -286,7 +293,7 @@ def test_no_report_or_refusal_names_a_path(tmp_path):
     # this file does not itself carry the shape its own sweeps refuse.
     account_line = "cache lives at C" + chr(58) + chr(92) + "Users" + chr(92) + "someone" + chr(92) + "AppData\n"
     with pytest.raises(pns.Refusal) as caught:
-        pns.publish(_source_with(account_line + _long_block()), tmp_path)
+        pns.publish(_source_with(account_line + _long_block()), tmp_path, linker=_FakeLinker(None))
     assert caught.value.reason == "account_path"
     emitted.append(caught.value.detail)
     assert "someone" not in caught.value.detail, "the refusal echoed the account name"
@@ -1355,6 +1362,89 @@ def test_the_module_has_no_code_path_that_writes_the_hand_off_text_out(tmp_path)
         assert banned not in text, f"{banned} is back; the detached copy is back with it"
 
 
+class _OsNamed:
+    """The real `os`, with `name` overridden. A MODULE-LOCAL stand-in.
+
+    `pns.os is os` is True, so `monkeypatch.setattr(pns.os, "name", ...)` would
+    set `os.name` PROCESS-WIDE for the duration of an arm, on Windows, inside a
+    three-thousand-arm run. It restores and it passed, but the blast radius is
+    the whole interpreter where it needs to be one module. Patching the
+    module's BINDING - `monkeypatch.setattr(pns, "os", _OsNamed(...))` -
+    contains it. Everything other than `name` still proxies to the real module,
+    so this cannot quietly starve a future `os.<anything>` in that module.
+    """
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def __getattr__(self, attr):
+        return getattr(os, attr)
+
+
+def _why_the_real_writer_is_unavailable() -> str:
+    """The condition ACTUALLY OBSERVED, never an assumption about which half failed.
+
+    A SKIP REASON IS READ ON EVERY LANE IT FIRES ON, and this tree's CI runs
+    pytest with `-rs` so that a reader can trust one. The reasons these two
+    arms carried until 2026-09-20 said "no PowerShell on PATH", which is
+    exactly false on the only Linux gate this tree has: ubuntu-latest CARRIES
+    `pwsh`, and that is the whole root cause of this repair. What is missing
+    there is Windows, not PowerShell. So both halves are probed and only the
+    ones genuinely missing are named.
+    """
+    missing = []
+    if pns._resolve_powershell() is None:
+        missing.append("no PowerShell resolves on PATH")
+    if pns.os.name != "nt":
+        missing.append(
+            "os.name is " + repr(pns.os.name) + ", and the .lnk is written through a "
+            "COM object that exists only on Windows"
+        )
+    if not missing:
+        return (
+            "the real writer reports itself available, so this skip should not have "
+            "fired - read it as a defect in available() rather than as an absent host "
+            "capability"
+        )
+    return "cannot write a Windows shortcut on this host: " + " and ".join(missing)
+
+
+def test_available_is_false_where_no_windows_shortcut_can_be_written(monkeypatch):
+    """REGRESSION, 2026-09-20. `available()` means CAN WRITE, not CAN FIND.
+
+    MEASURED ON CI THAT DAY, ubuntu-latest: the runner carries `pwsh` on PATH,
+    so `_resolve_powershell` resolved, the old one-condition `available()`
+    answered True, the two real-mechanism arms below did NOT skip, and the COM
+    object `New-Object -ComObject WScript.Shell` - which has no implementation
+    outside Windows - failed, so `publish` raised `Refusal: write_failed`.
+    Three arms red on Linux and green here, from a shell that was present and
+    useless. A second `skipif(sys.platform)` guard on those arms would have
+    hidden the defect instead of fixing it, and would have hidden a future
+    regression in `available()` itself along with it.
+
+    The shell is FORCED to resolve here, so the only thing this arm can be
+    reading is the platform condition.
+    """
+    monkeypatch.setattr(pns, "_resolve_powershell", lambda: "/usr/bin/pwsh")
+    monkeypatch.setattr(pns, "os", _OsNamed("posix"))
+    assert pns.PowerShellLinker().available() is False, (
+        "a resolvable shell on a non-Windows host reported as able to write a .lnk"
+    )
+
+
+def test_available_is_true_on_windows_with_a_resolvable_shell(monkeypatch):
+    """The non-vacuity control for the arm above.
+
+    Without it the regression arm is equally satisfied by an `available()`
+    hardcoded to False, which would skip the real mechanism everywhere -
+    including the one host that can actually run it.
+    """
+    if pns._resolve_powershell() is None:
+        pytest.skip("no PowerShell resolves on PATH, so the True branch has no subject here")
+    monkeypatch.setattr(pns, "os", _OsNamed("nt"))
+    assert pns.PowerShellLinker().available() is True
+
+
 def test_a_real_publish_leaves_the_shortcut_and_nothing_else(tmp_path):
     """REPAIR 1. THE CLAIM RESTS ON THIS ARM, not on the substring one above.
 
@@ -1374,7 +1464,7 @@ def test_a_real_publish_leaves_the_shortcut_and_nothing_else(tmp_path):
     what is on disk cannot be walked past by renaming the thing that writes.
     """
     if not pns.PowerShellLinker().available():
-        pytest.skip("no PowerShell on PATH, so the real writer cannot be exercised")
+        pytest.skip(_why_the_real_writer_is_unavailable() + ", so the real writer cannot be exercised")
 
     report = pns.publish(_source_with(_long_block()), tmp_path)
     assert report["ok"] is True
@@ -1491,7 +1581,7 @@ def test_the_real_shell_writes_a_shortcut_that_resolves_to_the_source(tmp_path):
     """
     linker = pns.PowerShellLinker()
     if not linker.available():
-        pytest.skip("no PowerShell on PATH, so the real mechanism cannot be exercised")
+        pytest.skip(_why_the_real_writer_is_unavailable() + ", so the real mechanism cannot be exercised")
 
     report = pns.publish(_source_with(_long_block()), tmp_path)
     assert report["ok"] is True
