@@ -11,6 +11,23 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-09-20. CI IS RED AND WAS RED BEFORE THIS SESSION - THREE
+  PLATFORM-DIVERGENT SHORTCUT ARMS.** Measured at `694cfbf`: 3 failed, 3093
+  passed, 20 skipped. The identical three failed at `08f1de7` with 3073 passed,
+  so this session added 20 passing arms on Linux and introduced none of the
+  failures. The three are `test_the_real_shell_writes_a_shortcut_that_resolves_to_the_source`,
+  `test_a_real_publish_leaves_the_shortcut_and_nothing_else` and
+  `test_no_report_or_refusal_names_a_path`, all in the `publish_next_session`
+  arms, all raising `Refusal: write_failed` because a Linux runner has no
+  Desktop to write a shortcut to. THE SHAPE, and it is the reusable part: the
+  arm is platform-divergent and the LOCAL gate cannot see it, because the local
+  gate runs on the platform where it works. A green local suite is therefore no
+  evidence about these three, and CI is the only Linux gate this tree has - so
+  a permanently red CI is an alarm nobody reads. NOT DONE: decide whether each
+  arm skips with a stated reason on a platform with no Desktop, or whether the
+  publisher grows a no-Desktop path that the arm then asserts over. Do not
+  close it by deleting the arms.
+
 - **NEW 2026-09-20, FLEET-WIDE, AND IT INVALIDATES ANY hold() CORPUS BUILT FROM
   A RENDERED LOG.** `core/log_setup.py:53` binds `_TIME_FORMAT` to
   `"%Y-%m-%d %H:%M:%S"` and passes it as the formatter's `datefmt` at
