@@ -11,7 +11,107 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-09-21. ROUND B IS CALLED AND RSC OWES ITS PART ON 2026-09-22.** LW
+- **NEW 2026-09-20, FLEET-WIDE, AND IT INVALIDATES ANY hold() CORPUS BUILT FROM
+  A RENDERED LOG.** `core/log_setup.py:53` binds `_TIME_FORMAT` to
+  `"%Y-%m-%d %H:%M:%S"` and passes it as the formatter's `datefmt` at
+  `core/log_setup.py:228` and `core/log_setup.py:260`. That is ONE-SECOND
+  resolution. Every real `hold()` in this tree's measured corpus is under 13
+  milliseconds, so a corpus built by parsing the rendered log reads 59 of 60
+  real holds as 0.0 s - a FLOOR ARTIFACT of the instrument, not a measurement of
+  the subject. The corpus recorded below was therefore built from
+  `LogRecord.created`, whose clock resolution measured 1e-07 s here, and that is
+  the fix for anyone repeating it. RC, CS and LW each owe the same duration
+  corpus against the same 4h30m window and will hit this identically; the note
+  has been delivered. NOT DONE: decide whether the shared line format gains
+  sub-second resolution, or whether the rule is simply that no duration claim
+  may be derived from rendered log text.
+
+- **NEW 2026-09-20. `_check_message_file` IS THE THIRD MEMBER OF THE SILENT
+  `return 0` FAMILY AND WAS DELIBERATELY NOT FIXED, BECAUSE ITS REPAIR MOVES A
+  CITED LINE.** The staged-lane half of this family closed at `15d98fa` and
+  `4be449f`. `_check_message_file` in `tools/precommit_gate.py` still returns 0
+  in silence, and it sits ABOVE the corpus builder that `CLAUDE.md` cites as
+  `tools/precommit_gate.py:414` - verified this session, that line reads
+  `paths = _git_z(["ls-files", "-z"], root)`, and `tests/test_docs_consistency.py`
+  asserts it still holds `ls-files`. So a repair that adds any line above 414
+  reddens that guard. THE WORK IS THEREFORE A COUPLED PAIR IN ONE COMMIT: print
+  the message-file lane's subject, and move the `CLAUDE.md` citation in the same
+  edit. Doing either half alone is a red suite. The cheaper variant worth
+  considering first is replacing that line cite with a symbol cite, which is the
+  remedy `c07dc82` already applied to the `SHARED_SHA256` citation.
+
+- **NEW 2026-09-20, AND TWO SIBLINGS REPORT THE SAME HOLE INDEPENDENTLY, WHICH
+  IS A REASON TO TEST THEIR SHARED INPUT RATHER THAN TO TREAT IT AS
+  CORROBORATION.** RSC has NO control that would catch a secret in a file that
+  is never committed. `tests/test_no_secret_literals.py:36` is explicit about
+  this and states it as a design choice: "TRACKEDNESS, NOT PRESENCE", with the
+  corpus coming from `git ls-files` rather than a disk walk, deliberately, so a
+  contributor's gitignored tree is not swept. RC and SS report the identical
+  hole in their own trees. THE SHARED INPUT IS NOT A REGEX AND NOT A ROSTER - it
+  is an inherited TRIGGER SET from the ADR-001 blueprint, in which the
+  population falls out of the trigger before any predicate exists: a pre-commit
+  hook sees the staged set, a pre-push hook sees the push range, and a pytest
+  arm sees `git ls-files`. One architectural decision, observed in four trees.
+  VERIFIED NOT FULLY DETERMINING, which is the part that keeps this honest: RC
+  carries a `PostToolUse` Edit-or-Write hook and RSC carries none, so the
+  blueprint EXPLAINS the hole without DETERMINING each tree's surface. NOT DONE:
+  decide whether a write-time trigger belongs here at all, given that a
+  never-committed file is by construction outside every guard this tree owns.
+
+- **NEW 2026-09-20, REPRODUCED FROM SS FINDING 19 AND UNMITIGATED HERE. A
+  RETENTION CONTROL LOOKS LIKE A ROOT CONTROL AND IS NOT ONE.** Measured this
+  session on this host: the pytest temp root at
+  `%TEMP%\pytest-of-<account>` has 42 children, `PYTEST_DEBUG_TEMPROOT` is
+  UNSET in the environment, and 218 files under `tests/` and `agents/` reference
+  `tmp_path`. `pytest.ini:20` sets `tmp_path_retention_policy = failed`, which
+  governs WHICH runs' directories survive and says nothing about WHERE they are
+  created - so it reads as coverage and is not. The hazard is that the machine's
+  shared temp root, outside this repo, accumulates test state from every tree
+  that runs pytest on this host. NOT DONE, and it is a merger decision rather
+  than a slice: adopt `PYTEST_DEBUG_TEMPROOT` pointed inside the repo, or state
+  why the shared root is accepted. Note that pointing it inside the repo changes
+  what halt clause (a) has to reason about, in the direction of fewer
+  out-of-repo writes.
+
+- **NEW 2026-09-20, AND IT IS FILED AS AN ABSENT SUBJECT SO NOBODY RECORDS IT AS
+  A WIN. SS FINDING 20 DOES NOT REACH RSC.** Swept this session: zero literal
+  references and zero dynamic resolution of the construct SS reports, because
+  RSC HAS NO LANE GATE AT ALL. That is the reason the finding does not apply,
+  and it is categorically different from the finding having been mitigated here.
+  A future session that adds a lane gate inherits SS finding 20 on the day it
+  lands, with nothing in this tree going red to say so. Bucket:
+  not-applicable-because-X, with X stated.
+
+- **NEW 2026-09-20, THE RESIDUALS `b18d6f1` DOCUMENTED RATHER THAN CLOSED, AND
+  THE REASON THEY ARE DOCUMENTED IS THE SAME FOR ALL THREE.** The channel-code
+  scan in `tests/test_no_sibling_names.py` now catches underscore-joining, which
+  was escape class 2 in its own docstring and was structurally invisible to a
+  `\b` boundary because Python counts `_` as a word character. Three escapes
+  remain and each has a BINDING CONDITION NARROWER THAN ANY WORDING could fix,
+  because all three are reachable only by a read of source bytes: lowercase
+  forms, where `IGNORECASE` returns 6 hits against 0 case-sensitive over the two
+  shared files and so cannot simply be switched on; a code assembled by RUNTIME
+  concatenation; and a code split across a line continuation. NOT DONE, and the
+  decision is whether any of the three is worth a different MECHANISM - an
+  import-time or runtime probe rather than a source scan - since no widening of
+  the pattern can reach them.
+
+- **NEW 2026-09-20. THE INBOX WATERMARK WAS DELIBERATELY NOT ADVANCED, AND SEVEN
+  TRIAGED ITEMS ARE APPLICABLE-AND-NOT-DONE.** Measured this session,
+  `python scripts/watch_inbox.py` reports 197 unread, the population being
+  entries absent from the untracked ops/runtime/inbox_seen.json watermark file -
+  named without backticks here because a governing doc may only point at paths
+  git stores. The 181-file triage table
+  is at `moon_sync_inbox/TRIAGE-RSC-2026-09-21.txt`, which is GITIGNORED - the
+  whole inbox is, at `.gitignore:115` - so it WILL NOT TRAVEL BY GIT and cannot
+  be cited as a guarded artifact. Seven items landed in the
+  applicable-and-not-done bucket. NOT DONE, two separate things: carry those
+  seven into rows of their own here, where a tracked file can hold them, and
+  only then decide whether to mark the batch. Marking a batch that was listed
+  but not fully carried inflates the watermark, which is worse than leaving it.
+
+- **DONE 2026-09-20 at `ef17cc8`. ROUND B WAS CALLED AND RSC HAS LANDED ITS
+  PART.** LW
   authored the shared `ops/loop/winmutex.py` carrier-code repair and circulated
   proposed bytes: 6184 bytes, sha256 `df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7`,
   removing six bytes so the line reads "Found on review, 2026-07-26." RSC
@@ -27,6 +127,19 @@ version. What follows is everything the scaffold deliberately did not do.
   round-B commit touches TWO test files, not one. This trips halt clause (b) by
   construction, which is expected and is what the round exists to authorise.
   Silence from any carrier is recorded as PARKED, never as agreement.
+
+  LANDED 2026-09-20 AT `ef17cc8`, AND EVERYTHING ABOVE IS NOW RECORD RATHER
+  THAN AN OBLIGATION. RSC did exactly what it owed: `shutil.copyfile`, never a
+  text-mode write, re-hashed from its own disk at 6184 bytes and
+  `df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7` with zero
+  CR bytes, and both pin changes in the one commit that moved the bytes. Both
+  halves of the coupling were proved by running rather than by reading - bytes
+  without the pin reddens the digest arm, pin without the bytes reddens the
+  channel-code arm. THE STRICTER RULING ON THE EMPTIED PIN WAS INCOMPLETE and
+  is corrected at `b18d6f1`; see the ledger entry headed "the channel-code
+  guard is given a subject it cannot lose". Halt clause (b) was tripped by
+  construction, as this row predicted, and that is what the round existed to
+  authorise.
 
 - **NEW 2026-09-21. A FOURTH POPULATION EXISTS AND NONE OF THE FOUR NESTS.**
   Measured across all six tree roots: `slots.py` carriers are LW, RC, RSC, SS;
@@ -47,7 +160,8 @@ version. What follows is everything the scaffold deliberately did not do.
   with every arm green. Those rows refresh only when a human re-runs the six-root
   hash. This is a STATED LIMIT, not a gap to close by reaching across trees.
 
-- **NEW 2026-09-21. `_check_staged` RETURNS 0 ON AN EMPTY SUBJECT.** Separate
+- **CLOSED 2026-09-20 at `15d98fa` and `4be449f`. `_check_staged` RETURNED 0 ON
+  AN EMPTY SUBJECT.** Separate
   from the untracked-corpus work, which is done. `tools/precommit_gate.py`
   already blocks on a zero scan corpus and on an unreadable diff, but with a
   CLEAN INDEX `staged` is an empty dict rather than None, no violation
@@ -55,15 +169,36 @@ version. What follows is everything the scaffold deliberately did not do.
   INVISIBLE one - a different defect in the same vacuity family, and the
   untracked reporter does not cover it.
 
+  CLOSED, AND ON DIFFERENT TERMS THAN THIS ROW PROPOSED. Emptiness is NOT
+  blocked and must not be: `git commit --allow-empty` fires
+  `.githooks/pre-commit` with exactly an empty index, so a refusal would wedge
+  a legitimate lane. The defect was SILENCE. `tools/precommit_gate.py` now
+  prints `staged=N added-lines=M` before the violation decision, so a BLOCKED
+  run states its subject too, and the non-commit lane in `main()` says the
+  staged half did not run while deliberately printing no `staged=` line. Four
+  counting arms in `tests/test_precommit_gate_corpus.py` parse the integers
+  back out and compare them against what the fixture really staged, so a
+  constant-printing mutant dies; measured this session, the set went 4 failed /
+  11 passed before the change to 15 passed after. `4be449f` then brought the
+  `_SITES` row in `tests/test_conftest_git_gate_sites.py` level with the three
+  new git-reaching nodes, proved by removing one id and watching the row name
+  exactly that id. THE FAMILY IS NOT FULLY CLOSED - `_check_message_file` is
+  its third member and has a row of its own above, because its repair moves a
+  line `CLAUDE.md` cites.
+
 - **NEW 2026-09-21. THE CLAUDE.md LINE CITATION INTO
   `tests/test_loop_concurrency.py` IS GUARDED ONLY BY A RANGE CHECK.** CLAUDE.md
-  cites lines 145-146 as the sha256 pins. Only ARM 1 of
-  `tests/test_docs_consistency.py` covers it and it merely range-checks; the
-  semantic arm is restricted to `CORPUS_BUILDER_CITATIONS`, three paths that do
-  not include this one. This session grew that file by 168 lines, widening the
-  false-pass window, and only hand-held line-count neutrality kept the citation
-  true. NOT DONE: add this citation to the semantic set, or replace the line
-  cite with a symbol cite.
+  cited lines 145-146 as the sha256 pins. THAT PAIR IS ITSELF NOW STALE, which
+  is the row proving its own point: `ef17cc8` moved it to 156-157 and `c07dc82`
+  moved it again to 157-158, where it also gained the `SHARED_SHA256` symbol
+  name beside the number. Only ARM 1 of `tests/test_docs_consistency.py` covers
+  it and it merely range-checks; the semantic arm is restricted to
+  `CORPUS_BUILDER_CITATIONS`, three paths that do not include this one.
+  MEASURED THIS SESSION rather than argued: repointing that citation at lines
+  2-3 of the same file leaves `python -m pytest tests/test_docs_consistency.py`
+  at 34 passed, so the guard would not notice a citation aimed at the module
+  docstring. NOT DONE: add this citation to the semantic set, or finish the
+  move to a pure symbol cite and drop the numerals.
 
 - **NEW 2026-09-21. THE ops/runtime/inbox_report.txt DROP GOES STALE WHILE THE SESSION
   HOOK PRESENTS IT AS THE FULL LIST.** Measured today: the file's header read
@@ -80,10 +215,36 @@ version. What follows is everything the scaffold deliberately did not do.
   `DEFAULT_STALE_AFTER`, measured at 16200 seconds, which is 4h30m. WHAT IS
   MISSING IS A MEASUREMENT AND NOT AN ARGUMENT: nobody has a recorded `hold()`
   DURATION to compare against that window, so whether any real pass approaches
-  4h30m is unknown rather than safe. THIS TREE CANNOT PRODUCE IT - the governed
-  daemon has not run live since the governor landed, so RSC's duration corpus is
-  ZERO pairs. RC, CS and LW owe that measurement. Do not close this row with
-  reasoning about what a pass probably takes.
+  4h30m is unknown rather than safe. Do not close this row with reasoning about
+  what a pass probably takes.
+
+  AMENDED 2026-09-20, AND IT IS AN AMENDMENT RATHER THAN A CLOSURE. The
+  sentence this row used to carry - that RSC's duration corpus is ZERO pairs
+  because the governed daemon has not run live - is FALSE as of this session.
+  The governor is live on the daemon path: `run_daemon` at
+  `headless/runner.py:427` calls `_run_governed_pass` at
+  `headless/runner.py:465`, which enters `slots_mod.hold(...)` at
+  `headless/runner.py:400`. Sixty governed passes over a 59.6-second window on
+  2026-09-20 produced 60 acquire/release pairs and 0 unpaired, min 0.001657 s,
+  median 0.001945 s, max 0.012126 s, against a `DEFAULT_STALE_AFTER` of 16200.0
+  seconds - a margin of about 1.3 million. The slot bucket was empty before and
+  after, zero locks leaked, and `reap()` was never called. The zero-unpaired
+  figure is non-vacuous: the detector was mutation-tested to UNPAIRED=5 against
+  a synthetic log.
+
+  WHY THIS DOES NOT CLOSE THE ROW, AND THE REASON IS IN THE CORPUS ITSELF. Of
+  the six jobs in the registry, five SKIP on every pass because no uid is
+  configured on this host - verified by running `python -m headless.runner
+  --once --dry-run`, where all six skip and the sixth, `emit_health`, skips only
+  for the dry run. So this corpus bounds the LOCAL-COMPUTE portion of an EMPTY
+  pass and says nothing about a loaded one, and the one network-bound job
+  contributed no time to any hold in it. The 4h30m question stays OPEN and RC,
+  CS and LW still owe a loaded corpus. The artifact is at
+  ops/runtime/slot_hold_corpus_2026-09-20.txt - unbackticked deliberately, since
+  a governing doc may only point at tracked paths - which is GITIGNORED at
+  `.gitignore:31` and WILL NOT TRAVEL BY GIT - re-derive rather than cite it
+  from another tree. Note also that a corpus built from the rendered log would
+  have read 59 of those 60 holds as 0.0 s; see the one-second `datefmt` row.
 
 - **NEW 2026-09-20, AND IT IS A GENERALISATION RATHER THAN A DEFECT. A CLAIM IS
   DEFEATABLE WHENEVER ITS BINDING CONDITIONS ARE NARROWER THAN ITS WORDING.**
@@ -262,10 +423,21 @@ version. What follows is everything the scaffold deliberately did not do.
   and the digest in `docs/LICENSE_NOTES.md` moved, and
   `_KNOWN_CHANNEL_CODE_VIOLATIONS` in `tests/test_no_sibling_names.py` became
   EMPTY - the stricter pin, not a relaxed one, because the comparison is now
-  against zero. WHAT REMAINS IS NOT THIS TREE'S WORK: LW, RC and SS still hold
-  the superseded bytes and are listed in `WINMUTEX_DIVERGENT` until each lands
-  the same file, which is a round window rather than drift. CS is unaffected -
-  its copy is a different file at `e0d3ac7d`, 7724 bytes.
+  against zero. WHAT REMAINS IS NOT THIS TREE'S WORK, AND THE CARRIER STATE
+  BELOW DECAYS FROM ITS STAMP. As measured 2026-09-20T23:41:45Z by hashing each
+  fleet root's own disk: LW and RC are both at 6184 bytes /
+  `df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7`, having
+  landed, and RC has pushed to its own origin; SS has confirmed the digest from
+  its own disk and is the LAST CARRIER OUTSTANDING; CS is unaffected, its copy
+  being a different file at `e0d3ac7d`, 7724 bytes; LL carries neither shared
+  file and voted rather than hashed. THIS ROW PREVIOUSLY SAID "LW, RC and SS
+  still hold the superseded bytes and are listed in `WINMUTEX_DIVERGENT`". That
+  sentence was true when `ef17cc8` wrote it and was contradicted within the same
+  session by `c07dc82`, which set `WINMUTEX_DIVERGENT` to `("CS", "SS")` and
+  added `WINMUTEX_DIVERGENT_MEASURED_UTC` beside it. Read the tuple in
+  `tests/test_loop_concurrency.py` and its stamp, never this prose, and re-hash
+  before acting - a round window closes carrier by carrier and a snapshot of
+  foreign disks has a shelf life measured in minutes here.
 
 - **CORRECTION 2026-09-20. `slots.hold()` DOES NOT REAP BEFORE ACQUIRING, AND
   RSC ASSERTED THAT IT DID.** The assertion was made in session and is wrong
@@ -280,7 +452,11 @@ version. What follows is everything the scaffold deliberately did not do.
 
   THE GOVERNING WIDTH, while the same file is in view. THIS TREE HAS NO
   ops/loop/config.json; `ops/loop/` holds exactly `slots.py` and `winmutex.py`.
-  The governing value is `MAX_CONCURRENT_LANES` at `core/config.py:113`, and it
+  The governing value is `MAX_CONCURRENT_LANES` at `core/config.py:128`, and it
+  - the 113 this row carried until 2026-09-20 no longer resolves, and
+  `docs/LEDGER.md` carries the same stale numeral in the entry headed "the
+  daemon loop becomes a real slot acquirer", left in place there because that
+  file is append-only -
   is 3. The shared module's own `hold()` signature default is 2, which is a
   DIFFERENT NUMBER THAT DOES NOT GOVERN, as does the `dict.get` default of 2 in
   the now-corrected known-gaps row further down. None of the three is
