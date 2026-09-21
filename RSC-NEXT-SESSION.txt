@@ -1,19 +1,6 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-09-20T23:41:45Z, on the round-B branch whose base commit is
-ef17cc8 - NOT on main. Everything below is a READING taken at that instant, not
-a promise about now. Re-measure before citing.
-
-READ THIS BEFORE YOU TRUST A WORD BELOW. THIS FILE IS UNGUARDED, AND NOT BY
-ACCIDENT OF ANYONE'S CARE. tests/test_docs_consistency.py builds its citation
-corpus from _tracked_markdown(), which filters on name.endswith(".md"). This
-file is tracked, is the first thing a cold session reads, and is a .txt - so
-every backticked-path check, every line-citation check and every pointer check
-in that module is blind to it BY SUFFIX. A SUFFIX-KEYED GUARD WITH A
-SUFFIX-EXCLUDED DEFECT. It has already cost once: this file spent a session
-telling readers that round B was open, highest-priority work, after round B had
-landed, and nothing in the tree could have gone red over it. Treat every claim
-here as hand-maintained prose, because that is all it is. A claim that must be
-guarded has to live in a .md file or in a test.
+Stamped 2026-09-20, at commit 517b259 on main. Everything below is a READING
+taken that day, not a promise about now. Re-measure before citing.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -47,171 +34,114 @@ THE GATES, in the order /done runs them
 Never pytest . from the root; the two suites run separately. NEVER pass a
 command-line -q - pytest.ini already carries one and a second makes -qq, which
 prints no summary line at all. mypy is ADVISORY and traverses only mypy.ini's
-files= roots, so it says NOTHING about headless/, ops/, surface/, scripts/ or
-tests/.
+files= roots - core/, engines/, ingest/, agents/pity_engine/, tools/ - so it
+says NOTHING about headless/, ops/, surface/, scripts/ or tests/. Never cite
+its Success as evidence about a test module.
 
-STATE OBSERVED 2026-09-21 AT 7fbbaf0
-  tests 3092 passed 4 skipped; pity_engine 80; shell node 52; ruff clean;
+STATE OBSERVED 2026-09-20 AT 517b259
+  tests 3112 passed 4 skipped; pity_engine 80; shell node 52; ruff clean;
   mypy 38 source files; licence 47; docs 34; qa 17 passed 2 skipped 3 noted;
   headless smoke rc 0. Working tree clean.
 
-  THE FOURTH SKIP IS NEW AND IS DELIBERATE. It is an arm in
-  tests/test_interpreter_pinning.py declining to report an unearned green on a
-  host where a bare python already resolves to sys.executable. It is not
-  contamination. Compare skip REASONS with -rs, never skip COUNTS.
+THE FOURTH SKIP IS DELIBERATE - an arm refusing an unearned green where a bare
+python already resolves to sys.executable. Compare skip REASONS with -rs, never
+skip COUNTS. A skip delta means the environment moved; a pass delta means the
+tree did. NEVER measure the suite with a virtualenv on PATH. Measured this
+session: two worktrees off the same commit produced DIFFERENT skip reason sets -
+one had sh on PATH and weaker ACL enforcement, the other the reverse. Neither
+set was a superset, so the union was only covered across both.
 
-THE INTERPRETER QUESTION IS SETTLED - DO NOT REOPEN IT AS AN OPEN CHOICE
-The Python 3.11 pin STANDS. It was settled by measurement, not by amendment.
-An equipped 3.11.9 agrees with 3.14.4 on both suites, ruff, mypy, qa_companion
-and the headless smoke, on an identical collection total, with exactly one
-Windows-only pathlib difference in a positive-control arm whose own docstring
-documents the asymmetry and which is expected green on CI's Linux 3.11. What
-was never true is that this tree's figures ARE 3.11 figures: python here
-resolves to 3.14.4 and CI runs 3.11.16. CLAUDE.md now says so.
+DO NOT REOPEN THE INTERPRETER QUESTION. Settled by measurement: the 3.11 pin
+STANDS, CLAUDE.md records the divergence. It is not an open choice.
 
-WHAT LANDED - five commits, c4cf858..7fbbaf0, all pushed
-  4bd3c29  Every roster numeral in docs/CHANNEL.md is derived from the parsed
-           roster table. 19 sites, 20 numerals, two axes that never mix, plus 9
-           must-stay-at-five exemptions pinned so a later reader finishing the
-           job goes red. Two ordinal sites are graded on ABSENCE of the stale
-           wording and demand a human rewrite, because the mechanical
-           substitution silently drops the tree the sentence already named.
-  abfa3d2  Every carrier claim names its population, and a new guard,
-           tests/test_carrier_population_prose.py, reds on a directory-scoped
-           or unnamed one. 18 hits on the old bytes, 0 on these.
-  5d51bc1  tools/corpus_statement.py publishes untracked_not_ignored so a guard
-           can STATE its corpus. It WARNS and never refuses, and nothing in it
-           raises to its caller, because it runs from a git hook.
-  709cfe0  tests/test_mypy_scope.py launches sys.executable, and the detector
-           now FOLLOWS THE NAME through module-level bindings so a splatted
-           tuple cannot hide a bare interpreter.
-  7fbbaf0  The docs.
+ROUND B IS LANDED AND MERGED. DO NOT DISPATCH ANYONE AGAINST IT.
+ops/loop/winmutex.py is 6184 bytes, sha256
+df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7, with the
+carrier code removed from one comment line so it reads "Found on review,
+2026-07-26." Landed at ef17cc8 together with every pin that depended on it, and
+both halves of the coupling were PROVEN RED by running, not asserted.
 
-THE ONE FINDING THAT REPEATED IN ALL FOUR SLICES - read before writing an arm
-Every slice shipped an arm that COULD NOT FAIL, and the cause was always one of
-two shapes: THE FIXTURE EXCLUDED THE DEFECT, or THE DETECTOR COULD NOT SEE THE
-SHAPE THE FIX ITSELF CREATED.
-  - A helper declared two git variables inert. Its fixture had NO TRACKED FILES,
-    so they had nothing to relabel. With a tracked file present both hijack.
-  - An interpreter fix introduced a module-level tuple, and its detector read
-    argv[0] at the call site, so reinstating the exact defect passed all 14 arms.
-  - A roster tie covered 8 sites and called the rest illustrative; 8 more were
-    found, then 2 more again by a census built BLIND from the document.
-  - A repair declined to build a guard as necessarily vacuous. The guard was
-    then built in about 20 lines and discriminated 18 to 0.
-ALWAYS reinstate the exact defect and prove the arm reds. An arm that has never
-rejected anything is not a gate.
+CARRIER STATE, measured 2026-09-20T23:41:45Z. THIS DECAYS - re-hash before
+citing, it already changed once inside a single session.
+  LW  applied 6184/df0a7a40      RC  applied and pushed to its own origin
+  SS  confirmed from its own disk, LAST CARRIER OUTSTANDING
+  CS  divergent 7724/e0d3ac7d, a DIFFERENT file, owes nothing
+  LL  carries neither shared file, voted rather than hashed
+CS holds ops/loop/slots.py at the pinned 9627/71fa2a68 but UNTRACKED and not
+ignored, so CS is a DISK holder and not a PIN carrier. Both halves verified.
 
-TRAPS MEASURED IN THIS TREE - EACH ONE HAS ACTUALLY BITTEN
-  - A VIRTUALENV ON PATH CONTAMINATES THE SUITE FIGURE. It turned a pass into a
-    skip and produced a false 3002/4 that was written up as a correction to this
-    file. This file was right. Re-measure in a clean shell before believing any
-    figure that disagrees.
-  - WINDOWS CreateProcess RESOLVES A BARE NAME against the calling image's
-    directory FIRST, then cwd, then PATH - not PATH order. One process can reach
-    three different interpreters and none need be the one running the suite.
-  - A GUARD WHOSE CORPUS COMES FROM git ls-files CANNOT SEE AN UNTRACKED FILE.
-    git add a new file BEFORE running the seam gates or the green is vacuous.
-  - A NO-OP MUTANT READS AS A KILL. An adversary credited an arm with killing a
-    sorted-to-list mutation; git ls-files already emits byte-sorted output, so
-    that mutation is undetectable against any real fixture. Confirm a mutation
-    CHANGED THE BYTES and that the kill names a specific arm.
-  - grep -c RETURNS EXIT 1 ON A ZERO COUNT, which breaks an && chain and can
-    silently truncate a measurement. A zero is often the interesting answer.
-  - tr -d with a NUL deletes the separator and collapses everything onto one
-    line, so a count comes back as 1. Translate the NUL to a newline instead.
-  - THE DOCS GUARD REFUSES A BACKTICKED PATH GIT DOES NOT TRACK. Write
-    gitignored, sibling-only and nonexistent paths in PLAIN TEXT.
-  - A LINE-NUMBER CITATION INTO A DOC DECAYS, AND THIS ENTRY IS ITS OWN PROOF.
-    It used to say CLAUDE.md cites tests/test_loop_concurrency.py:145-146. By
-    the time anyone read that, CLAUDE.md said 156-157; inserting one import
-    line then moved the pin again and CLAUDE.md now says 157-158. Three values
-    in three sittings, with only a RANGE check guarding any of them - and a
-    range check cannot tell a right line from a wrong one inside the same file,
-    so every one of those readings stayed green. CLAUDE.md now names the
-    SHARED_SHA256 symbol beside the number so a reader who finds it shifted can
-    re-locate. VERIFY THE NUMBER BEFORE YOU REPEAT IT; do not carry it forward.
-  - Path.write_text emits CRLF on Windows and eol=lf in .gitattributes hides it
-    from every diff. Byte-copy vendored artifacts; shutil.copyfile, never a
-    text-mode write.
-  - A quoted heredoc still mangles backslashes, and a long one can fail to parse
-    outright. Use the Write tool for anything substantial.
-  - The commit message file goes in the SESSION SCRATCHPAD, never a shared tmp
-    path. Under Git Bash a /tmp redirect lands in the Git INSTALLATION dir.
-  - Under Git Bash write taskkill //F //PID <pid>. Never Stop-Process.
-  - cd inside a compound command DRIFTS the working directory for later calls.
-  - Writing an outbound note into THIS tree's own inbox is AUTHORING, not
-    DELIVERING. Verify by reading the RECIPIENT'S copy.
-  - Subagents contradicted this session's briefs on measured points repeatedly
-    and were right every time, including about the briefs' own control figures.
-    Brief them to trust their own probe.
+BEFORE WRITING ANY ARM - the finding that repeated across two sessions now.
+Every arm that could not fail came from one of two shapes: the fixture EXCLUDED
+the defect, or the detector could not see the shape the fix itself created.
+Reinstate the exact defect and prove the arm reds. Purge __pycache__ on BOTH
+sides of every mutation, and assert the mutation is not a no-op first.
 
-OPEN WORK, HIGHEST PRIORITY FIRST - full text in ROADMAP.md, cited by heading
-  1. ROUND B IS LANDED. DO NOT DISPATCH ANYONE AGAINST IT. This item used to
-     read "ROUND B LANDS 2026-09-22 AND RSC OWES ITS PART", and it was already
-     false when written - a cold session reading it would have been sent to do
-     work that exists. It landed in commit ef17cc8, "fix(loop): land round B on
-     winmutex.py and move every pin with it". ops/loop/winmutex.py moved from
-     0b112a4f..., 6190 bytes, to
-     df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7, 6184
-     bytes - ONE comment line reworded, no behaviour - with the sha256 pin in
-     tests/test_loop_concurrency.py, the digest in docs/LICENSE_NOTES.md and
-     _KNOWN_CHANNEL_CODE_VIOLATIONS in tests/test_no_sibling_names.py all
-     moving in that one commit. ops/loop/slots.py did NOT move in round B.
+TRAPS MEASURED IN THIS TREE - none of these are hypothetical
+  A KNOWN-VIOLATION PIN often doubles as the only proof a fixture was
+  populated. Emptying one to [] was STRICTER for the arm that read it and made
+  a DIFFERENT arm in the same module vacuous - it passed against empty files.
+  Before emptying any pinned list, grep every arm that reads it.
 
-     WHAT ACTUALLY REMAINS, and it is short:
-       a. ef17cc8 is on a WORKTREE BRANCH, not on main. The mainline checkout
-          still has 0b112a4f, 6190 bytes, on disk. Until a merger lands the
-          branch, anyone who hashes the repository root gets the SUPERSEDED
-          digest and is not wrong to. Say which you measured.
-       b. CARRIERS STILL OUTSTANDING, measured 2026-09-20T23:41:45Z by hashing
-          each root's own disk: SS still holds 0b112a4f, 6190 bytes. LW and RC
-          have landed df0a7a40 and are done. CS is not outstanding and never
-          will be by this route - its copy is a DIFFERENT FILE at e0d3ac7d,
-          7724 bytes, divergent before round B and untouched by it. LL carries
-          no copy. THAT ROW IS A SNAPSHOT OF FOREIGN DISKS AND DECAYS: it was
-          measured minutes after a verifier had checked a different answer.
-          Re-hash before citing it. The roster and its stamp live in
-          tests/test_loop_concurrency.py as WINMUTEX_DIVERGENT and
-          WINMUTEX_DIVERGENT_MEASURED_UTC; nothing refreshes them but a person.
-       c. Nothing here owes LW, RC or CS an act. Round B is not RSC's work any
-          more.
-  2. THE SS AGE ITEM. ops/loop/slots.py short-circuits on AGE before pid_alive,
-     so a LIVE holder past the 16200-second window is declared stale. This tree
-     now runs a governed live daemon, so it can finally produce the hold()
-     duration corpus it owes. RC, CS and LW owe theirs.
-  3. THE RESPONDER STAYS DISABLED with three refusals and zero volunteers.
-     ops/runtime/trial_confirmed.json records RC's REFUSAL and expired
-     2026-09-08. NEVER write it - a gate one tree can satisfy alone is no gate.
-  4. INBOX: 38 entries remain untriaged, named in the scratchpad file the ledger
-     cites. 37 are RSC's own sent records; exactly ONE is inbound and is already
-     answered. The watermark was deliberately NOT advanced.
-  5. Open rows in ROADMAP.md, with what the round-B follow-up changed:
-     - CLAUDE.md's directory-scoped phrasing: CLOSED. CLAUDE.md, README.md,
-       ROADMAP.md and this file now state the FOUR pin carriers of
-       ops/loop/slots.py and the FIVE of ops/loop/winmutex.py separately, each
-       with the names and the 2026-09-20T23:41:45Z stamp.
-     - The carrier constants that cannot redden for another tree: STILL OPEN,
-       and it is a STATED LIMIT rather than a gap to close by reaching across
-       trees. What changed is that each cross-tree row now carries its
-       measurement instant, its sweep command and its swept root list, and the
-       diagnostic quotes the instant - so an overtaken row reads as a dated
-       record rather than as a false present tense. It still goes stale
-       silently, and no arm can catch that.
-     - The clean-index hole in the staged-diff check: STILL OPEN, untouched.
-     - The range-only guard on the CLAUDE.md line citation: STILL OPEN, and it
-       decayed twice more this session. See the trap entry above.
-     - NEW, and the one to act on first: the citation guard's corpus is
-       SUFFIX-KEYED and this file is excluded by it. See the header.
+  PYTHON \b TREATS UNDERSCORE AS A WORD CHARACTER, so a \b-delimited code
+  scanner cannot see _RC_ or OWNER_RC_NOTE - the exact escape class it existed
+  to catch. Closed with a separator boundary, 0 false positives measured.
 
-STANDING DIRECTIVES - THESE ARE NOT UP FOR RE-ASKING
-  Nothing waits for operator approval. Adjudicate a contested call, act on the
-  ruling, and report it as done. Commit and push everything. Subagent-first,
-  always: the main session is the OPERATOR'S SURFACE. The producer NEVER grades
-  its own work, and agreement between two agents is not evidence - find their
-  shared input and test THAT. Emit an inline checklist at session start, again
-  after at least four completions, and as the /done pre-flight - never per item.
-  CAVEMAN ULTRA in chat; byte-exact everywhere else. The cross-repo inbox is
-  reviewed, triaged into four buckets, ingested, implemented and ANSWERED every
-  session, and delivery is verified by reading the RECIPIENT'S copy. Silence
-  reads as DISSENT.
+  A QUOTED HEREDOC MANGLES BACKSLASHES. A slice this session wrote a literal
+  0x08 BACKSPACE instead of \b that way, and an ASCII check cannot catch it
+  because 0x08 IS ASCII. Use the Write/Edit tools for content with backslashes.
+
+  A SUFFIX-KEYED GUARD HAS A SUFFIX-EXCLUDED DEFECT. tests/test_docs_consistency
+  builds its citation corpus from _tracked_markdown(), which filters .md - so
+  this file, being .txt, is outside it entirely and its citations are unguarded.
+
+  LINE-NUMBER CITATIONS DECAY SILENTLY. Five in one dispatch brief were wrong
+  this session. The guard over CLAUDE.md citations is existence-and-range only:
+  repoint one at a docstring and the docs suite still passes 34. Cite by SYMBOL.
+
+  A CORPUS IS A SNAPSHOT. A carrier tuple measured and verified by an
+  independent pass was falsified by foreign disks moving. Stamp every
+  cross-tree row with the instant and the command, so staleness is self-evident.
+
+  AGREEMENT BETWEEN TWO AGENTS IS NOT EVIDENCE. Two agents reported the same
+  carrier state this session from one stale read. Find the shared input, test
+  THAT. Four trees sharing one guard hole shared an inherited TRIGGER SET, not
+  a regex - population falls out of trigger before any predicate exists.
+
+  A RENDERED LOG CANNOT RESOLVE A SUB-SECOND DURATION. core/log_setup.py binds
+  datefmt at :228 and :260 to one-second resolution, so a corpus parsed from
+  the log reads 59 of 60 real holds as 0.0s. Read LogRecord.created instead.
+
+OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md, cited by heading
+  1. The 4h30m staleness row is AMENDED, NOT CLOSED. 60 governed passes gave 60
+     pairs, 0 unpaired, max 0.012126s against DEFAULT_STALE_AFTER of 16200.0s -
+     but 5 of 6 jobs SKIP with no uid configured, so the corpus bounds an EMPTY
+     pass. The loaded-pass duration is still unmeasured. Corpus at
+     ops/runtime/slot_hold_corpus_2026-09-20.txt, which is gitignored.
+  2. SEAM REQUEST, filed and not implemented: widen the citation corpus past
+     .md so this file is guarded. Blast radius measured at three tracked .txt
+     files, two of them requirements files with no citations.
+  3. _check_message_file carries the SAME silent return 0 - the third member of
+     that vacuity family. Deliberately not fixed: repairing it shifts the line
+     CLAUDE.md cites into tools/precommit_gate.py, so the citation moves in the
+     same commit.
+  4. NO CONTROL CATCHES A SECRET IN A NEVER-COMMITTED FILE. Explicit at
+     tests/test_no_secret_literals.py - TRACKEDNESS, NOT PRESENCE. Two other
+     trees independently report the same hole.
+  5. SS finding 19 reproduces here and is UNMITIGATED - the pytest temp root has
+     42 children, PYTEST_DEBUG_TEMPROOT unset, 218 test files using tmp_path.
+     tmp_path_retention_policy is a RETENTION control, not a ROOT control.
+  6. SS finding 20 does NOT reach this tree - ABSENT SUBJECT, not solved hazard.
+     Do not record it as a win.
+  7. Inbox at 197 unread, population = entries absent from
+     ops/runtime/inbox_seen.json. Watermark deliberately NOT advanced. The
+     triage table is in moon_sync_inbox, which is gitignored.
+
+STANDING DIRECTIVES - NOT UP FOR RE-ASKING
+  Nothing waits for operator approval. Adjudicate, act, report done. Commit and
+  push everything. Subagent-first, always. The producer NEVER grades its own
+  work. Agreement between two agents is not evidence. Inline checklist at start,
+  after four or more completions, and at /done pre-flight. The cross-repo inbox
+  is reviewed, triaged into four buckets, ingested, implemented and ANSWERED
+  every session, and ALWAYS DELIVERED - a note in your own outbox is not
+  delivery, only the recipient's copy proves it, verified by reading it back.
+  Silence reads as DISSENT. CAVEMAN ULTRA in chat, byte-exact everywhere else.
