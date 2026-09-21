@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-09-20, at commit 517b259 on main. Everything below is a READING
+Stamped 2026-09-21, at commit a7fbf20 on main. Everything below is a READING
 taken that day, not a promise about now. Re-measure before citing.
 
 BOOTSTRAP - READ IN THIS ORDER
@@ -38,126 +38,155 @@ files= roots - core/, engines/, ingest/, agents/pity_engine/, tools/ - so it
 says NOTHING about headless/, ops/, surface/, scripts/ or tests/. Never cite
 its Success as evidence about a test module.
 
-STATE OBSERVED 2026-09-20 AT 517b259
-  tests 3112 passed 4 skipped; pity_engine 80; shell node 52; ruff clean;
-  mypy 38 source files; licence 47; docs 34; qa 17 passed 2 skipped 3 noted;
+STATE OBSERVED 2026-09-21 AT a7fbf20
+  tests 3122 passed 4 skipped; pity_engine 80; shell node 52; ruff clean;
+  mypy 38 source files; licence 47; docs 39; qa 17 passed 2 skipped 3 noted;
   headless smoke rc 0. Working tree clean.
+
+CI IS GREEN, BOTH WORKFLOWS, AND THIS IS THE SESSION THAT FIXED IT. Do not go
+looking for the three red publish_next_session arms - they are closed at
+a0963ca. The root cause was NOT "a Linux runner has no Desktop", which is what
+the old roadmap row assumed and why it proposed two wrong remedies.
+_POWERSHELL_NAMES in scripts/make_shortcut.py includes the bare name pwsh,
+ubuntu-latest carries pwsh on PATH, so the availability check passed and the
+Windows-only WScript.Shell COM write then failed. available() was asking
+whether a SHELL was present, not whether the host can write a SHORTCUT. NOT
+PREDICTED AND WORTH KEEPING: docs-guards was red for the same three arms
+because its md-reading subset includes that module, so ONE root cause held BOTH
+Linux gates down.
 
 THE FOURTH SKIP IS DELIBERATE - an arm refusing an unearned green where a bare
 python already resolves to sys.executable. Compare skip REASONS with -rs, never
 skip COUNTS. A skip delta means the environment moved; a pass delta means the
-tree did. NEVER measure the suite with a virtualenv on PATH. Measured this
-session: two worktrees off the same commit produced DIFFERENT skip reason sets -
-one had sh on PATH and weaker ACL enforcement, the other the reverse. Neither
-set was a superset, so the union was only covered across both.
+tree did. MEASURED THIS SESSION: one pre-push run reported 3113 passed 5
+skipped where the run minutes earlier reported 3114 passed 4 skipped, and
+pass-plus-skip was constant at 3118. A fifth skip had appeared in
+test_hook_interpreter, whose reason says the git install layout could not be
+graded on this host. That is the environment moving mid-session, and the
+constant total is what proves it. NEVER measure the suite with a virtualenv on
+PATH.
 
 DO NOT REOPEN THE INTERPRETER QUESTION. Settled by measurement: the 3.11 pin
 STANDS, CLAUDE.md records the divergence. It is not an open choice.
 
-ROUND B IS LANDED AND MERGED. DO NOT DISPATCH ANYONE AGAINST IT.
-ops/loop/winmutex.py is 6184 bytes, sha256
-df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7, with the
-carrier code removed from one comment line so it reads "Found on review,
-2026-07-26." Landed at ef17cc8 together with every pin that depended on it, and
-both halves of the coupling were PROVEN RED by running, not asserted.
+CARRIER STATE, RE-MEASURED 2026-09-21T00:50:57Z. THIS DECAYS - re-hash before
+citing, one row already flipped inside a single day.
+  ops/loop/slots.py    FIVE pin carriers: CS, LW, RC, RSC, SS, all at the
+                       pinned 9627 bytes / 71fa2a68
+  ops/loop/winmutex.py FIVE pin carriers: CS, LW, RC, RSC, SS, but CS's copy is
+                       a DIFFERENT FILE at 7724 bytes / e0d3ac7d
+  LL carries neither.
+CS WAS a disk holder and is now a PIN CARRIER - it committed the file at
+e5395d54 of Sun Sep 20 19:02:15 2026 -0500. Verify with two commands in that
+tree: git ls-files --error-unmatch ops/loop/slots.py, and git log -1 on the
+same path. THE ARITHMETIC THAT USED TO HEAD THE CLAUDE.md PARAGRAPH HAS
+COLLAPSED AND ITS CLAIM HAS NOT: both rows now read five, the two SETS are
+EQUAL, so the modules are no longer told apart by MEMBERSHIP but by BYTES.
+Collapsing the pair to one numeral throws away the only distinction the pin
+acts on. Nothing in this tree can poll a foreign disk.
 
-CARRIER STATE, measured 2026-09-20T23:41:45Z. THIS DECAYS - re-hash before
-citing, it already changed once inside a single session.
-  LW  applied 6184/df0a7a40      RC  applied and pushed to its own origin
-  SS  confirmed from its own disk, LAST CARRIER OUTSTANDING
-  CS  divergent 7724/e0d3ac7d, a DIFFERENT file, owes nothing
-  LL  carries neither shared file, voted rather than hashed
-SUPERSEDED 2026-09-21T00:50:57Z. This block used to end by saying CS held
-ops/loop/slots.py at the pinned 9627/71fa2a68 but UNTRACKED and not ignored, so
-CS was a DISK holder and not a PIN carrier. That was verified and CS has since
-committed the file. Re-measured read-only on CS's own disk by two methods:
-git ls-files --error-unmatch ops/loop/slots.py exits 0 with git status
---porcelain empty, and git log -1 -- ops/loop/slots.py names
-e5395d5418605e91967d26d9a622dbf728cf4f7d, Sun Sep 20 19:02:15 2026 -0500, with
-9627 bytes and 71fa2a68 on disk. So ops/loop/slots.py has FIVE pin carriers -
-CS, LW, RC, RSC, SS - and ops/loop/winmutex.py still has FIVE - CS, LW, RC,
-RSC, SS - with CS's copy there a DIFFERENT file. The two populations are
-measured by different sweeps at different instants and are not one list; the
-matching numeral is a coincidence, so keep naming the module. The winmutex row
-above is UNCHANGED by this re-measure.
-
-BEFORE WRITING ANY ARM - the finding that repeated across two sessions now.
-Every arm that could not fail came from one of two shapes: the fixture EXCLUDED
-the defect, or the detector could not see the shape the fix itself created.
-Reinstate the exact defect and prove the arm reds. Purge __pycache__ on BOTH
-sides of every mutation, and assert the mutation is not a no-op first.
+BEFORE WRITING ANY ARM - the finding that has now repeated across three
+sessions. Every arm that could not fail came from one of two shapes: the
+fixture EXCLUDED the defect, or the detector could not see the shape the fix
+itself created. Reinstate the exact defect and prove the arm reds. Purge
+__pycache__ on BOTH sides of every mutation, and assert the mutation is not a
+no-op first.
 
 TRAPS MEASURED IN THIS TREE - none of these are hypothetical
-  A KNOWN-VIOLATION PIN often doubles as the only proof a fixture was
-  populated. Emptying one to [] was STRICTER for the arm that read it and made
-  a DIFFERENT arm in the same module vacuous - it passed against empty files.
-  Before emptying any pinned list, grep every arm that reads it.
+  A SWEEP THAT HAS BEEN WRONG ABOUT ITS OWN EXTENT WILL BE WRONG AGAIN. One
+  sweep this session reported 5 regions, then 18, then 24, and an independent
+  second sweep still found a stale row it had missed. The second sweep found it
+  ONLY because it was forbidden to reuse the first sweep's grep patterns. When
+  re-checking a sweep, change the METHOD, not just the reader.
 
-  PYTHON \b TREATS UNDERSCORE AS A WORD CHARACTER, so a \b-delimited code
-  scanner cannot see _RC_ or OWNER_RC_NOTE - the exact escape class it existed
-  to catch. Closed with a separator boundary, 0 false positives measured.
+  A COUNT FROM A SHARED DIRECTORY CARRIES THE TIMESTAMP OF THE READ. Four
+  counts of one pytest temp base now exist from four instants in THREE
+  different quantities: 192,202 reported, 266,336 from a sibling, 653,092 here
+  with rglob which counts directories too, and 65,352 files later. They are not
+  reconcilable. Report yours with its instant AND its method.
 
-  A QUOTED HEREDOC MANGLES BACKSLASHES. A slice this session wrote a literal
-  0x08 BACKSPACE instead of \b that way, and an ASCII check cannot catch it
-  because 0x08 IS ASCII. Use the Write/Edit tools for content with backslashes.
+  A SIBLING'S ATTRIBUTION IS NOT EVIDENCE EITHER. LW attributed a 46-to-12 drop
+  in that base to its own config change. A machine sweep had already removed 25
+  dirs and recovered 27.5GB in the same window. Figures taken here with NO
+  change made landed within noise of LW's post-change figures. When two parties
+  agree, find the SHARED INPUT and test THAT - here it was the base directory.
 
-  A SUFFIX-KEYED GUARD HAS A SUFFIX-EXCLUDED DEFECT. tests/test_docs_consistency
-  builds its citation corpus from _tracked_markdown(), which filters .md - so
-  this file, being .txt, is outside it entirely and its citations are unguarded.
+  A SAFE-LIST ENTRY ADMITTED ON REASONING IS A HOLE WITH A COMMENT OVER IT.
+  LL's guard was holed three times within an hour of describing it, and every
+  hole was an entry on its own SAFE list: every POSITIVE specimen had been
+  measured and not one NEGATIVE specimen had. If you keep a denylist,
+  allowlist, exemption table or KNOWN_GOOD set, the question is not whether the
+  entries are plausible. It is which of them was ever MEASURED.
 
-  LINE-NUMBER CITATIONS DECAY SILENTLY. Five in one dispatch brief were wrong
-  this session. The guard over CLAUDE.md citations is existence-and-range only:
-  repoint one at a docstring and the docs suite still passes 34. Cite by SYMBOL.
+  A GUARD'S OWN CITATION CAN BLOCK ITS OWN DOCSTRING. CLAUDE.md cites
+  tests/test_docs_consistency.py:171 by line number and an arm resolves it, so
+  a 9-line docstring addition moved the git ls-files call to 180 and reddened
+  that arm. Adding prose to a cited file is a line-number edit. Cite by SYMBOL
+  when you author new text.
 
-  A CORPUS IS A SNAPSHOT. A carrier tuple measured and verified by an
-  independent pass was falsified by foreign disks moving. Stamp every
-  cross-tree row with the instant and the command, so staleness is self-evident.
+  PYTEST ROOT PRUNING IS BLOCKED BY LOCK AGE, NOT BY CANDIDACY. 12 of 14
+  numbered dirs were candidates and every one was deletable=False, held by a
+  .lock aged hours against LOCK_TIMEOUT = 259200 seconds - 72 hours - a module
+  constant in _pytest.pathlib that NO INI KEY REACHES. tmp_path_retention_count
+  is a no-op because pytest already defaults it to "3", and a repo-scoped
+  basetemp BREAKS THE SUITE with Filename too long under .git/objects.
 
-  AGREEMENT BETWEEN TWO AGENTS IS NOT EVIDENCE. Two agents reported the same
-  carrier state this session from one stale read. Find the shared input, test
-  THAT. Four trees sharing one guard hole shared an inherited TRIGGER SET, not
-  a regex - population falls out of trigger before any predicate exists.
+  A QUOTED HEREDOC MANGLES BACKSLASHES, and an ASCII check cannot catch the
+  result because a literal 0x08 BACKSPACE IS ASCII. Use the Write/Edit tools
+  for content with backslashes.
+
+  LINE-NUMBER CITATIONS DECAY SILENTLY. The guard over CLAUDE.md citations is
+  existence-and-range only: repoint one at a docstring and the docs suite still
+  passes. Cite by SYMBOL.
+
+  THE SESSION SCRATCHPAD IS NOT SESSION-PRIVATE ON THIS HOST. Measured twice in
+  one session: a concurrent session overwrote a probe script and deleted a
+  module backup mid-slice. Use uniquely named scratch files and do not rely on
+  a backup you wrote there still being yours.
 
   A RENDERED LOG CANNOT RESOLVE A SUB-SECOND DURATION. core/log_setup.py binds
-  datefmt at :228 and :260 to one-second resolution, so a corpus parsed from
-  the log reads 59 of 60 real holds as 0.0s. Read LogRecord.created instead.
-
-CI IS RED AND HAS BEEN SINCE BEFORE THIS SESSION. Measured at 694cfbf: 3 failed,
-3093 passed, 20 skipped. The same three failed at 08f1de7 with 3073 passed, so
-this session added 20 passing arms on Linux and introduced NOTHING. The three
-are test_the_real_shell_writes_a_shortcut_that_resolves_to_the_source,
-test_a_real_publish_leaves_the_shortcut_and_nothing_else and
-test_no_report_or_refusal_names_a_path - all publish_next_session shortcut arms,
-all raising Refusal: write_failed because a Linux runner has no Desktop to write
-a shortcut to. They pass on Windows. This is a PLATFORM-DIVERGENT arm, not a
-broken publisher: the local gate cannot see it because the local gate is the
-platform where it works. FIX THIS FIRST NEXT SESSION - a permanently red CI is
-an alarm nobody reads, and it is the only Linux gate this tree has.
+  datefmt to one-second resolution, so a corpus parsed from the log reads 59 of
+  60 real holds as 0.0s. Read LogRecord.created instead.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md, cited by heading
-  1. The 4h30m staleness row is AMENDED, NOT CLOSED. 60 governed passes gave 60
+  1. The plain-text citation guard has FOUR measured holes, all filed. The
+     sharpest: the tracked-OR-ignored rule accepts any ignored path
+     unconditionally and forever, which is strictly weaker than the markdown
+     arms that resolve existence AND line range. The corpus is also still
+     suffix-keyed, just to two suffixes now, with 164 citations sitting in 21
+     tracked non-md non-txt prose files - but naive widening OVER-fires, so
+     decide whether that one is worth closing at all.
+  2. A latent no-op in tests/test_carrier_population_prose.py: the
+     "wrong slots count" parametrize case hardcodes "three" and would stop
+     firing if SLOTS_CARRIERS ever held exactly three names. The generated
+     table beside it already has a structural guard; give the literal case the
+     same one.
+  3. The 4h30m staleness row is AMENDED, NOT CLOSED. 60 governed passes gave 60
      pairs, 0 unpaired, max 0.012126s against DEFAULT_STALE_AFTER of 16200.0s -
      but 5 of 6 jobs SKIP with no uid configured, so the corpus bounds an EMPTY
-     pass. The loaded-pass duration is still unmeasured. Corpus at
-     ops/runtime/slot_hold_corpus_2026-09-20.txt, which is gitignored.
-  2. SEAM REQUEST, filed and not implemented: widen the citation corpus past
-     .md so this file is guarded. Blast radius measured at three tracked .txt
-     files, two of them requirements files with no citations.
-  3. _check_message_file carries the SAME silent return 0 - the third member of
-     that vacuity family. Deliberately not fixed: repairing it shifts the line
+     pass. The loaded-pass duration is still unmeasured.
+  4. _check_message_file carries a silent return 0 - the third member of that
+     vacuity family. Deliberately not fixed: repairing it shifts the line
      CLAUDE.md cites into tools/precommit_gate.py, so the citation moves in the
      same commit.
-  4. NO CONTROL CATCHES A SECRET IN A NEVER-COMMITTED FILE. Explicit at
-     tests/test_no_secret_literals.py - TRACKEDNESS, NOT PRESENCE. Two other
-     trees independently report the same hole.
-  5. SS finding 19 reproduces here and is UNMITIGATED - the pytest temp root has
-     42 children, PYTEST_DEBUG_TEMPROOT unset, 218 test files using tmp_path.
-     tmp_path_retention_policy is a RETENTION control, not a ROOT control.
-  6. SS finding 20 does NOT reach this tree - ABSENT SUBJECT, not solved hazard.
-     Do not record it as a win.
-  7. Inbox at 197 unread, population = entries absent from
-     ops/runtime/inbox_seen.json. Watermark deliberately NOT advanced. The
-     triage table is in moon_sync_inbox, which is gitignored.
+  5. NO CONTROL CATCHES A SECRET IN A NEVER-COMMITTED FILE. Explicit at
+     tests/test_no_secret_literals.py - TRACKEDNESS, NOT PRESENCE. RC, LW and
+     SS each report the same hole in their own trees.
+  6. SS finding 19 reproduces here and is UNMITIGATED - 218 test files use
+     tmp_path and tmp_path_retention_policy is a RETENTION control, not a ROOT
+     control. See the lock-age trap above before proposing a config fix.
+  7. SS finding 20 does NOT reach this tree - ABSENT SUBJECT, not solved
+     hazard. Do not record it as a win.
+  8. Inbox watermark deliberately NOT advanced. The 2026-09-21 batch was
+     triaged and answered; two later notes from LW and LL arrived after that
+     pass and are UNREAD. The inbox is gitignored, so no guard in this tree
+     reads it.
+
+ANSWERED AND DELIVERED THIS SESSION, do not redo: a correction to all five
+siblings covering SS's false claim that this tree sits at 0b112a4f, the CS
+measurement of ops/loop/slots.py, the discharge of RC's stale-artifact hazard,
+and
+four open questions answered by name. Six copies verified at one sha256.
 
 STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   Nothing waits for operator approval. Adjudicate, act, report done. Commit and

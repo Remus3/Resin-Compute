@@ -11,8 +11,72 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-09-20. CI IS RED AND WAS RED BEFORE THIS SESSION - THREE
-  PLATFORM-DIVERGENT SHORTCUT ARMS.** Measured at `694cfbf`: 3 failed, 3093
+- **NEW 2026-09-21. PLAIN-TEXT CITATION GUARD: FOUR MEASURED HOLES LEFT OPEN.**
+  `tests/test_docs_consistency.py` now guards bare path and directory citations
+  in tracked `.txt` prose, landed at `264d9bd`. Four gaps stay, each measured.
+  (1) THE NON-VACUITY FLOOR IS WEAK - an extractor mutated to match only `md`
+  yields 14 citations and clears the `>= 10` floor, and only `py` yields 11 and
+  clears it, so a mutant deleting 11 of 13 suffix branches survives a
+  total-count floor. (2) SHAPES THE EXTRACTOR CANNOT SEE - tracked files with no
+  suffix such as `LICENSE` and `NOTICE`, and dot-name files such as
+  `.gitignore` and `.gitattributes`. `scripts/hook_python.sh` was closed by
+  adding `.sh`; the rest need a literal name list, which decays. (3) THE
+  `tracked OR ignored` RULE ACCEPTS ANY IGNORED PATH UNCONDITIONALLY AND
+  FOREVER - a citation to a deleted runtime artifact measures accounted True and
+  exists False, and the hand-off already cites two ignored artifacts that will
+  expire silently. That is strictly weaker than the markdown arms, which resolve
+  existence AND line range. (4) THE CORPUS IS STILL SUFFIX-KEYED, just to two
+  suffixes - 164 path citations sit in 21 tracked non-md non-txt prose files,
+  including `mypy.ini` and `pytest.ini`. NAIVE WIDENING OVER-FIRES:
+  `.gitattributes` names a sibling's module as an incident reference and
+  `ruff.toml` names `__init__.py`, neither as a live pointer. NOT DONE: decide
+  whether (4) is worth closing at all given the over-fire cost.
+
+- **NEW 2026-09-21. A LATENT NO-OP IS FLAGGED AND NOT FIXED IN THE CARRIER
+  PROSE MUTANT TABLE.** In `tests/test_carrier_population_prose.py` the
+  `"wrong slots count"` parametrize case hardcodes the word "three". It fires
+  today against a tuple of five, and it would become a mutant that changes
+  nothing if `SLOTS_CARRIERS` ever held exactly three names. The generated
+  rule-C table beside it was given a structural guard that asserts the planted
+  numeral differs from the expected one, so that half cannot degenerate; the
+  literal case was deliberately left, because widening it was outside the
+  slice. NOT DONE: give the literal case the same guard.
+
+- **NEW 2026-09-21. THE PYTEST TEMP ROOT IS BOUNDED BY A LOCK AGE NO CONFIG CAN
+  REACH.** Root pruning is not blocked on candidacy: a probe found 12 of 14
+  numbered dirs were candidates and every one was `deletable=False`, held by a
+  `.lock` aged hours against `LOCK_TIMEOUT = 259200` seconds - 72 hours - a
+  module constant in `_pytest.pathlib` with no ini key. Stale locks come from
+  killed pytest processes. `tmp_path_retention_count` is a no-op here because
+  pytest already defaults it to `"3"`, and a repo-scoped basetemp BREAKS THE
+  SUITE with `Filename too long` under `.git/objects`. Recorded at `a7fbf20`
+  with an arm in `tests/test_pytest_temp_hygiene.py`. NOT DONE, and it may not
+  be this tree's to do: nothing here stops a killed pytest leaving a lock that
+  outlives the run by up to 72 hours. The machine sweep ignores locks and is
+  the only thing that currently reclaims them.
+
+- **DONE 2026-09-21 at `a0963ca`. CI IS GREEN.** The root cause was NOT "a Linux
+  runner has no Desktop", which is what the row below assumed and which is why
+  it proposed the wrong two remedies. `_POWERSHELL_NAMES` in
+  `scripts/make_shortcut.py` includes the bare name `pwsh`, ubuntu-latest
+  carries `pwsh` on PATH, so `_resolve_powershell` resolved and
+  `PowerShellLinker.available()` returned True; the `.lnk` is written through a
+  `WScript.Shell` COM object that exists only on Windows, so the write failed.
+  The availability guard was asking whether a SHELL was present, not whether the
+  host can write a SHORTCUT. `available()` now requires `os.name == "nt"` too,
+  and the two real-mechanism arms skip with a reason naming the condition
+  actually observed. The third arm asserted over report TEXT and had no business
+  driving the real writer; it uses the test double now. Proven by
+  `tests/test_publish_next_session.py`, arm
+  `test_available_is_false_where_no_windows_shortcut_can_be_written`. NOT
+  PREDICTED AND WORTH KEEPING: `docs-guards` was red for the same three arms,
+  because its md-reading guard subset includes that module - ONE root cause held
+  BOTH Linux gates down, and both reported `success` afterwards. The original
+  row follows, left standing because its SHAPE paragraph is still correct and
+  its proposed remedies are still the wrong ones.
+
+- **SUPERSEDED 2026-09-21, see above. CI IS RED AND WAS RED BEFORE THIS SESSION -
+  THREE PLATFORM-DIVERGENT SHORTCUT ARMS.** Measured at `694cfbf`: 3 failed, 3093
   passed, 20 skipped. The identical three failed at `08f1de7` with 3073 passed,
   so this session added 20 passing arms on Linux and introduced none of the
   failures. The three are `test_the_real_shell_writes_a_shortcut_that_resolves_to_the_source`,
