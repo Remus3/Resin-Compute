@@ -12,6 +12,173 @@ now.
 
 ---
 
+## 2026-09-20 - the channel-code guard is given a subject it cannot lose, and the commit that called it stricter had shipped an arm that could not fail
+
+ORDERING NOTE, STATED BECAUSE THIS BLOCK IS NOT IN COMMIT ORDER. The correcting
+entry immediately below this one records `c07dc82`, which was appended to this
+file DURING the session while the three units in this block were still unfiled.
+So the three entries here sit above an entry that is chronologically between two
+of them. They were placed at the top rather than interleaved because inserting
+between standing entries is an in-place edit of an append-only file, which is
+the defect class the entry below exists to refuse. Read the block by its cited
+shas, not by its position.
+
+WHAT LANDED, `b18d6f1`, over `tests/test_no_sibling_names.py` only. Four defects
+an adversarial pass reproduced. The first of them was SHIPPED BY THE COMMIT THAT
+CLAIMED TO PREVENT IT, which is the reusable part.
+
+THE NON-VACUITY ARM WAS ITSELF VACUOUS, AND A STRICTER RULING WAS RIGHT ABOUT
+ONE ARM AND WRONG ABOUT ANOTHER IN THE SAME MODULE. Round B emptied
+`_KNOWN_CHANNEL_CODE_VIOLATIONS` and that was ruled STRICTER. It IS stricter for
+`test_the_shared_files_name_no_sibling_channel_code`, where the comparison is
+now against zero so a FIRST occurrence reddens where only a second one did. It
+is fatal to `test_the_scoped_channel_code_scan_can_actually_go_red`, whose red
+control copies the two shared files into a fixture and plants a violation: the
+pinned entry was the ONLY thing asserting that the fixture had copied anything
+at all, so `clean == sorted(_KNOWN_CHANNEL_CODE_VIOLATIONS)` became `[] == []`
+and passes against EMPTY FILES. REPRODUCED RATHER THAN ARGUED, by mutating the
+fixture's copy step to `dest.write_bytes(b"")`: the arm passed at rc 0 under the
+empty pin and reds under the old one. The repair derives the fixture's reality
+from the files themselves - each copied path must exist, be non-empty, and be
+byte-identical to the real file it claims to copy - so no arm depends on the pin
+being non-empty any more, and the same mutation now reds naming the empty
+fixture. THE GENERAL FORM: a ruling that a pin is stricter is a ruling about ONE
+comparison, and the pin's other readers have to be enumerated before it holds.
+
+NOTHING ASSERTED THE SCAN'S OWN POPULATION. `_SHARED_FILES` at
+`tests/test_no_sibling_names.py` is everything the scan opens, so it IS the
+population and a shrink is invisible. Measured, not predicted: reduced to
+`("ops/loop/slots.py",)` with a real violation restored in `winmutex.py`, the
+module reported 23 passed at exit 0.
+`test_the_scoped_scan_covers_every_shared_loop_module_and_nothing_was_added` now
+compares the tuple against this tree's own `ops/loop` directory in both
+directions, so a shrink and an addition are both red.
+
+THE DETECTOR WAS BLIND TO UNDERSCORE-JOINING, WHICH IS ESCAPE CLASS 2 IN THE
+MODULE'S OWN DOCSTRING. `_CHANNEL` was built with `\b`, and Python treats `_` as
+a word character, so `OWNER_RC_NOTE` and `_RC_` sat between two word characters
+and produced no boundary at all. `_SEP` in the sibling-NAME matcher has treated
+`_` as a separator since the module was written; the channel-CODE scan was added
+later and did not inherit it. The false-positive cost was measured over the
+population the scan actually reads BEFORE the change rather than estimated -
+word-boundary 0 hits, separator boundary 0 hits - so the widening costs nothing
+on its own subject. `test_the_channel_scan_sees_an_underscore_joined_code` pins
+it across 160 probes: all 64 plain-word shapes red before and after, 96
+previously invisible across 6 shapes. Lowercase, runtime concatenation and
+line-continuation splits are DOCUMENTED AS ACCEPTED RESIDUALS rather than
+claimed closed, and the guard's wording is narrowed to its binding condition - a
+read of source bytes - so the sentence stops covering cases the mechanism cannot
+reach.
+
+STALE NUMERALS WITH UNNAMED POPULATIONS, and one pair found while measuring
+rather than in the brief. The comment above `_CHANNEL_CODES` said the
+case-sensitive pattern returns 1 hit over the two shared files and IGNORECASE
+returns 7; measured 2026-09-21T00:01:11Z the pair is 0 and 6, the missing 1
+being the violation round B removed. Its corpus-wide pair of 1621 and 1831 over
+239 files did not reproduce either - 1962 and 2188 over 248 files at that same
+instant, the corpus having grown. Both non-reproducing pairs are RECORDED AS NOT
+REPRODUCED rather than deleted, and every surviving numeral names its population
+and carries its instant.
+
+---
+
+## 2026-09-20 - the staged lane of the precommit gate states the corpus it read, and the site row that names its git-reaching nodes is brought level with a population that really grew
+
+WHAT LANDED, `15d98fa` then `4be449f`. Two commits, one unit: the first names a
+KNOWN SEAM it could not close from its own write-list and the second closes
+exactly that seam.
+
+THE DEFECT WAS SILENCE, NOT EMPTINESS, AND THE DISTINCTION IS THE WHOLE DESIGN.
+`_check_staged` in `tools/precommit_gate.py` returned 0 in total silence: a clean
+index and forty staged files were byte-identical to every caller, no stdout, no
+stderr, rc 0. EMPTINESS IS DELIBERATELY NOT BLOCKED. `git commit --allow-empty`
+fires `.githooks/pre-commit` with exactly an empty index, so blocking would wedge
+a legitimate lane, and `_staged_added` already distinguishes `{}`, a genuine
+no-op commit, from `None`, a corpus never seen. The other two closures in that
+file do not reach this case - one refuses a zero-length SELECTION and one refuses
+an UNREADABLE diff, while a diff that was read and is empty is neither. The
+remedy is the arithmetic the scan lane already prints about itself: the staged
+lane now emits `staged=N added-lines=M` BEFORE the violation decision, so a
+BLOCKED run states its subject too, and an empty corpus additionally says so in
+words. The sibling case went with it - the non-commit lane in `main()` also
+returned 0 mutely, and now says the staged half did not run while deliberately
+NOT printing a `staged=` line, because it read no staged corpus.
+
+THE ARMS ARE COUNTING ARMS AND NOT FORMAT ARMS, WHICH WAS A CHOICE. Four in
+`tests/test_precommit_gate_corpus.py`, each against a real throwaway repo with a
+real index, no monkeypatch and no stub, parsing the two integers back out and
+comparing them against what the FIXTURE actually staged:
+`test_an_empty_staged_corpus_states_its_subject_instead_of_passing_silently`,
+`test_the_subject_report_counts_the_fixture_and_not_a_constant`,
+`test_the_subject_is_stated_on_a_blocking_exit_too` and
+`test_the_non_commit_lane_says_it_scanned_nothing`. A single presence assertion
+would have been satisfied by a mutant printing a constant `staged=0
+added-lines=0`; measured this session, that mutant was killed by two of the
+four, and the set went 4 failed / 11 passed before the change and 15 passed
+after.
+
+WHAT THIS DOES NOT DO, stated so nobody reads it as a refusal. A git hook
+consumes the exit code and nothing else, so this makes an empty corpus LEGIBLE
+rather than FATAL. A caller that must REFUSE an empty staged corpus needs an
+opt-in flag and a hook line passing it, and neither exists.
+
+THE THIRD MEMBER OF THE FAMILY WAS LEFT ALONE ON PURPOSE. `_check_message_file`
+in the same module has the same silent `return 0`. Repairing it shifts the line
+`CLAUDE.md` cites for the glyph gate's corpus builder, which
+`tests/test_docs_consistency.py` asserts still holds `ls-files`, and the
+citation's repair lives in a file that slice did not own. It is a ROADMAP row
+now, with the coupling named, rather than a quiet omission.
+
+THE SITE ROW CAUGHT ITS OWN GAP, AND THE WIDENING IS THE LEGITIMATE KIND.
+`tests/test_conftest_git_gate_sites.py` holds a `_SITES` row naming which nodes
+of the corpus module reach git, and the three new repo-backed arms were not in
+it: "has 5 test node(s) that reach git or its gate, and the row selects 2 of
+them". Each of the three stands up a real repo through `_init_repo`, which calls
+`require_git_repository()`, so they genuinely JOINED the derived population - the
+row was brought level with growth, not loosened until it stopped complaining.
+This tree has a standing finding that widening a matcher TWICE is the wrong
+response, and the row's comment now says so at the point a later reader would be
+tempted to do it a second time. PROVED THE ROW STILL BINDS rather than trusting
+the green: with one of the three ids removed the guard reds naming exactly that
+id and reports "selects 4 of them"; restored, the module is 28 passed.
+
+---
+
+## 2026-09-20 - round B lands on the shared winmutex.py and every pin moves in the same commit
+
+WHAT LANDED, `ef17cc8`. LW authored a repair to the fleet-shared
+`ops/loop/winmutex.py` and this tree landed it. ONE COMMENT LINE moved and no
+behaviour: the line named a sibling by channel code inside a file every carrier
+holds, which is the defect class `ops/loop/slots.py` forbids verbatim. Measured
+from this tree's own disk after the copy, the file is 6184 bytes at sha256
+`df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7`, zero CR
+bytes, superseding 6190 bytes at `0b112a4f`. The bytes were moved with
+`shutil.copyfile` and never through a text write, because `Path.write_text`
+emits CRLF on this platform and `eol=lf` hides it from every diff.
+
+EVERY PIN MOVED IN THE SAME COMMIT, because a pin left behind converts a joint
+round into an unexplained digest mismatch: the `SHARED_SHA256` winmutex entry in
+`tests/test_loop_concurrency.py` with a RE-PINNED paragraph recording the
+superseded digest, its author and its scope; `docs/LICENSE_NOTES.md`; the
+`_KNOWN_CHANNEL_CODE_VIOLATIONS` list in `tests/test_no_sibling_names.py`, now
+empty; and `CLAUDE.md`'s line citation into the pin dict, which the RE-PINNED
+paragraph had shifted.
+
+BOTH HALVES OF THE COUPLING WERE PROVED BY RUNNING, not by reading. New bytes
+with the pin held back reddens the digest arm; old bytes against the emptied
+list reddens the scoped channel-code arm. Every `__pycache__` was purged on both
+sides of each mutation and each restoration was verified by sha256 rather than
+by eye, because a net-zero-size revert running stale bytecode has produced a red
+suite against hashes matching HEAD in this tree before.
+
+WHAT IT DID NOT SETTLE, and it is filed rather than implied. The emptied pin was
+ruled stricter, and that ruling was incomplete - see the entry at the head of
+this block. `ops/loop/slots.py` did not move and its torn-write hazard is still
+an open ROADMAP row: round B moved one file, so that hazard's vehicle has not
+departed, only its travelling companion.
+
+---
+
 ## 2026-09-20 - a correcting entry: three present-tense sentences in this ledger describe a state that round B ended, and a carrier numeral in two of them never named its population
 
 APPENDED RATHER THAN EDITED IN PLACE, AND THE CHOICE IS THE POINT. This file
