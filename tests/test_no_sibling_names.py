@@ -381,19 +381,28 @@ def test_the_guard_states_what_it_cannot_catch():
 # edit them here.
 #
 # NO SINGLE NUMERAL COVERS BOTH FILES, so this comment states neither. The two
-# modules have DIFFERENT carrier sets, and a directory-wide sameness claim is
-# therefore false at every value it can take - which is exactly what the
-# superseded wording here ("across six repositories") asserted. Measured
+# modules carry SEPARATELY MEASURED carrier populations that move
+# independently, so a directory-wide sameness claim is false at every value it
+# can take - which is exactly what the superseded wording here ("across six
+# repositories") asserted. The two populations now list the same names and that
+# changes nothing: they agree on membership and NOT on bytes. Measured
 # 2026-09-20T23:41:45Z by hashing each fleet root's own disk and running
-# `git ls-files` inside it, the populations were:
+# `git ls-files` inside it, with the slots.py row RE-MEASURED
+# 2026-09-21T00:50:57Z, the populations were:
 #
-#   ops/loop/slots.py     FOUR PIN CARRIERS - LW, RC, RSC, SS - plus CS, which
-#                         holds the identical bytes UNTRACKED and is therefore
-#                         a DISK HOLDER and not a pin carrier, because a sha256
-#                         pin can only act on bytes git stores. LL holds none.
+#   ops/loop/slots.py     FIVE PIN CARRIERS - CS, LW, RC, RSC, SS - all at the
+#                         pinned bytes. CS entered this row on the re-measure:
+#                         `git ls-files --error-unmatch ops/loop/slots.py`
+#                         exits 0 there and `git log -1 -- ops/loop/slots.py`
+#                         names e5395d54 of Sun Sep 20 19:02:15 2026 -0500,
+#                         with 9627 bytes on disk. At the earlier stamp CS held
+#                         those same bytes UNTRACKED, which made it a DISK
+#                         HOLDER and not a pin carrier; the predicate did not
+#                         change, CS did. LL holds none.
 #   ops/loop/winmutex.py  FIVE PIN CARRIERS - CS, LW, RC, RSC, SS - and CS's
 #                         copy is a DIFFERENT FILE at 7724 bytes rather than a
-#                         lagging one. LL holds none.
+#                         lagging one. Unchanged by the re-measure above. LL
+#                         holds none.
 #
 # BOTH ROWS ARE A DATED SNAPSHOT OF FOREIGN DISKS AND DECAY FROM THE STAMP.
 # Nothing in this suite can poll another tree, so they are refreshed only by a
@@ -494,10 +503,12 @@ _KNOWN_CHANNEL_CODE_VIOLATIONS: list[tuple[str, str]] = []
 
 _CHANNEL_MESSAGE = (
     "Each of the two shared loop files is byte-identical-by-contract with the "
-    "OTHER CARRIERS OF THAT MODULE - a different set per module, four pin "
-    "carriers for slots.py and five for winmutex.py as at "
-    "2026-09-20T23:41:45Z, so there is no one numeral for the pair and this "
-    "message states none - and both are pinned by sha256, so DO NOT EDIT "
+    "OTHER CARRIERS OF THAT MODULE - a separately measured population per "
+    "module, five pin carriers for slots.py as at 2026-09-21T00:50:57Z and "
+    "five for winmutex.py as at 2026-09-20T23:41:45Z. The two lists coincide "
+    "in membership and not in bytes, and they are refreshed by different "
+    "sweeps, so a single numeral over the pair still says nothing a reader "
+    "can act on - and both files are pinned by sha256, so DO NOT EDIT "
     "EITHER FILE HERE. "
     "A local edit desynchronises every carrier that has not moved, and the "
     "sha256 pin then goes red in every one of them. The only fix is a JOINT "

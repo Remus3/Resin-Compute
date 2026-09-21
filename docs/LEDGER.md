@@ -219,6 +219,35 @@ WHAT IS NOW FALSE, and what it should be read as.
    value, which is the whole reason `tests/test_carrier_population_prose.py`
    exists.
 
+   **CORRECTION APPENDED 2026-09-21T00:50:57Z. THE PARAGRAPH ABOVE IS LEFT
+   EXACTLY AS IT WAS MEASURED AND IS STILL A CORRECT READING OF ITS OWN
+   INSTANT.** The slots.py half of it has since been overtaken. CS committed the
+   copy of `ops/loop/slots.py` it had been holding untracked, so it crossed from
+   disk holder to PIN CARRIER and that population went from FOUR to FIVE - CS,
+   LW, RC, RSC, SS. Re-measured read-only on CS's own disk by two methods:
+   `git ls-files --error-unmatch ops/loop/slots.py` exits 0 with
+   `git status --porcelain` empty, and `git log -1 -- ops/loop/slots.py` names
+   `e5395d54` of Sun Sep 20 19:02:15 2026 -0500, the file being 9627 bytes at
+   `71fa2a68`. The `ops/loop/winmutex.py` row is UNTOUCHED by this: still FIVE,
+   still CS, LW, RC, RSC, SS, CS's copy still a different file. LL still carries
+   neither.
+
+   **THIS ROW FLIPPED INSIDE ONE DAY, AND THAT IS THE DURABLE FINDING.** The
+   paragraph above was measured, independently checked, written down as a
+   correction to a worse claim - and one of its two halves was false the next
+   morning by an act in another repository that owed this tree no notice. Note
+   what did NOT change: the predicate. A sha256 pin can only act on bytes git
+   stores, so disk holder and pin carrier remain different things and the test
+   for telling them apart is unchanged. Only CS's side of it moved. Note also
+   what the correction costs the original lesson: the two populations are now
+   the SAME FIVE NAMES, so "the two sets DIFFER" above no longer holds on
+   membership. It holds on BYTES - CS is at the pinned digest for slots.py and
+   holds a different file for winmutex.py - and a single numeral over the
+   directory is still the wrong summary for that reason rather than the
+   arithmetic one. A ledger edited to agree with today could not show any of
+   this, which is why the measurement above stands and this note sits beneath
+   it.
+
 WHY BOTH DEFECTS ARE ONE DEFECT. A sentence about another repository's disk is a
 SNAPSHOT, and this ledger wrote them as standing facts. The first is a snapshot
 that an event overtook; the second is a snapshot whose subject was never stated,

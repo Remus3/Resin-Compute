@@ -260,16 +260,41 @@ def test_rule_c_reads_the_live_tuples_and_not_a_frozen_number():
     """Rule C must track the tuples, or it is a second hand-maintained literal.
 
     The whole complaint that produced this module was a count retyped in prose
-    with nothing tying it to the measurement. A rule C keyed on a literal 4
-    would reproduce that defect one layer up.
+    with nothing tying it to the measurement. A rule C keyed on a hardcoded
+    carrier count would reproduce that defect one layer up.
+
+    THE EXPECTATION BELOW MOVED FROM 4 TO 5 FOR slots.py ON 2026-09-21, and the
+    move is the argument for keeping this arm rather than a mark against it. CS
+    committed a copy of `ops/loop/slots.py` it had previously held untracked, so
+    it crossed from disk holder to pin carrier and the tuple grew. This arm went
+    red, which is exactly what it is for: the tuple may not move without a
+    person restating the measurement here.
+
+    THE TWO SIZES ARE NOW EQUAL AND THIS DICT STILL HAS TWO KEYS ON PURPOSE.
+    Collapsing it to one number would say the two populations are one
+    population. They are measured by different sweeps at different instants and
+    CS is at the pinned bytes for one module while holding a different file for
+    the other, so equal sizes are a coincidence of two snapshots.
+
+    THE MUTANT BELOW CANNOT DEGENERATE INTO A NO-OP AT ANY VALUE, which is the
+    property to preserve if this is ever edited. `wrong` is chosen as a word
+    that differs from `expected` by construction - "four" when expected is 5,
+    "five" otherwise - so the planted span always carries a count rule C must
+    reject. An arm that plants the CORRECT number would pass while the sweep
+    stayed blind, and this tree has recorded that exact shape.
     """
     sizes = {name: len(getattr(target_module, const)) for name, const in _MODULE_TUPLES.items()}
-    assert sizes == {"slots.py": 4, "winmutex.py": 5}, (
+    assert sizes == {"slots.py": 5, "winmutex.py": 5}, (
         f"the carrier tuples now measure {sizes}. If that is a real change, it was "
         "measured across the fleet and this arm's expectation moves with it; if it is "
         "not, the tuples were edited without a measurement."
     )
     for module, expected in sizes.items():
         wrong = "five" if expected != 5 else "four"
+        assert _numeral(wrong) != expected, (
+            f"the planted count for {module} is {wrong} and the tuple holds "
+            f"{expected}, so the mutant below is a NO-OP and the arm that reads it "
+            "cannot fail. Choose a word that differs from the measured size."
+        )
         span = f"The {module} carriers are {wrong} repos and they all agree."
         assert scan(f"# {span}\n"), f"rule C missed a wrong count for {module}"

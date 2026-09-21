@@ -67,8 +67,19 @@ citing, it already changed once inside a single session.
   SS  confirmed from its own disk, LAST CARRIER OUTSTANDING
   CS  divergent 7724/e0d3ac7d, a DIFFERENT file, owes nothing
   LL  carries neither shared file, voted rather than hashed
-CS holds ops/loop/slots.py at the pinned 9627/71fa2a68 but UNTRACKED and not
-ignored, so CS is a DISK holder and not a PIN carrier. Both halves verified.
+SUPERSEDED 2026-09-21T00:50:57Z. This block used to end by saying CS held
+ops/loop/slots.py at the pinned 9627/71fa2a68 but UNTRACKED and not ignored, so
+CS was a DISK holder and not a PIN carrier. That was verified and CS has since
+committed the file. Re-measured read-only on CS's own disk by two methods:
+git ls-files --error-unmatch ops/loop/slots.py exits 0 with git status
+--porcelain empty, and git log -1 -- ops/loop/slots.py names
+e5395d5418605e91967d26d9a622dbf728cf4f7d, Sun Sep 20 19:02:15 2026 -0500, with
+9627 bytes and 71fa2a68 on disk. So ops/loop/slots.py has FIVE pin carriers -
+CS, LW, RC, RSC, SS - and ops/loop/winmutex.py still has FIVE - CS, LW, RC,
+RSC, SS - with CS's copy there a DIFFERENT file. The two populations are
+measured by different sweeps at different instants and are not one list; the
+matching numeral is a coincidence, so keep naming the module. The winmutex row
+above is UNCHANGED by this re-measure.
 
 BEFORE WRITING ANY ARM - the finding that repeated across two sessions now.
 Every arm that could not fail came from one of two shapes: the fixture EXCLUDED

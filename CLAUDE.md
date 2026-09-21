@@ -319,23 +319,44 @@ clause (a) above therefore now has a LIVE subject in this repo rather than a
 hypothetical one. `reap()` in that same file
 unlinks a stale lock without ever consulting the repo field it logs, so it will
 reclaim a lock a SIBLING owns; `ops/loop/winmutex.py:37-38` are `Global\`
-kernel-namespace mutexes; and `tests/test_loop_concurrency.py:157-158` - the
+kernel-namespace mutexes; and `tests/test_loop_concurrency.py:160-161` - the
 `SHARED_SHA256` dict, named here as well as cited, because a line number decays
-and a symbol does not - pin both files by SHA256, so "hardening" either one
+and a symbol does not, and this one decayed by three lines in the edit that
+re-stamped the carrier rows below - pin both files by SHA256, so "hardening"
+either one
 desynchronises every carrier that has not moved.
 
-**THE TWO MODULES HAVE DIFFERENT CARRIER SETS, so one numeral over the `loop/`
-directory is false at every value it can take.** Measured 2026-09-20T23:41:45Z
-by hashing each fleet root's own disk and running `git ls-files` inside it:
-`ops/loop/slots.py` has FOUR PIN CARRIERS - LW, RC, RSC, SS - and CS holds the
-identical bytes UNTRACKED, which makes CS a disk holder of that module and not
-a pin carrier, because a sha256 pin can only act on bytes git stores.
-`ops/loop/winmutex.py` has FIVE PIN CARRIERS - CS, LW, RC, RSC, SS - and CS's
-copy there is a DIFFERENT FILE rather than a lagging one. LL carries neither.
-Those two rows are a SNAPSHOT OF OTHER REPOSITORIES' DISKS and they decay:
-nothing in this tree can poll a foreign disk, so the stamp, the sweep command
-and the per-name status live in `tests/test_loop_concurrency.py` and are
-refreshed only by a person re-running the sweep. Re-measure before citing.
+**THE TWO MODULES HAVE SEPARATELY MEASURED CARRIER POPULATIONS, so one numeral
+over the `loop/` directory is still the wrong summary - now that both rows read
+FIVE, that is a coincidence of two snapshots and not a directory-wide fact.**
+The arithmetic that used to carry this heading has collapsed and the claim has
+not. The rows are taken by different sweeps at different instants and they move
+independently. CHECKED RATHER THAN ASSUMED: at these stamps the two membership
+sets are EQUAL - both are CS, LW, RC, RSC, SS, the symmetric difference is
+empty, and LL is absent from both - so membership is no longer what
+distinguishes them. BYTES ARE. Every slots.py carrier is at the pinned
+71fa2a68, while on winmutex.py CS holds a DIFFERENT FILE and SS still holds the
+superseded digest. A reader who collapses the pair to "five" keeps the half
+that currently agrees and throws away the only half the pin acts on.
+`ops/loop/slots.py` has FIVE PIN CARRIERS - CS, LW, RC, RSC, SS - all at the
+pinned bytes. That row was RE-MEASURED 2026-09-21T00:50:57Z on CS's own disk,
+read-only, by two methods: `git ls-files --error-unmatch ops/loop/slots.py`
+exits 0 with `git status --porcelain` empty, and `git log -1 --
+ops/loop/slots.py` names commit e5395d54 of Sun Sep 20 19:02:15 2026 -0500 with
+9627 bytes on disk at the pinned digest. It SUPERSEDES the row that said CS
+held those bytes UNTRACKED and was therefore a disk holder and not a pin
+carrier: that was true when measured and CS committed the file afterwards. The
+predicate did not change - a sha256 pin can only act on bytes git stores - only
+CS's side of it did. `ops/loop/winmutex.py` has FIVE PIN CARRIERS - CS, LW, RC,
+RSC, SS - and CS's copy there is a DIFFERENT FILE rather than a lagging one;
+that row was measured 2026-09-20T23:41:45Z by hashing each fleet root's own
+disk and running `git ls-files` inside it, and the re-measure above did not
+touch it. LL carries neither. Those rows are a SNAPSHOT OF OTHER REPOSITORIES'
+DISKS and they decay - the reversal above is the proof, one row flipped inside
+a single day - and nothing in this tree can poll a foreign disk, so the stamps,
+the sweep commands and the per-name status live in
+`tests/test_loop_concurrency.py` and are refreshed only by a person re-running
+the sweep. Re-measure before citing.
 
 **OPEN, not settled - the NO-ANSWER RULE.** Three of the five participants are on
 ORDERED STANDBY and cannot reply, so a bilateral arming agreement is unreachable.
