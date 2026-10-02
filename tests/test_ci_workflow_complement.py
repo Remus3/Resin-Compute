@@ -303,7 +303,45 @@ def test_the_old_extension_allowlist_really_would_have_missed_them():
 
     If the discarded allowlist had covered those paths anyway, the test above
     would be asserting nothing. Reconstructed verbatim from the ci.yml step as
-    it stood at commit 41e7184.
+    it stood at commit a052424, readable with
+    `git show a052424:.github/workflows/ci.yml`.
+
+    THAT SHA SUPERSEDES `41e7184`, and the dead name is kept because the reason
+    it died is load-bearing rather than incidental. This tree rewrote its own
+    history on 2026-09-06, and the rewrite renamed every commit it touched;
+    `41e7184` was this citation's pre-rewrite name and resolves nowhere in this
+    repository now. The pairing survives only in that run's `commit-map`, which
+    a clone does NOT carry - so a reader who meets the dead sha in an artifact
+    outside this tree, such as GitHub's Events API, cannot translate it, and
+    this line is the only place the two names sit together.
+
+    NO GUARD STANDS BEHIND THIS LINE, and that is a ruling rather than an
+    oversight. Resolving every commit-sha-shaped token in every tracked file
+    partitions them, and the partition is what refuses the guard: of the
+    unresolvable tokens exactly one - this - was translatable by the
+    commit-map, while SIX MORE are cited as commits and must NEVER resolve,
+    being either another repository's commits or commits this tree force-pushed
+    away on purpose and recorded as destroyed. Only one of those six, an
+    `actions/checkout@` pin, is distinguishable by spelling. The rest differ
+    from a genuinely stale local sha in prose only, so a resolution arm needs a
+    hand-reasoned exception list that grows with every sibling citation, and
+    the easy direction is the dangerous one: a real stale sha admitted as
+    "probably foreign" leaves the guard certifying the defect it exists to
+    catch. The event worth guarding is a deliberate history rewrite, and at
+    that moment the operator holds the commit-map, which translates every
+    broken citation mechanically and completely. A migration run against the
+    map is the right instrument. A standing arm over this one line would look
+    like protection for the whole class while covering one member of it, which
+    is the failure `tests/test_ci_history_depth.py` names in its own docstring.
+
+    THE SHALLOW LANE IS NOT THE REASON, though it would have to be solved too.
+    `docs-guards.yml` checks out at `fetch-depth: 1` and then runs every
+    `tests/*.py` that mentions a markdown path, which includes this module. In
+    a depth-1 clone, measured rather than assumed, `git cat-file -t` fails
+    identically on `a052424` and on `41e7184` - the fix and the defect are
+    indistinguishable there. A shallow-clone skip would answer that, as
+    `tests/test_commit_trailers.py` already does, so the lane is a cost and not
+    the refusal.
     """
     old_allowlist = (".py", ".toml", ".ini", ".yml", ".yaml", ".json", ".js", ".sh")
     probes = (
