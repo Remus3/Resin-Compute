@@ -1305,3 +1305,67 @@ def test_the_legacy_index_zero_generator_still_works_and_is_still_covered():
         "the family's first_character member must be the legacy decoy byte for byte, or "
         "the old arm was replaced rather than kept"
     )
+
+
+# ---------------------------------------------------------------------------
+# The nested-checkout exclusion for the data/ sweep, and its neighbours arm
+# ---------------------------------------------------------------------------
+#
+# THIS ONE DID NOT MERELY WASTE TIME, IT MANUFACTURED A FINDING.
+# `sweep_data_dir` filtered on `fixtures` and nothing else, so a merged
+# worktree or a clone left under `data/` had its `.jsonl` rows validated as if
+# this tree had written them. Measured 2026-10-02 at 83d8b1a: a planted
+# checkout at `data/wt_probe_<hex>/foreign_rows.jsonl` produced the offender
+# `foreign_rows.jsonl:1: malformed data row: 'payload'` and moved `checked`
+# from 0 to 1, which reddened
+# `test_the_real_data_directory_reports_zero_checked_today_and_that_is_not_a_pass`
+# in a full-suite run. An offender that belongs to another repository is
+# unfixable here and unfalsifiable from the diff.
+
+
+def test_the_data_sweep_ignores_a_nested_checkout():
+    from tests.test_guard_worktree_exclusion import assert_probe_is_in_range, planted_tree
+
+    data_dir = REPO_ROOT / "data"
+    payload = {"foreign_rows.jsonl": b'{"not": "a provenance row"}\n'}
+    with planted_tree(data_dir, nested_checkout=True, files=payload) as probe_dir:
+        planted = probe_dir / "foreign_rows.jsonl"
+        # POSITIVE CONTROL: the old, unfiltered sweep really did reach this file.
+        assert_probe_is_in_range(planted, data_dir, "*.jsonl")
+
+        checked, offenders = sweep_data_dir(data_dir)
+        assert offenders == [], (
+            "the data/ sweep is reporting offenders from a nested checkout, so it is "
+            f"grading another repository's rows as this tree's: {offenders}"
+        )
+        assert checked == 0, (
+            f"the data/ sweep validated {checked} rows while the only .jsonl in range "
+            "belongs to a nested checkout, so every one of them is foreign"
+        )
+
+
+def test_the_data_sweep_still_grades_an_ordinary_sibling_directory():
+    """NEIGHBOURS ARM. Identical bytes, no `.git` marker, and it must be graded.
+
+    This is the arm an over-exclusion mutant reddens. Both halves are asserted:
+    the row is COUNTED, so the sweep did not silently skip it, and it is
+    REPORTED as an offender, so the sweep actually validated it rather than
+    merely listing the file.
+    """
+    from tests.test_guard_worktree_exclusion import planted_tree
+
+    data_dir = REPO_ROOT / "data"
+    payload = {"foreign_rows.jsonl": b'{"not": "a provenance row"}\n'}
+    with planted_tree(data_dir, nested_checkout=False, files=payload) as probe_dir:
+        checked, offenders = sweep_data_dir(data_dir)
+        assert checked == 1, (
+            "an ordinary non-dot directory under data/ carrying no .git marker is this "
+            "tree's own content and its rows must still be counted - an exclusion that "
+            f"drops them has destroyed the sweep rather than repaired it. checked={checked}"
+        )
+        named = [line for line in offenders if probe_dir.name in line]
+        assert len(named) == 1, (
+            "the planted malformed row must still be reported as an offender. "
+            f"offenders: {offenders}"
+        )
+        assert "malformed data row" in named[0], named[0]
