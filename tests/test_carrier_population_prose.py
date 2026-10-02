@@ -114,6 +114,29 @@ def _numeral(token: str) -> int:
     return _WORD_VALUES.get(token.lower(), 0) or int(token)
 
 
+def _a_wrong_word_for(size: int) -> str:
+    """A numeral word guaranteed to differ from `size`, or a loud failure.
+
+    EVERY PLANTED SPAN THAT RULE C MUST REJECT GETS ITS NUMERAL FROM HERE, and
+    that is the whole point of the function existing at module scope rather than
+    inside one test. A planted count typed as a literal is correct prose the day
+    the tuple reaches that value, and on that day rule C stops firing on it while
+    the arm reading it stays green - measured in this tree, see the parametrize
+    table below. Deriving the word from the live tuple makes that day impossible.
+
+    The assert is the non-vacuity arm for the derivation itself. It is cheap and
+    it fires at collection time, so a future edit that picks a word colliding
+    with the measured size cannot slip through as a silently dead plant.
+    """
+    word = "five" if size != 5 else "four"
+    assert _numeral(word) != size, (
+        f"the derived numeral word {word!r} equals the measured population {size}, so "
+        "every span built from it is CORRECT prose and rule C cannot reject it. "
+        "Pick a word that differs from the measured size."
+    )
+    return word
+
+
 def _comment_blocks(source: str) -> list[str]:
     """Contiguous runs of `#` lines, joined into one span each.
 
@@ -224,7 +247,21 @@ def test_the_scan_examined_a_real_corpus():
         ("unnamed mirror", "This directory is a byte-identical mirror of two sibling trees."),
         ("bare carrier count", "All three carriers are published and nothing else changed."),
         ("bare repo count", "The short version is that all three repos change in ONE round."),
-        ("wrong slots count", "The slots.py carriers are three repos and they all agree."),
+        # THE TWO ROWS BELOW CARRY A COUNT RULE C ACTUALLY COMPARES, so their
+        # numeral is DERIVED from the live tuple and never typed. The rows above
+        # are safe at any tuple value - rules A, B and D never read the number -
+        # but a rule C row typed as a literal dies the day the tuple reaches it.
+        (
+            "wrong slots count",
+            f"The slots.py carriers are {_a_wrong_word_for(len(target_module.SLOTS_CARRIERS))} "
+            "repos and they all agree.",
+        ),
+        (
+            "wrong winmutex count",
+            "The winmutex.py carriers are "
+            f"{_a_wrong_word_for(len(target_module.WINMUTEX_CARRIERS))} "
+            "repos and they all agree.",
+        ),
     ],
 )
 def test_the_scan_fires_on_a_planted_claim(tmp_path: Path, label: str, planted: str):
@@ -235,13 +272,28 @@ def test_the_scan_fires_on_a_planted_claim(tmp_path: Path, label: str, planted: 
     its carriage-return detector. Each case goes through `scan`, the function
     the real arm calls, rather than through a pattern by hand: an arm that
     matched the regex directly would pass while the sweep stayed blind.
+
+    THE OFFENDER MUST BE ATTRIBUTED TO THE PLANT, which is the second half of
+    the repair and the half that is easy to miss. This arm used to assert that
+    `scan(original + plant)` returned ANYTHING. Measured: with SLOTS_CARRIERS
+    forced to three names the planted "wrong slots count" span scanned to `[]`
+    on its own, while the target's OWN prose - which cites five - became TWO
+    rule C offenders, and the bare `assert offenders` stayed GREEN on borrowed
+    evidence. Subtracting the baseline makes the plant the only thing that can
+    satisfy this arm.
     """
     original = TARGET.read_text(encoding="utf-8")
+    baseline = scan(original)
     mutant = tmp_path / "mutant.py"
     mutant.write_text(original + f"\n\n# {planted}\n", encoding="utf-8", newline="\n")
 
     offenders = scan(mutant.read_text(encoding="utf-8"))
-    assert offenders, f"the scan accepted a {label} claim: {planted!r}"
+    attributable = [offender for offender in offenders if offender not in baseline]
+    assert attributable, (
+        f"the scan accepted a {label} claim: {planted!r}. The copy scanned to "
+        f"{len(offenders)} offender(s) and the untouched original to {len(baseline)}, so "
+        "nothing in the result is attributable to the planted span."
+    )
 
 
 def test_the_untouched_copy_stays_clean(tmp_path: Path):
@@ -277,11 +329,16 @@ def test_rule_c_reads_the_live_tuples_and_not_a_frozen_number():
     the other, so equal sizes are a coincidence of two snapshots.
 
     THE MUTANT BELOW CANNOT DEGENERATE INTO A NO-OP AT ANY VALUE, which is the
-    property to preserve if this is ever edited. `wrong` is chosen as a word
-    that differs from `expected` by construction - "four" when expected is 5,
-    "five" otherwise - so the planted span always carries a count rule C must
-    reject. An arm that plants the CORRECT number would pass while the sweep
-    stayed blind, and this tree has recorded that exact shape.
+    property to preserve if this is ever edited. The numeral comes from
+    `_a_wrong_word_for`, which derives a word differing from the measured size
+    and asserts that it does, so the planted span always carries a count rule C
+    must reject. An arm that plants the CORRECT number would pass while the
+    sweep stayed blind, and this tree has recorded that exact shape.
+
+    THAT HELPER IS SHARED WITH THE PARAMETRIZE TABLE ABOVE ON PURPOSE. The
+    table's rule C rows once typed their numeral, which is the defect this arm
+    was written to forbid one layer down - so the forbidden shape sat in the
+    parametrize table above this arm until 2026-10-02.
     """
     sizes = {name: len(getattr(target_module, const)) for name, const in _MODULE_TUPLES.items()}
     assert sizes == {"slots.py": 5, "winmutex.py": 5}, (
@@ -290,11 +347,6 @@ def test_rule_c_reads_the_live_tuples_and_not_a_frozen_number():
         "not, the tuples were edited without a measurement."
     )
     for module, expected in sizes.items():
-        wrong = "five" if expected != 5 else "four"
-        assert _numeral(wrong) != expected, (
-            f"the planted count for {module} is {wrong} and the tuple holds "
-            f"{expected}, so the mutant below is a NO-OP and the arm that reads it "
-            "cannot fail. Choose a word that differs from the measured size."
-        )
+        wrong = _a_wrong_word_for(expected)
         span = f"The {module} carriers are {wrong} repos and they all agree."
         assert scan(f"# {span}\n"), f"rule C missed a wrong count for {module}"
