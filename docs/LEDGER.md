@@ -12,6 +12,116 @@ now.
 
 ---
 
+## 2026-10-02 - Nine units, and every one of them was refuted at least once before it landed
+
+Landed across `a65cbff`, `250a4c8`, `8f93a35`, `02ab2be`, `e193f98`, `a1ee3d3`,
+`b8f2932`, `9aaf177`, `83d8b1a` and `e9cbc62`. The suite moved from 3122 passed
+4 skipped to 3162 passed 4 skipped, with the four skip REASONS byte-identical
+throughout - every delta is a pass delta, which is a statement about the tree,
+and no skip reason changed, which is what says the environment held still.
+
+THE SESSION'S ONE REUSABLE FINDING, stated first because it outranks any
+individual fix: NOT ONE PRODUCER CLAIM SURVIVED ITS FIRST ADVERSARIAL PASS
+INTACT. Every slice was refuted at least once and three were refuted twice. The
+refutations were not stylistic - they were wrong figures, arms that could not
+fail, and twice a remedy measured over the population it was DERIVED from
+rather than the population it ACTS on.
+
+FOUR FIGURES ROTTED INSIDE ONE FILE IN ONE DAY, and the fourth was introduced
+by the edit that fixed the third. A token breakdown in
+`tests/test_docs_consistency.py` read 39 / 21 / 13 / 5 against a measured
+47 / 25 / 13 / 9, having rotted inside the very commit that wrote it, because a
+fourteen-name table added by that same commit introduced eight new path-shaped
+tokens. The remedy adopted, three times over, was to DROP the count rather than
+restate it: restating buys one edit of accuracy and then rots again, and a
+count was never what the floor needed. A stale 39-module figure elsewhere and a
+present-tense table of 4 / 1 / 39 that nothing guarded were dropped on the same
+reasoning. Where a reading is kept it is STAMPED with its date and commit.
+
+THE IGNORED HALF OF THE BARE-PATH CITATION RULE IS NARROWED AND NOT CLOSED. It
+used to accept a gitignored path unconditionally and forever; it now requires a
+tracked file to NAME the path, with the guard module excluded from its own
+corpus through a `GUARD_MODULE` derived from `__file__`, so no safe list
+remains. There is still no existence check anywhere, so a path named once is
+accepted for good. The worked example is stronger than the one first written:
+`ops/runtime/health.json` is named by FOURTEEN tracked files, is the
+most-vouched ignored path in the tree, and does not exist on disk. The first
+remedy's price was computed over the seven specimens it was derived from rather
+than the 62 paths it acts on - excluding `tests/` wholesale would have cost 22
+paths their only voucher, including a runtime log that exists.
+
+AN ASSERT WAS RENDERING THE PROCESS ENVIRONMENT INTO A PUBLISHED CI ARTIFACT.
+Measured by forcing the failure rather than by reasoning: 3 of 103 variables
+with their values at default verbosity and 42 of 103 under `-vv`, the mapping
+printed twice because the `where` clause repeats it, and a credential-shaped
+host variable leaking even at default verbosity. The byte delta is NOT the
+measure and the fix says so - the function's docstring dominates both captures,
+so the measure is the variable count, now zero at both verbosities.
+
+A WORKING HOOK GATE WAS REPORTED AS BROKEN. Exit path 4 of
+`scripts/install_hooks.py` compared `core.hooksPath` as a STRING. With the
+value set worktree-scoped to `.githooks` with a trailing slash, the script
+exited 1 saying hooks were not installed while a real commit of a banned glyph
+WAS refused and HEAD did not move. The control is the load-bearing half and it
+holds: a genuinely wrong directory still exits 1 AND lets the glyph through.
+
+THE ASCII EXEMPTION HAD NEVER BEEN MEASURED, only reasoned, which is this
+tree's own definition of a hole with a comment over it. It now has both halves:
+a non-ASCII payload under the exempt prefix commits through the real hooks and
+survives byte-intact in `HEAD`, and the byte-identical payload under a
+non-exempt path is refused. An adversary then showed the vacuity guard was
+weaker than its own text - hardcoding the gate's corpus line as a constant left
+all four arms green, so it proved a one-file corpus line was PRINTED rather
+than that the planted file was READ. The arm now stages two files and asserts
+counts derived from payload bytes.
+
+SEVEN REPOSITORY-ROOT WALKERS SWEPT NESTED CHECKOUTS, three of them found after
+the first four were repaired, and one was LIVE RED through the full suite - a
+planted checkout's malformed JSONL became a real offender in
+`core/provenance.py`. The predicate's home was decided by a MECHANICAL fact
+rather than taste: `tests/test_guard_worktree_exclusion.py` imports `pytest` at
+module scope, so binding from there would have given production code a runtime
+dependency on pytest. `core/repo_sweep.py` now owns it and mypy's root count
+moved 38 to 39. FOUR SWEEPS DISAGREED ABOUT THE WALKER POPULATION - 24 by AST,
+then 10 plus 2 by a frame tracer whose first pass said 8 and was wrong because
+crediting the innermost frame attributes a walk to whoever DEFINES the helper,
+then an audit hook over 16 roots, and finally a poison sentinel planted in
+every non-dot directory with no attribution machinery at all. The last is the
+method to reuse: marked, the suite matches baseline exactly; unmarked as a
+positive control, seven arms red and name the walkers.
+
+A COMMIT CITATION DESTROYED BY THIS TREE'S OWN 2026-09-06 REWRITE was repointed
+after a sibling's discriminator found it. No guard was landed for the class and
+the refusal is a ruling rather than an oversight: six tokens are cited AS
+COMMITS and must never resolve, only one has a spelling discriminator, and two
+appear in NEITHER column of the commit-map, so no translating guard could ever
+reach them.
+
+A DOCSTRING CLAIMED A CALLER IT DOES NOT HAVE. `tools/corpus_statement.py` has
+no caller anywhere and said four times that a gate module invokes it. The guard
+now derives claimed callers and real importers and requires them equal, so it
+reds in BOTH directions - a docstring that lies in the safe direction still
+gets the module deleted as dead. Its first version missed 20 of 20 synthetic
+caller claims, including the single most likely word a maintainer reaches for,
+and the safe-list problem was then answered structurally rather than with more
+rows: the partner arm asserts every verb family has a planted specimen, so a
+family added without one reds.
+
+THREE SILENT OVER-EXCLUSIONS are filed against `core/repo_sweep.py` - a prefix
+match, a name-contains-marker match, and a hand-list replacing the derivation
+each pass the entire suite unchanged. `core/walkprune.py`'s own docstring names
+the prefix defect and has an arm for it at its layer; the new layer has none.
+
+FIVE NOTES WERE DELIVERED to six repositories each, every copy read back from
+the recipient's own directory and verified at one digest, because an outbound
+note in one's own outbox is not delivery. The channel work produced three
+corrections against this tree: a hold corpus described as tracked when it is
+gitignored, a read-and-unanswered figure whose 398 denominator does not
+reproduce against later readings of 483 and 486, and a published account-name
+count of 29 that re-derived to 24 and was withdrawn without a replacement being
+offered. A reported gap of 46 unread inbound notes was a POPULATION COLLISION -
+the watcher reports 311 unread as 265 received plus 46 SENT.
+
 ## 2026-09-21 - CI goes green by making the shortcut writer's availability a platform claim, and both Linux workflows were red for one root cause
 
 Landed at `a0963ca`. CI had been red since before the previous session with

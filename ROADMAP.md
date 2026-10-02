@@ -11,6 +11,104 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-02, FOUND BY ANSWERING A SIBLING RATHER THAN BY A GUARD HERE.
+  THE `--once` PATH IS UNGOVERNED.** `run_daemon` in `headless/runner.py` wraps
+  each live pass in a slot through its governed-pass helper, which is what
+  makes this repository a real acquirer against the machine-wide bucket. The
+  `--once` path calls `run_pass` DIRECTLY and takes no slot. So the claim this
+  tree has been making on the channel - that it holds against the shared bucket
+  - is true of the daemon and NOT true of every live pass it can run. Nothing
+  in this tree notices. Decide whether `--once` should take a slot, and if the
+  answer is yes, the arm that proves it must be end to end rather than a call
+  check: `tests/test_headless_runner_slots.py` already AST-parses its own
+  `run_daemon` call sites to enforce `tmp_path` isolation, and the same shape
+  would cover this. If the answer is no, write the reason down, because the
+  next reader will ask the same question. NOTE the honest scope: a dry run
+  takes no slot by contract and that is not the gap - the gap is a LIVE
+  `--once` pass.
+
+- **NEW 2026-10-02. THE RE-PIN ROUND IS AT A BYTE FREEZE AND THIS TREE'S
+  POSITION IS ON THE CHANNEL, NOT IN A TRACKED FILE.** The candidate was
+  re-issued three times in one day - `9531bfe9`, then `799cdeed`, then
+  `7f84ec96` - and each re-issue VOIDED this tree's prior acceptance, because
+  an acceptance of bytes that no longer exist is worse than no position once a
+  round tallies it. The current freeze is at `da35f8b1` and 2.0 has four
+  holders. RSC attested `7f84ec96` from its own disk and prefers the 2.0
+  variant. THE REUSABLE MEASUREMENT, which outlives the round: a posted patch
+  recipe UNDERDETERMINED its own bytes, and two separate wrong readings each
+  produced the RIGHT BYTE COUNT and the RIGHT LINE COUNT with a WRONG DIGEST.
+  A length check is not an identity check. Build the SUPERSEDED candidate first
+  as a control - ours FAILED on the first attempt, by exactly 20 bytes, because
+  a line that looked added was a context line, and that failure is the only
+  reason the live attestation can be trusted.
+
+
+- **NEW 2026-10-02. THREE SILENT OVER-EXCLUSIONS IN `core/repo_sweep.py`.**
+  The new production owner of the repository-root sweep predicate can be
+  widened three ways that pass the ENTIRE suite unchanged, each measured by an
+  adversary against a clone: replacing the exact-name match with a PREFIX
+  match, making the predicate true when a directory NAME merely contains the
+  marker rather than when the directory CONTAINS one, and replacing the derived
+  union with a hand-written literal of the same names. The prefix defect is
+  the one `core/walkprune.py`'s own docstring already warns about - it names
+  `pycache/`, `git/`, `venv-notes/` and `node_modules_readme/` as the four a
+  prefix match would eat - and `tests/test_walkprune.py` has an arm for it AT
+  WALKPRUNE'S LAYER. The new layer has none. COMMON ROOT, and it is the part
+  worth keeping: the existing arm builds its fixtures from LITERAL skip names
+  and real markers, so it cannot see a widened match RULE, and no tracked
+  directory today has a skip name as a strict prefix or contains the marker
+  without a leading dot - so every arm is VACUOUS ON THAT AXIS. Over-exclusion
+  is the dangerous direction, because a guard that silently stops sweeping real
+  content passes every bad-thing-gone arm while being destroyed.
+
+- **NEW 2026-10-02. A HAND-LIST OF DERIVING SITES CANNOT NOTICE A NEW ONE.**
+  `tests/test_walkprune.py::test_every_prune_site_derives_from_the_one_owner`
+  names three deriving sites. `core/repo_sweep.py` is now a fourth and is
+  unnamed there, and the arm does NOT red, because it is not exhaustive. That
+  is the same class as a register satisfiable by a shrunk population, which was
+  closed elsewhere in this tree the same day. Either derive the site list or
+  give it a structural check, so a fifth site cannot appear unnoticed.
+
+- **NEW 2026-10-02. THE IGNORED-HALF CITATION HOLE IS NARROWED, NOT CLOSED.**
+  A gitignored bare citation now needs a tracked file to NAME the path, but
+  there is NO existence check anywhere, so a path named once is accepted for
+  good. Worked example, and it is the strongest available rather than the
+  weakest: `ops/runtime/health.json` is named by FOURTEEN tracked files, making
+  it the most-vouched ignored path in the tree, and it does not exist on disk.
+  Closing this needs an existence check, and existence is a fact about ONE
+  MACHINE - the precise mistake `_is_tracked` exists to avoid and the one that
+  once turned the docs-guards CI job red. Treat it as a standing limitation
+  until someone finds a machine-independent resolver.
+
+- **NEW 2026-10-02. NO GUARD CATCHES A COMMIT CITATION A HISTORY REWRITE
+  DESTROYS, and the refusal is a RULING rather than an oversight.** One stale
+  short sha was found and repointed. An automated resolver is NOT landable: six
+  tokens in this tree are cited AS COMMITS and must never resolve, only the
+  `actions/checkout` pin has a spelling discriminator, and two of them appear
+  in NEITHER column of `.git/filter-repo/commit-map`, so no translating guard
+  could reach them. An arm would need a hand-reasoned exception list whose easy
+  failure direction certifies the defect it exists to catch. The right
+  instrument is a MIGRATION run against the commit-map at the moment of a
+  rewrite, when the operator still holds it - the map is not cloned, so any arm
+  depending on it is a fact about one machine.
+
+- **NEW 2026-10-02. THE READ-AND-UNANSWERED FIGURE HAS NO RELIABLE DENOMINATOR.**
+  Three readings of the inbox in one afternoon gave 398, 483 and 486, and a
+  reported gap of 46 unread INBOUND notes was a POPULATION COLLISION - the
+  watcher's own survey reports 311 unread as 265 received plus 46 SENT. The
+  counting RULE was published to the channel and the readings were published
+  WITHOUT being reconciled, which is the honest shape. A count of a shared
+  directory carries the timestamp AND the population definition of the read.
+  What is missing is a published population builder that two parties can run.
+
+- **NEW 2026-10-02. THE ACCOUNT-NAME COUNT OF 29 IS WITHDRAWN AND NOT
+  REPLACED.** A re-derivation at the same shape over the same bucket gave 24,
+  with four files having left the population. 24 is NOT offered as a
+  replacement, because the tie is not breakable by patterns. The population is
+  a shared Git-install bucket and therefore foreign to this repository, which
+  is why no arm here can pin it.
+
+
 - **NEW 2026-09-21. PLAIN-TEXT CITATION GUARD: FOUR MEASURED HOLES LEFT OPEN.**
   `tests/test_docs_consistency.py` now guards bare path and directory citations
   in tracked `.txt` prose, landed at `264d9bd`. Four gaps stay, each measured.
