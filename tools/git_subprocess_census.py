@@ -112,11 +112,22 @@ from __future__ import annotations
 import argparse
 import ast
 import shlex
+import sys
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# This module is documented as runnable BOTH as `python -m tools....` and as
+# `python tools/git_subprocess_census.py`. The second form puts `tools/` on
+# `sys.path` and not the repository root, so the `core` import below would die
+# on a usage this file's own docstring advertises. Same shim, same reason, as
+# `tools/gate_mutation_runner.py`.
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from core.repo_sweep import swept_files  # noqa: E402
 
 DEFAULT_ROOTS: tuple[str, ...] = ("tests", "tools", "ops", "headless", "scripts")
 
@@ -648,11 +659,23 @@ def census_source(source: str, path: str) -> list[CallSite]:
 
 
 def _python_files(root: Path) -> list[Path]:
-    return sorted(
-        path
-        for path in root.rglob("*.py")
-        if "__pycache__" not in path.parts and ".git" not in path.parts
-    )
+    """Every `.py` under `root` that THIS working tree owns.
+
+    A `.git`-IN-`path.parts` FILTER IS NOT A NESTED-CHECKOUT FILTER, and that
+    is the defect this now avoids rather than a refinement of it. A linked
+    worktree or a nested clone left under `tools/` or `tests/` carries its
+    `.git` marker at its OWN ROOT; its TRACKED CONTENT has no `.git` component
+    anywhere in its path, so the old test passed every one of those files
+    straight into the census. Measured 2026-10-02 at 83d8b1a: a planted
+    checkout at `tools/wt_probe_<hex>/nested/foreign_mod.py` was swept and
+    produced a GIT row in the report - a census figure about somebody else's
+    repository, reported as this tree's.
+
+    `swept_files` tests for the marker itself, so the checkout's whole subtree
+    goes. An ordinary non-dot directory under `root` carries no marker and is
+    still swept; `tests/test_git_subprocess_census.py` pins both halves.
+    """
+    return swept_files(root, "*.py")
 
 
 def census_paths(roots: Iterable[str], repo_root: Path) -> list[CallSite]:

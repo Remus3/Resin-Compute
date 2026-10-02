@@ -2445,3 +2445,81 @@ def test_the_non_ascii_arm_would_notice_an_ascii_only_re_derivation():
         "`census._dotted` on a non-ASCII receiver, so the arm above cannot see "
         f"the narrowing it was written for. divergences: {divergent}"
     )
+
+
+# ---------------------------------------------------------------------------
+# The nested-checkout exclusion, and the arm that keeps it from over-excluding
+# ---------------------------------------------------------------------------
+#
+# WHY A `.git`-IN-`path.parts` FILTER WAS NOT ONE. Before 2026-10-02
+# `census._python_files` dropped a path only when `.git` or `__pycache__`
+# appeared as a PATH COMPONENT. A nested checkout's marker sits at its OWN
+# ROOT; its TRACKED CONTENT has no `.git` component anywhere, so every `.py`
+# inside a merged worktree left under `tools/` or `tests/` went straight into
+# the census. Measured at 83d8b1a with a planted checkout: the report carried
+# `tools/wt_probe_<hex>/nested/foreign_mod.py:2:0  GIT  subprocess.run` - a
+# census row about another repository's file, inside this tree's figures.
+#
+# BOTH ARMS ARE REQUIRED. An exclusion that quietly stopped sweeping everything
+# would satisfy the first arm perfectly while destroying the census; the second
+# arm is the one that mutant reddens.
+
+
+def test_the_census_does_not_sweep_a_nested_checkout() -> None:
+    from tests.test_guard_worktree_exclusion import assert_probe_is_in_range, planted_tree
+
+    tools_dir = REPO_ROOT / "tools"
+    payload = {"nested/foreign_mod.py": b"import subprocess\nsubprocess.run(['git', 'log'])\n"}
+    with planted_tree(tools_dir, nested_checkout=True, files=payload) as probe_dir:
+        planted = probe_dir / "nested" / "foreign_mod.py"
+        # POSITIVE CONTROL: the old, unfiltered sweep really did reach this file,
+        # so a green result below is about the exclusion and not about a plant
+        # that landed out of range.
+        assert_probe_is_in_range(planted, tools_dir, "*.py")
+
+        swept = census._python_files(tools_dir)
+        assert len(swept) > 0, (
+            "the repaired sweep of tools/ found no python at all - zero out of zero "
+            "reads as a pass and proves nothing"
+        )
+        assert planted not in swept, (
+            "a nested checkout's tracked python is still swept by the census, so its "
+            "figures are partly about another repository"
+        )
+
+        sites = census.census_paths(["tools"], REPO_ROOT)
+        foreign = [site.render() for site in sites if probe_dir.name in site.path]
+        assert foreign == [], f"the census reported rows about a foreign checkout: {foreign}"
+
+
+def test_the_census_still_sweeps_an_ordinary_sibling_directory() -> None:
+    """NEIGHBOURS ARM. Identical bytes, no `.git` marker, and it must be seen.
+
+    This is the arm an over-exclusion mutant reddens. The payload is the same
+    file in the same place with exactly one difference - no marker at the probe
+    root - so the only thing it can be measuring is the marker test itself.
+    """
+    from tests.test_guard_worktree_exclusion import planted_tree
+
+    tools_dir = REPO_ROOT / "tools"
+    payload = {"nested/ordinary_mod.py": b"import subprocess\nsubprocess.run(['git', 'log'])\n"}
+    with planted_tree(tools_dir, nested_checkout=False, files=payload) as probe_dir:
+        planted = probe_dir / "nested" / "ordinary_mod.py"
+
+        swept = census._python_files(tools_dir)
+        assert len(swept) > 0, (
+            "the repaired sweep of tools/ found no python at all - zero out of zero "
+            "reads as a pass and proves nothing"
+        )
+        assert planted in swept, (
+            "an ordinary non-dot directory under tools/ carrying no .git marker is this "
+            "tree's own content and must still be swept - an exclusion that drops it has "
+            "destroyed the census rather than repaired it"
+        )
+
+        sites = census.census_paths(["tools"], REPO_ROOT)
+        buckets = [site.bucket for site in sites if probe_dir.name in site.path]
+        assert buckets == [census.GIT], (
+            "the census must still bucket a real git shell-out in this tree's own "
+            f"content as GIT. buckets seen: {buckets}"
+        )
