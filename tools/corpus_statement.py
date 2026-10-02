@@ -18,13 +18,54 @@ where the count arm went red on 2026-09-07 for honest work in progress, and
 "a guard that reddens for honest work in progress is one a contributor learns
 to ignore".
 
-NOTHING IN THIS MODULE RAISES TO ITS CALLER. `untracked_not_ignored` is
-invoked from `tools/precommit_gate.py`, which runs from a git hook, so any
-exception escaping here becomes a NON-ZERO HOOK EXIT - the warn-only mechanism
-turned into a refusing gate through the back door, defeating the very ruling
-above. Every degenerate input is therefore a WARNING plus a defensible return
-value. Over-naming in a warning is harmless; under-naming reproduces the
-original silence.
+NOTHING FIRES THIS MODULE. SAID PLAINLY, BECAUSE THE PREVIOUS WORDING LIED.
+Until 2026-10-02 this docstring named the glyph gate as the thing that calls
+`untracked_not_ignored`. That was FALSE and had been false since the module
+landed. The false sentence is described here rather than quoted, so that a
+sweep for it cannot score a hit on its own correction - the same trap as
+typing a banned glyph into the test that bans it.
+Measured: `tools/precommit_gate.py` imports `json`, `os`, `pathlib`,
+`re`, `subprocess`, `sys` and - locally, inside a function - `py_compile`.
+Stdlib, all of it. Across every tracked file the only thing that names
+`corpus_statement` at all is `tests/test_corpus_statement.py`, its own test
+module. There is no `__main__` block here either, so there is not even a
+command line to type.
+
+What this module is, therefore: a LIBRARY HELPER WITH NO PRODUCTION CALLER.
+Importable, covered by its own arms, and wired to nothing. An unwired script is
+not a watcher - the question is never whether the file exists but what FIRES
+it, and here the answer is nothing.
+
+THE WIRING THIS WANTS, named so the reader does not have to wonder. The natural
+site is the glyph gate's corpus construction in `tools/precommit_gate.py`: after
+it builds its `git ls-files` corpus, call
+
+    from tools.corpus_statement import untracked_not_ignored
+    unscanned = untracked_not_ignored(repo_root)
+    if unscanned:
+        print("NOT SCANNED - untracked, add them first: " + ", ".join(unscanned))
+
+and STILL EXIT 0, per the ruling below. That change is not made here because
+`tools/precommit_gate.py` is outside this change's write-list, and because a
+gate's PRESENCE is never proof it runs - wiring it is only done once a
+stage-a-violation, attempt-a-real-commit, assert-HEAD-unchanged test proves the
+new line fires end to end. Both are reasons to do it deliberately rather than
+in passing.
+
+WHY IT IS KEPT RATHER THAN DELETED. The hole it describes is real and was paid
+for once already - a new test module passed a builder's suite run and a merge
+seam run, then the pre-push gate refused it the moment it was tracked. The
+module is the fix for that, fully armed, waiting on one call site. Deleting it
+would throw away the fix and leave the defect.
+
+NOTHING HERE RAISES TO ITS CALLER, and that contract survives the correction
+above on its own merits. The intended caller is a git hook, where an escaping
+exception becomes a NON-ZERO HOOK EXIT - the warn-only mechanism turned into a
+refusing gate through the back door, defeating the very ruling above. Every
+degenerate input is therefore a WARNING plus a defensible return value.
+Over-naming in a warning is harmless; under-naming reproduces the original
+silence. Note the tense: the hook exposure is what wiring WOULD create, not
+something observed today.
 
 THE LOAD-BEARING DISTINCTION. "untracked" and "gitignored" are DIFFERENT SETS.
 
@@ -149,9 +190,12 @@ def _normalise_prefixes(
         untracked_not_ignored(root, prefixes=[d for d in owned if (root/d).is_dir()])
 
     which yields `[]` on a shallow or partial checkout, or when a config key
-    lists no directories. A raise there escapes into `tools/precommit_gate.py`
-    and out through a git hook as a non-zero exit, which is the refusing gate
-    the module docstring forbids. Warning and over-naming is harmless; refusing
+    lists no directories. A raise there would escape into whichever gate
+    eventually wires this helper and out through a git hook as a non-zero exit,
+    which is the refusing gate the module docstring forbids. Conditional
+    deliberately: nothing calls this today - see the module docstring - so that
+    escape is the hazard the wiring would create, not one being observed.
+    Warning and over-naming is harmless; refusing
     is not. It is also what this function already does for the structurally
     identical never-can-match case below, so raising was inconsistent with its
     own neighbour.
@@ -202,8 +246,10 @@ def untracked_not_ignored(
     These are exactly the files a `git ls-files` corpus cannot see, and so
     exactly the files any guard built on such a corpus did not scan.
 
-    Never raises. See the module docstring: this is called from a git hook, so
-    an escaping exception would become a refusing gate.
+    Never raises. Nothing calls this today - see the module docstring, which
+    names what would and why the call has not been landed. The contract holds
+    anyway: the intended caller runs from a git hook, where an escaping
+    exception would become a refusing gate.
 
     Args:
         root: directory to describe. Every git call is pinned to it via `cwd`,

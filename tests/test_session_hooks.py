@@ -70,6 +70,7 @@ something it never touched.
 """
 from __future__ import annotations
 
+import ast
 import functools
 import importlib.util
 import json
@@ -1205,7 +1206,15 @@ def test_this_file_stamps_nothing_into_the_live_runtime_records(monkeypatch):
         pytest.skip("nested run - see NESTED_MARKER, this arm must not re-enter itself")
 
     watcher = _watcher_module()
-    assert watcher.ENV_RUNTIME_DIR not in os.environ, (
+    # HOISTED DELIBERATELY - do NOT inline this back into the assert below.
+    # Comparing a bool renders `assert not True`; comparing against the mapping
+    # renders the mapping. Rationale and the measured byte counts live in
+    # `test_no_test_module_asserts_against_the_whole_environment`, which is also
+    # the guard that keeps this shape out of the tracked test corpus. They are
+    # kept there rather than here because pytest echoes THIS function's source
+    # on every failure of it, so a long comment here is a cost paid every time.
+    runtime_dir_is_set = watcher.ENV_RUNTIME_DIR in os.environ
+    assert not runtime_dir_is_set, (
         f"{watcher.ENV_RUNTIME_DIR} is set in this run's environment, so what this "
         "arm calls the live records are not the live records and it would measure "
         "nothing. Unset it and run again"
@@ -2096,3 +2105,216 @@ def test_the_declared_hook_says_unmeasured_over_a_really_denied_inbox(tmp_path):
         "a blind fire filed itself as a clean channel in the one record that "
         f"says what a fire decided: {lines}"
     )
+
+
+# ---------------------------------------------------------------------------
+# An assertion must not render the whole environment when it fails.
+# ---------------------------------------------------------------------------
+
+#: Expressions whose `repr` is the entire process environment. `os.environ` is
+#: the spelling this tree had; the copies are the obvious ways to reintroduce
+#: it while passing a text sweep that only looks for the bare name.
+_WHOLE_ENVIRONMENT_SOURCES: tuple[str, ...] = (
+    "os.environ",
+    "os.environ.copy()",
+    "dict(os.environ)",
+    "environ",
+)
+
+
+def _asserts_rendering_the_whole_environment(source: str) -> tuple[int, list[str]]:
+    """Return `(asserts_examined, offending_descriptions)` for one module.
+
+    A PAIR, not a list, for the reason the module docstring gives: an empty
+    offender list from a checker that examined nothing is a clean bill of
+    health that means nothing.
+
+    WHAT THIS INSTRUMENT CAN SEE. It parses the module with `ast` and inspects
+    the OPERANDS of the comparison a failing `assert` would render - the left
+    side and every comparator of a `Compare`, through a leading `not`, and
+    through the arms of an `and`/`or`. Because it is an AST walk and not a text
+    sweep, it sees these shapes when they are split across lines, which is how
+    the original defect was written.
+
+    WHAT THIS INSTRUMENT CANNOT SEE, stated rather than implied, because an AST
+    walk in this tree was once blind to caller-side guards and the absence read
+    as a fact:
+
+      - An ALIAS. `env = os.environ` followed by `assert key not in env` is a
+        data-flow fact, not a syntactic one, and is invisible here. A separate
+        data-flow pass over the tracked corpus found no such assert at the time
+        this guard was written, but nothing keeps one out.
+      - An INDIRECTION. `assert key not in _env()` renders whatever `_env`
+        returns, and this guard cannot know what that is.
+      - ANY OTHER large or sensitive object. The class is "an assertion whose
+        failure renders something unbounded or secret"; this guard enforces
+        only the environment member of it, which is the member with a measured
+        leak behind it.
+      - UNTRACKED FILES. The corpus is `git ls-files`, so a module on disk and
+        not yet added is outside it by construction - the defect
+        `tools/corpus_statement.py` exists to name.
+    """
+    tree = ast.parse(source)
+    examined = 0
+    offenders: list[str] = []
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assert):
+            continue
+        examined += 1
+
+        pending: list[ast.expr] = [node.test]
+        operands: list[ast.expr] = []
+        while pending:
+            current = pending.pop()
+            if isinstance(current, ast.UnaryOp) and isinstance(current.op, ast.Not):
+                pending.append(current.operand)
+            elif isinstance(current, ast.BoolOp):
+                pending.extend(current.values)
+            elif isinstance(current, ast.Compare):
+                operands.append(current.left)
+                operands.extend(current.comparators)
+
+        for operand in operands:
+            if ast.unparse(operand) in _WHOLE_ENVIRONMENT_SOURCES:
+                offenders.append(
+                    f"line {node.lineno}: {ast.unparse(node.test)[:90]}"
+                )
+                break
+
+    return examined, offenders
+
+
+def _tracked_test_modules() -> list[Path]:
+    """Every tracked `tests/*.py`, discovered rather than listed."""
+    completed = subprocess.run(
+        ["git", "ls-files", "-z", "tests/*.py"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        check=True,
+    )
+    names = [n for n in completed.stdout.decode("utf-8").split("\0") if n]
+    return [REPO_ROOT / n for n in names]
+
+
+def test_no_test_module_asserts_against_the_whole_environment() -> None:
+    """A failing assert must not print the operator's environment into the log.
+
+    THE DEFECT THIS CLOSES, MEASURED RATHER THAN ASSERTED. This file carried
+
+        assert watcher.ENV_RUNTIME_DIR not in os.environ, (...)
+
+    inside `test_this_file_stamps_nothing_into_the_live_runtime_records`.
+    pytest rewrites an `assert` so that a failure renders BOTH operands, and
+    the right-hand operand there is the whole process environment. Forced red
+    in a worktree by exporting `RESINCOMPUTE_RUNTIME_DIR`:
+
+        old, default verbosity   4650 bytes   3 variables rendered with values
+        old, -vv                 9618 bytes  42 variables rendered with values
+        new, default verbosity   4547 bytes   0
+        new, -vv                 5195 bytes   0
+
+    The default-verbosity byte delta is small ONLY because this function's
+    enormous docstring dominates both captures; the leak measurement is the
+    variable count, not the byte count, and the byte count is reported because
+    it is checkable. At default verbosity pytest truncates the middle of a long
+    repr, so the leak is partial there - 3 of the process's 103 variables, the
+    alphabetically first, `ANTHROPIC_BASE_URL` among them. Under `-vv` pytest
+    stops truncating and 42 appear, the mapping having been rendered TWICE:
+    once for the comparison and once for the `where ... = os.environ`
+    explanation. CI publishes that output as an artifact.
+
+    THOSE FIGURES DECAY AND NO ARM IS PINNED TO THEM. They describe the
+    environment of the one process that ran the measurement; a CI runner's
+    environment is different and usually larger. The conclusion - the old shape
+    renders variables and values, the new shape renders none - is what survives.
+
+    THE FIX IS A HOIST, not a message change. `runtime_dir_is_set = key in
+    os.environ` then `assert not runtime_dir_is_set` renders `assert not True`.
+    The KEY and the fact of its presence still reach the reader, through the
+    assertion message, which is the whole of what a diagnosis needs.
+
+    WHAT THIS ARM DOES NOT CLAIM. See `_asserts_rendering_the_whole_environment`
+    for the four shapes its instrument is blind to. It is a guard against
+    reintroducing the exact spelling and its near neighbours, not a proof that
+    no assertion anywhere renders something large.
+    """
+    require_git_repository()
+
+    modules = _tracked_test_modules()
+    assert len(modules) >= 40, (
+        f"the tracked test corpus collapsed to {len(modules)} modules, so this "
+        "sweep is vacuous - see the zero-out-of-zero trap in the module docstring"
+    )
+
+    examined = 0
+    offenders: list[str] = []
+    for path in modules:
+        count, found = _asserts_rendering_the_whole_environment(
+            path.read_text(encoding="utf-8")
+        )
+        examined += count
+        offenders.extend(
+            f"{path.relative_to(REPO_ROOT).as_posix()} {line}" for line in found
+        )
+
+    assert examined >= 1000, (
+        f"only {examined} assert statements were examined across "
+        f"{len(modules)} modules, which is too few to be the real corpus"
+    )
+    assert offenders == [], (
+        "these assertions render the WHOLE process environment when they fail, "
+        "and on CI that output is a published artifact. Hoist the membership "
+        "test into a bool and assert on the bool, keeping the key in the "
+        f"message: {offenders}"
+    )
+
+
+def test_the_environment_render_detector_actually_fires() -> None:
+    """NON-VACUITY. The detector above must catch a planted instance of each shape.
+
+    Without this arm, `offenders == []` is satisfied just as well by a detector
+    that matches nothing - the trap this file's docstring is about. The planted
+    sources are built here rather than read from disk so that nothing tracked is
+    mutated, not even briefly.
+    """
+    planted = {
+        "bare not-in": "assert key not in os.environ\n",
+        "bare in": "assert key in os.environ, 'message'\n",
+        "equality": "assert captured == os.environ\n",
+        "copy": "assert captured == os.environ.copy()\n",
+        "dict call": "assert captured == dict(os.environ)\n",
+        "from-import name": "assert key not in environ\n",
+        "split across lines": (
+            "assert (\n"
+            "    key\n"
+            "    not in os.environ\n"
+            "), 'the AST sees this and a line-oriented text sweep does not'\n"
+        ),
+        "inside an and": "assert other and key not in os.environ\n",
+    }
+    for label, source in planted.items():
+        examined, offenders = _asserts_rendering_the_whole_environment(source)
+        assert examined == 1, f"{label}: examined {examined} asserts, expected 1"
+        assert len(offenders) == 1, (
+            f"{label}: the detector missed a planted whole-environment render "
+            f"in {source!r}"
+        )
+
+    survivors = {
+        "the hoisted fix": (
+            "runtime_dir_is_set = key in os.environ\n"
+            "assert not runtime_dir_is_set, 'the key is named in the message'\n"
+        ),
+        "a get with a default": "assert os.environ.get(key) is None\n",
+        "a single value": "assert os.environ[key] == expected\n",
+        "an unrelated mapping": "assert key not in some_small_fixture\n",
+        "a keys view": "assert key not in set(os.environ)\n",
+    }
+    for label, source in survivors.items():
+        examined, offenders = _asserts_rendering_the_whole_environment(source)
+        assert examined == 1, f"{label}: examined {examined} asserts, expected 1"
+        assert offenders == [], (
+            f"{label}: a legitimate neighbour was flagged, which is how a sweep "
+            f"scores perfectly by deleting its own subjects: {offenders}"
+        )
