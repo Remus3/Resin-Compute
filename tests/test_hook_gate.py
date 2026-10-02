@@ -208,6 +208,7 @@ runs on every machine.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
 import shutil
@@ -1898,4 +1899,204 @@ def test_an_unconfigured_clone_commits_a_banned_message_straight_through(
     assert EM_DASH in subject, (
         "the glyph did not survive into the committed subject, so this arm did not "
         "demonstrate the hole it claims to measure"
+    )
+
+
+# ---------------------------------------------------------------------------
+# THE EXEMPTION, MEASURED - `_ASCII_EXEMPT_PREFIXES = ("data/cache/",)`
+#
+# WHY THESE ARMS EXIST. The exemption's PRECONDITION is already guarded:
+# tests/test_ci_workflow_complement.py asserts every exempt prefix is
+# gitignored, and carries a non-vacuity partner proving the `git check-ignore`
+# probe can say no. What nothing did was PLANT A NON-ASCII BYTE UNDER THE
+# PREFIX AND WATCH A REAL GATE RUN PASS OVER IT. The exemption was therefore
+# admitted on reasoning - this tree's own recorded definition of a hole with a
+# comment over it. The governing finding is that every POSITIVE specimen gets
+# measured while NEGATIVE specimens do not, and an exemption is a NEGATIVE
+# specimen by construction: it is the thing the gate is supposed NOT to flag.
+#
+# BOTH ARMS ARE REQUIRED. An exemption test that only shows the pass half
+# cannot tell an exemption from a gate that has stopped working altogether, so
+# EXEMPT_PAYLOAD below is staged under the exempt prefix in one arm and under
+# a NON-exempt prefix in the other, byte-identical, with the path as the only
+# variable.
+#
+# THE VACUOUS-PASS TRAP, closed explicitly. A bare gate invocation against a
+# clean index scans zero files and exits 0, so exit 0 alone would be satisfied
+# by a gate that never looked. `_report_staged_subject` prints
+# `precommit_gate: staged=N added-lines=M` on EVERY staged-lane exit, and the
+# pass arm asserts that line names a corpus of exactly one file with at least
+# one added line. That is what makes it a statement about a file the gate
+# READ. The gate builds that corpus from the staged diff, so the planted file
+# is `git add`-ed rather than merely written - an unstaged file is invisible
+# to it by construction.
+#
+# The non-ASCII characters are built with chr(). Typing them would make this
+# module violate the rule it is measuring, and the gate would then refuse the
+# very commit that adds these arms.
+# ---------------------------------------------------------------------------
+
+#: Two different SHAPES of non-ASCII on purpose. U+2014 is one of the six
+#: NAMED banned glyphs; U+00D7 reaches the gate's CATCH-ALL arm instead, the
+#: one added after a multiplication sign walked straight through a
+#: six-character denylist in a sibling tree. An exemption measured with an
+#: em-dash alone would say nothing about the catch-all half.
+EXEMPT_PAYLOAD = (
+    '{"name": "upstream' + EM_DASH + 'name", "size": "3' + chr(0x00D7) + '4"}\n'
+).encode("utf-8")
+
+#: Same basename in both arms. Only the directory differs.
+EXEMPT_RELPATH = "data/cache/upstream_probe.json"
+NON_EXEMPT_RELPATH = "data/fixtures/upstream_probe.json"
+
+#: `_report_staged_subject`'s line. The gate's statement of what it READ.
+_STAGED_SUBJECT = re.compile(r"precommit_gate: staged=(\d+) added-lines=(\d+)")
+
+
+def _exempt_prefixes() -> tuple[str, ...]:
+    """`_ASCII_EXEMPT_PREFIXES` loaded FRESH from the shipped gate on disk.
+
+    A private module name and an explicit loader rather than `import
+    precommit_gate`, so this never hands back a copy some other module
+    imported earlier in the same pytest process and possibly monkeypatched.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "_hook_gate_probe_precommit_gate", REPO_ROOT / "tools" / "precommit_gate.py"
+    )
+    assert spec is not None and spec.loader is not None, (
+        "tools/precommit_gate.py could not be loaded, so nothing here knows what "
+        "the gate exempts"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return tuple(module._ASCII_EXEMPT_PREFIXES)
+
+
+def test_the_two_exemption_arms_are_pointed_at_the_prefix_the_gate_actually_exempts():
+    """The fixture-excludes-the-defect check, stated BEFORE the two arms below.
+
+    A gate cannot fail if its fixture excludes the defect. If `data/cache/`
+    ever leaves `_ASCII_EXEMPT_PREFIXES`, the pass arm would quietly start
+    measuring an ordinary path; this arm makes that a red line with a reason
+    rather than a change of subject nobody notices.
+    """
+    prefixes = _exempt_prefixes()
+    assert prefixes, "the gate exempts nothing, so the pass arm below measures nothing"
+    assert EXEMPT_RELPATH.startswith(prefixes), (
+        f"{EXEMPT_RELPATH} is not under any of {prefixes}, so the 'exempt' arm "
+        f"below is not testing an exemption"
+    )
+    assert not NON_EXEMPT_RELPATH.startswith(prefixes), (
+        f"{NON_EXEMPT_RELPATH} IS exempt under {prefixes}, so the mirror arm below "
+        f"cannot fail and proves nothing"
+    )
+
+
+def test_the_exemption_payload_really_carries_non_ascii_bytes():
+    """Non-vacuity on the SPECIMEN itself, independent of any gate.
+
+    Bytes inspection, never a grep: `grep` hex escapes are not a character
+    class on this box and have reported 1785 non-ASCII lines in a file holding
+    zero non-ASCII bytes.
+    """
+    offenders = sorted({b for b in EXEMPT_PAYLOAD if b > 127})
+    assert offenders, (
+        "EXEMPT_PAYLOAD is pure ASCII, so both arms below would be statements "
+        "about a clean file and neither could ever fail"
+    )
+    decoded = EXEMPT_PAYLOAD.decode("utf-8")
+    assert EM_DASH in decoded, "the NAMED-glyph half of the specimen is missing"
+    assert chr(0x00D7) in decoded, "the CATCH-ALL half of the specimen is missing"
+
+
+def test_a_non_ascii_byte_under_the_exempt_prefix_commits_through_a_real_gate(
+    gate_repo: _ThrowawayRepo,
+):
+    """THE MEASUREMENT. End to end, through the real hooks, not a unit call.
+
+    Three separate claims, and the third is what stops this being a vacuous
+    pass:
+      1. the commit LANDED - exit 0, HEAD moved, no gate headline,
+      2. the exempt bytes reached history intact,
+      3. the gate's own corpus line says it read a ONE-FILE staged corpus with
+         added lines in it. Without 3 this arm would pass equally against a
+         gate that scanned nothing at all, which is the bare-invocation
+         vacuous pass recorded in docs/LEDGER.md.
+    """
+    gate_repo.stage(EXEMPT_RELPATH, EXEMPT_PAYLOAD)
+    before = gate_repo.head()
+    assert before, "the fixture left HEAD unborn"
+
+    proc = gate_repo.commit(CLEAN_MESSAGE)
+    after = gate_repo.head()
+
+    # BOTH STREAMS, and that is a measurement rather than caution. The gate
+    # PRINTS its corpus line, but git forwards a hook's stdout onto git's own
+    # STDERR, so an assertion written against `proc.stdout` alone went red on
+    # a perfectly working gate whose line was sitting in `proc.stderr`.
+    subject = _STAGED_SUBJECT.search(proc.stdout + proc.stderr)
+    assert subject is not None, (
+        "the gate never stated its staged corpus, so a pass here cannot be told "
+        f"apart from a gate that scanned nothing.\nstdout: {proc.stdout}\n"
+        f"stderr: {proc.stderr}"
+    )
+    staged_files, added_lines = int(subject.group(1)), int(subject.group(2))
+    assert staged_files == 1, (
+        f"the gate read a {staged_files}-file staged corpus, not the one planted "
+        f"file, so this arm is not measuring {EXEMPT_RELPATH}"
+    )
+    assert added_lines >= 1, (
+        "the gate read the planted file but ZERO added lines, so the exemption was "
+        "never consulted and exit 0 says nothing about it"
+    )
+
+    assert proc.returncode == 0, (
+        f"the gate REFUSED non-ASCII under the exempt prefix {EXEMPT_RELPATH}, so "
+        f"the exemption does not do what `_ASCII_EXEMPT_PREFIXES` claims.\n"
+        f"stdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+    assert GATE_MARKER not in proc.stderr, (
+        f"the gate emitted its block headline on an exempt path: {proc.stderr}"
+    )
+    assert after != before, (
+        f"the commit reported success but HEAD did not move: {before} -> {after}"
+    )
+    committed = gate_repo.git("show", f"HEAD:{EXEMPT_RELPATH}").stdout
+    assert EM_DASH in committed and chr(0x00D7) in committed, (
+        "the exempt file landed with its non-ASCII characters altered, so this arm "
+        "did not demonstrate that they passed through"
+    )
+
+
+def test_the_same_bytes_under_a_non_exempt_path_are_refused_by_the_same_gate(
+    gate_repo: _ThrowawayRepo,
+):
+    """THE MIRROR, and the reason the arm above means anything.
+
+    Byte-identical payload, byte-identical commit message, same fixture, same
+    hooks. The ONLY variable is the directory. Without this arm a gate that
+    had stopped scanning entirely would pass the exemption arm perfectly.
+    """
+    gate_repo.stage(NON_EXEMPT_RELPATH, EXEMPT_PAYLOAD)
+    before = gate_repo.head()
+    assert before, "the fixture left HEAD unborn, so 'HEAD did not move' proves nothing"
+
+    proc = gate_repo.commit(CLEAN_MESSAGE)
+    after = gate_repo.head()
+
+    assert proc.returncode != 0, (
+        f"the SAME bytes that are exempt under {EXEMPT_RELPATH} committed cleanly "
+        f"under {NON_EXEMPT_RELPATH}. The gate is not scanning, and the exemption "
+        f"arm above is passing for that reason.\nstdout: {proc.stdout}\n"
+        f"stderr: {proc.stderr}"
+    )
+    assert GATE_MARKER in proc.stderr, (
+        f"the commit was refused, but not by the gate, so this arm would also pass "
+        f"on a merely broken hook.\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+    assert NON_EXEMPT_RELPATH in proc.stderr.replace("\\", "/"), (
+        f"the gate blocked without naming the offending file: {proc.stderr}"
+    )
+    assert after == before, (
+        f"the gate printed its refusal but HEAD moved {before} -> {after}"
     )
