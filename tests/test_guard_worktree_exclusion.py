@@ -517,3 +517,191 @@ def test_all_four_repaired_guards_share_one_predicate_object() -> None:
             f"{module.__name__} does not use the shared sweep helper, so its exclusion "
             "can drift away from the other three without anything going red"
         )
+
+
+# ---------------------------------------------------------------------------
+# THE OVER-EXCLUSION AXIS. The name rule is EXACT, and the specimens that
+# prove it are DERIVED rather than typed.
+# ---------------------------------------------------------------------------
+#
+# WHY THESE ARMS EXIST, AND WHAT THE ARM ABOVE CANNOT SEE.
+# `test_the_predicate_excludes_both_signals_and_nothing_else` builds its
+# fixture from LITERAL skip names - `.dotdir`, `__pycache__`, a real `.git`
+# marker. Every one of those is excluded under the shipped rule AND under a
+# widened one, so that arm pins the predicate's ANSWERS on names it already
+# knows and cannot see the match RULE widen underneath it. Measured on this
+# slice's base: replacing the exact-name match in `core/repo_sweep.py` with a
+# `startswith` over `SWEEP_SKIP_DIRS` left the whole `tests` suite at its
+# baseline of 3162 passed, 4 skipped. Silent - and an over-exclusion that
+# silently stops sweeping real content passes every bad-thing-is-gone arm in
+# this file while destroying the four guards they exist to protect.
+#
+# WHY THE TREE ITSELF CANNOT SUPPLY THE SPECIMENS. No tracked directory name
+# in this checkout has a skip name as a STRICT PREFIX, and none contains the
+# `.git` marker string without a leading dot. So a sweep of real names is
+# vacuous on exactly the axis that went silent, and the specimens have to be
+# MANUFACTURED from the skip table instead of observed. That is the governing
+# finding here: a safe list admitted on reasoning is a hole with a comment
+# over it, because every POSITIVE specimen gets measured and no NEGATIVE one
+# does.
+
+#: Suffixes that turn a skip name into a DIFFERENT, legitimate directory name.
+#: Chosen so the GENERATED set contains the five specimens an adversary named
+#: against this predicate, rather than those five being typed in as the set.
+_EXTENDING_SUFFIXES = ("er", "ribution", "lab", "-notes", "_readme", "s", "2")
+
+#: Wrappers that bury a skip name in the MIDDLE of a name, so the specimen set
+#: discriminates a substring rule and not only a prefix one. Applied to the
+#: dotted spelling as well, which is how `legacy_.git` - a name that contains
+#: the whole `.git` string yet does not start with a dot - enters the set.
+_BURYING_WRAPPERS = ("legacy_{}", "{}_archive", "vendor_{}_snapshot")
+
+#: The five an adversary named against this predicate. This is NOT the
+#: specimen set - it is a PIN ON THE GENERATOR. A future edit that narrowed
+#: `_EXTENDING_SUFFIXES` would quietly shrink the population the arm below
+#: measures, which is the shrunk-population failure this tree has already
+#: recorded; naming these five makes that edit go red instead.
+_ADVERSARY_NAMED_SPECIMENS = (
+    "builder",
+    "distribution",
+    "venv-notes",
+    "node_modules_readme",
+    "gitlab",
+)
+
+
+def _names_that_merely_resemble_a_skip_name() -> list[str]:
+    """Directory names that RESEMBLE a skip name and must still be swept.
+
+    Generated from `SWEEP_SKIP_DIRS` itself, so the population grows the day a
+    name is added to the owner table and cannot be left behind by a reader who
+    forgets to extend a hand-written list.
+
+    Two spellings of every skip name feed the generator - the name as stored
+    and the name with its leading dots stripped - because a dot-prefixed skip
+    name extended into `.gitlab` is STILL legitimately excluded by this
+    predicate's dot rule and would be a false specimen. The dot-stripped
+    `gitlab` is the real one.
+
+    Anything that comes out dot-prefixed, or that lands back on a skip name,
+    is filtered out: both are excluded on their own account and neither says
+    anything about the width of the match.
+    """
+    candidates: set[str] = set()
+    for skip in SWEEP_SKIP_DIRS:
+        bare = skip.lstrip(".")
+        if not bare:
+            continue
+        for suffix in _EXTENDING_SUFFIXES:
+            candidates.add(bare + suffix)
+            candidates.add(skip + suffix)
+        for wrapper in _BURYING_WRAPPERS:
+            candidates.add(wrapper.format(bare))
+            candidates.add(wrapper.format(skip))
+    return sorted(
+        name
+        for name in candidates
+        if not name.startswith(".") and name.casefold() not in SWEEP_SKIP_DIRS
+    )
+
+
+def test_the_foreign_name_rule_is_exact_and_never_a_prefix_or_a_substring() -> None:
+    """THE SURVIVOR ARM for `core/repo_sweep.py`'s own layer.
+
+    `core/walkprune.py`'s docstring already warns that a substring or prefix
+    match would eat `pycache`, `git`, `venv-notes` and `node_modules_readme`
+    while passing every other arm, and `tests/test_walkprune.py` carries a
+    survivor arm at THAT layer. `is_foreign_dir_name` is a SECOND match rule
+    composed on top of it - a dot test ORed with the table - and until this arm
+    the new layer had no survivor arm of its own.
+
+    The three discrimination checks below are the non-vacuity: they prove the
+    generated population really does separate the shipped rule from each
+    widened one. Without them an empty or badly chosen specimen set would
+    score a perfect pass while testing nothing.
+    """
+    specimens = _names_that_merely_resemble_a_skip_name()
+
+    assert len(specimens) >= 50, (
+        f"the generator produced only {len(specimens)} specimens, too few to cover the "
+        f"skip table - this arm has been quietly emptied: {specimens}"
+    )
+    missing = [name for name in _ADVERSARY_NAMED_SPECIMENS if name not in specimens]
+    assert missing == [], (
+        f"the generator no longer produces the specimens an adversary named against "
+        f"this predicate, so its population has shrunk out from under this arm: {missing}"
+    )
+
+    killed_by_a_prefix_rule = [
+        name for name in specimens if any(name.startswith(skip) for skip in SWEEP_SKIP_DIRS)
+    ]
+    assert killed_by_a_prefix_rule, (
+        "no specimen starts with a skip name, so this arm could not tell an exact "
+        "match from a startswith match and is vacuous on the axis it exists for"
+    )
+    killed_by_a_substring_rule = [
+        name for name in specimens if any(skip in name for skip in SWEEP_SKIP_DIRS)
+    ]
+    assert killed_by_a_substring_rule, (
+        "no specimen contains a skip name, so this arm could not tell an exact match "
+        "from a substring match"
+    )
+    killed_by_a_dot_stripped_prefix_rule = [
+        name
+        for name in specimens
+        if any(name.startswith(skip.lstrip(".")) for skip in SWEEP_SKIP_DIRS)
+    ]
+    assert killed_by_a_dot_stripped_prefix_rule, (
+        "no specimen starts with a DOT-STRIPPED skip name, so a rule that folded "
+        "`.git` to `git` before matching would pass this arm unnoticed"
+    )
+
+    swallowed = sorted(name for name in specimens if is_foreign_dir_name(name))
+    assert swallowed == [], (
+        f"{len(swallowed)} legitimate directory names were excluded as collateral, so the "
+        f"name match has widened past an exact match and every guard that walks through "
+        f"it has silently stopped sweeping real content: {swallowed}"
+    )
+
+
+def test_no_derived_specimen_names_real_content_in_this_checkout() -> None:
+    """The specimens are MANUFACTURED, and this is what says so out loud.
+
+    A specimen that happened to name a directory this tree really owns would
+    make the arm above a statement about today's checkout rather than about
+    the match rule, and would start failing for a reason that has nothing to
+    do with the predicate. It would also mean the planted-probe arms earlier
+    in this file could collide with it.
+    """
+    specimens = _names_that_merely_resemble_a_skip_name()
+    assert specimens, "the generator is empty, so this control checks nothing"
+
+    colliding = sorted(name for name in specimens if (REPO_ROOT / name).exists())
+    assert colliding == [], (
+        f"these generated specimens name real entries at the repository root, so the arm "
+        f"above is coupled to this checkout rather than to the rule: {colliding}"
+    )
+
+
+def test_the_foreign_name_rule_still_catches_every_name_it_owns() -> None:
+    """THE PAIRED POSITIVE ARM.
+
+    A survivor arm on its own is satisfied by a predicate that excludes
+    NOTHING, which is the opposite over-correction and would reinstate the
+    worktree blindness this whole module repaired. A sweep needs both guards
+    or neither is worth anything.
+
+    The uppercase pass is the NTFS fold: `.GIT` and `__PYCACHE__` are the same
+    directories as `.git` and `__pycache__` to every Windows API and different
+    strings to Python's `in`.
+    """
+    assert len(SWEEP_SKIP_DIRS) >= 10, (
+        f"the skip table is near-empty, so this arm is vacuous: {sorted(SWEEP_SKIP_DIRS)}"
+    )
+    escaped = sorted(
+        name
+        for skip in SWEEP_SKIP_DIRS
+        for name in (skip, skip.upper())
+        if not is_foreign_dir_name(name)
+    )
+    assert escaped == [], f"these names the predicate owns were not excluded: {escaped}"
