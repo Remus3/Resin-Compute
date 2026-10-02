@@ -1,10 +1,19 @@
-"""The exclusion the four blind root-walking guards were missing, and its proof.
+"""The exclusion the blind root-walking guards were missing, and its proof.
 
-WHAT THIS FIXES. `tests/test_guard_worktree_blindness.py` measured, against all
-39 `test_*.py` modules in this directory, that exactly four of them recurse a
-directory tree anchored at the repository root while carrying no skip list of
-any kind - not a dot-directory filter, not even the conventional
-`__pycache__`/`.git` denylist:
+WHAT THIS FIXES. `tests/test_guard_worktree_blindness.py` measured, over every
+`test_*.py` module in this directory, that four of them recurse a directory tree
+anchored at the repository root while carrying no skip list of any kind - not a
+dot-directory filter, not even the conventional `__pycache__`/`.git` denylist:
+
+NO MODULE COUNT IS QUOTED HERE ANY MORE, DELIBERATELY. This paragraph used to
+say "all 39 `test_*.py` modules". That figure was correct when written and was
+measured at 95 on 2026-10-02 at commit 83d8b1a - it had rotted by a factor of
+more than two while the sentence around it stayed true. Restating it buys one
+edit of accuracy and then rots again, so the count is dropped rather than
+refreshed: the claim this docstring needs is "every module in this directory",
+which is what the measurement actually ranged over and which does not decay.
+Re-derive with `git ls-files -- 'tests/test_*.py' | wc -l` if a number is
+wanted.
 
     tests/test_docs_consistency.py   six `(REPO_ROOT / "docs").rglob("*.md")` sites
     tests/test_goal_spec.py          `DATA_DIR.rglob("*")` in `_data_files()`
@@ -21,28 +30,33 @@ lying around.
 WHY A SHARED PREDICATE RATHER THAN FOUR COPIES. Four hand-maintained skip lists
 are four chances to drift, and the drift is invisible - a skip list that has
 quietly stopped covering a case still passes every test the guard has. All four
-modules import `swept_files()` from here, and
+modules reach `swept_files()` through this module, and
 `test_all_four_repaired_guards_share_one_predicate_object` below pins that they
 share ONE function object rather than four look-alikes.
 
-WHY THIS MODULE AND NOT `tests/conftest.py`. `conftest.py` is the natural home
-and is where a follow-up slice should move it. It was outside this slice's
-declared write-list, and editing a file off the write-list is the exact thing
-that makes parallel slices collide, so the helper lives here for now. Nothing
-about the helper depends on the module it sits in.
+WHERE THE PREDICATE ACTUALLY LIVES NOW: `core/repo_sweep.py`. It used to be
+defined in this file, and the paragraph here used to name `tests/conftest.py`
+as the home a follow-up slice should move it to. Both of those are TEST
+locations and both are now wrong, for a reason that was measured rather than
+argued: `core/provenance.py` is PRODUCTION code that needs the same predicate,
+this module imports `pytest` at module scope, and a production module importing
+from here would have given `core.provenance` a hard runtime dependency on a
+test framework. `import core.provenance` would then fail wherever this tree runs
+without pytest. The names are RE-EXPORTED below, so every module that already
+did `from tests.test_guard_worktree_exclusion import swept_files` keeps working
+unchanged and keeps binding the SAME function object the identity arms pin.
 
-NO CIRCULAR IMPORT. This module imports the four guard modules INSIDE test
-bodies, never at module scope, so the four can import `swept_files` from here at
-module scope without a cycle.
+NO CIRCULAR IMPORT. This module imports the guard modules INSIDE test bodies,
+never at module scope, so they can import `swept_files` from here at module
+scope without a cycle. `core/repo_sweep.py` imports nothing from `tests/`.
 
 WHAT COUNTS AS "NOT THIS TREE'S OWN CONTENT". Two independent signals, both
 required because neither covers the other:
 
-  - a DOT-DIRECTORY anywhere between the sweep root and the file. This tree's
-    own worktrees live at `.claude/worktrees/`, one full copy per in-flight
-    agent, and `tests/test_loop_concurrency.py::_SWEEP_SKIP_DIRS` already
-    excludes dot-directories wholesale for exactly that reason. That is the
-    shape this slice was told to copy, and it is copied rather than reinvented.
+  - a PRUNED or DOT-PREFIXED directory anywhere between the sweep root and the
+    file. This tree's own worktrees live at `.claude/worktrees/`, one full copy
+    per in-flight agent. The name table is `core/walkprune.py`'s, matched
+    through its casefold, rather than a second hand-maintained list.
   - a directory carrying a `.git` ENTRY. A linked worktree's `.git` is a FILE
     holding a `gitdir:` pointer, not a directory, which is why the test is
     `.exists()` and not `.is_dir()` - `tests/conftest.py` records that same trap
@@ -71,25 +85,40 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable, Iterator
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 import pytest
+
+from core.repo_sweep import (
+    GIT_MARKER,
+    SWEEP_SKIP_DIRS,
+    excluded_from_repo_sweep,
+    is_foreign_dir_name,
+    is_nested_checkout,
+    prune_walk_dirs,
+    swept_files,
+)
+
+#: RE-EXPORTED, NOT REDEFINED. Six test modules already import `swept_files`
+#: from this module by name; binding it here means none of their import lines
+#: changed when the predicate moved to `core/repo_sweep.py`, and - because this
+#: is the same function object, not a wrapper - the identity arms that pin them
+#: all to ONE predicate still pin them to one predicate.
+__all__ = [
+    "GIT_MARKER",
+    "SWEEP_SKIP_DIRS",
+    "excluded_from_repo_sweep",
+    "is_foreign_dir_name",
+    "is_nested_checkout",
+    "prune_walk_dirs",
+    "swept_files",
+]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
 DOCS_DIR = REPO_ROOT / "docs"
 GITHOOKS_DIR = REPO_ROOT / ".githooks"
-
-#: Directory names a repository sweep must not descend into, on top of the
-#: dot-directory rule. Copied from `tests/test_loop_concurrency.py`'s
-#: `_SWEEP_SKIP_DIRS`, which is the one root-walking guard in this directory
-#: that already carried an exclusion when this slice was written.
-SWEEP_SKIP_DIRS = frozenset({"__pycache__", "node_modules", "venv", "build", "dist"})
-
-#: What a linked git worktree puts at its own root: a FILE, not a directory,
-#: holding a `gitdir:` pointer back to the superproject. Tested with
-#: `.exists()` so both that file and an ordinary `.git` directory are caught.
-GIT_MARKER = ".git"
 
 #: One byte past the ceiling `tests/test_licence_posture.py`'s bulk-dump guard
 #: pins as a function-local variable (`limit = 64 * 1024`). Copied as a literal
@@ -111,50 +140,73 @@ _PROBE_PREFIX = "wt_probe_"
 
 
 # ---------------------------------------------------------------------------
-# The predicate the four repaired guards share
-# ---------------------------------------------------------------------------
-
-
-def excluded_from_repo_sweep(path: Path, root: Path) -> bool:
-    """Is `path` inside something that is not this working tree's own content?
-
-    Only ANCESTOR DIRECTORIES strictly between `root` and `path` are consulted.
-    The leaf's own name never decides, so a tracked file legitimately named
-    `.gitattributes` is swept, and `root` itself never decides, so a sweep whose
-    root is itself a dot-directory - `.githooks/`, which
-    `tests/test_line_endings.py` walks - does not exclude its entire corpus on
-    the first step.
-    """
-    current = path.parent
-    while current != root:
-        parent = current.parent
-        if parent == current:
-            raise ValueError(f"{path} is not inside {root}, so it cannot be swept from there")
-        if current.name.startswith(".") or current.name in SWEEP_SKIP_DIRS:
-            return True
-        if (current / GIT_MARKER).exists():
-            return True
-        current = parent
-    return False
-
-
-def swept_files(root: Path, pattern: str = "*") -> list[Path]:
-    """Every FILE under `root` matching `pattern` that this tree actually owns.
-
-    The drop-in replacement for `sorted(root.rglob(pattern))` in a guard that
-    walks a repository directory. Sorted, so a guard's offender list stays
-    deterministic across machines and filesystems.
-    """
-    return sorted(
-        path
-        for path in root.rglob(pattern)
-        if path.is_file() and not excluded_from_repo_sweep(path, root)
-    )
-
-
-# ---------------------------------------------------------------------------
 # Probe planting
 # ---------------------------------------------------------------------------
+
+
+@contextmanager
+def planted_tree(parent: Path, *, nested_checkout: bool, files: dict[str, bytes]) -> Iterator[Path]:
+    """Plant ONE probe directory in the real tree, and remove it unconditionally.
+
+    EXPORTED, and that is the point of it being a plain context manager rather
+    than a fixture. Three more guards outside this module - in
+    `tests/test_git_subprocess_census.py`, `tests/test_loop_concurrency.py` and
+    `tests/test_provenance.py` - need to plant exactly this shape, and a
+    `@pytest.fixture` cannot be imported into another test module and used: it
+    would have to be re-registered through a `conftest.py` or copied. Copying
+    is what produced the duplicated skip lists this whole module exists to end,
+    so the mechanism is shared instead. `probe_factory` below is now a thin
+    multi-plant wrapper over this, so there is ONE planting rule and ONE
+    cleanup rule rather than two that must agree.
+
+    CLEANUP IS UNCONDITIONAL and VERIFIED. The `finally` runs even when the
+    body raises, and the removal is followed by an explicit
+    `assert not probe_dir.exists()`: a probe left behind inside `data/`,
+    `docs/`, `tools/` or `.githooks/` would itself be exactly the stray nested
+    content this module is about, and would poison every later run.
+
+    NAMED TO NEVER COLLIDE. A fresh `uuid4().hex` per probe, so two probes in
+    one test, two concurrent runs, and a probe racing a real worktree merge
+    cannot land on the same path.
+    """
+    probe_dir = parent / f"{_PROBE_PREFIX}{uuid.uuid4().hex}"
+    probe_dir.mkdir(parents=True)
+    try:
+        if nested_checkout:
+            # A linked worktree's root carries a `.git` FILE holding a pointer,
+            # not a `.git` directory. Written with a relative gitdir on purpose:
+            # an absolute one would be a machine-identity leak, which
+            # `tests/test_machine_identity.py` forbids and would catch.
+            (probe_dir / GIT_MARKER).write_bytes(b"gitdir: ../../.git/worktrees/probe\n")
+        for rel_path, content in files.items():
+            target = probe_dir / rel_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+        yield probe_dir
+    finally:
+        if probe_dir.exists():
+            # Deepest first, so every directory is empty by its own rmdir().
+            for path in sorted(probe_dir.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+                if path.is_dir() and not path.is_symlink():
+                    path.rmdir()
+                else:
+                    path.unlink()
+            probe_dir.rmdir()
+        assert not probe_dir.exists(), (
+            f"cleanup left {probe_dir} behind - a stray probe directory inside the "
+            "repository is exactly the defect this module is about, and this suite "
+            "must never be the thing that leaves one"
+        )
+
+
+def assert_probe_is_in_range(planted: Path, root: Path, pattern: str) -> None:
+    """POSITIVE CONTROL, exported for the three guards repaired outside this file.
+
+    See `_assert_probe_is_in_range` below, which is this function; the private
+    spelling is kept because this module's own arms already call it by that
+    name and renaming them would be churn in a file other slices read.
+    """
+    _assert_probe_is_in_range(planted, root, pattern)
 
 
 @pytest.fixture
@@ -177,41 +229,14 @@ def probe_factory() -> Iterator[Callable[..., Path]]:
     one test, two concurrent runs, and a probe racing a real worktree merge
     cannot land on the same path.
     """
-    created: list[Path] = []
+    with ExitStack() as stack:
 
-    def _plant(parent: Path, *, nested_checkout: bool, files: dict[str, bytes]) -> Path:
-        probe_dir = parent / f"{_PROBE_PREFIX}{uuid.uuid4().hex}"
-        probe_dir.mkdir(parents=True)
-        created.append(probe_dir)
-        if nested_checkout:
-            # A linked worktree's root carries a `.git` FILE holding a pointer,
-            # not a `.git` directory. Written with a relative gitdir on purpose:
-            # an absolute one would be a machine-identity leak, which
-            # `tests/test_machine_identity.py` forbids and would catch.
-            (probe_dir / GIT_MARKER).write_bytes(b"gitdir: ../../.git/worktrees/probe\n")
-        for rel_path, content in files.items():
-            target = probe_dir / rel_path
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(content)
-        return probe_dir
-
-    try:
-        yield _plant
-    finally:
-        for probe_dir in created:
-            if probe_dir.exists():
-                # Deepest first, so every directory is empty by its own rmdir().
-                for path in sorted(probe_dir.rglob("*"), key=lambda p: len(p.parts), reverse=True):
-                    if path.is_dir() and not path.is_symlink():
-                        path.rmdir()
-                    else:
-                        path.unlink()
-                probe_dir.rmdir()
-            assert not probe_dir.exists(), (
-                f"cleanup left {probe_dir} behind - a stray probe directory inside the "
-                "repository is exactly the defect this module is about, and this suite "
-                "must never be the thing that leaves one"
+        def _plant(parent: Path, *, nested_checkout: bool, files: dict[str, bytes]) -> Path:
+            return stack.enter_context(
+                planted_tree(parent, nested_checkout=nested_checkout, files=files)
             )
+
+        yield _plant
 
 
 def _assert_probe_is_in_range(planted: Path, root: Path, pattern: str) -> None:

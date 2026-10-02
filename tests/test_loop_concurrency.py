@@ -81,6 +81,7 @@ from pathlib import Path
 import pytest
 
 from core import config as core_config
+from core.repo_sweep import SWEEP_SKIP_DIRS, prune_walk_dirs
 
 ROOT = Path(__file__).resolve().parents[1]
 LOOP_DIR = ROOT / "ops" / "loop"
@@ -1310,16 +1311,34 @@ def test_the_config_dataclass_defaults_to_the_agreed_lane_width():
 # other agents' uncommitted work - so this suite's colour would depend on what
 # an unrelated worktree happens to contain at the moment it runs, which is both
 # non-reproducible and none of this test's business.
-_SWEEP_SKIP_DIRS = frozenset({"__pycache__", "node_modules", "venv", "build", "dist"})
+#
+# RE-EXPORTED FROM THE ONE OWNER, not restated. This name used to be a literal
+# frozenset defined here, and it was the list the shared predicate was first
+# copied FROM - which is how two hand-maintained copies of one rule came to
+# exist. The owner is now `core/repo_sweep.py`, which derives it in turn from
+# `core/walkprune.py`'s name table, so there is one list and nothing to drift.
+_SWEEP_SKIP_DIRS = SWEEP_SKIP_DIRS
 
 
 def _lane_declarations(root: Path) -> dict[str, object]:
-    """Every `config*.json` in the tree that declares `max_concurrent_lanes`."""
+    """Every `config*.json` in the tree that declares `max_concurrent_lanes`.
+
+    A DOT-DIRECTORY FILTER IS NOT A NESTED-CHECKOUT FILTER. This sweep carried
+    the dot rule and the skip list and NO `.git`-marker test at all, so a
+    merged worktree or a clone left at the repository root under an ordinary
+    non-dot name was walked straight into. Measured 2026-10-02 at 83d8b1a: a
+    planted checkout holding one `config_foreign.json` with
+    `max_concurrent_lanes: 99` turned this module's lane-parity guard RED, on a
+    file belonging to another repository.
+
+    `prune_walk_dirs` refuses the descent at the parent, so the checkout's
+    entries are never read at all - strictly better than filtering results
+    afterwards. An ordinary non-dot directory carries no marker and is still
+    walked; `tests/test_loop_concurrency.py` pins both halves below.
+    """
     found: dict[str, object] = {}
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [
-            d for d in dirnames if not d.startswith(".") and d not in _SWEEP_SKIP_DIRS
-        ]
+        prune_walk_dirs(dirpath, dirnames)
         for filename in filenames:
             if not (filename.startswith("config") and filename.endswith(".json")):
                 continue
@@ -1356,3 +1375,75 @@ def test_every_json_config_declaring_a_lane_count_declares_the_agreed_one():
         f"{disagreeing}. All declarations, in JSON and in code, must carry the same number - "
         "the effective ceiling is otherwise the largest of them."
     )
+
+
+# ---------------------------------------------------------------------------
+# The nested-checkout exclusion for the lane sweep, and its neighbours arm
+# ---------------------------------------------------------------------------
+#
+# A DOT-DIRECTORY FILTER IS NOT A NESTED-CHECKOUT FILTER. `_lane_declarations`
+# carried the dot rule and `_SWEEP_SKIP_DIRS` and NO `.git`-marker test at all,
+# so a merged worktree or a clone left at the repository root under an ordinary
+# non-dot name was walked straight into. Measured 2026-10-02 at 83d8b1a: a
+# planted checkout holding one `config_foreign.json` declaring
+# `max_concurrent_lanes: 99` turned the lane-parity guard above RED on another
+# repository's file.
+#
+# BOTH ARMS ARE REQUIRED, and the second is the load-bearing one here precisely
+# because the guard above is VACUOUS on this tree today - it walks a corpus of
+# zero `config*.json` files. An over-exclusion mutant is therefore invisible to
+# every other arm in this module, and the neighbours arm below is the only
+# thing in this file that can see it.
+
+
+def test_the_lane_sweep_does_not_walk_a_nested_checkout():
+    from tests.test_guard_worktree_exclusion import planted_tree
+
+    payload = {"config_foreign.json": b'{"max_concurrent_lanes": 99}\n'}
+    with planted_tree(ROOT, nested_checkout=True, files=payload) as probe_dir:
+        planted = probe_dir / "config_foreign.json"
+        # POSITIVE CONTROL: an unfiltered walk really does reach this file, so
+        # a green result below is about the exclusion and not a stray plant.
+        naive = [
+            Path(dirpath) / name
+            for dirpath, _dirnames, filenames in os.walk(probe_dir.parent)
+            for name in filenames
+        ]
+        assert planted in naive, (
+            f"the planted probe at {planted} is not in an unfiltered walk, so nothing "
+            "below would prove anything about the exclusion"
+        )
+
+        found = _lane_declarations(ROOT)
+        assert probe_dir.name not in {name.split("/")[0] for name in found}, (
+            "a nested checkout's config is still being read by the lane sweep, so this "
+            f"module's colour depends on another repository's files. found: {found}"
+        )
+        test_every_json_config_declaring_a_lane_count_declares_the_agreed_one()
+
+
+def test_the_lane_sweep_still_walks_an_ordinary_sibling_directory():
+    """NEIGHBOURS ARM. Identical bytes, no `.git` marker, and it must be read.
+
+    THE ONLY NON-VACUOUS READER OF THIS SWEEP IN THE TREE. The guard above
+    inspects zero files today and says so in its own docstring, so it cannot
+    distinguish a working sweep from one that excludes everything. This arm
+    plants a real declaration in this tree's own content and requires the sweep
+    both to FIND it and to JUDGE it - so an exclusion that silently swallowed
+    ordinary directories would redden here and nowhere else.
+    """
+    from tests.test_guard_worktree_exclusion import planted_tree
+
+    payload = {"config_foreign.json": b'{"max_concurrent_lanes": 99}\n'}
+    with planted_tree(ROOT, nested_checkout=False, files=payload) as probe_dir:
+        found = _lane_declarations(ROOT)
+        key = f"{probe_dir.name}/config_foreign.json"
+        assert key in found, (
+            "an ordinary non-dot directory at the repo root carrying no .git marker is "
+            "this tree's own content and must still be walked - an exclusion that drops "
+            f"it has destroyed the sweep rather than repaired it. found: {found}"
+        )
+        assert found[key] == 99, f"the sweep read the wrong value: {found[key]!r}"
+
+        with pytest.raises(AssertionError, match=r"disagree with the agreed lane width"):
+            test_every_json_config_declaring_a_lane_count_declares_the_agreed_one()
