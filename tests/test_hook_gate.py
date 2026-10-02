@@ -1925,11 +1925,47 @@ def test_an_unconfigured_clone_commits_a_banned_message_straight_through(
 # clean index scans zero files and exits 0, so exit 0 alone would be satisfied
 # by a gate that never looked. `_report_staged_subject` prints
 # `precommit_gate: staged=N added-lines=M` on EVERY staged-lane exit, and the
-# pass arm asserts that line names a corpus of exactly one file with at least
-# one added line. That is what makes it a statement about a file the gate
-# READ. The gate builds that corpus from the staged diff, so the planted file
-# is `git add`-ed rather than merely written - an unstaged file is invisible
-# to it by construction.
+# pass arm reads that line back. The gate builds that corpus from the staged
+# diff, so each planted file is `git add`-ed rather than merely written - an
+# unstaged file is invisible to it by construction.
+#
+# WHY THE PASS ARM STAGES TWO FILES AND DOES ARITHMETIC, which is the whole
+# point of the shape and not an incidental detail.
+#
+# The first version of this arm staged ONE file and asserted `staged == 1` and
+# `added_lines >= 1`. Both held, and the assert text said the arm was therefore
+# measuring the planted file. IT WAS NOT. An adversary replaced the body of
+# `_report_staged_subject` with a hardcoded `print("precommit_gate: staged=1
+# added-lines=1")` - a gate that reads nothing and states a constant - and ALL
+# FOUR ARMS IN THIS SECTION STAYED GREEN. `staged == 1` plus `added >= 1` is a
+# SHAPE assertion: it pins the FORMAT of a one-file corpus line, never the
+# INPUT that produced it. This tree has paid for that distinction before, when
+# a shape grader scored four false kills by asking about syntax while the
+# runner asked about behaviour.
+#
+# The repair is to make both numbers UNSATISFIABLE BY ANY CONSTANT the mutant
+# could plausibly carry, and satisfiable only by a corpus that contains the
+# exempt file. Two files are staged: the non-ASCII exempt specimen and an
+# ASCII-clean control under a NON-exempt path. The arm then asserts
+# `staged == 2` and `added_lines == EXEMPT_ADDED + CONTROL_ADDED`, with both
+# addends DERIVED from the payload bytes rather than typed, and asserted
+# distinct and each greater than one by
+# `test_the_two_staged_payloads_make_the_corpus_arithmetic_decisive`.
+#
+# WHAT THAT BUYS, stated exactly rather than rounded up. A gate that read only
+# the control reports `staged=1 added-lines=CONTROL_ADDED`; a gate that read
+# only the exempt file reports `staged=1 added-lines=EXEMPT_ADDED`; a gate that
+# read neither and states a constant reports whatever the constant is. Only a
+# corpus holding BOTH files yields the asserted pair, and in a throwaway
+# repository where these two are the only staged paths that pair is reachable
+# no other way. So the arm now establishes that THE EXEMPT FILE WAS IN THE
+# CORPUS THE GATE READ, which is the claim the old text made without evidence.
+#
+# WHAT IT STILL DOES NOT ESTABLISH, because the arm must not outrun this
+# either: the gate names no path on a clean exit, so nothing here reads the
+# string `data/cache/upstream_probe.json` back out of the gate's own output.
+# The attribution is arithmetic, not nominal. The mirror arm below is where a
+# path is matched by name, and it can be, because a REFUSAL names its offender.
 #
 # The non-ASCII characters are built with chr(). Typing them would make this
 # module violate the rule it is measuring, and the gate would then refuse the
@@ -1941,13 +1977,64 @@ def test_an_unconfigured_clone_commits_a_banned_message_straight_through(
 #: one added after a multiplication sign walked straight through a
 #: six-character denylist in a sibling tree. An exemption measured with an
 #: em-dash alone would say nothing about the catch-all half.
+#:
+#: MULTI-LINE ON PURPOSE. A one-line payload contributes exactly one added
+#: line, and `added-lines=1` is precisely the value a hardcoded constant would
+#: carry, so a single-line specimen cannot tell the two apart.
 EXEMPT_PAYLOAD = (
-    '{"name": "upstream' + EM_DASH + 'name", "size": "3' + chr(0x00D7) + '4"}\n'
+    "{\n"
+    '  "name": "upstream' + EM_DASH + 'name",\n'
+    '  "size": "3' + chr(0x00D7) + '4"\n'
+    "}\n"
 ).encode("utf-8")
+
+#: The ASCII-clean companion staged BESIDE the exempt file in the pass arm, so
+#: the corpus line becomes a sum of two known addends instead of a shape. It
+#: sits under a NON-exempt path deliberately: the gate must actually scan it
+#: and find nothing, which is a second, quieter statement that the gate was
+#: awake. Its line count differs from the exempt payload's so that neither
+#: file alone can produce the asserted total.
+#: A BYTES LITERAL, unlike `EXEMPT_PAYLOAD` above, which has to be built from
+#: `chr()` pieces because typing its glyphs would make this module violate the
+#: rule it measures. Nothing here needs building, so nothing here is built -
+#: and `test_the_two_staged_payloads_make_the_corpus_arithmetic_decisive`
+#: still inspects these bytes rather than trusting the literal's shape, since
+#: a `\\xNN` escape would be just as non-ASCII and just as invisible.
+ASCII_CONTROL_PAYLOAD = (
+    b"{\n"
+    b'  "control": true,\n'
+    b'  "role": "staged beside the exempt file so the corpus line is arithmetic",\n'
+    b'  "ascii_only": true,\n'
+    b'  "note": "a gate that read only this file reports a smaller total",\n'
+    b'  "see": "test_the_two_staged_payloads_make_the_corpus_arithmetic_decisive"\n'
+    b"}\n"
+)
+
+
+def _added_line_count(payload: bytes) -> int:
+    """Added lines as `git diff --cached --unified=0` counts them for a NEW file.
+
+    Every line of a newly added file arrives as one `+` line, and
+    `_staged_added` counts exactly those. `splitlines()` rather than
+    `count("\\n")` so a payload without a trailing newline is still counted
+    correctly - git emits `\\ No newline at end of file`, which is not a `+`
+    line and must not inflate the expected total.
+    """
+    return len(payload.decode("utf-8").splitlines())
+
+
+#: DERIVED from the bytes above, never typed. A typed count is a second place
+#: for the truth to live and the place that rots when the payload is edited.
+EXEMPT_ADDED = _added_line_count(EXEMPT_PAYLOAD)
+CONTROL_ADDED = _added_line_count(ASCII_CONTROL_PAYLOAD)
 
 #: Same basename in both arms. Only the directory differs.
 EXEMPT_RELPATH = "data/cache/upstream_probe.json"
 NON_EXEMPT_RELPATH = "data/fixtures/upstream_probe.json"
+
+#: The control's own path. Non-exempt, and a different basename from the two
+#: above so a path mix-up cannot pass unnoticed.
+ASCII_CONTROL_RELPATH = "data/fixtures/ascii_control_probe.json"
 
 #: `_report_staged_subject`'s line. The gate's statement of what it READ.
 _STAGED_SUBJECT = re.compile(r"precommit_gate: staged=(\d+) added-lines=(\d+)")
@@ -2009,6 +2096,56 @@ def test_the_exemption_payload_really_carries_non_ascii_bytes():
     assert chr(0x00D7) in decoded, "the CATCH-ALL half of the specimen is missing"
 
 
+def test_the_two_staged_payloads_make_the_corpus_arithmetic_decisive():
+    """The fixture-excludes-the-defect check for the PASS ARM'S NUMBERS.
+
+    The pass arm's strength is entirely a property of these two payloads, and
+    every property it leans on is asserted here rather than assumed, because
+    an edit to either payload could quietly turn the arm back into the shape
+    assertion it used to be.
+
+    FOUR PROPERTIES, each with the failure it prevents:
+
+    1. The control is PURE ASCII. If a non-ASCII byte ever crept into it the
+       gate would refuse the commit under its non-exempt path and the pass arm
+       would fail for a reason that has nothing to do with the exemption.
+    2. Each payload contributes MORE THAN ONE added line. `1` is the value a
+       hardcoded `added-lines=1` carries, so a one-line payload would leave
+       the mutant alive.
+    3. The two counts DIFFER. Equal counts would make the total a multiple of
+       one number, and a gate that double-counted a single file would land on
+       the same total.
+    4. Neither count alone equals the TOTAL. This is the property that makes
+       the total attributable to both files rather than to either one, and it
+       is asserted rather than inferred from 2 and 3.
+    """
+    control_offenders = sorted({b for b in ASCII_CONTROL_PAYLOAD if b > 127})
+    assert not control_offenders, (
+        "ASCII_CONTROL_PAYLOAD carries non-ASCII bytes "
+        f"{control_offenders}, so the gate would refuse it under its non-exempt "
+        "path and the pass arm would fail for the wrong reason"
+    )
+    assert EXEMPT_ADDED > 1, (
+        f"the exempt payload contributes {EXEMPT_ADDED} added line(s); a single "
+        "line is the value a hardcoded `added-lines=1` already carries, so the "
+        "pass arm could not tell a real count from a constant"
+    )
+    assert CONTROL_ADDED > 1, (
+        f"the control payload contributes {CONTROL_ADDED} added line(s); see the "
+        "exempt payload's reason above"
+    )
+    assert EXEMPT_ADDED != CONTROL_ADDED, (
+        f"both payloads contribute {EXEMPT_ADDED} added lines, so the total is a "
+        "multiple of one number and a gate that counted one file twice would "
+        "produce it"
+    )
+    total = EXEMPT_ADDED + CONTROL_ADDED
+    assert EXEMPT_ADDED != total and CONTROL_ADDED != total, (
+        "one payload alone already equals the total the pass arm asserts, so "
+        "that total would not establish that BOTH files were in the corpus"
+    )
+
+
 def test_a_non_ascii_byte_under_the_exempt_prefix_commits_through_a_real_gate(
     gate_repo: _ThrowawayRepo,
 ):
@@ -2018,12 +2155,16 @@ def test_a_non_ascii_byte_under_the_exempt_prefix_commits_through_a_real_gate(
     pass:
       1. the commit LANDED - exit 0, HEAD moved, no gate headline,
       2. the exempt bytes reached history intact,
-      3. the gate's own corpus line says it read a ONE-FILE staged corpus with
-         added lines in it. Without 3 this arm would pass equally against a
-         gate that scanned nothing at all, which is the bare-invocation
-         vacuous pass recorded in docs/LEDGER.md.
+      3. the gate's own corpus line is ARITHMETIC THAT ONLY A CORPUS HOLDING
+         THE EXEMPT FILE CAN PRODUCE. Without 3 this arm would pass equally
+         against a gate that scanned nothing at all, which is the
+         bare-invocation vacuous pass recorded in docs/LEDGER.md - and, as the
+         section comment above records, it did exactly that against a mutant
+         printing a hardcoded corpus line while the arm still claimed to be
+         measuring the planted file.
     """
     gate_repo.stage(EXEMPT_RELPATH, EXEMPT_PAYLOAD)
+    gate_repo.stage(ASCII_CONTROL_RELPATH, ASCII_CONTROL_PAYLOAD)
     before = gate_repo.head()
     assert before, "the fixture left HEAD unborn"
 
@@ -2041,13 +2182,21 @@ def test_a_non_ascii_byte_under_the_exempt_prefix_commits_through_a_real_gate(
         f"stderr: {proc.stderr}"
     )
     staged_files, added_lines = int(subject.group(1)), int(subject.group(2))
-    assert staged_files == 1, (
-        f"the gate read a {staged_files}-file staged corpus, not the one planted "
-        f"file, so this arm is not measuring {EXEMPT_RELPATH}"
+    expected_lines = EXEMPT_ADDED + CONTROL_ADDED
+    assert staged_files == 2, (
+        f"the gate reported a {staged_files}-file staged corpus, but two files "
+        f"were staged - {EXEMPT_RELPATH} and {ASCII_CONTROL_RELPATH}. A count "
+        "that does not track what was staged is a printed constant, not a "
+        "reading."
     )
-    assert added_lines >= 1, (
-        "the gate read the planted file but ZERO added lines, so the exemption was "
-        "never consulted and exit 0 says nothing about it"
+    assert added_lines == expected_lines, (
+        f"the gate reported {added_lines} added lines; the two staged files hold "
+        f"{EXEMPT_ADDED} ({EXEMPT_RELPATH}) + {CONTROL_ADDED} "
+        f"({ASCII_CONTROL_RELPATH}) = {expected_lines}. Neither file alone "
+        "produces that total, so a corpus that does not include the exempt file "
+        "cannot report it - which is why this arm, and not the file count "
+        "alone, is what makes the exemption verdict a statement about "
+        f"{EXEMPT_RELPATH}."
     )
 
     assert proc.returncode == 0, (
