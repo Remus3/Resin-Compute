@@ -124,11 +124,19 @@ against each repaired guard and carries the matched outside-the-checkout
 partner for every one of them.
 
 `test_lane_declarations_excludes_a_nested_dot_directory_probe` is the CONTRAST
-arm, and its name is still accurate: the one guard this tree measured as
-already excluding nested directories before any repair, proved to still do so
-against the identical style of probe, so this file is not merely finding
-defects but also proving that the fix pattern already present in
-`test_loop_concurrency.py` actually works.
+arm, and its name is accurate in a way the sentence that used to describe it
+was not. It proves `_lane_declarations` excludes a DOT-PREFIXED probe, which
+is the only thing the probe can show. The older wording called that guard "the
+one guard already excluding nested directories", and that is broader than the
+evidence: measured 2026-10-02 at b8f2932 by planting a NON-dot directory
+carrying a `.git` file at the repository root, `_lane_declarations` walked
+straight into it and surfaced its `config_nested.json`. Its filter is
+dot-prefix plus `_SWEEP_SKIP_DIRS` and carries no `.git`-marker test, so it
+covers `.claude/worktrees/` by name and a non-dot checkout not at all. The arm
+below is still worth having - it proves the dot-directory half of the fix
+pattern genuinely holds rather than being assumed from reading the source -
+but it is a statement about dot-directories and must not be read as a clean
+bill for that guard.
 """
 from __future__ import annotations
 
