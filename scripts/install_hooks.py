@@ -39,6 +39,63 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 HOOKS_DIRNAME = ".githooks"
 
 
+def _names_hooks_dir(active: str, hooks_dir: Path) -> bool:
+    """True when `active` NAMES `hooks_dir`, whatever SPELLING git handed back.
+
+    THE DEFECT THIS CLOSES, measured in this tree rather than reasoned about.
+    The readback below used to be `active != HOOKS_DIRNAME` - a comparison of
+    two STRINGS where the subject is a PATH. One path has many spellings and
+    all but one of them made the installer report `hooks are NOT installed`
+    about a clone whose hooks were installed and firing.
+
+    Reproduced end to end against a throwaway repo wired exactly as a fresh
+    clone. `git config extensions.worktreeConfig true` plus
+    `git config --worktree core.hooksPath '.githooks/'` - one trailing
+    separator, and the WORKTREE scope outranks the --local scope this script
+    writes, which is not exotic here because this repo runs its agents in
+    linked worktrees. The installer exited 1 with
+    `core.hooksPath reads back as '.githooks/', expected '.githooks' - hooks
+    are NOT installed.` while a real `git commit` of a line carrying U+2014
+    was REFUSED by the gate, HEAD did not move, and `precommit_gate BLOCKED`
+    was on stderr. The hooks were installed. The string said otherwise.
+    `'./.githooks'` reproduces it identically.
+
+    On Windows the spelling space is wider still and every member of it is a
+    real way a person or a tool writes this value: a case difference, a
+    backslash separator, an 8.3 short name, a junction, and an absolute
+    spelling of the same directory. `Path.resolve()` collapses all of them
+    for a path that EXISTS, and `os.path.normcase` is the backstop for the
+    case-insensitive half; on POSIX `normcase` is the identity, so nothing
+    here makes the comparison looser on Linux than it has to be.
+
+    WHAT THIS DOES NOT DO, so it is not over-read: it does not accept a
+    DIFFERENT directory. A readback naming some other path still resolves to
+    some other path and still fails, and
+    `test_a_hooks_path_naming_a_different_directory_is_still_refused` is the
+    non-vacuity arm that holds that open.
+
+    Relative values are resolved against REPO_ROOT because that is what git
+    does with them: `core.hooksPath` is "relative to the directory where the
+    hooks are run", which is the top level of the working tree.
+    """
+    if not active:
+        return False
+    candidate = Path(active)
+    if not candidate.is_absolute():
+        candidate = REPO_ROOT / candidate
+    try:
+        resolved = candidate.resolve()
+        want = hooks_dir.resolve()
+    except OSError:
+        # An unresolvable path is not a match. Fail CLOSED: the caller prints
+        # "hooks are NOT installed" and exits 1, which is the safe answer when
+        # the question could not be settled.
+        return False
+    if resolved == want:
+        return True
+    return os.path.normcase(str(resolved)) == os.path.normcase(str(want))
+
+
 def _git(*args: str, capture: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", "-C", str(REPO_ROOT), *args],
@@ -118,15 +175,29 @@ def main() -> int:
         return 1
 
     active = _git("config", "core.hooksPath").stdout.strip()
-    if active != HOOKS_DIRNAME:
-        # Verify rather than assume. A --system or --global hooksPath, or a
-        # config include, can win over what was just written.
+    if not _names_hooks_dir(active, hooks_dir):
+        # Verify rather than assume. A --system, --global or --worktree
+        # hooksPath, or a config include, can win over what was just written.
+        # RESOLVED rather than string-compared - see _names_hooks_dir for the
+        # measurement that forced that.
         print(
-            f"core.hooksPath reads back as {active!r}, expected "
-            f"{HOOKS_DIRNAME!r} - hooks are NOT installed.",
+            f"core.hooksPath reads back as {active!r}, which does not resolve "
+            f"to {hooks_dir} - hooks are NOT installed.",
             file=sys.stderr,
         )
         return 1
+    if active != HOOKS_DIRNAME:
+        # Not a failure. A different SPELLING of the same directory is a
+        # working installation, and saying so is better than silence: it tells
+        # the reader that something outranked the --local value this script
+        # just wrote, which is the one fact they would otherwise have to go
+        # looking for.
+        print(
+            f"note: core.hooksPath reads back as {active!r} rather than the "
+            f"{HOOKS_DIRNAME!r} just written - a higher-precedence scope "
+            f"(--worktree, --global, --system or an include) is supplying it. "
+            f"It resolves to the same directory, so the hooks ARE active."
+        )
 
     chmodded = _ensure_executable(hooks_dir)
     hooks = sorted(p.name for p in hooks_dir.iterdir() if p.is_file())
