@@ -24,12 +24,16 @@ the real working tree, and every git call is pinned to `cwd=<tmp_path>`.
 
 from __future__ import annotations
 
+import ast
 import logging
+import re
 import subprocess
+import textwrap
 from pathlib import Path
 
 import pytest
 
+from tests.conftest import require_git_repository
 from tools import corpus_statement
 from tools.corpus_statement import untracked_not_ignored
 
@@ -473,3 +477,695 @@ def test_this_module_is_seven_bit_ascii() -> None:
         text = raw.decode("ascii")
         for glyph, name in banned.items():
             assert glyph not in text, f"{path.name} contains a {name}"
+
+
+# ---------------------------------------------------------------------------
+# THE CALLER-CLAIM ORACLE.
+#
+# `tools/corpus_statement.py` has NO production caller, and until 2026-10-02
+# its docstrings said four times over that the glyph gate invoked it. That was
+# false the whole time. The correction was verified by a scratchpad oracle
+# which was never committed - and an uncommitted oracle is the same shape as
+# the defect it caught. An unwired script is not a watcher. This is that
+# oracle landed as an arm.
+#
+# WHAT IS ASSERTED IS A PROPERTY, NOT A SPELLING. The arm does not look for the
+# retracted sentence. It derives two sets and compares them:
+#
+#   C  the modules the docstrings ASSERT invoke this module
+#   R  the modules that actually import it, read off the tree
+#
+# and requires C == R. That reddens in BOTH directions. A fabricated caller
+# puts a path in C that is not in R. A caller wired up for real while the
+# docstring still says nothing fires the module puts a path in R that is not
+# in C - a docstring lying in the safe direction is still lying, and the next
+# reader deletes the module as dead.
+#
+# WHY A SUBSTRING SWEEP CANNOT DO THIS JOB. The corrected docstring mentions
+# `tools/precommit_gate.py` THREE times legitimately: once listing the guards
+# that build a `git ls-files` corpus, once reporting that its imports are all
+# stdlib, and once naming it as the site where the wiring WOULD go. It also
+# describes the retracted sentence in prose so that a sweep for the lie cannot
+# score a hit on the correction. All four survive here, and each one is a
+# survivor row in the non-vacuity partner below.
+#
+# THE DISCRIMINATOR, stated so it can be argued with. A sentence is a caller
+# claim only when it carries ALL THREE of a module path, a symbol this module
+# actually defines, and a caller verb - after code blocks are removed. The
+# three legitimate path mentions carry no own-symbol. The description of the
+# retracted sentence carries an own-symbol and a verb but names the gate by
+# nickname rather than by path. The proposed wiring carries the own-symbol
+# only inside an indented code block, which is stripped.
+#
+# WHAT THIS IS BLIND TO, named rather than discovered later.
+#   1. No modality analysis. A sentence is judged by its three tokens, not its
+#      tense or mood. So a HISTORICAL or HYPOTHETICAL mention that puts a path
+#      and an own-symbol in one sentence reads as a live claim and reddens.
+#      That is deliberate: the opposite choice lets a real lie escape behind a
+#      "would". It makes the discipline the earlier slice already used into a
+#      rule - when retracting or proposing, name the module by nickname or
+#      keep the symbol out of that sentence.
+#   2. Sentence splitting is by terminal punctuation. A claim spread across
+#      two sentences is not seen.
+#   3. `R` is built from imports, not from call graphs. A module that reaches
+#      this one through `importlib` or a subprocess is invisible.
+#   4. A WRONG-SYMBOL claim is missed, and this one cannot be fixed here.
+#      "`tools/precommit_gate.py` invokes `scan_the_corpus`" names a symbol
+#      this module does not define, so the own-symbol condition rejects it.
+#      Accepting it would mean dropping that condition - and the own-symbol
+#      condition is precisely what spares the three legitimate
+#      `tools/precommit_gate.py` mentions in the real docstring. Catching this
+#      shape and keeping those survivors are mutually exclusive, so the
+#      survivors win. A claim about a symbol that does not exist is a
+#      different defect and wants a different arm.
+#
+# MEASURED REACH, 2026-10-02. An adversarial pass fed twenty synthetic caller
+# claims through this discriminator and ALL TWENTY were missed. After the verb
+# list was widened and the bare-filename form accepted, nineteen land. The one
+# that does not is the wrong-symbol shape at (4) above.
+# ---------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_MODULE_UNDER_TEST = "tools/corpus_statement.py"
+_OWN_TEST_MODULE = "tests/test_corpus_statement.py"
+
+# THE VERB LIST IS A SAFE LIST, so every entry needs a SPECIMEN.
+#
+# The first cut of this arm accepted seven families and only five of them ever
+# appeared in a planted row; `wire` and `execute` were plausible, unmeasured,
+# and therefore exactly this tree's hole-with-a-comment shape. Worse, the list
+# omitted `run` and `use` - an adversarial pass fed twenty synthetic claims
+# through the extractor and all twenty were missed, with
+# "`tools/precommit_gate.py` USES `untracked_not_ignored`" the single most
+# likely sentence a future maintainer would actually write.
+#
+# Two things changed in response. The list is wider, and the specimen
+# requirement is now MECHANICAL: `test_the_caller_claim_detector_actually_fires`
+# asserts that every family below is matched by at least one planted row, so a
+# family added without a specimen reddens instead of sitting there untested.
+#
+# Widening is cheap here and that is worth saying plainly, because it is the
+# reason the list can afford to be generous. The verb is the WEAKEST of the
+# three conditions - a sentence still needs a module path AND a symbol this
+# module actually defines. The own-symbol condition is what spares the real
+# prose, not the narrowness of this list.
+_CALLER_VERB_FAMILIES: dict[str, tuple[str, ...]] = {
+    "invoke": ("invoke", "invokes", "invoked", "invoking"),
+    "call": ("call", "calls", "called", "calling"),
+    "fire": ("fire", "fires", "fired", "firing"),
+    "consume": ("consume", "consumes", "consumed", "consuming"),
+    "wire": ("wire", "wires", "wired", "wiring"),
+    "import": ("import", "imports", "imported", "importing"),
+    "execute": ("execute", "executes", "executed", "executing"),
+    "run": ("run", "runs", "ran", "running"),
+    "use": ("use", "uses", "used", "using"),
+    "drive": ("drive", "drives", "drove", "driven", "driving"),
+    "trigger": ("trigger", "triggers", "triggered", "triggering"),
+    "exercise": ("exercise", "exercises", "exercised", "exercising"),
+    "rely": ("rely", "relies", "relied", "relying"),
+    "depend": ("depend", "depends", "depended", "depending"),
+    "shell": ("shell", "shells", "shelled", "shelling"),
+}
+
+_CALLER_VERB = re.compile(
+    r"\b(?:"
+    + "|".join(
+        sorted(
+            (w for forms in _CALLER_VERB_FAMILIES.values() for w in forms),
+            key=len,
+            reverse=True,
+        )
+    )
+    + r")\b",
+    re.IGNORECASE,
+)
+
+
+def _matched_verb_families(sentence: str) -> set[str]:
+    """Which verb families a sentence exercises. Drives the specimen assertion."""
+    hit: set[str] = set()
+    for family, forms in _CALLER_VERB_FAMILIES.items():
+        pattern = r"\b(?:" + "|".join(forms) + r")\b"
+        if re.search(pattern, sentence, re.IGNORECASE):
+            hit.add(family)
+    return hit
+
+# A dotted-path token, with the directory prefix OPTIONAL.
+#
+# The first cut required a `dir/` prefix, so "precommit_gate.py invokes
+# `untracked_not_ignored`" - a perfectly ordinary way to write the lie - was
+# invisible. Measured before widening: across the 162 tracked `.py` there are
+# 151 distinct basenames and only three collide, `__init__.py` ten ways,
+# `__main__.py` and `conftest.py` twice each. None of the three is a plausible
+# subject for a caller claim. Measured after widening: the real docstrings
+# contain ZERO bare `.py` tokens that were not already full paths, so recall
+# went up at no cost to the surviving prose.
+_MODULE_PATH = re.compile(
+    r"\b((?:(?:tools|tests|scripts|core|engines|ingest|headless|ops|agents"
+    r"|shell|surface|data|docs)/)?[A-Za-z0-9_][A-Za-z0-9_./-]*\.py)\b"
+)
+
+# A NEGATIVE EXISTENTIAL about callers.
+#
+# The first cut keyed on the literal token `nothing`, which an adversarial pass
+# showed reds a CORRECT docstring on ordinary rewording: "No module in this
+# tree imports it.", "No caller exists anywhere in the tree.", "This module has
+# no caller at all." and "Not one tracked file calls it." all returned False,
+# and with no real importer the arm then demands a declaration that is already
+# there in different words. An arm that reddens for a correct rewrite of the
+# file it guards is one a later session deletes rather than obeys. Every
+# phrasing above is a row in the non-vacuity partner.
+_NO_CALLER_DECLARATION = re.compile(
+    r"\bno\s+(?:production\s+|known\s+|real\s+|other\s+)?callers?\b"
+    r"|\b(?:nothing|not\s+one|no\s+(?:module|tracked\s+file|file|one|caller))\b"
+    r"[^.]{0,80}?"
+    r"\b(?:fires?|calls?|invokes?|imports?|consumes?|wires?|executes?"
+    r"|runs?|uses?|drives?|triggers?)\b",
+    re.IGNORECASE,
+)
+
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def _indented_blocks(lines: list[str]) -> list[tuple[int, int]]:
+    """Contiguous runs of lines indented four or more columns, as (start, stop)."""
+    blocks: list[tuple[int, int]] = []
+    start: int | None = None
+    for index, line in enumerate(lines):
+        indented = bool(line.strip()) and line.startswith("    ")
+        if indented and start is None:
+            start = index
+        elif not indented and start is not None and not line.strip():
+            continue  # a blank line does not end a block
+        elif not indented and start is not None:
+            blocks.append((start, index))
+            start = None
+    if start is not None:
+        blocks.append((start, len(lines)))
+    return blocks
+
+
+def _strip_code_blocks(docstring: str) -> str:
+    """Remove indented blocks that are REAL PYTHON, keeping indented prose.
+
+    The test is structural rather than textual: dedent the block and try to
+    parse it. The proposed-wiring example parses as an import, an assignment
+    and an `if`, so it goes. An `Args:` entry and the two `git ls-files`
+    command lines do not parse, so they stay and remain searchable. A sweep
+    that stripped every indented line would go blind to any claim written
+    inside an argument description, which is planted row 8 below.
+    """
+    lines = docstring.splitlines()
+    drop: set[int] = set()
+    for start, stop in _indented_blocks(lines):
+        block = textwrap.dedent("\n".join(lines[start:stop]))
+        if not block.strip():
+            continue
+        try:
+            parsed = ast.parse(block)
+        except SyntaxError:
+            continue
+        meaningful = [
+            node
+            for node in parsed.body
+            if not (
+                isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+            )
+        ]
+        if meaningful:
+            drop.update(range(start, stop))
+    return "\n".join(line for i, line in enumerate(lines) if i not in drop)
+
+
+def _own_symbols(source: str, module_stem: str) -> set[str]:
+    """The names this module defines, DERIVED rather than listed.
+
+    A hardcoded list rots the moment a function is renamed, and a renamed
+    symbol would quietly drop out of the discriminator - a suffix rename
+    emptying a suffix-keyed guard is a failure this tree has already paid for.
+    """
+    symbols = {module_stem}
+    for node in ast.parse(source).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            symbols.add(node.name)
+    return symbols
+
+
+def _all_docstrings(source: str) -> list[tuple[str, str]]:
+    """Every docstring in the module, as (where, text), cleaned of indentation."""
+    tree = ast.parse(source)
+    found: list[tuple[str, str]] = []
+    module_doc = ast.get_docstring(tree, clean=True)
+    if module_doc:
+        found.append(("module", module_doc))
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            doc = ast.get_docstring(node, clean=True)
+            if doc:
+                found.append((node.name, doc))
+    return found
+
+
+def _caller_claims(source: str, module_stem: str) -> tuple[int, dict[str, list[str]]]:
+    """Extract the modules this source's docstrings CLAIM invoke it.
+
+    Returns the number of sentences examined - so a caller can refuse a
+    vacuous zero-out-of-zero pass - and a mapping from the claimed module path
+    to the sentences making the claim.
+    """
+    symbols = _own_symbols(source, module_stem)
+    examined = 0
+    claims: dict[str, list[str]] = {}
+    for _where, doc in _all_docstrings(source):
+        prose = _strip_code_blocks(doc)
+        for sentence in _SENTENCE_SPLIT.split(" ".join(prose.split())):
+            if not sentence.strip():
+                continue
+            examined += 1
+            paths = _MODULE_PATH.findall(sentence)
+            if not paths:
+                continue
+            if not _CALLER_VERB.search(sentence):
+                continue
+            if not any(re.search(rf"\b{re.escape(s)}\b", sentence) for s in symbols):
+                continue
+            for path in paths:
+                claims.setdefault(path, []).append(sentence.strip())
+    return examined, claims
+
+
+_CANARY_CLAIM = (
+    '"""Doc.\n\n'
+    "`tools/precommit_gate.py` invokes `untracked_not_ignored` on every run.\n"
+    '"""\n\n\ndef untracked_not_ignored(root):\n    return []\n'
+)
+
+
+def _resolve_claim_tokens(tokens: set[str]) -> set[str]:
+    """Map a bare `name.py` onto the tracked path that carries it.
+
+    An unresolvable or AMBIGUOUS basename is deliberately left as written. It
+    then matches no real importer and reddens, which is the safe direction: a
+    claim naming `conftest.py` has not said which of the two, and the right
+    answer is to make the docstring say so rather than to guess here.
+    """
+    index: dict[str, list[str]] = {}
+    for name in _tracked_python_files():
+        index.setdefault(Path(name).name, []).append(name)
+    resolved: set[str] = set()
+    for token in tokens:
+        if "/" in token:
+            resolved.add(token)
+            continue
+        candidates = index.get(token, [])
+        resolved.add(candidates[0] if len(candidates) == 1 else token)
+    return resolved
+
+
+def _declares_no_caller(source: str) -> bool:
+    """True when some docstring states, in so many words, that nothing fires it."""
+    return any(
+        _NO_CALLER_DECLARATION.search(_strip_code_blocks(doc))
+        for _where, doc in _all_docstrings(source)
+    )
+
+
+def _tracked_python_files() -> list[str]:
+    """Every tracked `.py`, discovered from git rather than listed."""
+    completed = subprocess.run(
+        ["git", "ls-files", "-z", "*.py"],
+        cwd=str(_REPO_ROOT),
+        capture_output=True,
+        check=True,
+    )
+    return sorted(n for n in completed.stdout.decode("utf-8").split("\0") if n)
+
+
+def _modules_importing(target_stem: str, exclude: set[str]) -> set[str]:
+    """Tracked modules that IMPORT `target_stem`, read off the working tree.
+
+    Working tree rather than `git show`, so a plant on disk is visible to this
+    oracle the way a real new caller would be.
+    """
+    importers: set[str] = set()
+    for name in _tracked_python_files():
+        if name in exclude:
+            continue
+        path = _REPO_ROOT / name
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):  # pragma: no cover - defect only
+            continue
+        if target_stem not in source:
+            continue  # cheap reject before the parse
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:  # pragma: no cover - defect only
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                if any(a.name.split(".")[-1] == target_stem for a in node.names):
+                    importers.add(name)
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if module.split(".")[-1] == target_stem or any(
+                    a.name == target_stem for a in node.names
+                ):
+                    importers.add(name)
+    return importers
+
+
+def test_docstring_caller_claims_resolve_against_the_tree() -> None:
+    """Any caller these docstrings name must really invoke the module, and vice versa.
+
+    THE DEFECT THIS CLOSES, MEASURED. Until 2026-10-02 three docstrings in
+    `tools/corpus_statement.py` asserted, four times between them, that the
+    glyph gate invoked `untracked_not_ignored`. It never did - that file
+    imports `json`, `os`, `pathlib`, `re`, `subprocess`, `sys` and a local
+    `py_compile`, and nothing else. The module had no caller at all. The
+    correction was checked once, by hand, from a scratchpad that was thrown
+    away; this arm is that check wired in so it runs.
+
+    BOTH DIRECTIONS REDDEN. A fabricated caller is caught because the claimed
+    path is not among the real importers. A real caller landed while the
+    docstring still announces that nothing fires the module is caught too,
+    because the importer is not among the claims - and that second failure is
+    the dangerous one, since a module documented as dead gets deleted.
+    """
+    require_git_repository()
+
+    source = (_REPO_ROOT / _MODULE_UNDER_TEST).read_text(encoding="utf-8")
+    stem = Path(_MODULE_UNDER_TEST).stem
+
+    # THE LIVENESS CANARY, and why it is here rather than a bigger floor.
+    #
+    # An adversarial pass observed that `examined >= 60` sits on the
+    # EXTRACTOR'S INPUT and not on what the claim side actually consumes. Of
+    # the 85 sentences, only 7 carry a module path and only 3 of those carry a
+    # verb; rewriting those 7 to nicknames - which this arm's own failure
+    # message RECOMMENDS - would leave `examined` at 85, empty the claim side
+    # structurally, and keep the arm green. A floor on the path-bearing count
+    # would close that, but it would also punish the discipline the arm asks
+    # for, so it is deliberately NOT added. This canary closes it instead, and
+    # is immune to prose style: if the discriminator ever goes structurally
+    # dead, a synthetic claim stops being caught and THIS arm reds, rather
+    # than only its partner.
+    canary_examined, canary_claims = _caller_claims(_CANARY_CLAIM, stem)
+    assert canary_examined >= 1 and canary_claims, (
+        "the caller-claim discriminator no longer catches a synthetic claim, "
+        "so every assertion below is vacuous regardless of what the real "
+        f"docstrings say. Canary: {_CANARY_CLAIM!r}"
+    )
+
+    examined, claims = _caller_claims(source, stem)
+    # Measured 2026-10-02 at a1ee3d3: 85 sentences across the three docstrings,
+    # 7 of them path-bearing. The floor is set well under 85 so ordinary prose
+    # edits do not trip it, and well over zero so a docstring gutted to a
+    # one-liner does. It guards the PROSE, not the discriminator; the canary
+    # above guards the discriminator.
+    assert examined >= 60, (
+        f"only {examined} docstring sentences were examined in "
+        f"{_MODULE_UNDER_TEST}, which is too few to be its real prose - this "
+        "arm would be passing zero out of zero"
+    )
+
+    symbols = _own_symbols(source, stem)
+    assert len(symbols) >= 3, (
+        f"the discriminator resolved only {sorted(symbols)} as symbols of this "
+        "module, so the own-symbol half of the test is nearly vacuous"
+    )
+
+    real = _modules_importing(stem, exclude={_MODULE_UNDER_TEST, _OWN_TEST_MODULE})
+    # A module naming its own path is not claiming a caller, and `real` already
+    # excludes it. Measured 2026-10-02 while deciding whether to generalise this
+    # arm over `tools/`: two of the thirteen tracked modules there mention their
+    # own path in a sentence carrying an own-symbol and a caller verb, so a
+    # sweep without this line reds on them the moment it is pointed anywhere
+    # else. `tools/corpus_statement.py` happens not to, today.
+    claimed = _resolve_claim_tokens(set(claims)) - {_MODULE_UNDER_TEST}
+
+    fabricated = sorted(claimed - real)
+    unannounced = sorted(real - claimed)
+
+    assert not fabricated, (
+        f"these docstrings in {_MODULE_UNDER_TEST} claim a caller that does "
+        f"not exist. Nothing in {fabricated} imports `{stem}`. Either wire the "
+        "call up or correct the prose; if the mention is historical or "
+        "hypothetical, keep the module path and the symbol name out of the "
+        "same sentence, which is how the surviving mentions are written. "
+        f"Offending sentences: {claims!r}"
+    )
+    assert not unannounced, (
+        f"{sorted(real)} really do import `{stem}`, but the docstrings of "
+        f"{_MODULE_UNDER_TEST} never name them as callers. A docstring that "
+        "understates its wiring is still wrong, and the next reader deletes "
+        f"the module as dead code. Unannounced: {unannounced}"
+    )
+
+    if not real:
+        assert _declares_no_caller(source), (
+            f"{_MODULE_UNDER_TEST} has no caller anywhere in the tree and its "
+            "docstrings no longer say so. Silence here is how the module gets "
+            "read as wired. State it plainly, as the 2026-10-02 correction did"
+        )
+    else:
+        assert not _declares_no_caller(source), (
+            f"{sorted(real)} import `{stem}`, yet a docstring still declares "
+            "that nothing fires this module"
+        )
+
+
+def test_the_caller_claim_detector_actually_fires() -> None:
+    """NON-VACUITY. The oracle must catch planted lies and spare real neighbours.
+
+    Without this arm `fabricated == []` is satisfied just as well by a
+    discriminator that matches nothing, which is the trap half this tree's
+    arms have historically fallen into. The other half is a sweep that scores
+    perfectly by flagging its own subjects, so the survivors matter as much as
+    the plants - every survivor row is a REAL sentence from the corrected
+    docstring, including the one that DESCRIBES the retracted claim.
+
+    Sources are built here rather than written to disk, so nothing tracked is
+    mutated even briefly. No `chr()` escape is needed for the planted lie: the
+    retracted paragraph was byte-inspected at 473 bytes with zero bytes above
+    0x7F and no CR, so planting it verbatim cannot make this module violate
+    the ASCII arm above.
+    """
+    head = '"""Doc.\n\n'
+    # BOTH public and private symbols are defined, because `_own_symbols`
+    # derives the discriminator's symbol set from the SOURCE it is handed. An
+    # earlier scratch harness defined only the public one and reported a
+    # private-symbol claim as missed; re-run against the real module, which
+    # defines both, the same claim landed. The miss was in the harness, not in
+    # the arm - a re-implemented grader weaker than the module it grades is a
+    # failure already recorded in this tree, so the fixture matches reality.
+    tail = (
+        '"""\n\n\ndef untracked_not_ignored(root):\n    return []\n\n\n'
+        "def _normalise_prefixes(root, prefixes):\n    return []\n"
+    )
+
+    planted = {
+        "the retracted sentence, verbatim": (
+            "NOTHING IN THIS MODULE RAISES TO ITS CALLER. `untracked_not_ignored` is\n"
+            "invoked from `tools/precommit_gate.py`, which runs from a git hook, so\n"
+            "any exception escaping here becomes a NON-ZERO HOOK EXIT.\n"
+        ),
+        "present tense, calls": (
+            "`tools/precommit_gate.py` calls `untracked_not_ignored` on every run.\n"
+        ),
+        "passive, is called from": (
+            "`untracked_not_ignored` is called from `scripts/install_hooks.py`.\n"
+        ),
+        "fires rather than calls": (
+            "The sweep in `tests/test_no_sibling_names.py` fires "
+            "`untracked_not_ignored`.\n"
+        ),
+        "named by the module stem": (
+            "`ops/supervisor.py` imports `corpus_statement` at startup.\n"
+        ),
+        "consumes": (
+            "`headless/runner.py` consumes `untracked_not_ignored` once a pass.\n"
+        ),
+        "wrapped across source lines": (
+            "The glyph gate at\n`tools/precommit_gate.py`\ninvokes\n"
+            "`untracked_not_ignored`.\n"
+        ),
+        "claim sitting inside an Args entry": (
+            "Args:\n"
+            "    root: the directory. `tools/precommit_gate.py` invokes\n"
+            "    `untracked_not_ignored` with the repo root here.\n"
+        ),
+        # A BARE FILENAME, no directory. Missed by the first cut entirely.
+        "bare filename, no directory prefix": (
+            "precommit_gate.py invokes `untracked_not_ignored` before it scans.\n"
+        ),
+        # ONE SPECIMEN PER VERB FAMILY. The six rows below exist because an
+        # adversarial pass found two accepted families with no specimen at all
+        # and four more families missing from the list. `_verb_family_coverage`
+        # at the end of this function makes the requirement mechanical.
+        "run - the family the first cut omitted": (
+            "`tools/precommit_gate.py` runs `untracked_not_ignored` on each hook.\n"
+        ),
+        "use - the word a maintainer reaches for first": (
+            "`tools/precommit_gate.py` uses `untracked_not_ignored` to name them.\n"
+        ),
+        "drive": (
+            "`untracked_not_ignored` is driven by `headless/runner.py` each pass.\n"
+        ),
+        "trigger": (
+            "`ops/supervisor.py` triggers `untracked_not_ignored` at startup.\n"
+        ),
+        "wire - accepted but never measured before": (
+            "`untracked_not_ignored` is wired into `tools/precommit_gate.py`.\n"
+        ),
+        "execute - accepted but never measured before": (
+            "`scripts/install_hooks.py` executes `untracked_not_ignored` once.\n"
+        ),
+        "exercise": (
+            "`untracked_not_ignored` is exercised by `headless/runner.py`.\n"
+        ),
+        "rely": (
+            "`tools/precommit_gate.py` relies on `untracked_not_ignored` here.\n"
+        ),
+        "depend": (
+            "`tools/precommit_gate.py` depends on `untracked_not_ignored`.\n"
+        ),
+        "shell": (
+            "`ops/supervisor.py` shells out to `corpus_statement` every pass.\n"
+        ),
+        "a PRIVATE symbol is a caller claim too": (
+            "`tools/precommit_gate.py` calls `_normalise_prefixes` before it scans.\n"
+        ),
+    }
+    covered: set[str] = set()
+    for label, body in planted.items():
+        _examined, claims = _caller_claims(head + body + tail, "corpus_statement")
+        assert claims, (
+            f"{label}: the detector missed a planted caller claim in {body!r}"
+        )
+        covered |= _matched_verb_families(" ".join(body.split()))
+
+    # THE SPECIMEN REQUIREMENT, MADE MECHANICAL. A verb family added to the
+    # safe list without a planted row is an entry nobody measured, which is
+    # this tree's recorded hole-with-a-comment shape. This assertion turns
+    # "every accepted verb should have a specimen" from a promise into a gate.
+    uncovered = sorted(set(_CALLER_VERB_FAMILIES) - covered)
+    assert not uncovered, (
+        f"these verb families are accepted by the discriminator but no planted "
+        f"row exercises them, so nothing measured whether they work: "
+        f"{uncovered}. Add a specimen above or drop the family"
+    )
+
+    survivors = {
+        "guards listed by the corpus they build": (
+            "Three guards in this tree build their corpus from `git ls-files` - the\n"
+            "glyph gate at `tools/precommit_gate.py`, the sibling-name sweep at\n"
+            "`tests/test_no_sibling_names.py`, and the docs pointer guard at\n"
+            "`tests/test_docs_consistency.py`.\n"
+        ),
+        "the measurement that proves there is no caller": (
+            "Measured: `tools/precommit_gate.py` imports `json`, `os`, `pathlib`,\n"
+            "`re`, `subprocess`, `sys` and - locally, inside a function -\n"
+            "`py_compile`. Stdlib, all of it.\n"
+        ),
+        "the retraction, which names the gate by nickname": (
+            "Until 2026-10-02 this docstring named the glyph gate as the thing that\n"
+            "calls `untracked_not_ignored`. That was FALSE and had been false since\n"
+            "the module landed.\n"
+        ),
+        "the proposed wiring, symbol only inside a code block": (
+            "The natural site is the glyph gate's corpus construction in\n"
+            "`tools/precommit_gate.py`: after it builds its `git ls-files` corpus,\n"
+            "call\n"
+            "\n"
+            "    from tools.corpus_statement import untracked_not_ignored\n"
+            "    unscanned = untracked_not_ignored(repo_root)\n"
+            "    if unscanned:\n"
+            '        print("NOT SCANNED: " + ", ".join(unscanned))\n'
+            "\n"
+            "and STILL EXIT 0, per the ruling below.\n"
+        ),
+        "the write-list reason the wiring is not landed": (
+            "That change is not made here because `tools/precommit_gate.py` is\n"
+            "outside this change's write-list, and because a gate's PRESENCE is\n"
+            "never proof it runs.\n"
+        ),
+        "the own-test-module mention, no caller verb": (
+            "Across every tracked file the only thing that names `corpus_statement`\n"
+            "at all is `tests/test_corpus_statement.py`, its own test module.\n"
+        ),
+    }
+    # EACH SURVIVES FOR A REASON, re-checked after the verb list was widened,
+    # because widening is exactly where this breaks. Measured 2026-10-02:
+    #   guards listed by the corpus  - no caller verb at all
+    #   the stdlib measurement       - verb `import`, but no own-symbol
+    #   the retraction               - verb `call` and own-symbol, no PATH
+    #   the proposed wiring          - own-symbol only inside the code block
+    #   the write-list reason        - verbs `fire`, `run`, `wire`, no own-symbol
+    #   the own-test-module mention  - no caller verb at all
+    # The fifth row is the one to watch. It already contained `runs` and was
+    # spared before the widening only because `run` was not yet accepted; it
+    # is spared now only by the own-symbol condition. That condition is the
+    # load-bearing one, not the narrowness of the verb list.
+    for label, body in survivors.items():
+        _examined, claims = _caller_claims(head + body + tail, "corpus_statement")
+        assert not claims, (
+            f"{label}: a legitimate neighbour was read as a caller claim, which "
+            "is how a sweep scores perfectly by deleting its own subjects: "
+            f"{claims}"
+        )
+
+    # A SELF-mention is not a caller claim. The extractor reports it, and the
+    # arm above subtracts it; both halves are checked here because only the
+    # pair is the behaviour. Measured in `tools/` before deciding against
+    # generalising: two of thirteen modules carry exactly this shape.
+    _examined, self_claims = _caller_claims(
+        head
+        + "The helper in `tools/corpus_statement.py` invokes "
+        + "`untracked_not_ignored` on itself.\n"
+        + tail,
+        "corpus_statement",
+    )
+    assert set(self_claims) == {_MODULE_UNDER_TEST}, self_claims
+    assert set(self_claims) - {_MODULE_UNDER_TEST} == set()
+
+    # THE NO-CALLER DECLARATION, both polarities.
+    #
+    # Keyed on the literal `nothing` in the first cut, which meant four
+    # ordinary rewordings of a CORRECT docstring all returned False and would
+    # have reddened this arm. Every one of them is a row here now. An arm that
+    # reds on a correct rewrite of the file it guards gets deleted rather than
+    # obeyed, so this is a fix and not a declared limitation.
+    for phrasing in (
+        "NOTHING FIRES THIS MODULE.",
+        "Nothing calls this today.",
+        "No module in this tree imports it.",
+        "No caller exists anywhere in the tree.",
+        "This module has no caller at all.",
+        "Not one tracked file calls it.",
+        "There is no production caller.",
+    ):
+        assert _declares_no_caller(head + phrasing + "\n" + tail), (
+            f"a correct no-caller declaration was not recognised: {phrasing!r}"
+        )
+
+    for phrasing in (
+        "This module is a helper.",
+        "The glyph gate calls it on every commit.",
+        "Nothing here raises to its caller, and that contract holds.",
+        "No exception escapes this function.",
+    ):
+        assert not _declares_no_caller(head + phrasing + "\n" + tail), (
+            "this was read as a declaration that nothing fires the module, "
+            f"which would wrongly forbid it once a caller lands: {phrasing!r}"
+        )
+
+    # The code-block stripper must remove python and keep prose.
+    stripped = _strip_code_blocks(
+        "Prose.\n\n    x = untracked_not_ignored(root)\n\nMore prose.\n"
+    )
+    assert "untracked_not_ignored" not in stripped, stripped
+    kept = _strip_code_blocks(
+        "Prose.\n\n    git ls-files --others --exclude-standard\n\nMore prose.\n"
+    )
+    assert "git ls-files" in kept, kept
