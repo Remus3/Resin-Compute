@@ -76,6 +76,7 @@ from types import MappingProxyType
 from typing import Any
 
 from core.atomic_io import atomic_write_text
+from core.repo_sweep import swept_files
 
 #: Bumped only by a deliberate migration. Nothing yet defines what a bump
 #: obliges a reader to do; that is recorded as open rather than invented, and
@@ -925,6 +926,24 @@ def sweep_data_dir(root: str | os.PathLike[str]) -> tuple[int, list[str]]:
     `data/fixtures/` is SKIPPED. It is hand-authored fixture material, not
     observation, and grading it would be either vacuous or wrong.
 
+    A NESTED CHECKOUT IS SKIPPED, and this one is not a performance note - it
+    is the difference between a slow sweep and a FABRICATED FINDING. This
+    function used to filter on `fixtures` and nothing else, so a merged
+    worktree or a clone left under `data/` was walked and ITS `.jsonl` rows
+    were validated as if this tree had written them. Measured 2026-10-02 at
+    83d8b1a: a planted checkout at `data/wt_probe_<hex>/foreign_rows.jsonl`
+    produced the offender `foreign_rows.jsonl:1: malformed data row: 'payload'`
+    and turned `checked` from 0 to 1, which reddened
+    `tests/test_provenance.py::test_the_real_data_directory_reports_zero_checked_today_and_that_is_not_a_pass`
+    through the full suite. A guard that manufactures an offender out of
+    another repository's file is worse than one that misses: the offender is
+    unfixable here and unfalsifiable from the diff.
+
+    The predicate is `core/repo_sweep.py`'s, shared with the guards in
+    `tests/`, and it lives in `core/` precisely so this PRODUCTION module can
+    reach it without importing from `tests/`. An ordinary non-dot directory
+    under `root` carries no `.git` marker and is still swept.
+
     A missing root reports (0, []). That zero is honest and the caller is
     expected to assert it: an empty corpus passing in silence is the exact
     defect the checked-count rule exists for.
@@ -934,7 +953,7 @@ def sweep_data_dir(root: str | os.PathLike[str]) -> tuple[int, list[str]]:
     offenders: list[str] = []
     if not base.is_dir():
         return checked, offenders
-    for path in sorted(base.rglob("*.jsonl")):
+    for path in swept_files(base, "*.jsonl"):
         relative = path.relative_to(base)
         if "fixtures" in relative.parts:
             continue
