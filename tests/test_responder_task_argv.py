@@ -148,6 +148,8 @@ import argparse
 import importlib.util
 import re
 import shlex
+import shutil
+import uuid
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 from types import ModuleType
@@ -160,6 +162,12 @@ import pytest
 # variable names, so a second copy of the grader here would be a second thing to
 # keep in step - which is how this tree earned a neutraliser asymmetry it is
 # still carrying. One grader, two texts, one mutant table.
+# THE SWEEP EXCLUSION IS SHARED, NOT RE-ROLLED. `_repo_python_files()` walks
+# from the true repository root, which makes it a root-walking guard of the
+# class `tests/test_guard_worktree_exclusion.py` exists to repair. It binds
+# that module's one predicate object so it cannot drift from the four guards
+# already using it. See the block at the foot of this file.
+from tests.test_guard_worktree_exclusion import swept_files
 from tests.test_supervisor_task_argv import (
     _CALL_OPERATOR_RE,
     _EXIT_RE,
@@ -488,14 +496,19 @@ def _installer_required_script() -> str:
 
 
 def _repo_python_files() -> list[Path]:
-    """Every tracked-looking `.py` under the repo root, dot dirs and caches out."""
-    return [
-        path
-        for path in REPO_ROOT.rglob("*.py")
-        if not any(
-            part.startswith(".") or part == "__pycache__" for part in path.relative_to(REPO_ROOT).parts
-        )
-    ]
+    """Every `.py` under the repo root THIS WORKING TREE ACTUALLY OWNS.
+
+    `swept_files` rather than a bare `rglob`: this walks from the TRUE
+    repository root, so a nested checkout left on disk - a sibling cloned into
+    `vendor/`, an extracted archive, a worktree added outside the convention -
+    puts a SECOND copy of the responder in the corpus and
+    `test_exactly_one_file_declares_the_task_label` then goes red on content
+    this tree does not own. The shared helper is bound rather than a fifth
+    hand-rolled skip list written here; see the block at the foot of this file
+    for the measurement, the two checkout shapes, and why the dot-directory
+    case was already covered by accident.
+    """
+    return swept_files(REPO_ROOT, "*.py")
 
 
 def _scripts_declaring_the_task_label() -> set[str]:
@@ -1861,4 +1874,228 @@ def test_the_responder_guard_runs_before_the_declaration_is_rewritten() -> None:
     assert guard < rewrite, (
         "the declaration rewrite runs BEFORE the survivor guard, so a placeholder left "
         "inside the XML declaration is erased before the guard can see it"
+    )
+
+
+# ---------------------------------------------------------------------------
+# `_repo_python_files()` AND NESTED CHECKOUTS
+#
+# THE DEFECT. `_repo_python_files()` recursed from the TRUE repository root
+# filtering only dot-prefixed path parts and `__pycache__`. That makes it a
+# root-walking guard of exactly the class `tests/test_guard_worktree_exclusion.py`
+# was written to repair, and it was the one such walker in this directory the
+# repair did not reach - it owned its own filter, so it imported nothing and
+# was named by nothing.
+#
+# WHY IT IS A WRONG FINDING AND NOT MERELY A SLOW ONE, which is the question
+# that decides whether this is worth a fix at all.
+# `test_exactly_one_file_declares_the_task_label` asserts that EXACTLY ONE
+# file in the tree declares `SOURCE_SCHEDULED_TASK`. A nested checkout of this
+# repository - or of any sibling carrying a copy of the responder - puts a
+# second declaring file on disk, and that arm goes red on content the working
+# tree does not own. The colour of the suite becomes a fact about whatever
+# some other agent left lying around, which is the sibling's original finding
+# verbatim. `_load_script` consults the same scan as its execution gate, so a
+# nested copy also widens the set of files this module is willing to import
+# and run.
+#
+# WHY IT WAS NOT LIVE FOR THIS REPO'S OWN WORKTREES, recorded here because the
+# next reader will reach for `.claude/worktrees/` first and find nothing.
+# This tree's worktrees live under `.claude/`, which is DOT-PREFIXED, and the
+# original filter already dropped every dot-prefixed part. So the one nested
+# checkout shape this repository actually creates was excluded BY ACCIDENT -
+# by a filter aimed at caches and editor directories, not at checkouts. The
+# exposure was to any nested checkout at a NON-dot path: a sibling cloned into
+# `vendor/`, an extracted archive, a worktree added by hand outside the
+# convention. `test_a_dot_prefixed_nested_checkout_was_already_excluded` below
+# pins that accident so it cannot later be removed as dead weight without the
+# reason surfacing.
+#
+# THE FIX IS THE SHARED PREDICATE, not a fifth hand-rolled skip list. Four
+# hand-maintained copies were the thing `swept_files()` was introduced to end,
+# and a fifth would drift the same way.
+# ---------------------------------------------------------------------------
+
+_NESTED_PROBE_PREFIX = "respargv_probe_"
+
+
+@pytest.fixture
+def nested_probe_factory():
+    """Plants probe directories in the REAL tree and removes every one.
+
+    WHY THE REAL TREE AND NOT `tmp_path`. `_repo_python_files()` is hard-wired
+    to `REPO_ROOT` and takes no root argument, so there is no seam to point it
+    somewhere else. Pointing a reimplementation at `tmp_path` would be grading
+    a copy of the helper rather than the helper.
+
+    CLEANUP IS UNCONDITIONAL and runs during fixture finalization, which fires
+    even when the test body raises. Each removal is verified: a leftover probe
+    holding a second `SOURCE_SCHEDULED_TASK` declaration would make the
+    uniqueness arm red on the NEXT run, turning one failure into a suite that
+    stays broken.
+    """
+    created: list[Path] = []
+
+    def _plant(*, dotdir: bool, git_marker: str | None, files: dict[str, bytes]) -> Path:
+        stem = f"{_NESTED_PROBE_PREFIX}{uuid.uuid4().hex}"
+        probe_dir = REPO_ROOT / (f".{stem}" if dotdir else stem)
+        probe_dir.mkdir(parents=True)
+        created.append(probe_dir)
+        if git_marker == "file":
+            # A LINKED WORKTREE's `.git` is a FILE holding a `gitdir:` pointer,
+            # not a directory. That is the shape `.exists()` catches and
+            # `.is_dir()` would miss.
+            (probe_dir / ".git").write_bytes(b"gitdir: /nowhere/probe\n")
+        elif git_marker == "dir":
+            (probe_dir / ".git").mkdir()
+        for rel_path, content in files.items():
+            target = probe_dir / rel_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+        return probe_dir
+
+    try:
+        yield _plant
+    finally:
+        for probe_dir in created:
+            shutil.rmtree(probe_dir, ignore_errors=True)
+            assert not probe_dir.exists(), (
+                f"cleanup left {probe_dir} behind - a stray checkout-shaped "
+                "directory inside the repository is the exact defect these arms "
+                "are about, and this suite must never be the thing that leaves it"
+            )
+
+
+#: A declaration identical in SHAPE to the responder's own, so the scan cannot
+#: tell it apart by anything except where it lives. Bytes, because that is
+#: what the scan reads.
+_PROBE_DECLARATION = (TASK_LABEL_CONSTANT + ' = "probe-not-this-trees-content"\n').encode(
+    "ascii"
+)
+
+
+def test_a_nested_checkout_is_not_swept_by_the_python_file_scan(nested_probe_factory):
+    """THE BAD THING IS GONE. A `.git`-marked checkout is not this tree.
+
+    The probe is a worktree-shaped checkout - a `.git` FILE, non-dot path -
+    holding a file that declares the task label. Both consequences are
+    asserted, because they are different failures: the file leaking into
+    `_repo_python_files()` is the SWEEP defect, and the owner set growing to
+    two is the WRONG FINDING that defect produces in
+    `test_exactly_one_file_declares_the_task_label`.
+    """
+    probe_dir = nested_probe_factory(
+        dotdir=False,
+        git_marker="file",
+        files={"tools/moon_sync_responder.py": _PROBE_DECLARATION},
+    )
+    planted = probe_dir / "tools" / "moon_sync_responder.py"
+    assert planted.is_file(), "the probe was not written - this arm would measure nothing"
+
+    swept = _repo_python_files()
+    assert swept, "the scan found no Python files at all - zero out of zero is not a pass"
+    assert planted not in swept, (
+        f"{planted} is inside a directory carrying a .git marker, so it belongs to a "
+        "nested checkout rather than to this working tree, and the scan swept it anyway"
+    )
+
+    owners = _scripts_declaring_the_task_label()
+    assert len(owners) == 1, (
+        f"a nested checkout made {TASK_LABEL_CONSTANT} look as though it is declared "
+        f"in {sorted(owners)}. The uniqueness arm would go red on content this tree "
+        "does not own, which is the wrong-finding half of the defect."
+    )
+
+
+def test_a_nested_clone_with_a_git_directory_is_not_swept_either(nested_probe_factory):
+    """The OTHER checkout shape. A clone's `.git` is a DIRECTORY.
+
+    Separate from the arm above on purpose: a predicate written with
+    `.is_dir()` passes that one and fails this one, and a predicate written to
+    match only a file does the reverse. Both shapes are real and neither
+    implies the other.
+    """
+    probe_dir = nested_probe_factory(
+        dotdir=False,
+        git_marker="dir",
+        files={"tools/moon_sync_responder.py": _PROBE_DECLARATION},
+    )
+    planted = probe_dir / "tools" / "moon_sync_responder.py"
+
+    assert planted not in _repo_python_files(), (
+        f"{planted} sits inside a nested clone - a .git DIRECTORY - and was swept"
+    )
+    assert len(_scripts_declaring_the_task_label()) == 1, (
+        "a nested clone's copy of the responder was counted as a second declaration"
+    )
+
+
+def test_an_ordinary_nested_directory_is_still_swept(nested_probe_factory):
+    """THE LEGITIMATE NEIGHBOURS SURVIVED - the second of the two guards this
+    tree requires of any sweep.
+
+    An exclusion that scored a perfect result on the two arms above by
+    dropping every nested directory would fail here. This probe carries no
+    `.git` marker and no dot prefix, so it is ordinary repository content and
+    MUST be swept. It deliberately does NOT declare the task label: a
+    legitimate second declaration would break the uniqueness arm for a real
+    reason, and this arm is about the sweep, not about the label.
+    """
+    probe_dir = nested_probe_factory(
+        dotdir=False,
+        git_marker=None,
+        files={"pkg/ordinary_module.py": b'"""Ordinary tracked-looking content."""\n'},
+    )
+    planted = probe_dir / "pkg" / "ordinary_module.py"
+
+    swept = _repo_python_files()
+    assert swept, "the scan found no Python files at all - zero out of zero is not a pass"
+    assert planted in swept, (
+        f"{planted} is ordinary repository content - no .git marker, no dot prefix - "
+        "and the exclusion dropped it. An exclusion that wins by excluding everything "
+        "has not fixed the sweep, it has emptied it."
+    )
+
+
+def test_a_dot_prefixed_nested_checkout_was_already_excluded(nested_probe_factory):
+    """WHY THIS WAS NEVER LIVE FOR THIS REPO'S OWN WORKTREES, pinned so the
+    reason survives the next reader.
+
+    This tree puts its worktrees under `.claude/worktrees/`. The scan's
+    ORIGINAL filter dropped dot-prefixed parts, so that one shape was already
+    excluded - by a filter aimed at caches and editor directories, which is an
+    accident rather than a decision. This arm turns the accident into a stated
+    property. It passed BEFORE the repair too, and that is the point: it
+    records that the repair's value was never in this case, so nobody
+    re-derives the exposure from the wrong example and concludes there was
+    none.
+    """
+    probe_dir = nested_probe_factory(
+        dotdir=True,
+        git_marker="file",
+        files={"tools/moon_sync_responder.py": _PROBE_DECLARATION},
+    )
+    planted = probe_dir / "tools" / "moon_sync_responder.py"
+
+    assert planted not in _repo_python_files(), (
+        f"{planted} is under a dot-prefixed directory - the shape "
+        ".claude/worktrees/ takes - and the scan swept it"
+    )
+
+
+def test_the_python_file_scan_binds_the_shared_sweep_predicate():
+    """IDENTITY, not equality, and the same arm the other four guards carry.
+
+    `tests/test_guard_worktree_exclusion.py::test_all_four_repaired_guards_share_one_predicate_object`
+    pins that the four repaired guards share ONE function object. This module
+    was the fifth root-walker and is not in that list, so it carries the
+    equivalent arm here rather than editing a count in a file it does not own.
+    A module that grew its own look-alike helper would satisfy every arm above
+    while drifting from the other four on the next case nobody thought to test.
+    """
+    from tests.test_guard_worktree_exclusion import swept_files as shared
+
+    assert swept_files is shared, (
+        "this module no longer uses the shared sweep helper, so its exclusion can "
+        "drift away from the four guards that do without anything going red"
     )
