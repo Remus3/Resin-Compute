@@ -646,20 +646,118 @@ def test_the_corpus_builder_arm_can_fail():
 # promise NOTHING about:
 #
 #   - EXISTENCE inside an ignored namespace. `ops/runtime/` is gitignored
-#     whole, so `ops/runtime/a_file_deleted_last_year.json` is accepted
-#     unconditionally and forever - measured accounted True, measured absent
-#     from disk. The hand-off already cites two ignored runtime artifacts, and
-#     both will expire silently rather than reporting.
+#     whole, so until 2026-10-02 `ops/runtime/a_file_deleted_last_year.json`
+#     was accepted unconditionally and forever - measured accounted True,
+#     measured absent from disk. NARROWED, not closed, by the voucher
+#     requirement recorded below. EXISTENCE itself is still unchecked and
+#     cannot be checked here: an ignored artifact is absent from every fresh
+#     clone by construction, so no machine-independent rule can ask for it.
 #   - LINE RANGE. The markdown arms resolve `path:NNN` against the target's
 #     real length. There is no bare equivalent; a line number in plain text is
 #     prose, and nothing here reads one.
 #   - The shapes the extractor cannot see, listed on `BARE_PATH_SUFFIXES`.
 #
-# The ignored half is a deliberate trade, not an oversight. It is the only rule
-# that does not decay when the hand-off is regenerated, which happens every
-# session. Tightening it means resolving ignored paths on disk, and a disk check
-# is a fact about ONE MACHINE - which is the precise mistake `_is_tracked()`
-# exists to avoid, and which once turned the docs-guards CI job red.
+# THE IGNORED HALF WAS TIGHTENED ON 2026-10-02. The figures are kept here
+# because the rule that landed is NOT the rule that was proposed, and the
+# proposed rule's stated REASON is measurably false in this tree.
+#
+# THE POPULATION FIRST, because a rule over an empty population is an arm that
+# cannot fail. Measured against the corpus standing at 50b61e7, by three
+# methods that do not share an implementation - this module's own extractors, a
+# grep for ignored namespaces, and a crude slash-token regex fed to `git
+# check-ignore` - the LIVE ignored-half population is ZERO. All 71 bare
+# citation instances across the three corpus documents resolve through the
+# TRACKED half. On that figure alone the right landing would be a recorded
+# number and no new predicate.
+#
+# THAT FIGURE DOES NOT HOLD UP ALONE, and re-measuring is what decided the
+# slice. The hand-off is regenerated every session, so the population was
+# re-measured across all NINE committed revisions of `RSC-NEXT-SESSION.txt`.
+# EIGHT of the nine carry a non-empty ignored half and the revision standing
+# today is the only empty one, so the population is empty by one-commit
+# accident rather than by construction. The sentence this paragraph replaced
+# said "the hand-off already cites two ignored runtime artifacts": true at
+# f989ffa, false at 50b61e7, and stale within a single commit of being written.
+#
+# TWO COUNTS COME OUT OF THAT REPLAY AND THEY MEASURE DIFFERENT POPULATIONS.
+# Say which, because a bare numeral here is the thing this tree keeps getting
+# wrong. IN SCOPE FOR ARM 3, which is what the guard can actually act on: 11
+# instances across 4 artifacts, all under `TREE_ROOTS`. UNSCOPED, counting
+# every ignored path the replay saw regardless of whether any extractor here
+# could reach it: 13 instances across 6 artifacts - an independent replay using
+# whitespace tokenisation and batched `git check-ignore`, sharing no code with
+# the extractors above, which is why it is worth recording rather than
+# averaging away. THE DELTA IS EXACTLY `moon_sync_inbox/` and
+# `.claude/worktrees/`, neither of which is in `TREE_ROOTS`, so both are
+# invisible to ARM 3 BY CONSTRUCTION and not by oversight. 11 of 4 is the
+# correct figure for this guard; 13 of 6 is the correct figure for the tree.
+#
+# REPLAY SOUNDNESS, since the replay applies TODAY's ignore rules to historical
+# blobs and that is only valid if the rules did not move: the last commit
+# touching `.gitignore` is 2026-09-07 and the oldest hand-off revision is
+# 2026-09-19, so the ignore rules are frozen across the entire window.
+#
+# THE PROPOSED RULE AND ITS WRONG REASON. The proposal was to accept an ignored
+# path only when the exact path literal also appears in a tracked source file,
+# on the reasoning that the module which GENERATES an artifact names it. That
+# premise is false here. `ops/health.py` composes the health file by joining
+# its `HEALTH_FILENAME` constant to a directory, and `scripts/watch_inbox.py`
+# builds `DEFAULT_STATE` the same way; neither generator contains the full path
+# literal, and every occurrence of `ops/runtime/health.json` inside tracked
+# CODE is a docstring or a comment. A literal-match rule is blind to a composed
+# path, which is this tree's recorded trap about a shape arm pinning FORMAT and
+# not INPUT.
+#
+# THE RULE DISCRIMINATES ANYWAY, for a different reason, and the different
+# reason is the one written into `_tracked_vouchers()`: a runtime artifact
+# worth citing gets WRITTEN DOWN by the session that made it, in `ROADMAP.md`
+# or `docs/LEDGER.md`. All four historical artifacts are vouched that way and
+# NOT ONE is vouched by its generator. The rule was kept and its justification
+# replaced, rather than the reverse.
+#
+# UNEXCLUDED, IT LICENSES THE DEFECT IT WAS WRITTEN TO CATCH. Measured: with no
+# exclusions the rule ACCEPTS `ops/runtime/a_file_deleted_last_year.json`,
+# because the comment block above names that path while arguing about it, and
+# nothing else in the tree does. The guard would vouch for the hole out of its
+# own description of the hole. `GUARD_MODULE` is therefore load-bearing
+# rather than tidy, and an arm reds if it is dropped.
+#
+# THIS TOOK THREE ATTEMPTS AND THE FIRST TWO WERE REFUTED, which is recorded
+# because the two failures are different and both are instructive. The first
+# shipped a one-entry SAFE LIST naming this file, admitted on reasoning; an
+# adversary showed the self-reference class is not a list of one. The second
+# over-corrected to a `tests/` prefix and PRICED IT OVER THE WRONG POPULATION
+# - seven hand-picked specimens the remedy was derived from, rather than the
+# 62 ignored paths the remedy acts on - and reported a price of zero where the
+# true price was 22, including a real artifact sitting on the main checkout's
+# disk. Both lessons were already written down in this tree before either
+# mistake: the question about a safe list is never whether an entry is
+# plausible but which were MEASURED, and a filter's population is not the
+# repair's population. See `GUARD_MODULE` for the three priced remedies.
+#
+# FALSE-POSITIVE COST, measured over real content and not invented content: the
+# landed rule accepts all 11 historical ignored-half instances and all four
+# distinct artifacts, and rejects both negative specimens. Newly rejected
+# citations in the live corpus: NONE, necessarily, that population being empty.
+#
+# THE HOLE IS NARROWED, NOT CLOSED, and the residual is written out in those
+# words so that no later reader takes the forever problem to have been
+# eliminated. The rule moved acceptance from "anything under `ops/runtime/`"
+# to "anything ever written down". Both are permanent. The worked example is
+# `ops/runtime/health.json` itself: it is mentioned in `docs/LEDGER.md`, it is
+# ABSENT FROM DISK, and this rule ACCEPTS it - correctly, because a clone would
+# not have it either. There is no `.exists()` anywhere in this path and there
+# cannot be, so once a path has been mentioned once, in any tracked file, it is
+# accepted for good even after the thing it names stops being produced. What
+# was bought is that a path nobody ever wrote down is now rejected; what
+# remains is that a path somebody wrote down once is never re-examined.
+#
+# WHAT IS STILL NOT PROMISED. Not existence, as above. Not a disk check:
+# resolving an ignored path on disk is a fact about ONE MACHINE, which is the
+# precise mistake `_is_tracked()` exists to avoid and which once turned the
+# docs-guards CI job red. Everything the voucher rule reads - the index, the
+# ignore rules, and the contents of tracked files - a fresh clone receives
+# identically, so the verdict is the same on a Linux runner as on this box.
 #
 # WHY TWO SUFFIXES WERE ADDED to `KNOWN_SUFFIXES` above. A sweep of the index
 # found `.sh` and `.parked` TRACKED and absent from that list, which made a
@@ -835,27 +933,188 @@ def _is_ignored(candidate: str) -> bool:
     )
 
 
-def _citation_is_accounted_for(candidate: str) -> bool:
-    """A cited path is legitimate when git STORES it or git IGNORES it.
+#: The one file that may not vouch for an ignored citation: THIS module.
+#: DERIVED FROM `__file__`, never typed, so it is a structural fact about who
+#: is doing the checking rather than a safe list that can go stale or widen.
+#:
+#: THE HAZARD IS SELF-REFERENCE AND NOTHING WIDER. A guard that accepts a path
+#: because its own comment block argues about that path has vouched for the
+#: hole out of its own description of the hole. That is the entire defect, and
+#: the remedy is exactly as wide as the defect.
+#:
+#: TWO WIDER REMEDIES WERE TRIED AND PRICED, and the prices are why this one
+#: landed. The second version of this change excluded `tests/` wholesale on a
+#: price measured over SEVEN hand-picked specimens - the four historical
+#: artifacts plus `ops/runtime/health.json`, `ops/runtime/inbox_report.txt`
+#: and `restart_trigger.txt` - which reported a price of zero. That price was
+#: WRONG, and wrong in a shape this tree has already recorded: a filter's
+#: population is not the repair's population. The seven were the specimens the
+#: remedy was DERIVED from; the population it ACTS on is every ignored path in
+#: the tree. Re-priced over all 62 of those:
+#:
+#:   remedy                                        paths losing their only voucher
+#:   this module only, from `__file__`              3
+#:   `tests/` wholesale                            22
+#:   `tests/` + `.claude/` + `tools/` + conftest   28
+#:
+#: The three that `__file__` costs are all strings this module itself invented
+#: - its `core/__pycache__/types.pyc` probe, its
+#: `ops/runtime/a_file_deleted_last_year.json` worked example, and a fragment
+#: of its own sentinel. NOT ONE is a real artifact, which is the property the
+#: seven-specimen price was supposed to establish and did not.
+#:
+#: WHAT THE WIDER REMEDIES WOULD HAVE COST, named rather than counted, because
+#: a count cannot be re-checked: `tests/` wholesale strands
+#: `ops/runtime/responder_invocations.log`, whose only tracked namers are four
+#: modules under `tests/` and which nothing in `ROADMAP.md`, `docs/LEDGER.md`,
+#: `CLAUDE.md` or `.gitignore` mentions. A hand-off citing it would have been
+#: rejected with "NO tracked file names it" about a file that is present on
+#: the main checkout's disk. `shell/dist/win-unpacked/resources/app/bundle.js`
+#: and `moon_sync_inbox/scripts/watch_inbox.py` strand the same way. Widening
+#: further to `tools/` additionally strands
+#: `ops/runtime/responder_refusals.json` and
+#: `ops/runtime/responder_answered.json`, both named only by
+#: `tools/moon_sync_responder.py` - so the four paths vouched only from
+#: `tools/` land on the REJECTED side of that boundary, which is the argument
+#: against moving it there.
+#:
+#: A NAMER-IS-A-FIXTURE RULE was offered as a third option and is DISCARDED,
+#: stated plainly rather than left implied: "fixture" cannot be defined
+#: mechanically here. Every candidate definition reduces to a list of files
+#: somebody judged to be fixtures, which is a safe list wearing a different
+#: hat, and this change has already been refuted twice for exactly that.
+#:
+#: THE RESIDUAL, bounded and stated. `ops/runtime/bogus.json` is a pure
+#: fixture name whose only namers are this module and
+#: `tests/test_channel_doc_pin.py`, so under this remedy the latter still
+#: vouches for it. That is NOT a live hazard - the live ignored-half
+#: population is empty and no document cites it - but it would become one if a
+#: document ever did. A fixture is not evidence that a path exists; it is
+#: evidence that somebody needed a name that does not.
+#:
+#: THE SIZE OF THE SELF-REFERENCE CLASS IS DISPUTED AND MUST NOT BE AVERAGED.
+#: Three numbers are in circulation and they answer different questions. 21,
+#: from this module's sweep, and 19, from an adversary's, are THE SAME question
+#: - ignored paths whose sole namer sits under `tests/` - measured by two
+#: extractors that disagree by two, so the ceiling is unknown. 6 is a DIFFERENT
+#: question: sole voucher under `tests/` or `.claude/`, over four namespaces
+#: only. Cite the question with the number or do not cite the number.
+#:
+#: The citation corpus is excluded as well, but COMPUTED rather than listed -
+#: see `_voucher_corpus()`. A document vouching for its own citation is the
+#: citation asserting itself, which is not evidence of anything.
+GUARD_MODULE = Path(__file__).resolve().relative_to(REPO_ROOT).as_posix()
 
-    Neither one is the defect this exists to catch: a typo, or a pointer that
-    decayed when the file it named was moved or deleted. Trackedness is checked
-    first because it is answered from the cached index with no subprocess.
 
-    THE IGNORED HALF PROMISES NOTHING ABOUT EXISTENCE. See the module docstring.
+@functools.lru_cache(maxsize=1)
+def _tracked_file_texts() -> tuple[tuple[str, str], ...]:
+    """(path, text) for every tracked file, read once and cached.
+
+    MACHINE-INDEPENDENT by construction, which is the whole constraint on this
+    section: membership comes from the cached `git ls-files` and the contents
+    are bytes a fresh clone receives. There is no `.exists()` anywhere in it.
+    See `_is_tracked()` for the CI red that rule was bought with.
+
+    `errors="replace"` because the index carries blobs that are not UTF-8 text
+    - a `.lnk` among them - and one undecodable file must not take the sweep
+    down. A replaced byte can only ever LOSE a voucher, never invent one, so
+    the failure direction is a false rejection that someone sees, not a false
+    acceptance that nobody does.
     """
-    return _is_tracked(candidate) or _is_ignored(candidate)
+    files, _ = _tracked_paths()
+    texts: list[tuple[str, str]] = []
+    for name in sorted(files):
+        try:
+            texts.append((name, (REPO_ROOT / name).read_text(encoding="utf-8", errors="replace")))
+        except OSError:
+            continue
+    assert len(texts) > 50, (
+        f"only {len(texts)} tracked files could be read - zero out of zero is not a pass, and a "
+        "corpus this small would report every ignored citation as unvouched"
+    )
+    return tuple(texts)
+
+
+@functools.lru_cache(maxsize=1)
+def _voucher_corpus() -> tuple[tuple[str, str], ...]:
+    """The tracked files allowed to vouch for an ignored path.
+
+    `_tracked_file_texts()` minus `GUARD_MODULE` and minus the citation corpus
+    itself. BOTH subtractions are DERIVATIONS rather than name lists: the
+    guard comes from `__file__`, and the corpus from the same `git ls-files`
+    everything else here reads, so a fourth prose document added later cannot
+    start vouching for its own citations because nobody remembered to list it.
+    """
+    corpus = set(_tracked_non_markdown_prose())
+    return tuple(
+        (name, text)
+        for name, text in _tracked_file_texts()
+        if name not in corpus and name != GUARD_MODULE
+    )
+
+
+def _tracked_vouchers(candidate: str) -> list[str]:
+    """Tracked files that name this exact path and are entitled to vouch for it.
+
+    THE EVIDENCE IS NOT THE GENERATOR, whatever the intuition says, and the
+    section comment above carries the measurement: no generator in this tree
+    contains the full path literal of the artifact it writes. What a real
+    runtime artifact does have is a session that WROTE IT DOWN - in
+    `ROADMAP.md` or `docs/LEDGER.md` - and all four artifacts the hand-off has
+    historically cited are vouched that way. That, not generation, is the
+    property this function tests.
+
+    The trailing slash is stripped, matching `_is_tracked()`. Stripping only
+    ever widens what the needle matches, so it can lose a rejection and cannot
+    invent an acceptance of a path no one wrote.
+    """
+    needle = candidate.rstrip("/")
+    return [name for name, text in _voucher_corpus() if needle in text]
+
+
+def _citation_is_accounted_for(candidate: str) -> bool:
+    """Legitimate when git STORES the path, or git IGNORES it AND a tracked
+    file names it.
+
+    The defect this exists to catch is a typo, or a pointer that decayed when
+    the file it named was moved or deleted. Trackedness is checked first
+    because it is answered from the cached index with no subprocess, and
+    because `_is_ignored()` records that ordering as load-bearing.
+
+    THE IGNORED HALF STILL PROMISES NOTHING ABOUT EXISTENCE - an ignored
+    artifact is absent from every fresh clone by construction. What the voucher
+    requirement adds is that something IN the clone still says the path was
+    meant to exist at all. Figures in the section comment above.
+    """
+    if _is_tracked(candidate):
+        return True
+    return _is_ignored(candidate) and bool(_tracked_vouchers(candidate))
 
 
 def test_every_bare_path_citation_in_plain_text_prose_resolves():
-    """ARM 3: a bare file or directory citation is tracked, or it is ignored."""
+    """ARM 3: a bare citation is tracked, or it is ignored AND vouched for.
+
+    The two rejection reasons are reported SEPARATELY rather than folded into
+    one message. They call for different repairs - a typo is fixed in the
+    document, an unvouched runtime artifact is either a decayed pointer or a
+    real artifact nobody wrote down - and a single message would send the
+    reader to re-derive which of the two they are looking at.
+    """
     failures: list[str] = []
     for doc in _tracked_non_markdown_prose():
         text = _read(doc)
         for path in _bare_path_citations(text) + _bare_directory_citations(text):
-            if _citation_is_accounted_for(path):
+            if _is_tracked(path):
                 continue
-            failures.append(f"{doc} -> {path} is neither stored by git nor ignored by it")
+            if not _is_ignored(path):
+                failures.append(f"{doc} -> {path} is neither stored by git nor ignored by it")
+            elif not _tracked_vouchers(path):
+                failures.append(
+                    f"{doc} -> {path} is gitignored and NO tracked file names it, so nothing a "
+                    "fresh clone receives says it was ever meant to exist. Either it is a decayed "
+                    "pointer, or it is a real runtime artifact that no one wrote down - record it "
+                    "in ROADMAP.md or docs/LEDGER.md if it is the second"
+                )
     assert not failures, "bare citations that resolve to nothing: " + "; ".join(sorted(set(failures)))
 
 
@@ -964,6 +1223,11 @@ def test_the_bare_path_arm_can_fail():
     assert _is_ignored("ops/runtime/health.json"), (
         "ops/runtime/health.json is no longer gitignored - the ignore half of the rule has lost its subject"
     )
+    assert _tracked_vouchers("ops/runtime/health.json"), (
+        "no tracked file names ops/runtime/health.json any more, so the ignore half of the rule "
+        "would now REJECT the most-cited runtime artifact in this tree - that is the voucher "
+        "requirement's false-positive surface becoming real, not a defect in the hand-off"
+    )
     assert _citation_is_accounted_for("ops/runtime/health.json")
 
     decayed = "docs/ARCHITECTURE.md"
@@ -971,4 +1235,199 @@ def test_the_bare_path_arm_can_fail():
     assert not _is_ignored(decayed)
     assert not _citation_is_accounted_for(decayed), (
         f"{decayed} is the pointer that started this whole file, and the rule must still reject it"
+    )
+
+
+#: Every DISTINCT ignored-half citation `RSC-NEXT-SESSION.txt` has actually
+#: carried, recovered 2026-10-02 by replaying all nine committed revisions of
+#: that file through the extractors above and the ignore rules standing today.
+#: Eight of the nine revisions carried one; 11 instances in all; the revision
+#: standing now is the only empty one. These are the real shapes the voucher
+#: rule must not reject, and they are listed rather than summarised because a
+#: count cannot be re-checked and a list can.
+HISTORICAL_IGNORED_HALF_CITATIONS = (
+    "ops/runtime/inbox_seen.json",
+    "ops/runtime/outbox_drafts/",
+    "ops/runtime/slot_hold_corpus_2026-09-20.txt",
+    "ops/runtime/trial_confirmed.json",
+)
+
+#: A path inside the ignored namespace that NOTHING in the tree names, ASSEMBLED
+#: AT RUNTIME so that the literal never appears in this file's source.
+#:
+#: That is not decoration. The first version typed the literal, and an
+#: adversary showed the arm below reds on ordinary maintenance: `ROADMAP.md`
+#: and `docs/LEDGER.md` routinely quote paths out of guard modules, the `/done`
+#: step edits both, and a single quoted mention of a sentinel that must have
+#: zero vouchers turns a correct guard into a trap whose warning arrives only
+#: after the red. A string that is never written down cannot be copied out of
+#: here into a document, which is the house rule about building a trap literal
+#: with `chr()` rather than typing it, applied to the same failure mode.
+#:
+#: `chr(45)` is the hyphen. It is spelled that way for the same reason: a
+#: grep or a copy-paste of this file picks up no path-shaped run of text.
+UNVOUCHED_SENTINEL = (
+    "ops/runtime/no" + chr(45) + "such" + chr(45) + "artifact" + chr(45)
+    + "guard" + chr(45) + "sentinel" + chr(45) + "never" + chr(45) + "quoted.json"
+)
+
+#: Gitignored paths this module names in its own comments and probes, and
+#: which nothing else in the tree named when they were chosen. They are the
+#: subjects of the self-exclusion: each one exists in the index ONLY because
+#: this file argues about it, so each is a path the rule must refuse.
+#:
+#: MORE THAN ONE ON PURPOSE. The arm that uses them filters to those still
+#: isolated, so a document quoting one of them costs a probe rather than
+#: reddening a suite. Two is the floor at which that degradation is possible
+#: at all.
+GUARD_MODULE_PROBE_PATHS = (
+    "ops/runtime/a_file_deleted_last_year.json",
+    "core/__pycache__/types.pyc",
+)
+
+
+def test_the_voucher_rule_accepts_real_runtime_artifacts_and_rejects_a_decayed_one():
+    """Non-vacuity for the ignored half, against REAL inputs.
+
+    The live ignored-half population is EMPTY - 0 of 71 bare citation
+    instances, measured three ways at 50b61e7 - so the tightened ARM 3 passes
+    on sight today and proves nothing by passing. The substitute is this
+    module's own convention: re-run the RULE here against inputs whose answers
+    are known independently, and do not mutate a tree that is shared with a
+    merge in order to watch a test fail.
+
+    Both directions are covered, because a predicate stuck on True and one
+    stuck on False are both failures and only one of them is the new one.
+    """
+    for artifact in HISTORICAL_IGNORED_HALF_CITATIONS:
+        assert not _is_tracked(artifact), (
+            f"{artifact} is tracked now, so it no longer exercises the IGNORED half at all - "
+            "replace this specimen with one that is still ignored"
+        )
+        assert _is_ignored(artifact), (
+            f"{artifact} is no longer gitignored, so the ignore half of the rule has lost this subject"
+        )
+        assert _tracked_vouchers(artifact), (
+            f"{artifact} was cited by a real hand-off and no tracked file names it any more, so "
+            "the landed rule would now REJECT a citation that was legitimate when written. This "
+            "is the voucher requirement's false-positive surface becoming real: restore the "
+            "mention that vouched for it - ROADMAP.md or docs/LEDGER.md carried all four - or "
+            "retire this specimen deliberately and say so here"
+        )
+        assert _citation_is_accounted_for(artifact)
+
+    assert _is_ignored(UNVOUCHED_SENTINEL), (
+        f"{UNVOUCHED_SENTINEL} is not in an ignored namespace, so it probes the wrong half of the "
+        "rule - pick a sentinel under a gitignored directory"
+    )
+    assert not _tracked_vouchers(UNVOUCHED_SENTINEL), (
+        f"{UNVOUCHED_SENTINEL} has acquired vouchers {_tracked_vouchers(UNVOUCHED_SENTINEL)} - it "
+        "was chosen precisely because nothing names it, so pick another sentinel"
+    )
+    assert not _citation_is_accounted_for(UNVOUCHED_SENTINEL), (
+        "an ignored path that nothing in the tree names is the exact defect the ignored half was "
+        "tightened for, and the rule must reject it"
+    )
+
+
+def test_the_voucher_exclusions_are_load_bearing():
+    """A safe-list admitted on reasoning is a hole with a comment over it.
+
+    So the question is not whether each exclusion is plausible - it is which of
+    them was MEASURED, and measured in the NEGATIVE direction, which is the one
+    that matters. Each assertion below shows an exclusion to be the only thing
+    standing between the rule and an acceptance it must not make.
+    """
+    # THE EXCLUSION HAS A SUBJECT, and it is applied.
+    tracked_names = {name for name, _ in _tracked_file_texts()}
+    assert GUARD_MODULE in tracked_names, (
+        f"{GUARD_MODULE} is not tracked, so the exclusion derived from __file__ excludes nothing. "
+        "Either this module left the index or REPO_ROOT no longer resolves to the checkout"
+    )
+    voucher_names = {name for name, _ in _voucher_corpus()}
+    assert GUARD_MODULE not in voucher_names, (
+        f"{GUARD_MODULE} can still vouch - the exclusion is derived but not applied, and the "
+        "guard is once more licensing paths out of its own comments"
+    )
+
+    # BEHAVIOURAL, and that word is load-bearing. An earlier version asserted
+    # only that certain namers were absent from a voucher list, which was a
+    # TAUTOLOGY: `_tracked_vouchers()` draws from `_voucher_corpus()`, so it
+    # could not have contained them whatever the rule did. An arm that stopped
+    # asking about behaviour and started asking about structure is the shape
+    # that produced four false kills in this tree. So this asks the rule for a
+    # VERDICT on a real path and checks the verdict.
+    #
+    # PROSE-IMMUNE BY SHRINKING, NOT BY REDDENING. The probe set is filtered to
+    # those paths this module is still the ONLY namer of. `ROADMAP.md` and
+    # `docs/LEDGER.md` quote paths out of guard modules and the `/done` step
+    # edits both, so a mention elsewhere simply drops that path from the set
+    # and the remaining probes carry the arm. Only losing ALL of them reds,
+    # which is the honest signal that the probe set needs replacing.
+    isolated = [
+        path for path in GUARD_MODULE_PROBE_PATHS
+        if [name for name, text in _tracked_file_texts() if path in text] == [GUARD_MODULE]
+    ]
+    assert isolated, (
+        f"every path in {GUARD_MODULE_PROBE_PATHS} has gained a namer outside {GUARD_MODULE}, so "
+        "none of them isolates the self-exclusion any more. Pick another path that only this "
+        "module names - it must be gitignored, and it must not be quoted in any document"
+    )
+    for path in isolated:
+        assert _is_ignored(path), f"{path} is no longer ignored, so it probes the wrong half"
+        assert not _tracked_vouchers(path), (
+            f"{path} is vouched for by {_tracked_vouchers(path)} while this module is its only "
+            "namer - the self-exclusion has been defeated"
+        )
+        assert not _citation_is_accounted_for(path), (
+            f"{path} is ACCOUNTED FOR although nothing but this guard's own comments names it. "
+            "The guard is licensing the defect it was written to catch"
+        )
+
+    # THE CITATION CORPUS. Pinned structurally rather than by a specimen, and
+    # that is a stated limit: while the live ignored-half population is empty
+    # there is no citation in the corpus that only the corpus names, so no
+    # negative specimen for this half exists to be measured.
+    corpus = set(_tracked_non_markdown_prose())
+    vouchers = {name for name, _ in _voucher_corpus()}
+    assert not corpus & vouchers, (
+        f"a citation corpus document can vouch: {sorted(corpus & vouchers)} - a document "
+        "vouching for its own citation is the citation asserting itself"
+    )
+    assert HANDOFF_DOCUMENT in corpus, (
+        f"{HANDOFF_DOCUMENT} left the corpus, so the exclusion above excludes nothing that matters"
+    )
+
+
+def test_the_ignored_half_population_is_measured_not_assumed():
+    """Record the figure the tightened rule acts on, and keep the LIST.
+
+    This arm deliberately does NOT assert the population is empty. Eight of the
+    nine committed revisions of the hand-off carried a non-empty one, so an
+    emptiness assertion would have redded a perfectly good hand-off in eight
+    sessions out of nine - a gate the next session would delete rather than
+    obey. What it pins is that the population is COMPUTABLE, that the voucher
+    machinery it feeds is not dead, and that the whole population clears the
+    rule, with the population itself in the failure message so the next reader
+    is handed the list instead of re-deriving it.
+    """
+    population: list[str] = []
+    total = 0
+    for doc in _tracked_non_markdown_prose():
+        text = _read(doc)
+        for path in _bare_path_citations(text) + _bare_directory_citations(text):
+            total += 1
+            if not _is_tracked(path) and _is_ignored(path):
+                population.append(f"{doc} -> {path}")
+
+    assert total >= 10, f"the bare sweep walked only {total} citations - the extractor is broken"
+    assert len(_voucher_corpus()) > 50, (
+        f"the voucher corpus holds only {len(_voucher_corpus())} files - every ignored citation "
+        "would read as unvouched, which is a rule failing open in the loud direction"
+    )
+
+    unvouched = [entry for entry in population if not _tracked_vouchers(entry.split(" -> ", 1)[1])]
+    assert not unvouched, (
+        f"ignored citations that no tracked file names: {sorted(unvouched)}. The full ignored-half "
+        f"population this run was {sorted(population)} out of {total} citations in total"
     )
