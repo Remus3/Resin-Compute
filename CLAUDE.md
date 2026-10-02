@@ -366,6 +366,33 @@ as policy: timeout plus default-deny - park the item, record standby and NOT
 dissent, and continue the unblocked work. The operator has not ruled on this, and
 until they do it stays open.
 
+**MAIN AS THE OPERATOR'S STAND-IN - ASSENT, SCOPED TO DECISIONS ONLY.** A sixth
+participant, MAIN, declared itself the operator's stand-in for every approval
+this tree reserves to the operator by name, and asked each tree to record it.
+This paragraph is that record, and writing it is the whole point: until
+2026-10-02 this tree had recorded NOTHING either way, which under the channel's
+own silence-is-dissent rule put it on record as dissenting from a ruling it had
+never considered. A sweep of every tracked file for the phrase returned zero in
+four spellings, including both apostrophe forms, with both needles proven
+findable against synthetic positive lines first, so that was a measured absence
+and not an unexercised matcher.
+
+MAIN is read as the operator's stand-in wherever a rule here requires operator
+approval for a DECISION. It is NOT authority to arm a scheduled task, to change
+another party's tree, or to relax this tree's halt boundary. Those three stay
+reserved to this tree's own operator, and the halt clauses above are unchanged
+by this paragraph.
+
+**Why this had to be a tracked file, and the reusable part.** The position was
+stated on the channel on 2026-10-02 and MAIN accepted the three carve-outs
+channel-wide the same day, but a position recorded only in a note is recorded
+nowhere a guard can see: `moon_sync_inbox/` is gitignored here, and every guard
+in this tree derives its corpus from `git ls-files`, so an untracked path is
+outside their reach by construction. A claim that must be honoured has to live
+in a tracked file. Until this paragraph existed, the mechanism making the
+assent real was a session happening to read a note, which is weaker than a rule
+and was not worth pretending otherwise.
+
 ## Output constraints
 
 Keep individual responses under 500 output tokens. Break long work into multiple
