@@ -743,14 +743,73 @@ def test_the_corpus_builder_arm_can_fail():
 # THE HOLE IS NARROWED, NOT CLOSED, and the residual is written out in those
 # words so that no later reader takes the forever problem to have been
 # eliminated. The rule moved acceptance from "anything under `ops/runtime/`"
-# to "anything ever written down". Both are permanent. The worked example is
-# `ops/runtime/health.json` itself: it is mentioned in `docs/LEDGER.md`, it is
-# ABSENT FROM DISK, and this rule ACCEPTS it - correctly, because a clone would
-# not have it either. There is no `.exists()` anywhere in this path and there
-# cannot be, so once a path has been mentioned once, in any tracked file, it is
-# accepted for good even after the thing it names stops being produced. What
-# was bought is that a path nobody ever wrote down is now rejected; what
-# remains is that a path somebody wrote down once is never re-examined.
+# to "anything ever written down". Both are permanent.
+#
+# THE WORKED EXAMPLE IS THE MOST-VOUCHED IGNORED PATH IN THE TREE, which is
+# the point and not a caveat. An earlier revision of this paragraph used
+# `ops/runtime/health.json` and described it as a path named only in
+# `docs/LEDGER.md`. That half was FALSE, and false in the direction that makes
+# the residual look smaller than it is - a thinly-mentioned path slipping
+# through is a much easier hole to accept than the one actually standing here.
+#
+# RE-MEASURED 2026-10-02, population stated because a bare count cannot be
+# re-checked: the 250 paths `git ls-files` emits in this checkout. Two methods
+# that share that population and no implementation - a `re` oracle over each
+# file's BYTES with an explicit boundary asserted on BOTH sides, and
+# `grep -lwE` with the dots escaped - agree at FOURTEEN tracked files naming
+# it. NO INSTANCE TOTAL IS QUOTED HERE, and the reason is a live example: the
+# first draft of this paragraph said 24, and the edit that added the
+# enumeration below mentioned the path once more and made it 25. The figure
+# rotted inside the very commit that wrote it. An instance count moves with
+# every passing mention, this module's own included, and nothing a reader can
+# see supports it. The NAMER count is different - the list is written out
+# directly below, so the numeral is checkable by counting it.
+#
+# Thirteen of the fourteen can vouch; the fourteenth is this module, which
+# `_voucher_corpus()` subtracts. NEITHER SWEEP USED
+# `grep -wF`: with `-F` in effect `-w` checks only the RIGHT word boundary on
+# this box, so a suffix occurrence false-positives. That control was re-run
+# here rather than taken on trust, and it reproduced.
+#
+# THE FOURTEEN, WRITTEN OUT. A numeral beside a hand-grouped summary is how
+# the first version of this paragraph went wrong a second time: it said
+# FOURTEEN over a grouping that summed to thirteen, having dropped
+# `docs/LEDGER.md` - the very file the false "named only in" claim had named.
+# A count cannot be re-checked and a list can, so the list is the record and
+# the numeral is just its length:
+#
+#     .claude/agents/adversary.md     .claude/agents/builder.md
+#     .claude/agents/ui-auditor.md    .claude/agents/verifier.md
+#     CLAUDE.md                       README.md
+#     docs/LEDGER.md                  docs/adr/ADR-001-stack.md
+#     headless/jobs.py                headless/runner.py
+#     ops/__init__.py                 ops/health.py
+#     tests/test_readme_tree.py       tests/test_docs_consistency.py
+#
+# NOT DERIVED INTO AN ASSERTION, deliberately, and this is the reason because
+# the next reader will ask. A live arm pinning this count would red whenever
+# anyone added or removed a mention, and the namers include `CLAUDE.md`,
+# `README.md` and the agent definitions - the highest-churn documents in the
+# tree. That is the gate the next session deletes rather than obeys, which is
+# the same judgement `test_the_ignored_half_population_is_measured_not_assumed`
+# records for refusing to assert its own population is empty. The half that IS
+# worth pinning live is already pinned: the arm below asserts
+# `_tracked_vouchers("ops/runtime/health.json")` is non-empty, so the rule
+# losing its subject reds while ordinary editing does not. This block is a
+# DATED SNAPSHOT - re-measure before citing it, and move the list, not the
+# numeral.
+#
+# So the residual is not a thinly-cited path slipping through. It is that the
+# single most-cited runtime artifact in this tree IS ABSENT FROM DISK, in this
+# worktree and on the main checkout, and this rule ACCEPTS it. Correctly,
+# because a fresh clone would not have it either. There is no `.exists()` in this
+# path and there cannot be, so once a path has been mentioned once, in any
+# tracked file, it is accepted for good even after the thing it names stops
+# being produced. A HIGH VOUCHER COUNT BUYS EXACTLY WHAT ONE BUYS. What was
+# bought is that a path nobody ever wrote down is now rejected; what remains
+# is that a path somebody wrote down once is never re-examined, and the
+# most-vouched path in the corpus is the demonstration that voucher COUNT
+# carries no evidence about existence at all.
 #
 # WHAT IS STILL NOT PROMISED. Not existence, as above. Not a disk check:
 # resolving an ignored path on disk is a fact about ONE MACHINE, which is the
@@ -1314,6 +1373,84 @@ GUARD_MODULE_PROBE_PATHS = (
     "core/__pycache__/types.pyc",
 )
 
+#: Path-shaped tokens in this module's own source. Deliberately broad - the
+#: derivation below narrows by ASKING GIT, never by tightening this regex.
+_PATH_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_./-]*/[A-Za-z0-9_.-]+\.[a-z]{2,7}")
+
+
+def _ignored_paths_only_this_guard_names() -> list[str]:
+    """Every gitignored path whose ONLY tracked namer is `GUARD_MODULE`.
+
+    DERIVED FROM THE CORPUS, NOT TYPED, and that is the repair. The tuple
+    above used to be the arm's only authority, and an arm whose subject is a
+    hand-typed tuple in the same file is satisfiable by DELETING A MEMBER:
+    the floor was one, so dropping an entry left the arm green while the
+    self-exclusion lost half its evidence. Measured on this file 2026-10-02 -
+    removing `core/__pycache__/types.pyc` from the tuple and running the arm
+    alone passed, 1 passed in 0.15s.
+
+    A derived population cannot be shrunk that way, because there is nothing
+    to delete from. READING OF 2026-10-02, and a dated one because it is a
+    fact about this file's prose rather than about the rule: each probe path
+    is named several times over and above its tuple entry, so striking the
+    tuple line leaves the path in this set and the subset check below reds.
+    That reading decays in ONE direction only - mentions being removed - and
+    if it ever reaches zero the subset check stops catching a single-line
+    strike while the caller's declared floor still holds. So the consequence
+    of this going stale is a weaker argument, never a gate that passes when
+    it should fail.
+
+    THE FLOOR BELOW IS ON THE EXTRACTOR AND IT BOUNDS A DIFFERENT QUANTITY
+    THAN THE ARM ASSERTS. A TRACKED TOKEN CAN NEVER REACH THE RETURNED LIST -
+    the loop drops it on the first condition - and this module names enough
+    tracked paths to clear the floor BY THEMSELVES, so the assertion would
+    hold with every ignored token gone. What it bounds is that the regex
+    still matches path-shaped text at all. What it does NOT bound is the size
+    of the result. That floor belongs to the CALLER, because only the caller
+    knows how many probes it needs, and it is asserted there.
+
+    NO TOKEN BREAKDOWN IS QUOTED HERE, AND THE OMISSION IS THE POINT. Two
+    earlier drafts of this docstring carried one, and both rotted inside the
+    commit that wrote them - the second time because the fourteen-name table
+    two screens above added path-shaped tokens of its own, which the same
+    commit's prose was simultaneously diagnosing for the instance total.
+    Three rotted figures in one file in one day is a statement about the
+    SHAPE of the record and not about anyone's care, so the shape changed:
+    the sentence above makes the claim that actually matters and names no
+    count, which makes it unfalsifiable by ordinary prose editing.
+
+    DERIVING THE BREAKDOWN INTO AN ARM WAS CONSIDERED AND REJECTED, because
+    it would pin the wrong thing. The breakdown's content is that this floor
+    is weak in a specific way; asserting it would promote that weakness to a
+    guaranteed invariant and red the suite the day the extractor got
+    STRONGER. A gate that forbids improvement is worse than no gate. The
+    property worth holding is the caller's floor, and that one is asserted.
+
+    An empty result is in any case a legitimate state - prose elsewhere may
+    have quoted every probe - which is the other reason the floor cannot live
+    here.
+
+    `UNVOUCHED_SENTINEL` is correctly absent from this set: it is assembled
+    with `chr()` so the literal never appears in this source, which is the
+    same property that keeps it out of a grep or a copy-paste.
+    """
+    texts = _tracked_file_texts()
+    own = dict(texts)[GUARD_MODULE]
+    tokens = sorted(set(_PATH_TOKEN.findall(own)))
+    assert len(tokens) > 20, (
+        f"the path-token scan found only {len(tokens)} candidates in {GUARD_MODULE}, so the regex "
+        "has stopped matching path-shaped text. This bounds the EXTRACTOR only - see the "
+        "docstring: tracked tokens alone clear this floor, so it says nothing about how many "
+        "paths come back. The result's floor is the caller's"
+    )
+    found: list[str] = []
+    for token in tokens:
+        if _is_tracked(token) or not _is_ignored(token):
+            continue
+        if [name for name, text in texts if token in text] == [GUARD_MODULE]:
+            found.append(token)
+    return found
+
 
 def test_the_voucher_rule_accepts_real_runtime_artifacts_and_rejects_a_decayed_one():
     """Non-vacuity for the ignored half, against REAL inputs.
@@ -1393,14 +1530,60 @@ def test_the_voucher_exclusions_are_load_bearing():
     # edits both, so a mention elsewhere simply drops that path from the set
     # and the remaining probes carry the arm. Only losing ALL of them reds,
     # which is the honest signal that the probe set needs replacing.
-    isolated = [
-        path for path in GUARD_MODULE_PROBE_PATHS
-        if [name for name, text in _tracked_file_texts() if path in text] == [GUARD_MODULE]
-    ]
+    #
+    # THE TWO WAYS THE PROBE SET CAN SHRINK ARE NOT THE SAME EVENT, and the
+    # arm failed to tell them apart until 2026-10-02. A path losing isolation
+    # to a quote elsewhere is ordinary maintenance and must degrade quietly.
+    # A path DELETED FROM THE TUPLE is the defect, and the old arm - a bare
+    # non-emptiness check over a hand-typed tuple - could not see it, because
+    # a floor of one is satisfied by any surviving member. The derivation
+    # below separates them: `derived` is computed from the corpus, so a tuple
+    # entry struck out leaves the path in `derived` and OUT of the tuple,
+    # which is the subset violation asserted first. Prose-immunity is
+    # untouched, because a quoted path leaves BOTH sides at once.
+    derived = _ignored_paths_only_this_guard_names()
+    undeclared = sorted(set(derived) - set(GUARD_MODULE_PROBE_PATHS))
+    assert not undeclared, (
+        f"{GUARD_MODULE} is the only tracked namer of {undeclared}, and they are not in "
+        f"GUARD_MODULE_PROBE_PATHS. Either an entry was deleted from that tuple - which is the "
+        "shrink this assertion exists to catch, and the probe set must be restored - or a new "
+        "ignored path literal entered this module's prose and is now an undeclared subject of "
+        "the self-exclusion, in which case declare it"
+    )
+
+    # THE DECLARED FLOOR IS TWO, AND UNTIL NOW NOTHING ASSERTED IT. The tuple's
+    # own comment says MORE THAN ONE ON PURPOSE and names two as the floor at
+    # which graceful degradation is possible at all, and that promise sat in
+    # prose while the arm below accepted one. Measured 2026-10-02: deleting the
+    # tuple entry AND retargeting its three other prose mentions - four lines
+    # in this one file - drove the population from two to one and the arm
+    # PASSED, 1 passed in 0.36s. The subset check above cannot catch it,
+    # because a path scrubbed from the text leaves `derived` as well. So the
+    # floor is asserted on the DECLARED tuple, which is the thing the comment
+    # makes the promise about and the thing an editor actually edits.
+    #
+    # ON THE DECLARED SET RATHER THAN ON `isolated`: a document quoting a probe
+    # must still degrade quietly, and `isolated` is the quantity prose is
+    # allowed to shrink. Pinning the floor there would red on exactly the
+    # maintenance this arm was built to tolerate.
+    assert len(GUARD_MODULE_PROBE_PATHS) >= 2, (
+        f"GUARD_MODULE_PROBE_PATHS is down to {len(GUARD_MODULE_PROBE_PATHS)} entry "
+        f"{GUARD_MODULE_PROBE_PATHS}. Two is the floor its own comment promises: with one probe "
+        "there is no room for a document to quote it, so the next quote reds the suite instead "
+        "of costing a probe. Restore a second gitignored path that only this module names"
+    )
+
+    isolated = [path for path in GUARD_MODULE_PROBE_PATHS if path in set(derived)]
+    stolen = {
+        path: [name for name, text in _tracked_file_texts() if path in text]
+        for path in GUARD_MODULE_PROBE_PATHS
+        if path not in set(derived)
+    }
     assert isolated, (
-        f"every path in {GUARD_MODULE_PROBE_PATHS} has gained a namer outside {GUARD_MODULE}, so "
-        "none of them isolates the self-exclusion any more. Pick another path that only this "
-        "module names - it must be gitignored, and it must not be quoted in any document"
+        f"every path in {GUARD_MODULE_PROBE_PATHS} has gained a namer outside {GUARD_MODULE} "
+        f"({stolen}), so none of them isolates the self-exclusion any more. Pick another path "
+        "that only this module names - it must be gitignored, and it must not be quoted in any "
+        "document"
     )
     for path in isolated:
         assert _is_ignored(path), f"{path} is no longer ignored, so it probes the wrong half"
