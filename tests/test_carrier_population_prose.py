@@ -109,6 +109,40 @@ _MODULE_TUPLES = {
     "winmutex.py": "WINMUTEX_CARRIERS",
 }
 
+#: The governing doc. It records the carrier rows in prose, and critically it
+#: is a file NEITHER this guard NOR its target controls - which is the whole
+#: reason the arm at the bottom reads it instead of a literal of its own.
+GOVERNING_DOC = ROOT / "CLAUDE.md"
+
+#: A carrier row in `GOVERNING_DOC`, matched against WHITESPACE-FLATTENED text
+#: because the winmutex row wraps mid-list and a line-oriented pattern finds
+#: only one of the two. Measured: unflattened, this regex returns 1 row.
+_CARRIER_ROW = re.compile(
+    r"`ops/loop/([A-Za-z_]+\.py)` has ([A-Z]+) PIN CARRIERS - ((?:[A-Z]{2,4}, )+[A-Z]{2,4}) -"
+)
+
+
+def _governing_doc_carrier_rows() -> dict[str, tuple[str, ...]]:
+    """Per-module carrier MEMBERSHIP as `CLAUDE.md` records it.
+
+    THE NUMERAL IS CROSS-CHECKED AGAINST THE NAME LIST IN THE SAME SENTENCE,
+    so a row reading FIVE over four names reds here rather than silently
+    handing back a four-name tuple. That is this tree's standing rule about
+    deriving a numeral instead of copying one, applied to the doc as well as
+    to the test.
+    """
+    flat = " ".join(GOVERNING_DOC.read_text(encoding="utf-8").split())
+    rows: dict[str, tuple[str, ...]] = {}
+    for module, numeral, names in _CARRIER_ROW.findall(flat):
+        members = tuple(name.strip() for name in names.split(","))
+        assert _numeral(numeral) == len(members), (
+            f"{GOVERNING_DOC.name} says {numeral} pin carriers for {module} but lists "
+            f"{len(members)} names {members}. The doc disagrees with itself, so nothing here "
+            "can anchor to it until a person re-runs the sweep and restates the row"
+        )
+        rows[module] = members
+    return rows
+
 
 def _numeral(token: str) -> int:
     return _WORD_VALUES.get(token.lower(), 0) or int(token)
@@ -328,6 +362,37 @@ def test_rule_c_reads_the_live_tuples_and_not_a_frozen_number():
     CS is at the pinned bytes for one module while holding a different file for
     the other, so equal sizes are a coincidence of two snapshots.
 
+    THE EXPECTATION IS NO LONGER A LITERAL IN THIS FILE, repaired 2026-10-02.
+    It used to read `sizes == {"slots.py": 5, "winmutex.py": 5}`, which is the
+    frozen number this arm's own first paragraph forbids, reintroduced one
+    layer up. MEASURED, because the obvious claim about it is wrong and was
+    checked rather than assumed: a BARE coordinated shrink - both tuples
+    losing a name, nothing else touched - already REDDED on that literal. The
+    satisfiable shape was the TWO-LINE one, shrink the tuples and retype the
+    literal, which the old failure message actively invited by saying the
+    expectation moves with the tuples. Measured on this file: with both
+    tuples at four names and the literal retyped to four, the arm PASSED, and
+    the literal was the only thing in the module that had looked at the size
+    at all.
+
+    SO THE ARM NOW ANCHORS TO MEMBERSHIP RECORDED IN `CLAUDE.md`, a tracked
+    file that neither this guard nor its target can edit as part of the same
+    change. Membership is strictly stronger than size: swapping one carrier
+    name for another holds the count at five and reds here. There is no
+    number left in this module to retype, which is the defect class closed
+    rather than relocated.
+
+    WHAT THIS STILL CANNOT DO, stated because the brief for the repair
+    forbade inventing it. Four of the five carriers are TYPED FOREIGN DISKS -
+    nothing in this repository can poll another repository's checkout - and
+    only this tree's own entry is disk-anchored, by
+    `test_loop_concurrency.py::test_this_tree_s_own_membership_matches_this_tree_s_own_disk`.
+    So a full procedure predicate is STRUCTURALLY UNAVAILABLE here and none
+    is attempted. What the anchor buys is that two independent hand-records
+    must agree and must be moved together by a person; it cannot make either
+    of them TRUE. Both remain a snapshot of other machines' disks, and
+    `CLAUDE.md` says so in the same paragraph these rows come from.
+
     THE MUTANT BELOW CANNOT DEGENERATE INTO A NO-OP AT ANY VALUE, which is the
     property to preserve if this is ever edited. The numeral comes from
     `_a_wrong_word_for`, which derives a word differing from the measured size
@@ -340,12 +405,21 @@ def test_rule_c_reads_the_live_tuples_and_not_a_frozen_number():
     was written to forbid one layer down - so the forbidden shape sat in the
     parametrize table above this arm until 2026-10-02.
     """
-    sizes = {name: len(getattr(target_module, const)) for name, const in _MODULE_TUPLES.items()}
-    assert sizes == {"slots.py": 5, "winmutex.py": 5}, (
-        f"the carrier tuples now measure {sizes}. If that is a real change, it was "
-        "measured across the fleet and this arm's expectation moves with it; if it is "
-        "not, the tuples were edited without a measurement."
+    recorded = _governing_doc_carrier_rows()
+    assert set(recorded) == set(_MODULE_TUPLES), (
+        f"{GOVERNING_DOC.name} yielded carrier rows for {sorted(recorded)} and this guard "
+        f"tracks {sorted(_MODULE_TUPLES)}. The anchor is empty or half-empty, so an equality "
+        "against it would pass on nothing - re-read the carrier paragraph and fix the pattern "
+        "or the prose before trusting any result below"
     )
+    live = {name: tuple(getattr(target_module, const)) for name, const in _MODULE_TUPLES.items()}
+    assert live == recorded, (
+        f"the carrier tuples now measure {live} and {GOVERNING_DOC.name} records {recorded}. "
+        "These are two hand-records of the same fleet sweep and they must move together, by a "
+        "person who re-ran it. Neither one is evidence on its own and this arm does not say "
+        "which is right - it says they disagree."
+    )
+    sizes = {name: len(members) for name, members in live.items()}
     for module, expected in sizes.items():
         wrong = _a_wrong_word_for(expected)
         span = f"The {module} carriers are {wrong} repos and they all agree."
