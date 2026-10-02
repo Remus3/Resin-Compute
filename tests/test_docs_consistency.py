@@ -950,18 +950,47 @@ def _is_ignored(candidate: str) -> bool:
 #: WRONG, and wrong in a shape this tree has already recorded: a filter's
 #: population is not the repair's population. The seven were the specimens the
 #: remedy was DERIVED from; the population it ACTS on is every ignored path in
-#: the tree. Re-priced over all 62 of those:
+#: the tree.
 #:
-#:   remedy                                        paths losing their only voucher
-#:   this module only, from `__file__`              3
-#:   `tests/` wholesale                            22
-#:   `tests/` + `.claude/` + `tools/` + conftest   28
+#: EVERY ROW BELOW CARRIES ITS POPULATION AND ITS EXTRACTOR, and that is not
+#: bookkeeping. Two of these numerals are NOT reproducible by a second method,
+#: and a numeral published bare is one a later session cites as settled. The
+#: population is agreed; the extraction is not.
+#:
+#: POPULATION, agreed by both methods: 62 ignored paths. Built by taking
+#: path-shaped tokens out of every tracked blob and asking `git check-ignore`.
+#: An independent extractor reached the same 62 only after it ADDED a raw-text
+#: path regex to its own token pass - before that it saw 45, built from
+#: backtick spans and AST string constants alone.
+#:
+#:   remedy                                      this file's   second
+#:                                               extractor     extractor
+#:   this module only, from `__file__`                3            3
+#:   `tests/` wholesale                              22           23
+#:   `tests/` + `.claude/` + `tools/` + conftest     28           27
+#:
+#: THE GUARD-ONLY ROW REPRODUCED EXACTLY under both, which is the row the
+#: landed remedy rests on. The other two disagree by one in opposite
+#: directions. THE DELTA IS EXTRACTOR-LEVEL, NOT A DISAGREEMENT ABOUT THE
+#: POPULATION: both methods price the same 62 paths and differ on how a few
+#: tokens are cut out of surrounding text. One source of it is named - the
+#: second extractor pulls a fragment it reads as `ops/runtime/no`. Neither
+#: column is the truth; re-derive with a stated method or cite the pair.
+#:
+#: AND A THIRD FIGURE IS NOT IN CONFLICT WITH EITHER. An earlier pass priced
+#: the `tests/` remedy at 13. That was correct OVER ITS OWN POPULATION of 45 -
+#: the backtick-and-AST one above - and it is not a rival to 22 or 23, which
+#: are over 62. 13 and 22 answer different questions. Naming the population
+#: beside the row is the whole lesson of this section: the first price claim
+#: here was false precisely because a filter's population is not the repair's,
+#: and a row without its population invites that mistake again.
 #:
 #: The three that `__file__` costs are all strings this module itself invented
 #: - its `core/__pycache__/types.pyc` probe, its
 #: `ops/runtime/a_file_deleted_last_year.json` worked example, and a fragment
 #: of its own sentinel. NOT ONE is a real artifact, which is the property the
-#: seven-specimen price was supposed to establish and did not.
+#: seven-specimen price was supposed to establish and did not. That row is also
+#: the one both extractors agree on, so it is the one safe to lean on.
 #:
 #: WHAT THE WIDER REMEDIES WOULD HAVE COST, named rather than counted, because
 #: a count cannot be re-checked: `tests/` wholesale strands
