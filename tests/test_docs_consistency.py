@@ -789,7 +789,7 @@ def test_the_corpus_builder_arm_can_fail():
 # NOT DERIVED INTO AN ASSERTION, deliberately, and this is the reason because
 # the next reader will ask. A live arm pinning this count would red whenever
 # anyone added or removed a mention, and the namers include `CLAUDE.md`,
-# `README.md` and four agent definitions - the highest-churn documents in the
+# `README.md` and the agent definitions - the highest-churn documents in the
 # tree. That is the gate the next session deletes rather than obeys, which is
 # the same judgement `test_the_ignored_half_population_is_measured_not_assumed`
 # records for refusing to assert its own population is empty. The half that IS
@@ -805,7 +805,7 @@ def test_the_corpus_builder_arm_can_fail():
 # because a fresh clone would not have it either. There is no `.exists()` in this
 # path and there cannot be, so once a path has been mentioned once, in any
 # tracked file, it is accepted for good even after the thing it names stops
-# being produced. THIRTEEN VOUCHERS BUY EXACTLY WHAT ONE BUYS. What was
+# being produced. A HIGH VOUCHER COUNT BUYS EXACTLY WHAT ONE BUYS. What was
 # bought is that a path nobody ever wrote down is now rejected; what remains
 # is that a path somebody wrote down once is never re-examined, and the
 # most-vouched path in the corpus is the demonstration that voucher COUNT
@@ -1390,21 +1390,41 @@ def _ignored_paths_only_this_guard_names() -> list[str]:
     alone passed, 1 passed in 0.15s.
 
     A derived population cannot be shrunk that way, because there is nothing
-    to delete from. Both probe paths are named two or more times in this
-    module's prose over and above their tuple entry, so striking the tuple
-    line leaves the path in this set and the subset check below reds.
+    to delete from. READING OF 2026-10-02, and a dated one because it is a
+    fact about this file's prose rather than about the rule: each probe path
+    is named several times over and above its tuple entry, so striking the
+    tuple line leaves the path in this set and the subset check below reds.
+    That reading decays in ONE direction only - mentions being removed - and
+    if it ever reaches zero the subset check stops catching a single-line
+    strike while the caller's declared floor still holds. So the consequence
+    of this going stale is a weaker argument, never a gate that passes when
+    it should fail.
 
     THE FLOOR BELOW IS ON THE EXTRACTOR AND IT BOUNDS A DIFFERENT QUANTITY
-    THAN THE ARM ASSERTS. Saying so plainly, because the first version of this
-    docstring let a number stand where it read as protection it does not give.
-    MEASURED 2026-10-02: this module names 39 distinct path-shaped tokens, of
-    which 21 are TRACKED, 13 are ignored and 5 are neither. A tracked token
-    can never reach the returned list - the loop drops it on the first
-    condition - so the 21 clear a floor of 20 BY THEMSELVES, and the assertion
-    would hold with every ignored token gone. What it bounds is that the
-    regex still matches path-shaped text at all; what it does NOT bound is the
-    size of the result. The result's floor belongs to the CALLER, because only
-    the caller knows how many probes it needs, and it is asserted there.
+    THAN THE ARM ASSERTS. A TRACKED TOKEN CAN NEVER REACH THE RETURNED LIST -
+    the loop drops it on the first condition - and this module names enough
+    tracked paths to clear the floor BY THEMSELVES, so the assertion would
+    hold with every ignored token gone. What it bounds is that the regex
+    still matches path-shaped text at all. What it does NOT bound is the size
+    of the result. That floor belongs to the CALLER, because only the caller
+    knows how many probes it needs, and it is asserted there.
+
+    NO TOKEN BREAKDOWN IS QUOTED HERE, AND THE OMISSION IS THE POINT. Two
+    earlier drafts of this docstring carried one, and both rotted inside the
+    commit that wrote them - the second time because the fourteen-name table
+    two screens above added path-shaped tokens of its own, which the same
+    commit's prose was simultaneously diagnosing for the instance total.
+    Three rotted figures in one file in one day is a statement about the
+    SHAPE of the record and not about anyone's care, so the shape changed:
+    the sentence above makes the claim that actually matters and names no
+    count, which makes it unfalsifiable by ordinary prose editing.
+
+    DERIVING THE BREAKDOWN INTO AN ARM WAS CONSIDERED AND REJECTED, because
+    it would pin the wrong thing. The breakdown's content is that this floor
+    is weak in a specific way; asserting it would promote that weakness to a
+    guaranteed invariant and red the suite the day the extractor got
+    STRONGER. A gate that forbids improvement is worse than no gate. The
+    property worth holding is the caller's floor, and that one is asserted.
 
     An empty result is in any case a legitimate state - prose elsewhere may
     have quoted every probe - which is the other reason the floor cannot live
