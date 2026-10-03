@@ -36,6 +36,7 @@ daemon shuts down cleanly on a signal rather than being killed mid-write.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import os
 import signal
@@ -82,6 +83,10 @@ SLOT_REPO_LABEL = "resin-compute"
 EXIT_OK = 0
 EXIT_JOB_FAILED = 1
 EXIT_USAGE = 2
+#: A LIVE pass left a job running past its deadline, so the process exited
+#: without releasing its slot. Never 259: that is Windows STILL_ACTIVE, and
+#: `slots.pid_alive` would read the dead process as alive.
+EXIT_JOB_ABANDONED = 3
 
 #: The operator's durable disarm. A file with this name in the runtime
 #: directory (the `runtime_dir` argument, else the directory the health file
@@ -108,12 +113,15 @@ HALT_SENTINEL_NAME = "HALT"
 # every job to pickle, which none of them do. Each job therefore runs on a
 # daemon worker thread and the pass waits for it at most the deadline. A job
 # still running then is FAILED, `context.cancel` is set, and the pass waits a
-# short grace for it to notice. RESIDUAL, accepted and bounded: a Python thread
-# cannot be killed, so a job that ignores `cancel` keeps running, ABANDONED.
-# Its effects are fenced: no further job in that pass starts (it may still be
-# mutating the shared context), and no further LIVE pass takes a slot while
-# any abandoned job is alive, so abandoned work never overlaps new slotted
-# work. It is a daemon thread, so it never blocks interpreter exit.
+# short grace for it to notice. A Python thread cannot be killed, so a job that
+# ignores `cancel` keeps running, ABANDONED, and no further job in that pass
+# starts (it may still be mutating the shared context). On a LIVE pass the
+# invariant is: NO SLOT OF THIS PROCESS IS RELEASED WHILE A JOB OF THIS
+# PROCESS IS STILL RUNNING. So the process ends inside the hold, slot still
+# held - see `_die_holding_slot` - which kills the abandoned job and leaves a
+# dead-pid lock for `slots.is_stale` to reclaim. A dry run holds no slot, so
+# there the job just stays abandoned on its daemon thread, and a later LIVE
+# pass in the same process refuses to take a slot until it ends.
 
 #: Ceiling on any slot wait, daemon or one-shot, whatever `--interval` says.
 MAX_SLOT_WAIT_SECONDS = 300
@@ -599,6 +607,60 @@ def _halt_requested(runtime_dir: str | None, cycle: int) -> bool:
     return present
 
 
+def _die_holding_slot(outcome: PassResult, runtime_dir: str | None, cycle: int) -> None:
+    """End the PROCESS, slot still held, because a job of this pass is abandoned.
+
+    THE INVARIANT: no slot of this process is released while a job of this
+    process is still running. A thread cannot be killed and a process can, so
+    the process goes. That kills the abandoned job - it can write nothing
+    after this point, which closes the late-write race by construction - and
+    leaves the lock with a dead pid, which `slots.is_stale` reclaims on the
+    next `hold()` by any carrier. `os._exit`, never `sys.exit`: SystemExit
+    would unwind through the hold's `finally` and RELEASE the slot while the
+    job still ran. Under the supervisor the daemon is restarted on this exit.
+
+    RESIDUAL, accepted: the abandoned thread dies wherever it is, so a temp
+    file it was writing through `core/atomic_io.py` can be left behind. The
+    target itself is never torn - a temp only becomes the target by an atomic
+    `replace` - and nothing in this tree sweeps orphaned temps; their names
+    carry pid and a random suffix, so they never collide with a later write.
+    """
+    names = abandoned_jobs()
+    log.critical(
+        "cycle %d: %d job(s) overran their deadline and are still running (%s). The "
+        "runner is exiting with code %d WITHOUT releasing its lane slot, so that no "
+        "work of this process runs outside a held slot; the lock is reclaimed once "
+        "this process is gone.",
+        cycle,
+        len(names),
+        ", ".join(names),
+        EXIT_JOB_ABANDONED,
+    )
+    try:
+        health_mod.write_health(
+            alive=False,
+            started_at=outcome.started_at,
+            last_pass_at=outcome.finished_at,
+            last_pass_ok=False,
+            jobs=[r.as_dict() for r in outcome.results],
+            engine_version_value=health_mod.engine_version(),
+            role="headless-runner",
+            uid=outcome.uid,
+            message=(
+                "a job overran its deadline and could not be stopped, so the runner "
+                "exited to stop it; it restarts under its supervisor"
+            ),
+            extra={"abandoned_jobs": names, "exit_code": EXIT_JOB_ABANDONED},
+            base=Path(runtime_dir) if runtime_dir else None,
+        )
+    except Exception:  # noqa: BLE001 - nothing may stop the exit below
+        log.exception("could not write the abandonment record to the health file")
+    for handler in logging.getLogger().handlers + log.handlers:
+        with contextlib.suppress(Exception):
+            handler.flush()
+    os._exit(EXIT_JOB_ABANDONED)
+
+
 def _run_governed_pass(
     uid: str | None,
     dry_run: bool,
@@ -673,9 +735,14 @@ def _run_governed_pass(
             timeout=slot_timeout,
             log=lambda message: log.info("%s", message),
         ):
-            return run_pass(
+            outcome = run_pass(
                 uid=uid, dry_run=False, job_names=job_names, runtime_dir=runtime_dir
             )
+            if abandoned_jobs():
+                # INSIDE the hold, on purpose: this never returns, so the
+                # hold's `finally` never runs and the slot is NOT released.
+                _die_holding_slot(outcome, runtime_dir, cycle)
+            return outcome
     except slots_mod.SlotTimeout:
         # Never swallowed into a success path, and never surfaced raw. The
         # operator gets a cause; the exception text goes to the debug log.
