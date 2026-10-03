@@ -744,6 +744,21 @@ def test_worker_acknowledges(slot_fence_ledger):
     t.join()
 '''
 
+# The same refusal with NO fence hit at all. In the arm above the worker also
+# records a hit, and that unacknowledged hit turns the run red on its own, so the
+# arm stays green even when the refusal is never recorded. Here the only thing
+# that can turn the run red is the RECORDED refusal: the raise inside the worker
+# only warns, and the warning text names the main thread too, so the outer arm
+# cannot lean on that text.
+_INNER_WORKER_ACKNOWLEDGES_ZERO = '''
+import threading
+
+def test_worker_acknowledges_zero(slot_fence_ledger):
+    t = threading.Thread(target=lambda: slot_fence_ledger.acknowledge(0))
+    t.start()
+    t.join()
+'''
+
 _INNER_WRONG_COUNT = '''
 import sys
 from ops.loop import slots
@@ -815,6 +830,20 @@ def test_acknowledging_from_a_worker_thread_fails(tmp_path: Path) -> None:
         f"reused thread ident could clear a dead thread's hit. output:\n{out[-2000:]}"
     )
     assert "main thread" in out, out[-2000:]
+
+
+def test_a_worker_acknowledge_with_no_fence_hit_still_fails(tmp_path: Path) -> None:
+    """The refusal itself is what fails the run, not a fence hit beside it."""
+    proc = _run_inner_pytest(tmp_path, _INNER_WORKER_ACKNOWLEDGES_ZERO)
+    out = proc.stdout + proc.stderr
+    assert proc.returncode != 0, (
+        "a WORKER thread called acknowledge() with no fence hit and the run stayed "
+        "green - the refusal raised inside the worker only warned and was never "
+        f"recorded for teardown. output:\n{out[-2000:]}"
+    )
+    # The red came from the teardown, after a passing call, and not from a hit.
+    assert "1 passed" in out and "1 error" in out, out[-2000:]
+    assert "not acknowledged" not in out, out[-2000:]
 
 
 def test_acknowledging_the_wrong_count_fails(tmp_path: Path) -> None:

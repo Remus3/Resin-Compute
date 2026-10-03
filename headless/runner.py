@@ -25,7 +25,8 @@ and a dry run takes none: a slot is a lock file, and a dry run writes none.
 
 Exit codes:
   0  the pass completed; no job failed, or it was a dry run
-  1  at least one job FAILed in a non-dry run
+  1  at least one job FAILed in a non-dry run, or a live --once pass did not
+     run at all - no slot came free, or the operator's HALT sentinel is present
   2  usage error - an unknown --job name, or argparse rejected the arguments
 
 Inherited from Sibling-C's headless lane: a run summary lands in
@@ -40,6 +41,7 @@ import os
 import signal
 import sys
 import threading
+import time
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -81,6 +83,32 @@ EXIT_OK = 0
 EXIT_JOB_FAILED = 1
 EXIT_USAGE = 2
 
+#: The operator's durable disarm. A file with this name in the runtime
+#: directory (the `runtime_dir` argument, else the directory the health file
+#: resolves to) stops every LIVE pass before it takes a slot. The runner NEVER
+#: deletes it: a stop file cleared at launch fails to stop the first hold after
+#: a restart, so removing it is the operator's act alone. A dry run ignores it.
+HALT_SENTINEL_NAME = "HALT"
+
+# Lock-age budget. `slots.hold()` stamps the lock's `ts` BEFORE it waits, so
+# the age another carrier's reaper sees on a lock this process still holds is
+#
+#     slot wait + pass run + release drain
+#
+# and `slots.DEFAULT_STALE_AFTER` must exceed that sum, or a live lock is reaped
+# as stale and the bucket over-admits. Each term is bounded here, and
+# `tests/test_headless_runner_lock_budget.py` re-runs the arithmetic from these
+# attributes. RESIDUAL, accepted: the deadline is checked BETWEEN jobs, so one
+# job that never returns is still unbounded. A hard cap needs the job in a
+# subprocess that can be killed, which this lane does not do.
+
+#: Ceiling on any slot wait, daemon or one-shot, whatever `--interval` says.
+MAX_SLOT_WAIT_SECONDS = 300
+
+#: Once a pass has run this long, it starts no further jobs; the rest are
+#: recorded as SKIP and run on the next pass.
+PASS_DEADLINE_SECONDS = 3600
+
 
 # ---------------------------------------------------------------------------
 # Pass result
@@ -96,6 +124,9 @@ class PassResult:
     dry_run: bool = False
     uid: str | None = None
     results: list[jobs_mod.JobResult] = field(default_factory=list)
+    #: Jobs not started because the pass ran past PASS_DEADLINE_SECONDS.
+    #: Appended last with a default, per the tree's dataclass convention.
+    deadline_skipped: int = 0
 
     @property
     def failed(self) -> list[jobs_mod.JobResult]:
@@ -113,11 +144,16 @@ class PassResult:
 
     def summary_line(self) -> str:
         counts = self.counts()
-        return (
+        line = (
             f"pass complete - {counts[jobs_mod.STATUS_PASS]} pass, "
             f"{counts[jobs_mod.STATUS_FAIL]} fail, "
             f"{counts[jobs_mod.STATUS_SKIP]} skip"
         )
+        # A deadline cut is not a failure (the exit code stays 0), but it must
+        # not read as a plain green pass either.
+        if self.deadline_skipped:
+            line += f"; deadline reached: {self.deadline_skipped} jobs not started"
+        return line
 
 
 # ---------------------------------------------------------------------------
@@ -256,8 +292,26 @@ def run_pass(
     mode = "dry run" if dry_run else "live"
     log.info("pass start (%s) - %d job(s), uid=%s", mode, len(specs), uid or "unset")
 
+    # Monotonic, never `time.time`: a wall-clock step must not end a pass early
+    # or extend it. Looked up at call time, not bound at import.
+    deadline = float(PASS_DEADLINE_SECONDS)
+    pass_start = time.monotonic()
     for spec in specs:
-        result = jobs_mod.run_job(spec, context)
+        elapsed = time.monotonic() - pass_start
+        if elapsed > deadline:
+            # Checked BEFORE a job starts, never during one: a running job is
+            # not interrupted, which is the residual named at the budget
+            # constants. The remaining jobs are a SKIP, not a FAIL - they did
+            # not go wrong, they were not reached.
+            result = jobs_mod.skipped(
+                spec.name,
+                f"not started - the pass ran past its {int(deadline)}s deadline; "
+                "it will run on the next pass",
+                deadline_seconds=int(deadline),
+            )
+            outcome.deadline_skipped += 1
+        else:
+            result = jobs_mod.run_job(spec, context)
         context.results[spec.name] = result
         outcome.results.append(result)
         log.info("%-6s %-16s %s", result.status, result.name, result.message)
@@ -358,6 +412,73 @@ def _lane_width() -> int:
     return MAX_CONCURRENT_LANES
 
 
+class _Halted:
+    """The type of `HALTED`: a pass that did not run because of the sentinel.
+
+    Distinct from None (a starved pass) so the daemon can stop on one and
+    retry on the other, and falsy so no caller can read it as a PassResult.
+    """
+
+    _instance: _Halted | None = None
+
+    def __new__(cls) -> _Halted:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __bool__(self) -> bool:
+        return False
+
+    def __repr__(self) -> str:
+        return "HALTED"
+
+
+HALTED = _Halted()
+
+
+def halt_sentinel_path(runtime_dir: str | None) -> Path:
+    """Where the operator's HALT file lives: the same directory as the health file."""
+    return health_mod.runtime_dir(Path(runtime_dir) if runtime_dir else None) / HALT_SENTINEL_NAME
+
+
+def _halt_requested(runtime_dir: str | None, cycle: int) -> bool:
+    """True when the operator's sentinel is present. Fails CLOSED.
+
+    If the sentinel's presence cannot be determined, the lane stays disarmed:
+    a stop control that silently reads as "go" when it cannot be read is not a
+    stop control. The raw error goes to the debug log, never to a surface.
+
+    `os.stat` directly, NEVER `Path.exists()`: on 3.14 `exists()` swallows
+    every OSError and answers False, and on 3.11 it still swallows some Windows
+    errors (WinError 123), so an unreadable sentinel would read as absent and
+    the pass would RUN. Only "the file is not there" - FileNotFoundError, or
+    NotADirectoryError when a parent is not a directory - means not halted.
+    """
+    path = halt_sentinel_path(runtime_dir)
+    try:
+        os.stat(path)
+        present = True
+    except (FileNotFoundError, NotADirectoryError):
+        present = False
+    except OSError:
+        log.warning(
+            "cycle %d halted - could not check for the operator sentinel %s, so the "
+            "pass did NOT run (a stop control that cannot be read stays stopped)",
+            cycle,
+            path,
+        )
+        log.debug("sentinel check failed", exc_info=True)
+        return True
+    if present:
+        log.warning(
+            "cycle %d halted by operator sentinel %s - no slot taken, the pass did "
+            "NOT run. Remove the file to resume; the runner never removes it.",
+            cycle,
+            path,
+        )
+    return present
+
+
 def _run_governed_pass(
     uid: str | None,
     dry_run: bool,
@@ -367,8 +488,16 @@ def _run_governed_pass(
     cycle: int,
     slot_root: str | Path | None,
     slot_timeout: float,
-) -> PassResult | None:
+) -> PassResult | _Halted | None:
     """Run one pass while holding one machine-wide lane slot.
+
+    Returns `HALTED` when the operator's HALT sentinel is present: no slot is
+    taken and the pass does not run. Checked on every call, immediately before
+    the hold, so a daemon stops at the next pass after the file appears.
+
+    The slot wait is clamped to `MAX_SLOT_WAIT_SECONDS` here, the one place
+    every caller passes through, so no caller can push a lock's age past the
+    budget recorded at that constant.
 
     Returns None when no slot came free inside the timeout. That is a FAILED
     cycle: the pass does not run, and the caller must never read it as
@@ -395,6 +524,10 @@ def _run_governed_pass(
     # work, and holding a shared lane while doing it starves the other carriers.
     max_slots = _lane_width()
     root = Path(slot_root) if slot_root is not None else None
+    slot_timeout = min(float(slot_timeout), float(MAX_SLOT_WAIT_SECONDS))
+
+    if _halt_requested(runtime_dir, cycle):
+        return HALTED
 
     try:
         with slots_mod.hold(
@@ -445,7 +578,13 @@ def run_daemon(
     bucket and is overridden only by tests, which must never touch that bucket:
     sibling repositories hold lanes in it live. `slot_timeout` defaults to one
     interval - waiting longer than that means the pass is already late, so the
-    cycle fails and the next tick tries again rather than the loop piling up.
+    cycle fails and the next tick tries again rather than the loop piling up -
+    and never more than `MAX_SLOT_WAIT_SECONDS`, because `--interval` is
+    unbounded and the slot wait counts toward a held lock's age.
+
+    The operator's HALT sentinel is checked on EVERY pass. When it is present
+    the loop stops and the daemon exits `EXIT_OK`: a halt is an operator's
+    clean stop, not a failure of this process.
     """
     flag = _ShutdownFlag()
     installed = install_signal_handlers(flag)
@@ -456,10 +595,15 @@ def run_daemon(
     )
 
     run_id = uuid.uuid4().hex[:12]
-    timeout = float(max(1, int(interval))) if slot_timeout is None else float(slot_timeout)
+    timeout = (
+        float(min(max(1, int(interval)), MAX_SLOT_WAIT_SECONDS))
+        if slot_timeout is None
+        else float(slot_timeout)
+    )
 
     passes = 0
     last_ok = True
+    halted = False
     while not flag.requested:
         passes += 1
         outcome = _run_governed_pass(
@@ -472,6 +616,10 @@ def run_daemon(
             slot_root=slot_root,
             slot_timeout=timeout,
         )
+        if outcome is HALTED:
+            halted = True
+            log.info("daemon halted by operator sentinel at cycle %d, stopping", passes)
+            break
         # A starved cycle has no PassResult at all, and it is a FAILURE. This is
         # the one place a None could be mistaken for "nothing went wrong".
         last_ok = outcome is not None and outcome.ok
@@ -484,7 +632,7 @@ def run_daemon(
     log.info("daemon stopped after %d pass(es)", passes)
     if not dry_run:
         _write_shutdown_health(runtime_dir)
-    if dry_run:
+    if dry_run or halted:
         return EXIT_OK
     return EXIT_OK if last_ok else EXIT_JOB_FAILED
 
@@ -536,8 +684,13 @@ def run_once(
     # it takes no slot, so `outcome` is never None here on the dry path.
     if dry_run:
         return EXIT_OK
-    # None is a starved pass, and it is a FAILURE - never read as "no news".
-    return EXIT_OK if outcome is not None and outcome.ok else EXIT_JOB_FAILED
+    # None is a starved pass and HALTED is a pass the operator's sentinel
+    # stopped. Both are a pass that did NOT run, so both are EXIT_JOB_FAILED -
+    # never read as "no news". `isinstance` rather than truthiness, so neither
+    # sentinel can be mistaken for a result.
+    if not isinstance(outcome, PassResult):
+        return EXIT_JOB_FAILED
+    return EXIT_OK if outcome.ok else EXIT_JOB_FAILED
 
 
 def _write_shutdown_health(runtime_dir: str | None) -> None:
