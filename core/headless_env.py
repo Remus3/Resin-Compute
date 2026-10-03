@@ -49,6 +49,22 @@ ENV_HEADLESS_BASE_URL = "CLAUDE_HEADLESS_BASE_URL"
 #: user-wide, never machine-wide, never in this process.
 ENV_CHILD_BASE_URL = "ANTHROPIC_BASE_URL"
 
+#: Removed from the CHILD's environment, never from this process. Each one
+#: either authenticates directly or switches the provider, and any of them
+#: inherited by the child outranks or bypasses the proxy - a billing bypass.
+#: A later addition is one line here.
+CHILD_ENV_STRIPPED: tuple[str, ...] = (
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY",
+    "ANTHROPIC_BEDROCK_BASE_URL",
+    "ANTHROPIC_VERTEX_BASE_URL",
+    "ANTHROPIC_VERTEX_PROJECT_ID",
+)
+
 #: The connect probe's ceiling. Short: the proxy is expected to be local.
 PROBE_TIMEOUT_SECONDS = 2.0
 
@@ -179,6 +195,10 @@ def prepare_headless_env(
         return _refuse(REFUSE_MALFORMED)
     if not probe(target[0], target[1], timeout=timeout, connect=connect):
         return _refuse(REFUSE_UNREACHABLE)
-    child = dict(os.environ if environ is None else environ)
+    child = {
+        k: v
+        for k, v in (os.environ if environ is None else environ).items()
+        if k not in CHILD_ENV_STRIPPED
+    }
     child[ENV_CHILD_BASE_URL] = url
     return Decision(True, child, "")

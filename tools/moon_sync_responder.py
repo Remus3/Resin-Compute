@@ -325,6 +325,14 @@ DEFAULT_REFUSALS = RUNTIME_DIR / "responder_refusals.json"
 #: off; it never retries another way - see `UsageLimited`.
 DEFAULT_BACKOFF = RUNTIME_DIR / "responder_backoff.json"
 
+#: LOOP BREAKER (b), THE OUTBOUND CAP. `{"version": 1, "replies": [{"to":
+#: CODE, "at": epoch}]}`, this tree's own durable record of replies DELIVERED,
+#: so the bound holds even though the replies themselves leave the repo and the
+#: hop budget, which counts only this inbox, never sees them.
+DEFAULT_OUTBOUND = RUNTIME_DIR / "responder_outbound.json"
+MAX_REPLIES_PER_SENDER = 3
+OUTBOUND_WINDOW_SECONDS = 86400.0
+
 #: Used when a usage-limit refusal carries no reset time, and the ceiling on
 #: one that does, so a garbled stamp cannot park the responder for a year.
 USAGE_BACKOFF_SECONDS = 3600.0
@@ -706,6 +714,39 @@ def is_responder_authored(text: str) -> bool:
     return RESPONDER_TAG in text
 
 
+#: ANY TREE'S RESPONDER TAG, not only ours. Ours is `[RSC-RESPONDER] ...` at the
+#: start of a line (`RESPONDER_TAG`); a sibling running this same responder
+#: under its own codename writes `[<CODE>-RESPONDER]` in the same place, so the
+#: SHAPE is matched rather than the one literal.
+_ANY_RESPONDER_TAG = re.compile(r"^\[[A-Z]{2,4}-RESPONDER\]", re.MULTILINE)
+
+#: A body that DECLARES it was written by a machine, for a sibling whose tag
+#: shape is not known. Mirrors the sentence `RESPONDER_TAG` itself carries.
+_DECLARED_AUTOMATED = re.compile(
+    r"written by an? (?:unattended|headless) responder", re.IGNORECASE
+)
+
+#: The reply filename convention `_reply_name` writes.
+_AUTO_REPLY_NAME = "-auto-reply-to-"
+
+
+def is_auto_reply(name: str, text: str) -> bool:
+    """Whether a note is itself a responder's auto-reply, from ANY tree.
+
+    LOOP BREAKER (a). Such a note is never auto-answered: two responders that
+    answer each other's replies have no exit but the hop budget, and that budget
+    counts only what lands in THIS inbox. Matched on four signals, any one
+    sufficient: this tree's own tag, any tree's tag shape, a body declaring an
+    unattended or headless responder wrote it, or the auto-reply filename.
+    """
+    return (
+        _AUTO_REPLY_NAME in name
+        or RESPONDER_TAG in text
+        or _ANY_RESPONDER_TAG.search(text) is not None
+        or _DECLARED_AUTOMATED.search(text) is not None
+    )
+
+
 def _read_text(path: Path) -> str:
     """Bytes to text without ever raising. Unreadable reads as empty.
 
@@ -973,6 +1014,7 @@ def pending(
     answered: set[str],
     since: float | None = None,
     deprioritise: set[str] | None = None,
+    capped: set[str] | None = None,
 ) -> list[Path]:
     """Notes from an opted-in sender that have not been answered yet.
 
@@ -1030,6 +1072,13 @@ def pending(
                     continue
             except OSError:
                 continue
+        # LOOP BREAKER (b): a sender already sent `MAX_REPLIES_PER_SENDER`
+        # replies in the rolling day is not answered again until one ages out.
+        if code in (capped or set()):
+            continue
+        # LOOP BREAKER (a): never auto-answer an auto-reply, from any tree.
+        if is_auto_reply(child.name, _read_text(child)):
+            continue
         out.append(child)
     return out
 
@@ -1135,6 +1184,14 @@ def counterparty_agreed(path: Path, now: float | None = None) -> tuple[bool, str
     an agreement to run tonight is not an agreement to run next week, and a
     confirmation file left behind is otherwise a standing authorisation nobody
     remembers granting.
+
+    ONE RECORD ARMS THE WHOLE AUDIENCE, BY MERGER RULING 2026-10-02. The record
+    names one counterparty, yet `OPTED_IN` now holds every participant, so a
+    refuter read this as one agreement arming six. The ruling: the operator's
+    2026-10-02 directive went to EVERY tree and stands in for the per-pair trial
+    agreement, so no per-sender confirmation is required. What is NOT relaxed is
+    the floor - the record must still exist, be well formed and be unexpired,
+    so the expiry still ends every edge at once.
     """
     payload = read_json(path, default=None)
     if not isinstance(payload, dict):
@@ -2106,6 +2163,45 @@ def backoff_active(path: Path, now: float) -> bool:
     return isinstance(until, (int, float)) and now < float(until)
 
 
+def _outbound_rows(path: Path, now: float) -> list[dict]:
+    """Delivered-reply rows still inside the rolling window. Unreadable is empty."""
+    doc = read_json(path, {})
+    rows = doc.get("replies") if isinstance(doc, dict) else None
+    if not isinstance(rows, list):
+        return []
+    floor = now - OUTBOUND_WINDOW_SECONDS
+    return [
+        r for r in rows
+        if isinstance(r, dict)
+        and isinstance(r.get("to"), str)
+        and isinstance(r.get("at"), (int, float))
+        and floor < float(r["at"]) <= now + OUTBOUND_WINDOW_SECONDS
+    ]
+
+
+def senders_at_cap(path: Path, now: float) -> set[str]:
+    """Senders already sent `MAX_REPLIES_PER_SENDER` replies in the rolling day."""
+    counts: dict[str, int] = {}
+    for row in _outbound_rows(path, now):
+        counts[row["to"]] = counts.get(row["to"], 0) + 1
+    return {code for code, n in counts.items() if n >= MAX_REPLIES_PER_SENDER}
+
+
+def record_outbound(path: Path, to: str, now: float, delivered: bool) -> bool:
+    """Count one DELIVERED reply to `to`. An undelivered one is not counted.
+
+    Called unconditionally on the reply path with `delivered` passed in, so the
+    decision lives here rather than in a new branch inside `_run_once`. Rows
+    older than the window are pruned on every write, so the record is bounded.
+    """
+    if not delivered:
+        return False
+    if not _ensure_parent(path):
+        return False
+    rows = [*_outbound_rows(path, now), {"to": to, "at": now}]
+    return atomic_write_json(path, {"version": 1, "replies": rows})
+
+
 def record_backoff(path: Path, reset_at: float | None, now: float) -> bool:
     """Record a backoff from a usage-limit refusal. Clamped, never unbounded."""
     until = now + USAGE_BACKOFF_SECONDS
@@ -2295,6 +2391,7 @@ def _run_once(
         _answered(DEFAULT_ANSWERED),
         since=bounds.window_opens,
         deprioritise=bounced_notes(DEFAULT_REFUSALS, agreement_id(DEFAULT_CONFIRMATION)),
+        capped=senders_at_cap(DEFAULT_OUTBOUND, started),
     )
     # GATE:empty-queue
     if not queue:
@@ -2491,6 +2588,9 @@ def _run_once(
         # GATE:delivery-write-all
         result["delivered"] = all(ok for ok, _ in written) and bool(written)
         result["actions"] = ["A5"]
+        # COUNTED AGAINST THE OUTBOUND CAP. Unconditional call, the delivered
+        # flag decides inside, so this adds no branch to the cycle.
+        record_outbound(DEFAULT_OUTBOUND, sender_of(note.name) or "", started, result["delivered"])
         result["termination"] = "delivered"
 
         # THE RETURN VALUE IS OBSERVED, AND IT WAS A BARE STATEMENT HERE. A False
@@ -2578,7 +2678,18 @@ _headless_gate = headless_env.prepare_headless_env
 #: A usage-limit refusal, as the CLI or the proxy words it. Consulted on a
 #: non-zero exit, or on a SHORT untagged stdout, so a real draft that merely
 #: discusses limits is not mistaken for one.
-_USAGE_LIMIT = re.compile(r"usage limit|limit reached|rate[ _-]?limit|\b429\b", re.IGNORECASE)
+#:
+#: THE REAL CLI AND PROXY TEXT WAS NOT CAPTURED. These phrases are the wording
+#: the refutation of c695ad1 enumerated, plus the legacy `usage limit reached|`
+#: shape; a live refusal has never been observed through this route. An
+#: `overloaded` error is deliberately ABSENT: it is a transient failure, recorded
+#: as `spawn-failed`, and treating it as a usage limit would park the responder
+#: for an hour on a blip.
+_USAGE_LIMIT = re.compile(
+    r"usage[ _-]?limit|limit reached|rate[ _-]?limit|\b429\b|hit your limit"
+    r"|limit will reset|resets at|out of extra usage",
+    re.IGNORECASE,
+)
 _RESET_EPOCH = re.compile(r"\|(\d{10})\b")
 _SHORT_REFUSAL_CHARS = 300
 
