@@ -1097,9 +1097,10 @@ def test_a_spent_budget_tick_reads_turn_limit_reached(rsp, tmp_path, trusted):
     def spawn(prompt, bounds):
         raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
 
-    # A real spent budget has rows to age out; with none, "limit" would ship
-    # a null cap_frees_at, which the widget owner ruled out.
-    _seed_runs(rsp, [time.time() - 60])
+    # A real spent budget is FULL and has rows to age out: with none, "limit"
+    # would ship a null cap_frees_at, and with headroom it would claim a cap
+    # the ledger does not show (adversary, 2026-10-03).
+    _seed_runs(rsp, [time.time() - 60] * rsp.MAX_RUNS_PER_DAY)
     _armed_cycle(rsp, tmp_path, spawn=spawn)
     status = _status(rsp)
     assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
@@ -1217,7 +1218,7 @@ def test_a_main_reply_limit_tick_names_when_the_oldest_reply_ages_out(rsp, tmp_p
 def test_a_run_budget_tick_names_when_the_oldest_run_ages_out(rsp, tmp_path, trusted):
     now = time.time()
     oldest = now - 7200
-    _seed_runs(rsp, [now - 60, oldest])
+    _seed_runs(rsp, [oldest] + [now - 60] * (rsp.MAX_RUNS_PER_DAY - 1))
 
     def spawn(prompt, bounds):
         raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
@@ -1226,7 +1227,8 @@ def test_a_run_budget_tick_names_when_the_oldest_run_ages_out(rsp, tmp_path, tru
     status = _status(rsp)
     assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
     assert status["cap_frees_at"] == kit._iso(oldest + rsp.RUNS_WINDOW_SECONDS), status
-    assert status["runs_in_window"] == 2 and status["runs_cap"] == rsp.MAX_RUNS_PER_DAY
+    assert status["runs_in_window"] == rsp.MAX_RUNS_PER_DAY
+    assert status["runs_cap"] == rsp.MAX_RUNS_PER_DAY
 
 
 def test_a_hop_budget_tick_reads_idle_not_limit(rsp, tmp_path, trusted):
@@ -1316,6 +1318,375 @@ def test_an_idle_tick_counts_the_responders_own_runs(rsp, tmp_path):
     status = _status(rsp)
     assert status["runs_in_window"] == 3 and status["runs_cap"] == rsp.MAX_RUNS_PER_DAY, status
     assert not (rsp._kit_root() / kit.BUDGET_REL).exists(), "non-vacuity: the kit record is absent"
+
+
+# THE /120 COUNTER, settled 2026-10-03 (ROADMAP "FLEET-KIT v4 WRAP-UP"). Two
+# run ledgers exist: the responder's own, and the kit's `RunBudget`. Whichever
+# one BINDS is the one the status counts from and names a free time from - a
+# kit refusal must never report the responder ledger's oldest row, nor null.
+
+
+def _seed_kit_budget(rsp, stamps):
+    path = rsp._kit_root() / kit.BUDGET_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"starts": list(stamps)}))
+    return path
+
+
+def test_a_spent_kit_budget_raises_its_own_outcome(rsp, routed, monkeypatch, tmp_path):
+    run = Run()
+    monkeypatch.setattr(subprocess, "run", run)
+    _seed_kit_budget(rsp, [time.time() - 60.0] * kit.RUNS_CAP)
+
+    with pytest.raises(rsp.KitRunBudgetSpent) as caught:
+        rsp._spawn_headless("p", rsp.Bounds())
+    assert caught.value.termination == "kit-run-budget" and "kit-run-budget" in rsp.TERMINATIONS
+    assert run.calls == 0 and _no_run_reserved(rsp)
+
+
+def test_a_kit_refusal_inside_spawn_for_budget_is_the_kits_outcome(rsp, routed, monkeypatch):
+    """The race the pre-check cannot close: the kit's own `start` refuses."""
+    def refuse(*_a, **_k):
+        raise kit.Refused(f"run budget exhausted ({kit.RUNS_CAP}/{kit.RUNS_CAP})")
+
+    monkeypatch.setattr(kit, "spawn", refuse)
+    with pytest.raises(rsp.KitRunBudgetSpent):
+        rsp._spawn_headless("p", rsp.Bounds())
+
+
+def test_a_kit_lock_busy_inside_spawn_is_still_run_locked(rsp, routed, monkeypatch):
+    """Neighbour that must survive: "budget lock busy" contains "budget"."""
+    def refuse(*_a, **_k):
+        raise kit.Refused("budget lock busy")
+
+    monkeypatch.setattr(kit, "spawn", refuse)
+    with pytest.raises(rsp.RunLockBusy):
+        rsp._spawn_headless("p", rsp.Bounds())
+
+
+def test_a_kit_budget_tick_counts_and_frees_from_the_kit_ledger(rsp, routed, monkeypatch, tmp_path, trusted):
+    monkeypatch.setattr(subprocess, "run", Run())
+    now = time.time()
+    oldest = now - 7200
+    _seed_kit_budget(rsp, [oldest] + [now - 60.0] * (kit.RUNS_CAP - 1))
+    # The responder ledger holds a DIFFERENT oldest row, so a status built from
+    # the wrong ledger is caught by its free time, not only by its count.
+    _seed_runs(rsp, [now - 30])
+
+    result = _armed_cycle(rsp, tmp_path)
+    status = _status(rsp)
+
+    assert result["termination"] == "kit-run-budget", result
+    assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
+    assert status["cap_frees_at"] == kit._iso(oldest + kit.WINDOW_S), status
+    assert (status["runs_in_window"], status["runs_cap"], status["window_s"]) == (
+        kit.RUNS_CAP, kit.RUNS_CAP, kit.WINDOW_S,
+    ), status
+
+
+@pytest.mark.parametrize("cap", ["CAP_RUNS", "CAP_MAIN_REPLIES", "CAP_KIT_RUNS"])
+def test_every_status_ledger_ships_window_s_as_an_int(rsp, cap):
+    """MAIN 0915 schema 1: `"window_s": <int>`. Measured 2026-10-03: the
+    responder ledgers shipped 86400.0, the kit's own 86400."""
+    budget = rsp._status_budget(getattr(rsp, cap), time.time())
+    assert type(budget.window) is int and type(budget.cap) is int, (budget.window, budget.cap)
+
+
+def test_a_corrupt_kit_ledger_tick_never_reads_a_timeless_limit(rsp, routed, monkeypatch, tmp_path, trusted):
+    """Non-vacuity for the kit arm: no computable free time reads Backing Off."""
+    monkeypatch.setattr(subprocess, "run", Run())
+    path = rsp._kit_root() / kit.BUDGET_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{not json")
+
+    result = _armed_cycle(rsp, tmp_path)
+    status = _status(rsp)
+
+    assert result["termination"] == "usage-backoff", result
+    assert status["state"] == "backoff" and status["task"] == "Backing Off", status
+
+
+# ADVERSARY 2026-10-03, two counterexamples, ported from its reproducer.
+
+
+def test_both_run_ledgers_full_report_the_later_free_time(rsp, routed, monkeypatch, tmp_path, trusted):
+    """RULE: when both run ledgers are at cap, the status reports the one that
+    frees LAST - the lane is capped until both free - with that ledger's counts."""
+    monkeypatch.setattr(subprocess, "run", Run())
+    now = time.time()
+    _seed_kit_budget(rsp, [now - 7200] + [now - 60.0] * (kit.RUNS_CAP - 1))
+    young = now - 30.0
+    _seed_runs(rsp, [young] * rsp.MAX_RUNS_PER_DAY)
+
+    result = _armed_cycle(rsp, tmp_path)
+    status = _status(rsp)
+
+    assert result["termination"] == "kit-run-budget", result
+    assert status["state"] == "limit", status
+    assert status["cap_frees_at"] == kit._iso(young + rsp.RUNS_WINDOW_SECONDS), status
+    assert (status["runs_in_window"], status["runs_cap"]) == (
+        rsp.MAX_RUNS_PER_DAY, rsp.MAX_RUNS_PER_DAY,
+    ), status
+
+
+def test_both_full_the_kit_freeing_last_is_the_one_reported(rsp, routed, monkeypatch, tmp_path, trusted):
+    """Neighbour: the rule picks by free time, not by which ledger refused."""
+    monkeypatch.setattr(subprocess, "run", Run())
+    now = time.time()
+    young = now - 30.0
+    _seed_kit_budget(rsp, [young] * kit.RUNS_CAP)
+    _seed_runs(rsp, [now - 7200] * rsp.MAX_RUNS_PER_DAY)
+
+    _armed_cycle(rsp, tmp_path)
+    status = _status(rsp)
+
+    assert status["cap_frees_at"] == kit._iso(young + kit.WINDOW_S), status
+
+
+def test_a_kit_refusal_the_status_reread_does_not_bear_out_never_reads_limit(rsp, routed, monkeypatch, tmp_path, trusted):
+    """The pre-check's one read says FULL; by the status re-read the ledger has
+    headroom (rows aged out, a race). The status must not ship a limit."""
+    monkeypatch.setattr(subprocess, "run", Run())
+    now = time.time()
+    _seed_kit_budget(rsp, [now - 60.0] * 5)
+    real = kit.RunBudget._load
+    calls = {"n": 0}
+
+    def flaky(self):
+        calls["n"] += 1
+        return [now - 60.0] * self.cap if calls["n"] == 1 else real(self)
+
+    monkeypatch.setattr(kit.RunBudget, "_load", flaky)
+    result = _armed_cycle(rsp, tmp_path)
+    status = _status(rsp)
+
+    assert result["termination"] == "kit-run-budget", "non-vacuity: the full read was never taken"
+    assert status["state"] == "backoff" and status["task"] == "Backing Off", status
+
+
+def _invocation_log(rsp) -> str:
+    path = rsp.DEFAULT_INVOCATIONS
+    return path.read_text(encoding="ascii") if path.exists() else ""
+
+
+def test_a_corrupt_kit_ledger_is_logged_fail_closed(rsp, routed, monkeypatch, tmp_path, trusted):
+    """Adversary round 2: it needs a human, like its siblings' unreadable records."""
+    monkeypatch.setattr(subprocess, "run", Run())
+    path = rsp._kit_root() / kit.BUDGET_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{not json")
+
+    _armed_cycle(rsp, tmp_path)
+
+    assert "fail-closed:kit-run-budget-unreadable" in _invocation_log(rsp)
+
+
+def test_a_readable_kit_ledger_logs_no_unreadable_line(rsp, routed, monkeypatch, tmp_path, trusted):
+    """Neighbour: a full but readable kit ledger is a limit, never an unreadable."""
+    monkeypatch.setattr(subprocess, "run", Run())
+    _seed_kit_budget(rsp, [time.time() - 60.0] * kit.RUNS_CAP)
+
+    result = _armed_cycle(rsp, tmp_path)
+
+    assert result["termination"] == "kit-run-budget", result
+    assert "kit-run-budget-unreadable" not in _invocation_log(rsp)
+
+
+def test_a_kit_ledger_that_fails_its_second_read_is_unreadable_not_full(rsp, routed, monkeypatch, tmp_path, trusted):
+    """Adversary round 2 probe: the first read succeeds at 5/120, every later
+    read raises. That must never be reported as a full kit budget."""
+    monkeypatch.setattr(subprocess, "run", Run())
+    _seed_kit_budget(rsp, [time.time() - 60.0] * 5)
+    real = kit.RunBudget._load
+    calls = {"n": 0}
+
+    def flip(self):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return real(self)
+        raise kit.BudgetUnreadable("budget file unreadable: PermissionError")
+
+    monkeypatch.setattr(kit.RunBudget, "_load", flip)
+    result = _armed_cycle(rsp, tmp_path)
+    monkeypatch.setattr(kit.RunBudget, "_load", real)
+
+    assert result["termination"] == "usage-backoff", result
+    assert not any(f"{kit.RUNS_CAP}/{kit.RUNS_CAP}" in r for r in result["reasons"]), result
+    assert "fail-closed:kit-run-budget-unreadable" in _invocation_log(rsp)
+
+
+def test_a_run_budget_refusal_with_headroom_never_reads_limit(rsp, tmp_path, trusted):
+    _seed_runs(rsp, [time.time() - 60])
+    _armed_cycle(rsp, tmp_path, spawn=_budget_spent_spawn(rsp))
+    status = _status(rsp)
+    assert status["state"] == "backoff" and status["task"] == "Backing Off", status
+    assert status["runs_in_window"] == 1 and status["runs_cap"] == rsp.MAX_RUNS_PER_DAY, status
+
+
+def test_an_unreadable_kit_ledger_in_spawn_is_a_backoff_not_a_budget(rsp, routed, monkeypatch):
+    def refuse(*_a, **_k):
+        raise kit.BudgetUnreadable("budget file unreadable: PermissionError")
+
+    monkeypatch.setattr(kit, "spawn", refuse)
+    with pytest.raises(rsp.KitBudgetUnreadable) as caught:
+        rsp._spawn_headless("p", rsp.Bounds())
+    assert caught.value.termination == "usage-backoff"
+    assert not isinstance(caught.value, rsp.KitRunBudgetSpent)
+    assert "fail-closed:kit-run-budget-unreadable" in _invocation_log(rsp)
+
+
+def _count_kit_loads(monkeypatch, fail_on=()):
+    """Wrap the kit's one parser; raise a transient read error on the given calls."""
+    real = kit.RunBudget._load
+    calls = {"n": 0}
+
+    def load(self):
+        calls["n"] += 1
+        if calls["n"] in fail_on:
+            raise kit.BudgetUnreadable("budget file unreadable: PermissionError")
+        return real(self)
+
+    monkeypatch.setattr(kit.RunBudget, "_load", load)
+    return calls
+
+
+@pytest.mark.parametrize("seed", [5, "full"])
+def test_the_status_reads_the_kit_ledger_once_per_decision(rsp, routed, monkeypatch, seed):
+    """Adversary round 3: count, cap and free time from ONE read, or a transient
+    failure between two reads mixes a failed count with a real free time."""
+    now = time.time()
+    _seed_kit_budget(rsp, [now - 60.0] * (kit.RUNS_CAP if seed == "full" else seed))
+    calls = _count_kit_loads(monkeypatch)
+    rsp._status_budget(rsp.CAP_KIT_RUNS, now)
+    assert calls["n"] == 1, calls
+
+
+@pytest.mark.parametrize("termination", ["run-budget", "kit-run-budget"])
+def test_a_run_limit_tick_reads_each_run_ledger_once(rsp, routed, monkeypatch, termination):
+    """Root-cause sibling: one tick's status decision takes ONE snapshot of each
+    run ledger, so its count and its free time cannot come from two reads."""
+    now = time.time()
+    _seed_runs(rsp, [now - 60.0] * rsp.MAX_RUNS_PER_DAY)
+    _seed_kit_budget(rsp, [now - 60.0] * 5)
+    kit_calls = _count_kit_loads(monkeypatch)
+    real_rows = rsp._run_rows
+    run_calls = {"n": 0}
+
+    def rows(path, at):
+        run_calls["n"] += 1
+        return real_rows(path, at)
+
+    monkeypatch.setattr(rsp, "_run_rows", rows)
+    rsp._write_tick_status({"termination": termination, "note": None})
+
+    assert (run_calls["n"], kit_calls["n"]) == (1, 1), (run_calls, kit_calls)
+    assert _status(rsp)["state"] == "limit", "non-vacuity: the binding branch was not taken"
+
+
+def test_a_transient_kit_read_in_the_status_path_is_never_a_limit(rsp, routed, monkeypatch, tmp_path, trusted):
+    """Adversary round 3 reproducer: responder full (frees in ~1.8 h), kit
+    REALLY 5/120, one transient failure on the status path's kit read. It must
+    not ship a 120/120 kit limit freeing ~22 h too late."""
+    monkeypatch.setattr(subprocess, "run", Run())
+    now = time.time()
+    _seed_runs(rsp, [now - 80000.0] + [now - 30.0] * (rsp.MAX_RUNS_PER_DAY - 1))
+    kit_frees = kit._iso(now - 60.0 + kit.WINDOW_S)
+    _seed_kit_budget(rsp, [now - 60.0] * 5)
+    calls = _count_kit_loads(monkeypatch, fail_on=(2,))
+
+    result = _armed_cycle(rsp, tmp_path)
+    status = _status(rsp)
+
+    assert result["termination"] == "run-budget", result
+    assert calls["n"] >= 2, "non-vacuity: the status path never read the kit ledger"
+    assert status["state"] == "backoff" and status["task"] == "Backing Off", status
+    assert status["cap_frees_at"] != kit_frees, status
+
+
+def test_the_wrong_ledger_mutant_is_killed_by_the_kit_tick(rsp, routed, monkeypatch, tmp_path, trusted):
+    """Adversary round 3 point 3: `_status_budget` forced onto the responder
+    ledger must turn a kit-ledger arm red. Run in-process as the mutant."""
+    orig = rsp._status_budget
+    monkeypatch.setattr(rsp, "_status_budget", lambda cap, now: orig(rsp.CAP_RUNS, now))
+    with pytest.raises(AssertionError):
+        test_a_kit_budget_tick_counts_and_frees_from_the_kit_ledger(
+            rsp, routed, monkeypatch, tmp_path, trusted
+        )
+
+
+# ADVERSARY ROUND 4: a stamp no clock can print (Infinity, or epoch
+# milliseconds) must never escape a status write. Such a ledger is UNREADABLE:
+# counted as its cap, no free time, never a limit.
+
+
+def test_a_millisecond_responder_row_never_crashes_an_idle_tick(rsp, tmp_path):
+    """Probe d1: one ms-epoch row, finite, so `_run_rows` keeps it active."""
+    _seed_runs(rsp, [time.time() * 1000.0])
+    result = rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
+    status = _status(rsp)
+    assert result["termination"] == "empty", result
+    assert status["cap_frees_at"] is None, status
+    assert status["runs_in_window"] == status["runs_cap"] == rsp.MAX_RUNS_PER_DAY, status
+
+
+@pytest.mark.parametrize("stamp", ["inf", "ms"])
+def test_an_unprintable_full_kit_ledger_never_crashes_a_tick(rsp, routed, monkeypatch, tmp_path, trusted, stamp):
+    """Probe d2: a full kit ledger of Infinity or ms stamps."""
+    monkeypatch.setattr(subprocess, "run", Run())
+    value = float("inf") if stamp == "inf" else time.time() * 1000.0
+    _seed_kit_budget(rsp, [value] * kit.RUNS_CAP)
+
+    _armed_cycle(rsp, tmp_path)
+    status = _status(rsp)
+
+    assert status["state"] == "backoff" and status["task"] == "Backing Off", status
+    assert status["cap_frees_at"] is None, status
+
+
+def test_an_unprintable_kit_stamp_under_cap_is_unreadable_at_the_pre_check(rsp, routed, monkeypatch, tmp_path):
+    """Under the cap the kit would START, then crash its own status write on
+    the stamp. The pre-check calls such a ledger unreadable and starts nothing."""
+    run = Run()
+    monkeypatch.setattr(subprocess, "run", run)
+    _seed_kit_budget(rsp, [float("inf")] * 5)
+    with pytest.raises(rsp.KitBudgetUnreadable):
+        rsp._spawn_headless("p", rsp.Bounds())
+    assert run.calls == 0 and _no_run_reserved(rsp)
+
+
+def test_a_printable_kit_ledger_neighbour_is_still_read(rsp, routed, monkeypatch):
+    """Neighbour: ordinary stamps are not swept up as unprintable."""
+    now = time.time()
+    _seed_kit_budget(rsp, [now - 60.0] * 5)
+    budget = rsp._status_budget(rsp.CAP_KIT_RUNS, now)
+    assert budget.used() == 5 and budget.frees_at() == pytest.approx(now - 60.0 + kit.WINDOW_S)
+
+
+@pytest.mark.parametrize("writer", ["tick", "idle"])
+def test_a_status_write_overflow_is_logged_never_raised(rsp, monkeypatch, writer):
+    """Backstop: whatever the kit's writer raises on a timestamp stays inside."""
+    def overflow(*_a, **_k):
+        raise OverflowError("date value out of range")
+
+    monkeypatch.setattr(kit, "write_status", overflow)
+    if writer == "tick":
+        rsp._write_tick_status({"termination": "empty", "note": None})
+    else:
+        rsp._write_idle()
+    log = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii")
+    assert "fail-closed:kit-status-OverflowError" in log, log
+
+
+def test_an_unreadable_kit_ledger_pre_check_is_a_backoff(rsp, routed, monkeypatch, tmp_path):
+    monkeypatch.setattr(subprocess, "run", Run())
+
+    def unreadable(self):
+        raise kit.BudgetUnreadable("budget file unreadable: OSError")
+
+    monkeypatch.setattr(kit.RunBudget, "_load", unreadable)
+    with pytest.raises(rsp.KitBudgetUnreadable):
+        rsp._spawn_headless("p", rsp.Bounds())
+    assert _no_run_reserved(rsp)
 
 
 def test_a_refused_route_tick_reads_refused(rsp, tmp_path, monkeypatch, trusted):

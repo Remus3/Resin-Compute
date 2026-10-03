@@ -12,6 +12,52 @@ now.
 
 ---
 
+## 2026-10-03 (late) - the /120 counter settled: the binding ledger reports, kit refusals included
+
+RESIDUAL CLOSED. A refusal by the fleet kit's own `RunBudget` (the read-only
+pre-check, or `kit.spawn`'s own "budget" refusal) raised plain
+`RunBudgetSpent`, so the tick status counted from and named `cap_frees_at`
+from the RESPONDER ledger - the wrong ledger, or null and a Backing Off
+when that ledger was empty. Now `KitRunBudgetSpent` ends the fire
+`kit-run-budget` and `_status_budget` reads the kit ledger through its own
+`RunBudget` API. Failing first in `tests/test_headless_env.py`: no
+`KitRunBudgetSpent`, and termination `run-budget` where `kit-run-budget` was
+expected. Mutant (kit branch routed back to the responder ledger) observed
+red on the free time: responder row + 24 h instead of the kit's oldest
+start + 24 h. Neighbour kept: a kit "budget lock busy" still maps to
+`run-locked`. Also `window_s`/`runs_cap` now ship as ints (86400.0 observed
+before). ADVERSARY REFUTED the first cut with two counterexamples, both
+ported fail-first: with BOTH run ledgers full the status named the kit's
+free time about 2 h before the responder ledger freed (now the later of the
+two, with that ledger's counts); and a transient kit read refusal shipped
+"limit" at 5/120 (now Backing Off - a limit needs a full ledger on re-read -
+and an unreadable kit ledger is `KitBudgetUnreadable`, termination
+`usage-backoff`, matched by type before the "budget" string match). Two
+older arms that expected "limit" over a partial ledger were reseeded full.
+ROUND 2 REFUTED two more, ported fail-first: an unreadable kit ledger left
+no durable fail-closed line (now `fail-closed:kit-run-budget-unreadable`);
+and the pre-check read the kit file twice (`readable()` then `can_start()`),
+so a second-read failure reported "(120/120)" at a real 5/120 - now one read
+through the kit's `_load`, then decide. The round-2 probe, run against this
+tree, reads usage-backoff with the fail-closed line on both cases. ROUND 3
+REFUTED the status path: `_status_budget` read the kit ledger twice
+(`used()` then `frees_at()`), so one transient failure shipped a 120/120 kit
+limit at a real 5/120 freeing about 22 h late. Now one `_load` per decision
+there too, and one snapshot of each run ledger per tick; fail-first arms
+counted 2 reads where 1 is required. The wrong-ledger mutant
+(`_status_budget` forced onto the responder ledger), applied in source, was
+killed by 10 arms in `tests/test_headless_env.py`; source restored and
+cmp-identical. ROUND 4 REFUTED one crash: a full kit
+ledger of Infinity stamps made `kit._iso` raise OverflowError out of
+`run_once` every tick, and (pre-existing sibling) one epoch-ms responder row
+crashed the idle write. Ported fail-first (6 arms, all OverflowError or
+OSError escaping); now unprintable stamps make a ledger unreadable and both
+status writers catch OverflowError as a backstop.
+Decision on separate fields and on unifying ledgers recorded in
+`ROADMAP.md` under "THE /120 COUNTER". Uncommitted at writing.
+
+---
+
 ## 2026-10-03 (evening) - FLEET-KIT v4 adopted, the responder spawns through the kit, six backlog slices landed, and a Linux-only CI red closed
 
 FLEET KIT. Every MAIN kit file was hashed against MAIN's outbox at the same

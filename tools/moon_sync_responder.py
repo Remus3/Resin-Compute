@@ -234,6 +234,10 @@ TERMINATIONS = (
     # THE OPERATOR'S HALT SENTINEL IS PRESENT (`halt_sentinel`), so this fire
     # did nothing at all. Checked in `run_once` before the cycle body.
     "halted",
+    # THE FLEET KIT'S OWN RUN BUDGET BOUND, not the responder's. Its own
+    # string because the status file must count and name a free time from
+    # the ledger that bound (`_status_budget`), and the log must say which.
+    "kit-run-budget",
 )
 
 #: Set on the delivered path when the reply LANDED and the answered record did
@@ -724,6 +728,49 @@ class RunLockBusy(RunBudgetSpent):
     """
 
     termination = "run-locked"
+
+
+class KitRunBudgetSpent(RunBudgetSpent):
+    """The fleet kit's `RunBudget` refused, so nothing was started.
+
+    The responder's own ledger may have headroom: the KIT'S ledger is the one
+    that binds, so the status file counts from it and names when ITS oldest
+    start ages out (`_status_budget`), never the responder ledger's.
+    """
+
+    termination = "kit-run-budget"
+
+
+class KitBudgetUnreadable(RunBudgetSpent):
+    """The fleet kit's run-budget record could not be READ, so nothing started.
+
+    Not a spent budget (adversary, 2026-10-03): a transient read error or a
+    corrupt record says nothing about how many runs are counted, so it must
+    never read as a full run cap. It fails closed and retries next tick, so it
+    reuses the `usage-backoff` termination, whose status is Backing Off in the
+    0915 task set; the reason line names the record. NOT `run-locked`, whose
+    status is Idle: a corrupt record that refuses every start would then show
+    as a healthy idle lane.
+    """
+
+    termination = "usage-backoff"
+
+
+#: The fail-closed log token for an unreadable kit run-budget record, beside
+#: its siblings `run-record-unreadable` and `outbound-record-unreadable`. The
+#: cause is either TRANSIENT (measured 2026-10-03: a PermissionError on about
+#: 1 read in 13 under a concurrent writer on this host), which clears by the
+#: next tick, or a CORRUPT record, which the kit refuses on every start until
+#: a person repairs or removes it. The log cannot tell the two apart, so it
+#: says so durably either way, not only as a usage-backoff.
+KIT_BUDGET_UNREADABLE_LOG = "kit-run-budget-unreadable"
+KIT_BUDGET_UNREADABLE_REASON = "the fleet kit's run budget record could not be read"
+
+
+def _kit_budget_unreadable() -> KitBudgetUnreadable:
+    """Log the fail-closed line and return the exception for the caller to raise."""
+    _log_fail_closed(None, KIT_BUDGET_UNREADABLE_LOG)
+    return KitBudgetUnreadable(KIT_BUDGET_UNREADABLE_REASON)
 
 
 class _DraftRefused(ValueError):
@@ -3636,6 +3683,7 @@ _TICK_STATES: dict[str, tuple[str, str]] = {
     "usage-limited": ("backoff", "Backing Off"),
     "usage-backoff": ("backoff", "Backing Off"),
     "run-budget": ("limit", "Turn Limit Reached"),
+    "kit-run-budget": ("limit", "Turn Limit Reached"),
     "run-locked": ("idle", "Idle"),
     "headless-refused": ("refused", "Backing Off"),
 }
@@ -3643,6 +3691,30 @@ MAIN_REPLY_LIMIT_TASK = "Turn Limit Reached"
 
 #: Which ledger the status counts from, for `_status_budget`.
 CAP_RUNS, CAP_MAIN_REPLIES = "runs", "main-replies"
+#: The kit's own `RunBudget` under `_kit_root()`, read only when IT bound.
+CAP_KIT_RUNS = "kit-runs"
+
+
+def _printable_epoch(epoch: float) -> bool:
+    """Whether the kit's status writer can print `epoch` (`kit._iso`).
+
+    ADVERSARY ROUND 4: Infinity, or an epoch-milliseconds stamp written by
+    mistake, made `kit._iso` raise OverflowError out of every status write.
+    """
+    if not isinstance(epoch, (int, float)) or not math.isfinite(epoch) or epoch <= 0:
+        return False
+    try:
+        kit._iso(epoch)
+    except (OSError, OverflowError, ValueError):
+        return False
+    return True
+
+
+def _stamps_printable(stamps: list[float], window: float) -> bool:
+    """Every stamp's age-out time is printable. A ledger failing this is
+    UNREADABLE for every decision that names a time from it: counted as its
+    cap, with no free time, so it is never a limit and never crashes."""
+    return all(_printable_epoch(stamp + window) for stamp in stamps)
 
 
 class _StatusBudget:
@@ -3657,7 +3729,12 @@ class _StatusBudget:
     """
 
     def __init__(self, used: int, cap: int, window: float, frees: float | None) -> None:
-        self.cap, self.window = cap, window
+        # INTS ON THE WIRE: schema 1 says `window_s` and `runs_cap` are <int>,
+        # and the responder's window constants are floats (86400.0 shipped).
+        self.cap, self.window = int(cap), int(window)
+        if frees is not None and not _printable_epoch(frees):
+            # BACKSTOP: an unprintable free time is an unreadable ledger.
+            used, frees = self.cap, None
         self._used, self._frees = used, frees
 
     def used(self) -> int:
@@ -3673,18 +3750,61 @@ def _status_budget(cap: str, now: float) -> _StatusBudget:
     A corrupt ledger counts as the cap and names no time, as the kit does;
     `_write_tick_status` then refuses to call that a limit.
     """
+    if cap == CAP_KIT_RUNS:
+        # ONE READ of the kit ledger (adversary round 3), through the kit's own
+        # parser `_load`, as the pre-check in `_spawn_headless` does. Its public
+        # `used()` and `frees_at()` read the file once EACH and both swallow a
+        # read error, so a transient failure between them mixed a failed count
+        # (the cap) with a real free time: a false limit freeing ~22 h late.
+        # Unreadable counts as the cap with NO free time, exactly as the
+        # branches below do, so `_write_tick_status` never calls it a limit.
+        kit_budget = kit.RunBudget(_kit_root() / kit.BUDGET_REL, clock=lambda: now)
+        try:
+            starts = kit_budget._load()
+        except kit.BudgetUnreadable:
+            return _StatusBudget(kit_budget.cap, kit_budget.cap, kit_budget.window, None)
+        if not _stamps_printable(starts, kit_budget.window):
+            return _StatusBudget(kit_budget.cap, kit_budget.cap, kit_budget.window, None)
+        kit_frees = starts[0] + kit_budget.window if starts else None
+        return _StatusBudget(len(starts), kit_budget.cap, kit_budget.window, kit_frees)
     if cap == CAP_MAIN_REPLIES:
         rows = _outbound_rows(DEFAULT_OUTBOUND, now)
         if rows is None:
             return _StatusBudget(MAX_REPLIES_PER_SENDER, MAX_REPLIES_PER_SENDER, OUTBOUND_WINDOW_SECONDS, None)
         mine = [float(r["at"]) for r in rows if r["to"] == MAIN_CODE]
+        if not _stamps_printable(mine, OUTBOUND_WINDOW_SECONDS):
+            return _StatusBudget(MAX_REPLIES_PER_SENDER, MAX_REPLIES_PER_SENDER, OUTBOUND_WINDOW_SECONDS, None)
         frees = min(mine) + OUTBOUND_WINDOW_SECONDS if mine else None
         return _StatusBudget(len(mine), MAX_REPLIES_PER_SENDER, OUTBOUND_WINDOW_SECONDS, frees)
     runs = _run_rows(DEFAULT_RUNS, now)
-    if runs is None:
+    if runs is None or not _stamps_printable(runs, RUNS_WINDOW_SECONDS):
         return _StatusBudget(MAX_RUNS_PER_DAY, MAX_RUNS_PER_DAY, RUNS_WINDOW_SECONDS, None)
     frees_run = min(runs) + RUNS_WINDOW_SECONDS if runs else None
     return _StatusBudget(len(runs), MAX_RUNS_PER_DAY, RUNS_WINDOW_SECONDS, frees_run)
+
+
+def _binding_run_budget(now: float, runs: _StatusBudget) -> _StatusBudget | None:
+    """Of the TWO run ledgers, the one the lane waits on; None when neither is full.
+
+    RULE (adversary, 2026-10-03): a run starts only when BOTH the responder's
+    ledger and the kit's have headroom, so when both are at cap the lane frees
+    when the LATER of the two frees, and the status reports that ledger whole -
+    its count, cap, window and free time together. A full ledger with no free
+    time (corrupt) is returned as is, so the caller degrades it to a backoff.
+
+    `runs` is the caller's OWN snapshot of the responder ledger, so one tick's
+    decision reads each ledger exactly once (adversary round 3 sibling).
+    """
+    full = [
+        b for b in (runs, _status_budget(CAP_KIT_RUNS, now))
+        if b.used() >= b.cap
+    ]
+    if not full:
+        return None
+    timeless = [b for b in full if b.frees_at() is None]
+    if timeless:
+        return timeless[0]
+    return max(full, key=lambda b: b.frees_at() or 0.0)
 
 
 def _write_tick_status(result: dict | None) -> None:
@@ -3703,7 +3823,19 @@ def _write_tick_status(result: dict | None) -> None:
         and MAIN_CODE in senders_at_cap(DEFAULT_OUTBOUND, time.time())
     ):
         state, task, cap = "limit", MAIN_REPLY_LIMIT_TASK, CAP_MAIN_REPLIES
-    budget = _status_budget(cap, time.time())
+    now = time.time()
+    budget = _status_budget(cap, now)
+    if termination in (RunBudgetSpent.termination, KitRunBudgetSpent.termination):
+        # Whichever ledger refused, report the one the lane actually waits on.
+        # `cap` is CAP_RUNS here: the MAIN-cap override applies only to idle.
+        binding = _binding_run_budget(now, budget)
+        if binding is not None:
+            budget = binding
+    if state == "limit" and budget.used() < budget.cap:
+        # NEVER A LIMIT WITH HEADROOM (adversary, 2026-10-03): a refusal the
+        # ledger re-read does not bear out - a transient read, a race - was
+        # fail-closed, not a cap, and retries next tick.
+        state, task = _TICK_STATES["usage-backoff"]
     if state == "limit" and budget.frees_at() is None:
         # "limit" NEVER SHIPS WITH A NULL cap_frees_at (widget owner's ruling).
         # A binding cap with no computable free time is a corrupt ledger, which
@@ -3716,7 +3848,8 @@ def _write_tick_status(result: dict | None) -> None:
             budget,
             next_tick=time.time() + RESPONDER_TICK_SECONDS,
         )
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, OverflowError) as exc:
+        # OverflowError: a timestamp the writer cannot print (adversary round 4).
         _log_fail_closed(None, f"kit-status-{exc.__class__.__name__}")
 
 
@@ -4300,7 +4433,8 @@ def _write_idle() -> None:
             _status_budget(CAP_RUNS, time.time()),
             next_tick=time.time() + RESPONDER_TICK_SECONDS,
         )
-    except OSError as exc:
+    except (OSError, ValueError, OverflowError) as exc:
+        # Same backstop as `_write_tick_status` (adversary round 4 sibling).
         _log_fail_closed(None, f"kit-status-{exc.__class__.__name__}")
 
 
@@ -4436,16 +4570,34 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
     except kit.Refused:
         raise SpawnFailed("the session command was not found on PATH") from None
 
-    # THE KIT'S BUDGET HAS HEADROOM, checked READ-ONLY through its public API
-    # before the responder's own run is reserved (adversary 4b), so a spent
+    # THE KIT'S BUDGET HAS HEADROOM, checked READ-ONLY - one read through the
+    # kit's own parser, see below - before the responder's own run is
+    # reserved (adversary 4b), so a spent
     # kit budget burns no responder run. ACCEPTED RESIDUAL: a kit refusal that
     # arises BETWEEN these checks and `kit.spawn` - the proxy dying, or another
     # process taking the last kit run - still costs one responder run. That
     # race needs a kit change to close and errs on the side of spawning less.
+    #
+    # ONE READ, then decide (adversary round 2): `readable()` then `can_start()`
+    # read the file twice, and a failure on the second read came back as a
+    # FULL budget "(120/120)" at a real 5/120. The public API cannot tell an
+    # unreadable record from a full one in a single call (`can_start` and
+    # `used` both swallow the error), so the one read is the kit's own
+    # `_load`, the parser every public method uses. Pinned by bytes at v4
+    # (`ops/fleet_kit/MANIFEST.json`); a kit that renames it fails this arm's
+    # tests in `tests/test_headless_env.py` rather than silently misreading.
     kit_budget = kit.RunBudget(_kit_root() / kit.BUDGET_REL)
-    if not kit_budget.can_start():
-        raise RunBudgetSpent(
-            f"the fleet kit's run budget is exhausted ({kit_budget.used()}/{kit_budget.cap})"
+    try:
+        kit_starts = kit_budget._load()
+    except kit.BudgetUnreadable:
+        raise _kit_budget_unreadable() from None
+    if not _stamps_printable(kit_starts, kit_budget.window):
+        # Under the cap the kit would START and then raise OverflowError from
+        # its own status write on this stamp (adversary round 4): unreadable.
+        raise _kit_budget_unreadable()
+    if len(kit_starts) >= kit_budget.cap:
+        raise KitRunBudgetSpent(
+            f"the fleet kit's run budget is exhausted ({len(kit_starts)}/{kit_budget.cap})"
         )
 
     # HALT BEFORE THE RESERVATION (refuted on 46c2b3e): a sentinel that landed
@@ -4487,11 +4639,14 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
             stdin=True,
             halt_file=halt_sentinel(),
         )
+    except kit.BudgetUnreadable:
+        # By TYPE, before the string match below: its text contains "budget".
+        raise _kit_budget_unreadable() from None
     except kit.Refused as exc:
         why = str(exc)
         if "lock busy" in why:
             raise RunLockBusy(why) from None
-        raise (RunBudgetSpent if "budget" in why else HeadlessRefused)(why) from None
+        raise (KitRunBudgetSpent if "budget" in why else HeadlessRefused)(why) from None
     except SpawnFailed:
         raise
     except (OSError, subprocess.SubprocessError) as exc:
