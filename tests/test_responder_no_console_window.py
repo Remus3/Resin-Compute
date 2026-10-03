@@ -208,7 +208,10 @@ def test_the_other_spawn_kwargs_survived(spawned, rsp):
     the exact failure `_spawn_headless`'s own docstring says the timeout exists to
     prevent. So the kwargs the spawn had BEFORE the flag landed are named here.
     """
-    for name in ("input", "capture_output", "text", "timeout", "cwd", "check"):
+    # `check` is no longer passed: since FLEET-KIT v4 the runner is the kit's
+    # own `_run`, a Popen that never raises on a non-zero exit, which is the
+    # property `check=False` used to carry. It is asserted below by value.
+    for name in ("input", "capture_output", "text", "timeout", "cwd"):
         assert name in spawned.kwargs, (
             f"{name} vanished from the spawn - adding the flag must not cost a "
             "pre-existing kwarg"
@@ -216,7 +219,7 @@ def test_the_other_spawn_kwargs_survived(spawned, rsp):
     assert spawned.kwargs["timeout"] == pytest.approx(rsp.Bounds().spawn_timeout_seconds), (
         "the spawn's timeout no longer comes from Bounds"
     )
-    assert spawned.kwargs["check"] is False, "check=False is load-bearing for the failure path"
+    assert spawned.kwargs.get("check", False) is False, "a raising runner would skip the failure path"
 
 
 # ---------------------------------------------------------------------------

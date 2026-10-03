@@ -88,6 +88,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import importlib
 import json
 import logging
 import math
@@ -108,7 +109,13 @@ if str(REPO_ROOT) not in sys.path:
 
 from core import headless_env  # noqa: E402
 from core.atomic_io import atomic_write_json, atomic_write_text, read_json  # noqa: E402
-from ops.fleet_kit import fleet_headless as kit  # noqa: E402
+
+# THE VENDORED KIT, LOADED BY importlib AND TYPED Any. A static import makes
+# mypy follow into `ops/fleet_kit/fleet_headless.py`, which is outside this
+# tree's mypy roots on purpose and is never edited here; v4 carries four
+# `union-attr` findings in `usage_line` that would turn this tree's mypy gate
+# red over bytes it may not touch. Measured 2026-10-03 on the v4 merge.
+kit: Any = importlib.import_module("ops.fleet_kit.fleet_headless")
 
 #: The operator's log. A failed session's RAW output goes here and nowhere a
 #: sibling or a held file can see it.
@@ -1194,29 +1201,6 @@ def pending(
         code = sender_of(child.name)
         if code is None or code == SELF_CODE or code not in opted_in:
             continue
-        # THE FLEET KIT'S NOTE RULE, by NAME ONLY (head=""). RULED, slice B:
-        # the kit's head test damps any body containing TERMINAL (known kit gap
-        # 3), which would eat a MAIN order that merely DISCUSSES the rule. The
-        # body stays with this tree's narrower `is_terminal_note` below. A note
-        # it skips is not recorded anywhere: this filter re-skips it every
-        # cycle, and writing it to the answered record would claim a reply
-        # that was never sent.
-        #
-        # NOT FOR MAIN (RULED, adversary C6 on a04f4c7). The kit's name test is
-        # a case-blind SUBSTRING match, so a MAIN ORDER named for the terminal
-        # rule - `...-fix-the-terminal-rule`, `...-TERMINALS-sweep` - was
-        # skipped forever, silently. MAIN notes are decided by this tree's
-        # narrow `is_terminal_note` below alone, which reads a TERMINAL or
-        # no-reply TOKEN in the name, or a declaration in the body.
-        #
-        # BOTH READERS MUST SAY MAIN (re-check ruling on d363ea3). This tree's
-        # `sender_of` is case-blind and takes the FIRST `-from-XX-`, the kit's
-        # is upper-case only, so `x-from-main-from-RSC-y.md` read MAIN here and
-        # RSC to the kit, and the bypass skipped the kit's SELF-skip. The
-        # bypass now holds only when the kit's own `note_sender` agrees.
-        main_by_both = code == MAIN_CODE and kit.note_sender(child.name) == MAIN_CODE
-        if not main_by_both and kit.should_skip(child.name, SELF_CODE, "") is not None:
-            continue
         if child.name in answered:
             continue
         if since is not None:
@@ -1244,8 +1228,23 @@ def pending(
         text = _read_text(child)
         if is_auto_reply(child.name, text):
             continue
+        # THE FLEET KIT'S NOTE RULE, v4, WITH THE NOTE'S HEAD (MAIN 1204 s7
+        # step 3). v4's `should_skip` damps only a whole TERMINAL / NOREPLY /
+        # NO-REPLY token in the name or a marker-only line, and never an ORDER,
+        # FIX or RULING. MEASURED against every arm here: v4 alone gets each
+        # MAIN case right, so the v3-era workarounds are DELETED - the head=""
+        # call (kit gap 3) and the both-readers-say-MAIN bypass (C6 and the
+        # re-check). A note it skips is not recorded: this filter re-skips it
+        # every cycle, and writing it to the answered record would claim a
+        # reply that was never sent.
+        if kit.should_skip(child.name, SELF_CODE, text[:NOTE_HEAD_CHARS]) is not None:
+            continue
         # LOOP BREAKER (c): never spawn on a note its sender marked TERMINAL or
-        # no-reply. MAIN 0845 makes this a fleet floor.
+        # no-reply. MAIN 0845 makes this a fleet floor. KEPT BESIDE THE KIT:
+        # v4 reads only a marker-ONLY line, so a declaration inside a sentence
+        # - "ACK: read. TERMINAL, no reply wanted." - passes the kit and is
+        # caught here (pinned in tests/test_responder_uniform_budget.py). It
+        # yields to the kit's NEVER_DAMP classes, so an ORDER is never damped.
         if is_terminal_note(child.name, text):
             continue
         out.append(child)
@@ -1269,8 +1268,18 @@ _TERMINAL_BODY = re.compile(
 )
 
 
+#: How much of a note the kit's `should_skip` sees as its head.
+NOTE_HEAD_CHARS = 600
+
+
 def is_terminal_note(name: str, text: str) -> bool:
-    """Whether the sender marked this note TERMINAL / no-reply, by name or body."""
+    """Whether the sender marked this note TERMINAL / no-reply, by name or body.
+
+    Never for an ORDER, FIX or RULING (`kit.NEVER_DAMP`, read from the kit and
+    not restated): fleet law since v4 is that those are never damped.
+    """
+    if kit.note_class(name, text[:NOTE_HEAD_CHARS]) in kit.NEVER_DAMP:
+        return False
     return _TERMINAL_NAME.search(name) is not None or _TERMINAL_BODY.search(text) is not None
 
 
@@ -3884,10 +3893,12 @@ _kit_connect: Callable[..., Any] = socket.create_connection
 
 
 def _claude_exe() -> str:
-    """The kit's resolution of `claude`, through `shutil.which` read at call time."""
-    import shutil
-
-    return str(kit.claude_exe(which=shutil.which))
+    """The kit's own resolution of `claude` (v4): never from the child's working
+    directory, never from a relative or empty PATH entry. The v3-era
+    `which=shutil.which` pass-through is DELETED - it is exactly the lookup v4
+    refuses, since `shutil.which` answers from the working directory first on
+    Windows."""
+    return str(kit.claude_exe(cwd=SPAWN_CWD))
 
 
 #: A usage-limit refusal, as the CLI or the proxy words it. Searched ANYWHERE
@@ -3933,35 +3944,37 @@ def _child_env(env: dict[str, str]) -> dict[str, str]:
     return headless_env.harden_child_env(env, keep=tuple(keep))
 
 
-def _stdin_run(sink: list[subprocess.CompletedProcess], prompt: str) -> Callable[..., Any]:
-    """The `run=` the kit is handed: THE PROMPT GOES ON STDIN, never on argv.
+#: The process runner under the wrapper below: the KIT'S OWN `_run`, which
+#: kills the whole process tree on a timeout. A module attribute so an arm can
+#: substitute it; production never does.
+_kit_runner: Callable[..., Any] = kit._run
 
-    RULED (slice B): the kit's `build_argv` puts the prompt at `argv[2]`, after
-    `-p`. A note is untrusted text and a command line is where untrusted text
-    becomes arguments, and Windows caps a command line at 32767 characters
-    (known kit gap 5). So the prompt is lifted out of argv and written to the
-    child's stdin, which closes both.
 
-    THE LAYOUT IS CHECKED, NOT GUESSED (adversary C3): `argv[1]` must be `-p`
-    AND `argv[2]` must be exactly the prompt this module handed the kit. A
-    kit whose argv moved the prompt is refused before anything starts, so a
-    flag can never be lifted out and fed to stdin in its place.
+def _capturing_run(sink: list[subprocess.CompletedProcess], prompt: str) -> Callable[..., Any]:
+    """The `run=` the kit is handed. KEPT, for two things v4 does not do.
+
+    v4 COVERS THE REST NATIVELY and the local copies are DELETED: the prompt
+    goes on stdin through `spawn(stdin=True)` (no more lifting it out of
+    argv), the child's cwd through `spawn(cwd=)`, and the timeout teardown is
+    the kit's own tree-kill in `kit._run`, which this wrapper calls rather
+    than replaces. What it still adds:
+
+    - THE ENV HARDENING. The kit strips credentials by name; this applies
+      `core.headless_env`'s wider prefix strip (CLAUDECODE, OAuth token,
+      NODE_OPTIONS) on top. `spawn` has no parameter for that.
+    - THE RAW RESULT. `spawn` returns only `result["result"]`, but the gate
+      needs `is_error`, `subtype` and the raw stdout and stderr for the
+      usage-limit phrases, so the finished process is captured here.
+
+    THE STDIN CONTRACT IS CHECKED (adversary C3, restated for v4): the prompt
+    must arrive as `input` and must appear NOWHERE in argv.
     """
 
     def run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
-        if len(argv) < 3 or argv[1] != "-p" or argv[2] != prompt:
-            raise SpawnFailed("the fleet kit argv no longer leads with -p and the prompt")
-        done = subprocess.run(
-            [argv[0], "-p", *argv[3:]],
-            input=argv[2],
-            capture_output=True,
-            text=True,
-            timeout=kwargs.get("timeout"),
-            cwd=str(SPAWN_CWD),
-            check=False,
-            creationflags=_NO_WINDOW,
-            env=_child_env(dict(kwargs.get("env") or {})),
-        )
+        if len(argv) < 2 or argv[1] != "-p" or prompt in argv or kwargs.get("input") != prompt:
+            raise SpawnFailed("the fleet kit did not hand the prompt on stdin alone")
+        kwargs["env"] = _child_env(dict(kwargs.get("env") or {}))
+        done = _kit_runner(argv, **kwargs)
         sink.append(done)
         return done
 
@@ -4075,14 +4088,19 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
     lean flags, and writes the usage line and the lane status. Around it this
     function keeps what the kit does not do:
 
-    - THE PROMPT GOES ON STDIN (`_stdin_run`), never on the command line.
+    - THE PROMPT GOES ON STDIN (`spawn(stdin=True)`), never on the command line;
+      `_capturing_run` adds the env hardening and keeps the raw result.
     - THE PERMISSION FLOOR goes on through `extra=` (`SPAWN_FLOOR`), no Bash.
     - THE PARENT MEASURES what the child no longer can (`repo_facts`).
-    - THE RESPONDER'S OWN RUN BUDGET is reserved too, under its OS lock. KEPT
-      DELIBERATELY: the kit's `RunBudget` reads a corrupt record as empty and
-      overwrites it, and takes no lock, so concurrent processes can exceed its
-      cap. `tests/test_responder_uniform_budget.py` pins fail-closed-on-corrupt,
-      never-overwrite and a cap that real contending processes cannot pass.
+    - THE RESPONDER'S OWN RUN BUDGET is reserved too, under its OS lock. KEPT,
+      RE-MEASURED AGAINST v4: v4's `RunBudget` now fails closed on a corrupt
+      file, never overwrites it, and locks - but its lock is an O_EXCL lock
+      FILE that a dead holder leaves behind (every start then waits and is
+      refused until the 120 s stale-steal), and the steal UNLINKS it.
+      `tests/test_responder_uniform_budget.py` pins both properties v4 still
+      lacks: "a holder that dies frees the lock at once" and "the lock file is
+      never unlinked, no stale-timeout path". The kit's budget still binds
+      inside `spawn`, so both budgets apply.
     - THE TIMEOUT comes from the agreed bounds.
     - NO CONSOLE WINDOW (`_NO_WINDOW`), and a usage-limit backoff.
 
@@ -4094,7 +4112,9 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
         raise UsageBackoff(USAGE_BACKOFF_REASON)
 
     # THE ROUTE, checked BEFORE any budget is spent, with the kit's own
-    # functions; the kit checks again inside `spawn`.
+    # functions; the kit checks again inside `spawn`. NO `pin=`: v4's
+    # `check_url(url, pin=)` is used only when a pin is configured, and this
+    # tree configures none (MAIN 1204 s7 step 3 ruling).
     try:
         host, port = kit.check_url(_kit_url_source())
         kit.probe(host, port, connect=_kit_connect)
@@ -4128,7 +4148,7 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
     full_prompt = prompt
     finished: list[subprocess.CompletedProcess] = []
     try:
-        kit.spawn(
+        line = kit.spawn(
             _kit_root(),
             SELF_CODE,
             full_prompt,
@@ -4138,33 +4158,30 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
             rules_file=RESPONDER_BRIEF,
             timeout=bounds.spawn_timeout_seconds,
             extra=SPAWN_FLOOR,
-            run=_stdin_run(finished, full_prompt),
+            run=_capturing_run(finished, full_prompt),
             url_source=_kit_url_source,
             connect=_kit_connect,
             exe_source=lambda: exe,
+            cwd=SPAWN_CWD,
+            stdin=True,
+            halt_file=halt_sentinel(),
         )
     except kit.Refused as exc:
         why = str(exc)
+        if "lock busy" in why:
+            raise RunLockBusy(why) from None
         raise (RunBudgetSpent if "budget" in why else HeadlessRefused)(why) from None
     except SpawnFailed:
         raise
     except (OSError, subprocess.SubprocessError) as exc:
         # The class of `exc` is used, never its text.
         raise SpawnFailed(exc.__class__.__name__) from None
-    except (AttributeError, TypeError) as exc:
-        # MEASURED (round 7): a JSON ARRAY, STRING or NUMBER on the child's
-        # stdout raises AttributeError INSIDE THE KIT - its `usage_line` calls
-        # `.get` on whatever `json.loads` returned - after the run was counted
-        # and before the usage line is written. A kit defect, reported for v4
-        # and not patched here; this side catches it as a spawn failure.
-        raw = finished[-1].stdout if finished else ""
-        log.warning(
-            "fleet kit raised %s on a non-object session print: %s",
-            exc.__class__.__name__, (raw or "").strip()[:MAX_LOGGED_SESSION_ERROR],
-        )
-        raise SpawnFailed("the session printed JSON that is not an object") from None
     finally:
         _write_idle()
+    if line.get("error") == "timeout":
+        # v4 RETURNS on a timeout, after killing the process tree, instead of
+        # raising; it is still a spawn failure and never a draft.
+        raise SpawnFailed("TimeoutExpired")
     if not finished:
         raise SpawnFailed("the fleet kit returned without running the session")
     done = finished[-1]

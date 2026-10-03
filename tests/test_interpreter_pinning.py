@@ -139,9 +139,24 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
         "config.command, and the config default is built from sys.executable by "
         "default_child_python() in that same file.",
     ),
+    "ops/fleet_kit/fleet_headless.py": (
+        3,
+        "FLEET-KIT v4, vendored and never edited; triaged 2026-10-03 by reading "
+        "each site. _git: git, from the caller or _find_on_path('git'). "
+        "_kill_tree: taskkill.exe under SYSTEMROOT/System32, else "
+        "_find_on_path('taskkill'). _run: Popen of the caller's argv, whose "
+        "head in this tree is the claude executable from claude_exe(). None "
+        "is a Python.",
+    ),
     "scripts/make_shortcut.py": (1, "PowerShell argv built by a helper."),
     "tests/test_commit_trailers.py": (1, "shutil.which of a shell, not a Python."),
     "tests/test_git_env_scrub.py": (2, "argv is a test-local fixture value."),
+    "tests/test_headless_env.py": (
+        1,
+        "kit_route's stand-in for the kit's runner passes the kit-built argv "
+        "to a stubbed subprocess.run; its head is FAKE_EXE, never a Python "
+        "and never launched.",
+    ),
     "tests/test_hook_interpreter.py": (1, "_sh() resolves the POSIX shell under test."),
     "tests/test_interpreter_pinning.py": (
         2,
@@ -159,11 +174,6 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
     "tools/gate_mutation_runner.py": (
         1,
         "suite_argv() builds [sys.executable, -m, pytest, ...] in that file.",
-    ),
-    "tools/moon_sync_responder.py": (
-        1,
-        "the run= wrapper handed to the fleet kit: argv[0] is the claude "
-        "executable the kit resolved through shutil.which, not a Python.",
     ),
     "tools/precommit_gate.py": (
         2,

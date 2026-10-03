@@ -24,7 +24,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
-import shutil
 import socket
 import subprocess
 import time
@@ -106,8 +105,17 @@ def kit_route(rsp, monkeypatch, tmp_path, url=STUB_URL, accept=True, registry=No
     # The parent-side git measurement is stubbed so no arm runs git, and so
     # `subprocess.run` stubs see exactly the one session launch.
     monkeypatch.setattr(rsp, "repo_facts", lambda: "abc1234 a stubbed commit", raising=False)
-    monkeypatch.setattr(shutil, "which", lambda _n: str(ROOT / "fake-claude-shim.cmd"))
+    # v4's `claude_exe` refuses any path inside the child's working directory,
+    # so the stub is an ABSOLUTE path outside the repo that is never launched.
+    monkeypatch.setattr(rsp, "_claude_exe", lambda: str(FAKE_EXE))
+    # The kit's tree-killing runner is replaced by a plain `subprocess.run`
+    # call, so each arm's `subprocess.run` stub still sees the one launch.
+    monkeypatch.setattr(rsp, "_kit_runner", lambda argv, **kw: subprocess.run(argv, **kw))
     return dialer
+
+
+#: Absolute, outside the repo, and never executed: every arm stubs the runner.
+FAKE_EXE = Path(os.path.abspath(os.sep)) / "fake-bin-never-run" / "claude.exe"
 
 
 # ---------------------------------------------------------------------------
@@ -461,20 +469,27 @@ def test_the_prompt_goes_on_stdin_and_never_on_argv(rsp, routed, monkeypatch):
     assert run.args[1] == "-p"
 
 
-def test_the_kit_argv_layout_is_checked_not_guessed(rsp, monkeypatch):
+def test_the_stdin_contract_is_checked_not_guessed(rsp, monkeypatch):
+    """C3, restated for v4: the kit hands the prompt through `stdin=True`, and
+    the wrapper refuses unless the prompt is the `input` and is NOWHERE in argv."""
     run = Run()
-    monkeypatch.setattr(subprocess, "run", run)
-    wrapper = rsp._stdin_run([], "the prompt")
+    monkeypatch.setattr(rsp, "_kit_runner", run)
+    wrapper = rsp._capturing_run([], "the prompt")
     with pytest.raises(rsp.SpawnFailed):
-        wrapper(["claude", "--print-something", "x"], env={}, timeout=1)
-    assert run.calls == 0
-    # C3: `-p` in place is not enough - argv[2] must BE the prompt handed over.
+        wrapper(["claude", "--print-something"], env={}, timeout=1, input="the prompt")
     with pytest.raises(rsp.SpawnFailed):
-        wrapper(["claude", "-p", "--model", "sonnet", "the prompt"], env={}, timeout=1)
+        wrapper(["claude", "-p", "the prompt", "--model", "sonnet"], env={}, timeout=1)
+    with pytest.raises(rsp.SpawnFailed):
+        wrapper(["claude", "-p", "--model", "sonnet"], env={}, timeout=1, input="other")
     assert run.calls == 0
-    # Non-vacuity: the kit's real layout passes.
-    wrapper(["claude", "-p", "the prompt", "--model", "sonnet"], env={}, timeout=1)
+    # Non-vacuity: v4's stdin layout passes.
+    wrapper(["claude", "-p", "--model", "sonnet"], env={}, timeout=1, input="the prompt")
     assert run.calls == 1 and run.kwargs["input"] == "the prompt"
+
+
+def test_the_production_runner_is_the_kits_tree_killing_run(rsp):
+    """v4 covers the timeout teardown; the wrapper delegates to it."""
+    assert rsp._kit_runner is kit._run
 
 
 def test_the_argv_is_bare_with_the_brief_and_the_permission_floor(rsp, routed, monkeypatch):
@@ -586,21 +601,29 @@ def _note(inbox: Path, name: str, body: str = "please measure\n") -> Path:
 
 
 def test_a_main_order_discussing_terminal_in_its_body_is_still_queued(rsp, tmp_path):
-    """Gap 3: the kit's head test would damp this; head="" keeps it."""
+    """v4 (MAIN 1204): the kit now reads the head and still keeps this - a body
+    SENTENCE that mentions the rule is not a marker. The v3 head="" call is gone."""
     inbox = tmp_path / "inbox"
     body = "TO RSC.\nNever spawn on a note marked TERMINAL. A reply IS requested.\n"
     kept = _note(inbox, "2026-10-03-1100-from-MAIN-order.md", body)
-    assert kit.should_skip(kept.name, "RSC", body) == "terminal", "non-vacuity: the kit would damp it"
+    assert kit.should_skip(kept.name, "RSC", body) is None
     assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
 
 
-def test_the_kit_damps_a_terminal_substring_in_a_name(rsp, tmp_path):
-    """RECORDED OVER-DAMP: the kit matches TERMINAL as a substring of the name,
-    so `terminals` is skipped. Accepted - fleet law, and the safe side."""
+def test_v4_no_longer_damps_a_terminal_substring_in_a_name(rsp, tmp_path):
+    """The v3 over-damp is gone: `terminals` is not the TERMINAL token."""
     inbox = tmp_path / "inbox"
-    _note(inbox, "2026-10-03-1101-from-RC-terminals-and-replies.md")
+    plural = _note(inbox, "2026-10-03-1101-from-RC-terminals-and-replies.md")
     kept = _note(inbox, "2026-10-03-1102-from-RC-question.md")
-    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [plural, kept]
+
+
+def test_a_whole_terminal_token_or_a_marker_line_is_still_damped(rsp, tmp_path):
+    """The neighbour v4 must still catch, through the kit's call with a head."""
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-03-1103-from-RC-ANSWER-x-TERMINAL.md")
+    _note(inbox, "2026-10-03-1104-from-RC-answer.md", "# From RC - ANSWER\nTERMINAL\n")
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
 
 
 # ---------------------------------------------------------------------------
@@ -729,17 +752,13 @@ def test_node_options_never_reaches_the_child():
     ],
 )
 def test_a_main_order_is_not_damped_by_the_kits_name_test(rsp, tmp_path, name):
-    """C6: for MAIN the kit's substring name test is not applied; this tree's
-    narrow check decides. Each of these is an ORDER, not a declaration."""
+    """C6 under v4: an ORDER is never damped, by the kit (NEVER_DAMP) and by
+    this tree's own check, which now yields to the kit's classes. MEASURED: v4
+    alone gets each case right, so the both-readers-say-MAIN bypass is gone."""
     inbox = tmp_path / "inbox"
     kept = _note(inbox, name, "TO RSC. Do the thing; a reply is requested.\n")
-    assert kit.should_skip(name, "RSC", "") == "terminal", "non-vacuity: the kit would damp it"
-    if "no-reply" in name:
-        # This tree's own check treats a hyphenated no-reply token as a
-        # declaration, so this one stays skipped - recorded, not hidden.
-        assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
-    else:
-        assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
+    assert kit.should_skip(name, "RSC", "") is None
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
 
 
 def test_a_main_note_that_declares_terminal_is_still_skipped(rsp, tmp_path):
@@ -1040,18 +1059,59 @@ def test_a_non_object_json_print_is_a_spawn_failure(rsp, routed, monkeypatch, ra
 
 
 @pytest.mark.parametrize("raw", ['["a", "b"]', '"just a string"'], ids=["array", "string"])
-def test_measured_the_kit_itself_raises_on_a_non_object_print(tmp_path, raw):
-    """MEASUREMENT for the kit v4 report, not a property of this tree: the
-    kit's `usage_line` calls `.get` on whatever `json.loads` returned, so a
-    non-empty JSON array or string raises AttributeError out of `spawn` after
-    the run was counted. If a kit version fixes it, this arm goes red and the
-    note to MAIN can be dropped."""
+def test_v4_survives_a_non_object_print(tmp_path, raw):
+    """FLIPPED for v4 (MAIN 1204): `usage_line` no longer calls `.get` on a
+    non-object result, so the kit returns a line with result None instead of
+    raising. This tree's own catch for that raise is DELETED; `_session_result`
+    still refuses the print as a draft (the arm above)."""
 
     def run(argv, **kwargs):
         return subprocess.CompletedProcess(argv, 0, stdout=raw, stderr="")
 
-    with pytest.raises(AttributeError):
-        kit.spawn(
-            tmp_path, "RSC", "p", run=run,
-            url_source=lambda: STUB_URL, connect=Dialer(), exe_source=lambda: "claude",
-        )
+    line = kit.spawn(
+        tmp_path, "RSC", "p", run=run, stdin=True,
+        url_source=lambda: STUB_URL, connect=Dialer(), exe_source=lambda: str(FAKE_EXE),
+    )
+    assert line["result"] is None and line["rc"] == 0
+
+
+# ---------------------------------------------------------------------------
+# FLEET-KIT v4 native parameters (MAIN 1204 s7 step 3).
+# ---------------------------------------------------------------------------
+
+
+def test_the_kit_is_handed_the_halt_sentinel(rsp, routed, monkeypatch):
+    """`halt_file=` is native in v4: a HALT that lands after the tick's own
+    check is still honoured by the kit, before anything starts."""
+    run = Run()
+    monkeypatch.setattr(subprocess, "run", run)
+    sentinel = rsp.halt_sentinel()
+    sentinel.parent.mkdir(parents=True, exist_ok=True)
+    sentinel.write_text("halt\n")
+    with pytest.raises(rsp.HeadlessRefused) as info:
+        rsp._spawn_headless("p", rsp.Bounds())
+    assert "halt" in str(info.value)
+    assert run.calls == 0
+
+
+def test_the_kit_is_handed_stdin_and_the_spawn_cwd(rsp, routed, monkeypatch):
+    run = Run()
+    monkeypatch.setattr(subprocess, "run", run)
+    rsp._spawn_headless("p", rsp.Bounds())
+    assert run.kwargs["input"] == "p"
+    assert run.kwargs["cwd"] == str(rsp.SPAWN_CWD)
+    assert "p" not in run.args
+
+
+def test_v4_budget_still_lacks_dead_holder_release_so_the_responders_is_kept(tmp_path):
+    """MEASURED, the reason the responder's own budget is KEPT: a lock FILE a
+    dead holder left behind blocks every v4 start until the stale-steal, where
+    the responder's OS lock frees at once (tests/test_responder_uniform_budget.py).
+    If a kit version releases a dead holder's lock at once, this goes red."""
+    budget = kit.RunBudget(tmp_path / "budget.json", lock_wait=0.2, lock_stale=3600.0)
+    lock = tmp_path / "budget.json.lock"
+    lock.write_text("left by a dead process\n")
+    with pytest.raises(kit.Refused):
+        budget.start()
+    assert lock.exists()
+
