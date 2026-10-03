@@ -366,7 +366,10 @@ class _Run:
     def __call__(self, *args, **kwargs):
         self.calls += 1
         return subprocess.CompletedProcess(
-            args=args[0], returncode=0, stdout=json.dumps({"result": "draft"}), stderr=""
+            args=args[0], returncode=0, stderr="",
+            stdout=json.dumps(
+                {"type": "result", "subtype": "success", "is_error": False, "result": "draft"}
+            ),
         )
 
 
