@@ -704,6 +704,18 @@ class RunBudgetSpent(SpawnFailed):
     termination = "run-budget"
 
 
+class HaltedBeforeSpawn(RunBudgetSpent):
+    """The operator's HALT sentinel appeared after the tick's own check.
+
+    Raised by `_spawn_headless` immediately before `kit.spawn` (ruling on the
+    refutation of 6f9dda2), so a HALT that lands mid-tick starts no session.
+    A `RunBudgetSpent` subclass so the spawn site's ONE existing handler maps
+    it, to the `halted` termination the status file already renders.
+    """
+
+    termination = "halted"
+
+
 class RunLockBusy(RunBudgetSpent):
     """Another responder process holds the run lock, so nothing was started.
 
@@ -1311,11 +1323,13 @@ def provenance_map(queue: list[Path], roots: dict[str, Path]) -> dict[str, Prove
     different file. A second hash of a file another process can swap is a
     second, unrelated measurement.
 
-    RESIDUAL, RECORDED AND NOT FIXED (round-2 security adversary, 2026-10-03):
-    a byte-identical RE-DROP of an UNANSWERED MAIN note gets a fresh mtime, so
-    it passes the window filter again and verifies MATCH again - the bytes are
-    genuinely MAIN's. It is bounded by `MAX_REPLIES_PER_SENDER` replies to MAIN
-    per rolling day, and an ANSWERED name never bypasses (`bypass_queue`).
+    RE-DROPS, CLOSED BY CONTENT HASH (S3, 2026-10-03; was a recorded residual
+    from the round-2 security adversary). A byte-identical re-drop of a MAIN
+    note gets a fresh mtime and verifies MATCH again - the bytes are genuinely
+    MAIN's - so the window filter and the verdict cannot tell it from new mail.
+    `drop_redrops` can: the answered record and the refusal rows carry the
+    sha256 this map computed, and bytes already answered or held under another
+    name are not picked again. `MAX_REPLIES_PER_SENDER` still bounds the rest.
     """
     return {
         n.name: main_provenance(n, roots) for n in queue if sender_of(n.name) == MAIN_CODE
@@ -1775,6 +1789,9 @@ PROVENANCE_PREFIX = "[RSC-PROVENANCE]"
 PROVENANCE_TOKEN = "rsc-provenance"
 PROVENANCE_FORGED_REASON = "the session wrote the responder's provenance token, which only the responder may write"
 PROVENANCE_MISSING_REASON = "a reply to MAIN must carry exactly one provenance line, the responder's own"
+#: A canonical-form token (see `_canonical_token_text`) anywhere but the one
+#: real provenance line - a lookalike, or separator-only prose. Ruled wording.
+PROVENANCE_OUTSIDE_REASON = "provenance token outside the provenance line"
 
 #: The most leading lines `addresses_self` treats as a note's HEADER, even with
 #: no `## ` heading or `---` rule to end it. MAIN's house format puts its
@@ -2072,9 +2089,58 @@ def verified_body(note: Path, verdicts: dict[str, Provenance]) -> str | None:
     return None if prov is None or prov.body is None else _decode_note(prov.body)
 
 
+#: The canonical token: `PROVENANCE_TOKEN` with everything but [a-z0-9] gone.
+_CANONICAL_TOKEN = "".join(c for c in PROVENANCE_TOKEN if c.isalnum())
+
+#: The confusable map, applied after NFKC and casefold. Digits a lookalike puts
+#: for a letter, and the Cyrillic and Greek letters that render as Latin ones.
+#: Code points are built with chr() so this file stays 7-bit ASCII.
+_CONFUSABLES = str.maketrans(
+    {
+        "0": "o", "1": "l", "3": "e", "4": "a", "5": "s",
+        # Cyrillic a e o p c y x k m t h b i j s
+        chr(0x430): "a", chr(0x435): "e", chr(0x43E): "o", chr(0x440): "p",
+        chr(0x441): "c", chr(0x443): "y", chr(0x445): "x", chr(0x43A): "k",
+        chr(0x43C): "m", chr(0x442): "t", chr(0x43D): "h", chr(0x432): "b",
+        chr(0x456): "i", chr(0x458): "j", chr(0x455): "s", chr(0x44C): "b",
+        # Greek alpha epsilon omicron rho nu kappa tau iota upsilon chi
+        chr(0x3B1): "a", chr(0x3B5): "e", chr(0x3BF): "o", chr(0x3C1): "p",
+        chr(0x3BD): "v", chr(0x3BA): "k", chr(0x3C4): "t", chr(0x3B9): "i",
+        chr(0x3C5): "u", chr(0x3C7): "x",
+    }
+)
+
+
+def _canonical_token_text(text: str) -> str:
+    """`text` in the CANONICAL form the token is counted in.
+
+    RULED on the adversary's refutation of 6f9dda2, replacing a list of
+    lookalikes that could not be finished: NFKC, casefold, `_CONFUSABLES`, then
+    EVERY character not in [a-z0-9] is deleted - separators, punctuation,
+    brackets, combining marks, variation selectors, bidi controls, zero-width
+    characters and every line separator `str.splitlines` knows. Applied to the
+    WHOLE text joined, so no separator of any kind can split a token.
+    """
+    import unicodedata
+
+    folded = unicodedata.normalize("NFKC", text).casefold().translate(_CONFUSABLES)
+    return "".join(c for c in folded if "a" <= c <= "z" or "0" <= c <= "9")
+
+
+def _token_count(text: str) -> int:
+    """How many canonical provenance tokens `text` carries."""
+    return _canonical_token_text(text).count(_CANONICAL_TOKEN)
+
+
 def _carries_token(text: str) -> bool:
-    """Whether `text` carries the provenance token, any case, CR normalised."""
-    return PROVENANCE_TOKEN in text.replace("\r\n", "\n").replace("\r", "\n").lower()
+    """Whether `text` carries the provenance token in ANY spelling.
+
+    Counted in `_canonical_token_text`'s form over the whole text. STATED COST,
+    accepted by ruling: prose that runs RSC into provenance with only
+    separators between - `RSC/provenance`, `the RSC provenance line`, `TO RSC.
+    Provenance verified` - is refused, with `PROVENANCE_OUTSIDE_REASON`.
+    """
+    return _token_count(text) > 0
 
 
 def stamp_reply(draft: str, line: str | None, bounds: Bounds) -> str:
@@ -2109,15 +2175,25 @@ def provenance_reasons(
     so a bare CR or a form feed counts as a break. The missing-line reason is
     only added when the session's draft was otherwise sendable, so an empty
     draft stays `exhausted`.
+
+    (d) THE CANONICAL COUNT (ruling on the refutation of 6f9dda2). The session
+    draft must carry ZERO canonical tokens; the exact token is `FORGED`, any
+    other spelling `PROVENANCE_OUTSIDE_REASON`. A MAIN reply's FINAL text must
+    carry exactly as many canonical tokens as the one real line contributes,
+    counted over the WHOLE text joined, so no separator can split one away.
     """
     reasons: list[str] = []
-    if _carries_token(child):
+    if PROVENANCE_TOKEN in child.lower():
         reasons.append(PROVENANCE_FORGED_REASON)
+    elif _carries_token(child):
+        reasons.append(PROVENANCE_OUTSIDE_REASON)
     if line is not None and not validate_draft(child, bounds or Bounds()):
         lines = final.splitlines()
         hits = [ln for ln in lines if PROVENANCE_TOKEN in ln.lower()]
         if hits != [line] or len(lines) < 2 or lines[1] != line:
             reasons.append(PROVENANCE_MISSING_REASON)
+        if _token_count(final) != _token_count(line) and PROVENANCE_OUTSIDE_REASON not in reasons:
+            reasons.append(PROVENANCE_OUTSIDE_REASON)
     return reasons
 
 
@@ -2642,9 +2718,138 @@ def _remember_answered(path: Path, name: str) -> bool:
     usable, _why = answered_usable(path)
     if not usable:
         return False
-    return atomic_write_json(
-        path, {"version": 1, "answered": sorted(_answered(path) | {name})}
-    )
+    names = _answered(path) | {name}
+    return atomic_write_json(path, _answered_doc(names, _answered_hashes(path)))
+
+
+#: The answered record's map of note name -> sha256 of the bytes that were
+#: answered, beside the name list. Absent until a MAIN note is answered.
+ANSWERED_SHA_KEY = "sha256"
+
+
+def _answered_doc(names: set[str], hashes: dict[str, str]) -> dict:
+    """The answered document. The hash map is kept only for answered names."""
+    doc: dict[str, Any] = {"version": 1, "answered": sorted(names)}
+    kept = {n: h for n, h in sorted(hashes.items()) if n in names}
+    if kept:
+        doc[ANSWERED_SHA_KEY] = kept
+    return doc
+
+
+def _answered_hashes(path: Path) -> dict[str, str]:
+    """name -> sha256 from the answered record. Unreadable degrades to empty."""
+    payload = read_json(path, default=None) if path.is_file() else None
+    raw = payload.get(ANSWERED_SHA_KEY) if isinstance(payload, dict) else None
+    if not isinstance(raw, dict):
+        return {}
+    return {n: h for n, h in raw.items() if isinstance(n, str) and isinstance(h, str)}
+
+
+def _remember_answered_sha(path: Path, name: str, sha: str | None) -> bool:
+    """Record the content hash of a note already in the answered record.
+
+    A SEPARATE WRITE, after `_remember_answered`, so that line - a bound gate
+    anchor - keeps its exact text. None (a non-MAIN note: no bytes were hashed
+    once for it) and a name not yet answered both write nothing.
+    """
+    if sha is None or not answered_usable(path)[0]:
+        return False
+    names = _answered(path)
+    if name not in names:
+        return False
+    return atomic_write_json(path, _answered_doc(names, {**_answered_hashes(path), name: sha}))
+
+
+def _content_sha(note: Path, verdicts: dict[str, Provenance]) -> str | None:
+    """The sha256 to RECORD for `note`: only when its verdict is MATCH, else None.
+
+    REFUTED ON 6f9dda2 (adversary probe pb.py): recording any verdict's hash let
+    a sibling plant real note X's bytes under an old MAIN name Z whose outbox
+    copy differs. Z verified MISMATCH, was answered as data, and its hash then
+    suppressed X. Only bytes MAIN's outbox vouches for under THAT name may feed
+    `drop_redrops`; MISMATCH, NOT-ADDRESSED and UNVERIFIABLE never do.
+    """
+    prov = verdicts.get(note.name)
+    if prov is None or prov.body is None or prov.verdict != PROVENANCE_MATCH:
+        return None
+    return prov.inbox_sha256
+
+
+def _inbox_sha(note: Path, verdicts: dict[str, Provenance]) -> str | None:
+    """The sha256 of the inbox bytes hashed for `note`, whatever the verdict.
+
+    Used only to MATCH a candidate against hashes already recorded, which are
+    MATCH-only by `_content_sha`; it never feeds a record.
+    """
+    prov = verdicts.get(note.name)
+    return None if prov is None or prov.body is None else prov.inbox_sha256
+
+
+def backfill_answered_hashes(path: Path, inbox: Path, roots: dict[str, Path]) -> int:
+    """Hash answered MAIN names that predate the sha map, IF they verify MATCH NOW.
+
+    A one-time, lazy migration: a name in the answered record with no hash is
+    hashed only while its inbox file still exists AND `main_provenance` says
+    MATCH for it now; anything else stays unhashed and is retried next cycle.
+    One write through `atomic_write_json` when at least one name landed, and
+    none otherwise, so an unverified record is never rewritten. Returns how
+    many names were hashed.
+    """
+    if not path.is_file() or not answered_usable(path)[0]:
+        return 0
+    names = _answered(path)
+    hashes = _answered_hashes(path)
+    added: dict[str, str] = {}
+    for name in sorted(names - set(hashes)):
+        if sender_of(name) != MAIN_CODE:
+            continue
+        note = inbox / name
+        try:
+            if not note.is_file():
+                continue
+        except OSError:
+            continue
+        sha = _content_sha(note, {name: main_provenance(note, roots)})
+        if sha is not None:
+            added[name] = sha
+    if not added:
+        return 0
+    if not atomic_write_json(path, _answered_doc(names, {**hashes, **added})):
+        return 0
+    return len(added)
+
+
+def content_seen(answered: Path, refusals: Path) -> dict[str, set[str]]:
+    """sha256 -> the note names already ANSWERED or HELD with those bytes."""
+    seen: dict[str, set[str]] = {}
+    for name, sha in _answered_hashes(answered).items():
+        seen.setdefault(sha, set()).add(name)
+    for name, row in _refusals(refusals).items():
+        sha = row.get(ANSWERED_SHA_KEY)
+        if isinstance(sha, str):
+            seen.setdefault(sha, set()).add(name)
+    return seen
+
+
+def drop_redrops(
+    queue: list[Path], verdicts: dict[str, Provenance], seen: dict[str, set[str]]
+) -> list[Path]:
+    """`queue` without any note whose bytes ANOTHER name was answered or held with.
+
+    S3 residual (b), RULED: a byte-identical re-drop of a MAIN note - a fresh
+    name or a fresh mtime over bytes already answered or already held - must
+    NOT re-spend a reply. Keyed by CONTENT HASH, the one `provenance_map`
+    computed, never by mtime. A note's OWN record never excludes it: a held
+    note stays eligible, as `pending` requires, and only its copies drop.
+    Notes with no hashed bytes (every non-MAIN sender) pass unchanged.
+    """
+    kept: list[Path] = []
+    for n in queue:
+        sha = _inbox_sha(n, verdicts)
+        if sha is not None and seen.get(sha, set()) - {n.name}:
+            continue
+        kept.append(n)
+    return kept
 
 
 def refusal_key(name: str, reasons: list[str]) -> str:
@@ -2893,8 +3098,13 @@ def _remember_refusal(
     agreement: str,
     bounced: bool,
     stamp: float,
+    sha256: str | None = None,
 ) -> bool:
     """Record one refusal. Bounded by literal caps, oldest note evicted first.
+
+    `sha256` is the content hash of the refused note's verified bytes (MAIN
+    only), so `drop_redrops` can refuse a byte-identical copy of a HELD note.
+    Appended at the END with a default, per this module's convention.
 
     EVICTION HERE CAN ONLY COST A DUPLICATE HOLD, never a duplicate bounce. The
     bounce ledger is a separate top-level block scoped to the agreement and is
@@ -2911,6 +3121,8 @@ def _remember_refusal(
         fingerprints.append(key)
     row["fingerprints"] = fingerprints[-MAX_REFUSAL_FINGERPRINTS:]
     row["last"] = stamp
+    if sha256 is not None:
+        row[ANSWERED_SHA_KEY] = sha256
     count = row.get("count")
     row["count"] = (count if isinstance(count, int) else 0) + 1
     if bounced and name not in notes and len(notes) < MAX_BOUNCED_NOTES:
@@ -3379,11 +3591,22 @@ def halt_sentinel() -> Path:
 
 
 def _halt_requested() -> bool:
-    """True when the sentinel is present. FAILS CLOSED: unreadable means halted."""
+    """True when ANY entry named HALT is present. FAILS CLOSED.
+
+    BY `os.lstat`, NOT `exists()` (S3 item f, the ruling S4 made for
+    `headless/runner.py`): `exists()` follows a link, so a DANGLING HALT
+    symlink read as go, and on 3.14 it swallows OSError itself, so the
+    fail-closed branch never ran and an unreadable sentinel read as go too.
+    Only FileNotFoundError or NotADirectoryError means go; any other error
+    means halted.
+    """
     try:
-        return halt_sentinel().exists()
+        os.lstat(halt_sentinel())
+    except (FileNotFoundError, NotADirectoryError):
+        return False
     except OSError:
         return True
+    return True
 
 
 def _halted_result(grammar: str) -> dict:
@@ -3400,6 +3623,14 @@ def _halted_result(grammar: str) -> dict:
 #: per-sender reply cap - is state "limit" with task "Turn Limit Reached";
 #: which cap binds is told by cap_frees_at and the log, never by a private
 #: task name. A refused route retries next tick, so it reads "Backing Off".
+#:
+#: THE HOP BUDGET IS DELIBERATELY ABSENT, so its `budget` termination reads
+#: "idle" / "Idle" with `next_tick` (widget owner's ruling, 2026-10-03). State
+#: "limit" must never ship with `cap_frees_at` null, and the hop budget never
+#: ages out: it counts responder-tagged notes in the inbox (`hops_used`). It is
+#: a loop breaker rather than a quota, and a MATCH-verified MAIN note bypasses
+#: it (`bypass_queue`), so the lane is not stopped by it. The invocation log's
+#: `budget` line is where it is recorded.
 _TICK_STATES: dict[str, tuple[str, str]] = {
     "halted": ("halted", "Halted"),
     "usage-limited": ("backoff", "Backing Off"),
@@ -3409,6 +3640,51 @@ _TICK_STATES: dict[str, tuple[str, str]] = {
     "headless-refused": ("refused", "Backing Off"),
 }
 MAIN_REPLY_LIMIT_TASK = "Turn Limit Reached"
+
+#: Which ledger the status counts from, for `_status_budget`.
+CAP_RUNS, CAP_MAIN_REPLIES = "runs", "main-replies"
+
+
+class _StatusBudget:
+    """What `kit.write_status` reads from its `budget` argument, from THIS
+    responder's own ledgers (MAIN 1325 FIX).
+
+    `used()`, `cap` and `window` come from the BINDING cap's own ledger: the
+    runs in `DEFAULT_RUNS` against `MAX_RUNS_PER_DAY`, or the replies to MAIN
+    in `DEFAULT_OUTBOUND` against `MAX_REPLIES_PER_SENDER`. `frees_at()` is the
+    epoch the oldest counted row ages out. Duck-typed to the kit's
+    `RunBudget`, so the kit is called with its own parameters and not edited.
+    """
+
+    def __init__(self, used: int, cap: int, window: float, frees: float | None) -> None:
+        self.cap, self.window = cap, window
+        self._used, self._frees = used, frees
+
+    def used(self) -> int:
+        return self._used
+
+    def frees_at(self) -> float | None:
+        return self._frees
+
+
+def _status_budget(cap: str, now: float) -> _StatusBudget:
+    """The binding ledger's count, cap, window, and when its oldest row ages out.
+
+    A corrupt ledger counts as the cap and names no time, as the kit does;
+    `_write_tick_status` then refuses to call that a limit.
+    """
+    if cap == CAP_MAIN_REPLIES:
+        rows = _outbound_rows(DEFAULT_OUTBOUND, now)
+        if rows is None:
+            return _StatusBudget(MAX_REPLIES_PER_SENDER, MAX_REPLIES_PER_SENDER, OUTBOUND_WINDOW_SECONDS, None)
+        mine = [float(r["at"]) for r in rows if r["to"] == MAIN_CODE]
+        frees = min(mine) + OUTBOUND_WINDOW_SECONDS if mine else None
+        return _StatusBudget(len(mine), MAX_REPLIES_PER_SENDER, OUTBOUND_WINDOW_SECONDS, frees)
+    runs = _run_rows(DEFAULT_RUNS, now)
+    if runs is None:
+        return _StatusBudget(MAX_RUNS_PER_DAY, MAX_RUNS_PER_DAY, RUNS_WINDOW_SECONDS, None)
+    frees_run = min(runs) + RUNS_WINDOW_SECONDS if runs else None
+    return _StatusBudget(len(runs), MAX_RUNS_PER_DAY, RUNS_WINDOW_SECONDS, frees_run)
 
 
 def _write_tick_status(result: dict | None) -> None:
@@ -3420,17 +3696,24 @@ def _write_tick_status(result: dict | None) -> None:
     """
     termination = (result or {}).get("termination", "crashed")
     state, task = _TICK_STATES.get(termination, ("idle", "Idle"))
+    cap = CAP_RUNS
     if (
         state == "idle"
         and (result or {}).get("note") is None
         and MAIN_CODE in senders_at_cap(DEFAULT_OUTBOUND, time.time())
     ):
-        state, task = "limit", MAIN_REPLY_LIMIT_TASK
+        state, task, cap = "limit", MAIN_REPLY_LIMIT_TASK, CAP_MAIN_REPLIES
+    budget = _status_budget(cap, time.time())
+    if state == "limit" and budget.frees_at() is None:
+        # "limit" NEVER SHIPS WITH A NULL cap_frees_at (widget owner's ruling).
+        # A binding cap with no computable free time is a corrupt ledger, which
+        # counts as the cap and retries next tick - so it reads as a backoff.
+        state, task = _TICK_STATES["usage-backoff"]
     root = _kit_root()
     try:
         kit.write_status(
             root, SELF_CODE, state, task, time.time(),
-            kit.RunBudget(root / kit.BUDGET_REL),
+            budget,
             next_tick=time.time() + RESPONDER_TICK_SECONDS,
         )
     except (OSError, ValueError) as exc:
@@ -3546,6 +3829,10 @@ def _run_once(
     # the cycle: ordering, the bypass, the reply line and the prompt body all
     # read this map.
     verdicts = provenance_map(candidates, roots)
+    # RE-DROPS KEYED BY CONTENT HASH (S3 residual b): bytes already answered or
+    # held under another name are not picked again, whatever their mtime.
+    backfill_answered_hashes(DEFAULT_ANSWERED, inbox, roots)
+    candidates = drop_redrops(candidates, verdicts, content_seen(DEFAULT_ANSWERED, DEFAULT_REFUSALS))
     queue = bypass_queue(main_first(candidates, verdicts, bounced), verdicts, bypass_only, answered)
     # GATE:empty-queue
     if not queue:
@@ -3712,7 +3999,8 @@ def _run_once(
         # necessary: that crash fired AFTER the bounce had gone out, so the
         # delivery happened and the record of it never did.
         recorded = _remember_refusal(
-            DEFAULT_REFUSALS, note.name, reasons, agreement, False, started
+            DEFAULT_REFUSALS, note.name, reasons, agreement, False, started,
+            _content_sha(note, verdicts),
         )
         # GATE:refusal-recorded
         if not recorded:
@@ -3786,6 +4074,9 @@ def _run_once(
         if not _remember_answered(DEFAULT_ANSWERED, note.name):
             print(f"responder: {ANSWERED_NOT_RECORDED}")
             result["reasons"] = [ANSWERED_NOT_RECORDED]
+        # THE CONTENT HASH, so a byte-identical re-drop under another name never
+        # spends a second reply (`drop_redrops`). A no-op for a non-MAIN note.
+        _remember_answered_sha(DEFAULT_ANSWERED, note.name, _content_sha(note, verdicts))
 
     finished = time.time()
     record_cycle(
@@ -4006,7 +4297,7 @@ def _write_idle() -> None:
     try:
         kit.write_status(
             _kit_root(), SELF_CODE, "idle", "Idle", None,
-            kit.RunBudget(_kit_root() / kit.BUDGET_REL),
+            _status_budget(CAP_RUNS, time.time()),
             next_tick=time.time() + RESPONDER_TICK_SECONDS,
         )
     except OSError as exc:
@@ -4167,6 +4458,10 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
     # ABOVE the note (`build_prompt`); nothing is appended after the note.
     full_prompt = prompt
     finished: list[subprocess.CompletedProcess] = []
+    # HALT AGAIN, immediately before the session: the tick checked once at its
+    # start, and a sentinel that landed since must still mean no spawn.
+    if _halt_requested():
+        raise HaltedBeforeSpawn("the operator's HALT sentinel is present")
     try:
         line = kit.spawn(
             _kit_root(),

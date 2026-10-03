@@ -986,6 +986,75 @@ def test_a_halt_sentinel_halts_the_tick_and_says_so(rsp, tmp_path, trusted):
     assert "halted" in rsp.TERMINATIONS
 
 
+def test_a_dangling_halt_symlink_still_halts(rsp, tmp_path):
+    """S3 item (f): `exists()` follows the link, so a dangling HALT read as go."""
+    sentinel = rsp.halt_sentinel()
+    assert tmp_path in sentinel.parents, sentinel
+    sentinel.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.symlink(tmp_path / "no-such-target", sentinel)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"this host cannot create a symlink ({type(exc).__name__}), so a dangling HALT cannot be staged")
+    assert not sentinel.exists() and os.path.lexists(sentinel), "the arm staged no dangling link"
+    assert rsp._halt_requested() is True
+
+
+def test_a_halt_that_lands_after_the_tick_check_stops_the_spawn(
+    rsp, routed, monkeypatch, tmp_path, trusted
+):
+    """Refuted on 6f9dda2: the HALT check ran once per tick, so a sentinel that
+    appeared between that check and `kit.spawn` still launched a session."""
+    run = Run()
+    monkeypatch.setattr(subprocess, "run", run)
+    real_reserve = rsp.reserve_run
+
+    def reserve_then_halt(path, now):
+        sentinel = rsp.halt_sentinel()
+        sentinel.parent.mkdir(parents=True, exist_ok=True)
+        sentinel.write_text("halt\n")
+        return real_reserve(path, now)
+
+    monkeypatch.setattr(rsp, "reserve_run", reserve_then_halt)
+    result = _armed_cycle(rsp, tmp_path)
+
+    assert run.calls == 0, "a session launched after the HALT sentinel appeared"
+    assert result["termination"] == "halted", result
+    status = _status(rsp)
+    assert status["state"] == "halted" and status["task"] == "Halted", status
+
+
+def test_a_halt_directory_halts_and_an_absent_one_does_not(rsp):
+    """Any ENTRY named HALT halts; nothing there is the one plain go."""
+    sentinel = rsp.halt_sentinel()
+    sentinel.parent.mkdir(parents=True, exist_ok=True)
+    assert rsp._halt_requested() is False, "an absent sentinel halted: the arms below prove nothing"
+    sentinel.mkdir()
+    assert rsp._halt_requested() is True
+
+
+@pytest.mark.parametrize(
+    ("error", "halted"),
+    [
+        (FileNotFoundError, False),
+        (NotADirectoryError, False),
+        (PermissionError, True),
+        (OSError, True),
+    ],
+)
+def test_only_a_missing_entry_reads_as_go(rsp, monkeypatch, error, halted):
+    """FAIL CLOSED by lstat: on 3.14 `exists()` swallowed every OSError as go."""
+    real_lstat = os.lstat
+    target = os.fspath(rsp.halt_sentinel())
+
+    def lstat(path, *args, **kwargs):
+        if os.fspath(path) == target:
+            raise error("staged")
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(rsp.os, "lstat", lstat)
+    assert rsp._halt_requested() is halted, error
+
+
 def test_a_backoff_tick_reads_backing_off(rsp, tmp_path, trusted):
     rsp.DEFAULT_BACKOFF.parent.mkdir(parents=True, exist_ok=True)
     rsp.DEFAULT_BACKOFF.write_text(json.dumps({"until": time.time() + 3600}))
@@ -999,6 +1068,9 @@ def test_a_spent_budget_tick_reads_turn_limit_reached(rsp, tmp_path, trusted):
     def spawn(prompt, bounds):
         raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
 
+    # A real spent budget has rows to age out; with none, "limit" would ship
+    # a null cap_frees_at, which the widget owner ruled out.
+    _seed_runs(rsp, [time.time() - 60])
     _armed_cycle(rsp, tmp_path, spawn=spawn)
     status = _status(rsp)
     assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
@@ -1022,6 +1094,7 @@ def test_a_main_reply_limit_tick_is_a_limit_with_an_allowed_task_name(rsp, tmp_p
     # other name as [?] (operator report, 2026-10-03). Which cap binds is the
     # state plus cap_frees_at, never a private task name.
     assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
+    assert status["cap_frees_at"] is not None, "the MAIN cap's free time is missing"
 
 
 #: MAIN 0915 section 1, verbatim: the minimum set plus the stream refinements.
@@ -1041,6 +1114,179 @@ def test_every_status_task_name_is_in_the_main_0915_set(rsp):
     too_long = sorted(n for n in names if len(n) > 24)
     assert not outside, f"task names outside MAIN 0915: {outside}"
     assert not too_long, f"task names over 24 chars: {too_long}"
+
+
+def test_every_write_status_call_passes_a_tabled_task(rsp):
+    """AST sweep: every `kit.write_status` call site passes either a 0915 literal
+    or the local `task`, whose every assignment reads the table or the constant."""
+    import ast
+
+    tree = ast.parse(Path(rsp.__file__).read_text(encoding="ascii"))
+    calls = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "write_status"
+    ]
+    assert len(calls) >= 2, "non-vacuity: the sweep found no status writes"
+    for call in calls:
+        arg = call.args[3]
+        if isinstance(arg, ast.Constant):
+            assert arg.value in MAIN_0915_TASK_NAMES, arg.value
+        else:
+            assert isinstance(arg, ast.Name) and arg.id == "task", ast.dump(arg)
+    func = next(
+        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_write_tick_status"
+    )
+    sources = [
+        ast.unparse(node.value) for node in ast.walk(func)
+        if isinstance(node, ast.Assign)
+        and any("task" in ast.unparse(t).split(", ") for t in node.targets)
+    ]
+    assert sources, "non-vacuity: no assignment to task"
+    for text in sources:
+        assert "_TICK_STATES" in text or "MAIN_REPLY_LIMIT_TASK" in text, text
+
+
+# MAIN 1325 FIX: the status file must name WHEN a binding cap frees, and count
+# the runs the responder actually reserved in its own record, against its cap.
+
+
+def _seed_main_cap(rsp, stamps):
+    rsp.DEFAULT_OUTBOUND.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_OUTBOUND.write_text(json.dumps(
+        {"version": 1, "replies": [{"to": "MAIN", "at": at} for at in stamps]}
+    ))
+
+
+def _seed_runs(rsp, stamps):
+    rsp.DEFAULT_RUNS.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_RUNS.write_text(json.dumps({"version": 1, "runs": list(stamps)}))
+
+
+def test_a_main_reply_limit_tick_names_when_the_oldest_reply_ages_out(rsp, tmp_path, trusted):
+    from tests.test_moon_sync_responder import _agree
+
+    _agree(rsp)
+    now = time.time()
+    oldest = now - 3600
+    _seed_main_cap(rsp, [now - 60, oldest, now - 600])
+    _seed_runs(rsp, [now - 120, now - 30])
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-03-1700-from-MAIN-ORDER-x.md", "TO RSC. do it\n")
+
+    rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
+    status = _status(rsp)
+
+    assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
+    assert status["cap_frees_at"] == kit._iso(oldest + rsp.OUTBOUND_WINDOW_SECONDS), status
+    # The BINDING cap's own ledger: replies to MAIN in its window, not runs.
+    assert status["runs_in_window"] == 3, status
+    assert status["runs_cap"] == rsp.MAX_REPLIES_PER_SENDER
+    assert status["window_s"] == rsp.OUTBOUND_WINDOW_SECONDS
+
+
+def test_a_run_budget_tick_names_when_the_oldest_run_ages_out(rsp, tmp_path, trusted):
+    now = time.time()
+    oldest = now - 7200
+    _seed_runs(rsp, [now - 60, oldest])
+
+    def spawn(prompt, bounds):
+        raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
+
+    _armed_cycle(rsp, tmp_path, spawn=spawn)
+    status = _status(rsp)
+    assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
+    assert status["cap_frees_at"] == kit._iso(oldest + rsp.RUNS_WINDOW_SECONDS), status
+    assert status["runs_in_window"] == 2 and status["runs_cap"] == rsp.MAX_RUNS_PER_DAY
+
+
+def test_a_hop_budget_tick_reads_idle_not_limit(rsp, tmp_path, trusted):
+    """The hop budget never ages out, so it is NOT a limit: "limit" may never
+    ship with a null cap_frees_at. It reads Idle with next_tick, and the
+    invocation log's `budget` line records why."""
+    from tests.test_moon_sync_responder import _agree
+
+    _agree(rsp)
+    _seed_runs(rsp, [time.time() - 60])
+    inbox = tmp_path / "inbox"
+    for i in range(rsp.Bounds().max_hops):
+        _note(inbox, f"2026-10-03-17{i:02d}-from-RSC-reply.md", rsp.RESPONDER_TAG + "\nx\n")
+
+    result = rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
+    status = _status(rsp)
+
+    assert result["termination"] == "budget", result
+    assert status["state"] == "idle" and status["task"] == "Idle", status
+    assert status["next_tick"] is not None, status
+    log = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines()
+    assert log[-1].endswith("\tbudget"), "the hop-limit reason is not in the log"
+
+
+def _budget_spent_spawn(rsp):
+    """A session stand-in that reports the run budget spent."""
+
+    def spawn(prompt, bounds):
+        raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
+
+    return spawn
+
+
+def _limit_path_main(rsp, tmp_path):
+    from tests.test_moon_sync_responder import _agree
+
+    _agree(rsp)
+    now = time.time()
+    _seed_main_cap(rsp, [now - 10 * (i + 1) for i in range(rsp.MAX_REPLIES_PER_SENDER)])
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-03-1700-from-MAIN-ORDER-x.md", "TO RSC. do it\n")
+    rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
+    return rsp.MAX_REPLIES_PER_SENDER, rsp.MAX_REPLIES_PER_SENDER, rsp.OUTBOUND_WINDOW_SECONDS
+
+
+def _limit_path_runs(rsp, tmp_path):
+    now = time.time()
+    _seed_runs(rsp, [now - 10 * (i + 1) for i in range(rsp.MAX_RUNS_PER_DAY)])
+    _armed_cycle(rsp, tmp_path, spawn=_budget_spent_spawn(rsp))
+    return rsp.MAX_RUNS_PER_DAY, rsp.MAX_RUNS_PER_DAY, rsp.RUNS_WINDOW_SECONDS
+
+
+@pytest.mark.parametrize("path", [_limit_path_main, _limit_path_runs], ids=["main-replies", "run-budget"])
+def test_every_limit_path_names_a_free_time_from_its_own_ledger(rsp, tmp_path, trusted, path):
+    """INVARIANT (widget owner, 2026-10-03): state "limit" never ships with a
+    null cap_frees_at, and its counts come from the binding cap's ledger."""
+    used, cap, window = path(rsp, tmp_path)
+    status = _status(rsp)
+    assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
+    assert status["cap_frees_at"] is not None, status
+    assert (status["runs_in_window"], status["runs_cap"], status["window_s"]) == (used, cap, window)
+
+
+@pytest.mark.parametrize("record", ["DEFAULT_RUNS", "DEFAULT_OUTBOUND"])
+def test_a_limit_with_no_computable_free_time_never_reads_limit(rsp, tmp_path, trusted, record):
+    """Non-vacuity for the invariant: a corrupt ledger counts as the cap and has
+    no free time, so the tick reads Backing Off rather than a timeless limit."""
+    target = getattr(rsp, record)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("{not json")
+    if record == "DEFAULT_OUTBOUND":
+        from tests.test_moon_sync_responder import _agree
+
+        _agree(rsp)
+        rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds(armed=True))
+    else:
+        _armed_cycle(rsp, tmp_path, spawn=_budget_spent_spawn(rsp))
+    status = _status(rsp)
+    assert status["state"] != "limit" or status["cap_frees_at"] is not None, status
+    assert status["state"] == "backoff" and status["task"] == "Backing Off", status
+
+
+def test_an_idle_tick_counts_the_responders_own_runs(rsp, tmp_path):
+    now = time.time()
+    _seed_runs(rsp, [now - 100, now - 50, now - 10])
+    rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
+    status = _status(rsp)
+    assert status["runs_in_window"] == 3 and status["runs_cap"] == rsp.MAX_RUNS_PER_DAY, status
+    assert not (rsp._kit_root() / kit.BUDGET_REL).exists(), "non-vacuity: the kit record is absent"
 
 
 def test_a_refused_route_tick_reads_refused(rsp, tmp_path, monkeypatch, trusted):
@@ -1104,9 +1350,14 @@ def test_v4_survives_a_non_object_print(tmp_path, raw):
 
 def test_the_kit_is_handed_the_halt_sentinel(rsp, routed, monkeypatch):
     """`halt_file=` is native in v4: a HALT that lands after the tick's own
-    check is still honoured by the kit, before anything starts."""
+    check is still honoured by the kit, before anything starts.
+
+    The responder's own pre-spawn HALT check (S3 f) is stubbed off here, so this
+    arm still proves the KIT is handed the sentinel - the second, inner check.
+    """
     run = Run()
     monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(rsp, "_halt_requested", lambda: False)
     sentinel = rsp.halt_sentinel()
     sentinel.parent.mkdir(parents=True, exist_ok=True)
     sentinel.write_text("halt\n")
