@@ -986,6 +986,51 @@ def test_a_halt_sentinel_halts_the_tick_and_says_so(rsp, tmp_path, trusted):
     assert "halted" in rsp.TERMINATIONS
 
 
+def test_a_dangling_halt_symlink_still_halts(rsp, tmp_path):
+    """S3 item (f): `exists()` follows the link, so a dangling HALT read as go."""
+    sentinel = rsp.halt_sentinel()
+    assert tmp_path in sentinel.parents, sentinel
+    sentinel.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.symlink(tmp_path / "no-such-target", sentinel)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"this host cannot create a symlink ({type(exc).__name__}), so a dangling HALT cannot be staged")
+    assert not sentinel.exists() and os.path.lexists(sentinel), "the arm staged no dangling link"
+    assert rsp._halt_requested() is True
+
+
+def test_a_halt_directory_halts_and_an_absent_one_does_not(rsp):
+    """Any ENTRY named HALT halts; nothing there is the one plain go."""
+    sentinel = rsp.halt_sentinel()
+    sentinel.parent.mkdir(parents=True, exist_ok=True)
+    assert rsp._halt_requested() is False, "an absent sentinel halted: the arms below prove nothing"
+    sentinel.mkdir()
+    assert rsp._halt_requested() is True
+
+
+@pytest.mark.parametrize(
+    ("error", "halted"),
+    [
+        (FileNotFoundError, False),
+        (NotADirectoryError, False),
+        (PermissionError, True),
+        (OSError, True),
+    ],
+)
+def test_only_a_missing_entry_reads_as_go(rsp, monkeypatch, error, halted):
+    """FAIL CLOSED by lstat: on 3.14 `exists()` swallowed every OSError as go."""
+    real_lstat = os.lstat
+    target = os.fspath(rsp.halt_sentinel())
+
+    def lstat(path, *args, **kwargs):
+        if os.fspath(path) == target:
+            raise error("staged")
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(rsp.os, "lstat", lstat)
+    assert rsp._halt_requested() is halted, error
+
+
 def test_a_backoff_tick_reads_backing_off(rsp, tmp_path, trusted):
     rsp.DEFAULT_BACKOFF.parent.mkdir(parents=True, exist_ok=True)
     rsp.DEFAULT_BACKOFF.write_text(json.dumps({"until": time.time() + 3600}))

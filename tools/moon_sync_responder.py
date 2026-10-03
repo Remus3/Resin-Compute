@@ -1311,11 +1311,13 @@ def provenance_map(queue: list[Path], roots: dict[str, Path]) -> dict[str, Prove
     different file. A second hash of a file another process can swap is a
     second, unrelated measurement.
 
-    RESIDUAL, RECORDED AND NOT FIXED (round-2 security adversary, 2026-10-03):
-    a byte-identical RE-DROP of an UNANSWERED MAIN note gets a fresh mtime, so
-    it passes the window filter again and verifies MATCH again - the bytes are
-    genuinely MAIN's. It is bounded by `MAX_REPLIES_PER_SENDER` replies to MAIN
-    per rolling day, and an ANSWERED name never bypasses (`bypass_queue`).
+    RE-DROPS, CLOSED BY CONTENT HASH (S3, 2026-10-03; was a recorded residual
+    from the round-2 security adversary). A byte-identical re-drop of a MAIN
+    note gets a fresh mtime and verifies MATCH again - the bytes are genuinely
+    MAIN's - so the window filter and the verdict cannot tell it from new mail.
+    `drop_redrops` can: the answered record and the refusal rows carry the
+    sha256 this map computed, and bytes already answered or held under another
+    name are not picked again. `MAX_REPLIES_PER_SENDER` still bounds the rest.
     """
     return {
         n.name: main_provenance(n, roots) for n in queue if sender_of(n.name) == MAIN_CODE
@@ -2072,9 +2074,85 @@ def verified_body(note: Path, verdicts: dict[str, Provenance]) -> str | None:
     return None if prov is None or prov.body is None else _decode_note(prov.body)
 
 
+#: Digits a lookalike puts where a letter of the token belongs.
+_LOOKALIKE_DIGITS = str.maketrans({"0": "o", "5": "s", "3": "e", "4": "a"})
+
+#: The token's letters with whatever separates them stripped - the FOLDED form.
+_FOLDED_TOKEN = "".join(c for c in PROVENANCE_TOKEN if c.isalpha())
+
+#: One letter of the folded token, or a non-ASCII letter standing in for it.
+#: `*` is what `_fold_token_text` writes for a non-ASCII letter.
+_FOLDED_PATTERN = re.compile("".join(f"[{c}*]" for c in _FOLDED_TOKEN))
+
+#: Joiners that fold away OUTSIDE brackets. Whitespace and sentence punctuation
+#: are deliberately absent: they are word boundaries in prose, and `TO RSC.
+#: Provenance verified.` must not read as a token.
+_TOKEN_JOINERS = frozenset("-_~*`'\"|+=/\\")
+
+#: A bracketed span short enough to be a tag. Inside one, EVERY non-letter
+#: folds away, so `[RSC PROVENANCE]` and `[RSC.PROVENANCE]` are the token.
+_BRACKETED = re.compile(r"\[([^\[\]]{1,40})\]")
+
+
+def _fold_token_text(text: str, joiners: frozenset[str] | None = None) -> str:
+    """`text` reduced to the shape a token lookalike shares with the token.
+
+    NFKC first (fullwidth letters become ASCII), then case is folded and the
+    digits in `_LOOKALIKE_DIGITS` become the letters they imitate. ASCII letters
+    are kept; a non-ASCII letter NFKC could not map - a Cyrillic or Greek
+    homoglyph - becomes the wildcard `*`; format characters (zero-width space
+    and joiners, category Cf) are dropped. Any other character is dropped when
+    `joiners` is None or holds it, and otherwise ENDS the run as a space.
+    """
+    import unicodedata
+
+    out: list[str] = []
+    for ch in unicodedata.normalize("NFKC", text).lower().translate(_LOOKALIKE_DIGITS):
+        if "a" <= ch <= "z":
+            out.append(ch)
+        elif ord(ch) > 127 and ch.isalpha():
+            out.append("*")
+        elif unicodedata.category(ch) == "Cf" or joiners is None or ch in joiners:
+            continue
+        else:
+            out.append(" ")
+    return "".join(out)
+
+
+def _line_has_lookalike(line: str) -> bool:
+    """Whether one line carries a folded lookalike of the provenance token."""
+    import unicodedata
+
+    if _FOLDED_PATTERN.search(_fold_token_text(line, _TOKEN_JOINERS)):
+        return True
+    bracketed = _BRACKETED.findall(unicodedata.normalize("NFKC", line))
+    return any(_FOLDED_PATTERN.search(_fold_token_text(span)) for span in bracketed)
+
+
 def _carries_token(text: str) -> bool:
-    """Whether `text` carries the provenance token, any case, CR normalised."""
-    return PROVENANCE_TOKEN in text.replace("\r\n", "\n").replace("\r", "\n").lower()
+    """Whether `text` carries the provenance token OR A LOOKALIKE OF IT.
+
+    REFUTED AS AN EXACT SUBSTRING TEST (S3 residual, 2026-10-03): the old rule
+    was `rsc-provenance` in the lowercased text, so `[RSC-PR0VENANCE]`,
+    `[RSC_PROVENANCE]`, `[RSC PROVENANCE]`, a fullwidth spelling, a Cyrillic
+    `o` and a zero-width space inside the token all passed, and an ASCII one
+    reached MAIN as a second "verdict" line beside the responder's real one.
+    The draft-level ascii rule caught the non-ASCII ones; this rule now refuses
+    them ON ITS OWN, so the two are independent.
+
+    THE FOLD IS PER LINE, split as `str.splitlines` splits - the way
+    `provenance_reasons` splits - so letters on two lines never join.
+    Outside brackets only `_TOKEN_JOINERS` fold away, so prose keeps its word
+    boundaries: `the RSC provenance line` and `TO RSC. Provenance verified.`
+    are not tokens. Inside a short `[...]` span every non-letter folds away.
+    STATED COST, fail-closed direction: prose writing `RSC_provenance` or
+    `[RSC provenance]` is refused, and the session is told never to write the
+    tag in any form.
+    """
+    for line in text.splitlines():
+        if PROVENANCE_TOKEN in line.lower() or _line_has_lookalike(line):
+            return True
+    return False
 
 
 def stamp_reply(draft: str, line: str | None, bounds: Bounds) -> str:
@@ -2115,7 +2193,7 @@ def provenance_reasons(
         reasons.append(PROVENANCE_FORGED_REASON)
     if line is not None and not validate_draft(child, bounds or Bounds()):
         lines = final.splitlines()
-        hits = [ln for ln in lines if PROVENANCE_TOKEN in ln.lower()]
+        hits = [ln for ln in lines if _carries_token(ln)]
         if hits != [line] or len(lines) < 2 or lines[1] != line:
             reasons.append(PROVENANCE_MISSING_REASON)
     return reasons
@@ -2642,9 +2720,85 @@ def _remember_answered(path: Path, name: str) -> bool:
     usable, _why = answered_usable(path)
     if not usable:
         return False
-    return atomic_write_json(
-        path, {"version": 1, "answered": sorted(_answered(path) | {name})}
-    )
+    names = _answered(path) | {name}
+    return atomic_write_json(path, _answered_doc(names, _answered_hashes(path)))
+
+
+#: The answered record's map of note name -> sha256 of the bytes that were
+#: answered, beside the name list. Absent until a MAIN note is answered.
+ANSWERED_SHA_KEY = "sha256"
+
+
+def _answered_doc(names: set[str], hashes: dict[str, str]) -> dict:
+    """The answered document. The hash map is kept only for answered names."""
+    doc: dict[str, Any] = {"version": 1, "answered": sorted(names)}
+    kept = {n: h for n, h in sorted(hashes.items()) if n in names}
+    if kept:
+        doc[ANSWERED_SHA_KEY] = kept
+    return doc
+
+
+def _answered_hashes(path: Path) -> dict[str, str]:
+    """name -> sha256 from the answered record. Unreadable degrades to empty."""
+    payload = read_json(path, default=None) if path.is_file() else None
+    raw = payload.get(ANSWERED_SHA_KEY) if isinstance(payload, dict) else None
+    if not isinstance(raw, dict):
+        return {}
+    return {n: h for n, h in raw.items() if isinstance(n, str) and isinstance(h, str)}
+
+
+def _remember_answered_sha(path: Path, name: str, sha: str | None) -> bool:
+    """Record the content hash of a note already in the answered record.
+
+    A SEPARATE WRITE, after `_remember_answered`, so that line - a bound gate
+    anchor - keeps its exact text. None (a non-MAIN note: no bytes were hashed
+    once for it) and a name not yet answered both write nothing.
+    """
+    if sha is None or not answered_usable(path)[0]:
+        return False
+    names = _answered(path)
+    if name not in names:
+        return False
+    return atomic_write_json(path, _answered_doc(names, {**_answered_hashes(path), name: sha}))
+
+
+def _content_sha(note: Path, verdicts: dict[str, Provenance]) -> str | None:
+    """sha256 of the bytes the provenance check HASHED for `note`, or None."""
+    prov = verdicts.get(note.name)
+    return None if prov is None or prov.body is None else prov.inbox_sha256
+
+
+def content_seen(answered: Path, refusals: Path) -> dict[str, set[str]]:
+    """sha256 -> the note names already ANSWERED or HELD with those bytes."""
+    seen: dict[str, set[str]] = {}
+    for name, sha in _answered_hashes(answered).items():
+        seen.setdefault(sha, set()).add(name)
+    for name, row in _refusals(refusals).items():
+        sha = row.get(ANSWERED_SHA_KEY)
+        if isinstance(sha, str):
+            seen.setdefault(sha, set()).add(name)
+    return seen
+
+
+def drop_redrops(
+    queue: list[Path], verdicts: dict[str, Provenance], seen: dict[str, set[str]]
+) -> list[Path]:
+    """`queue` without any note whose bytes ANOTHER name was answered or held with.
+
+    S3 residual (b), RULED: a byte-identical re-drop of a MAIN note - a fresh
+    name or a fresh mtime over bytes already answered or already held - must
+    NOT re-spend a reply. Keyed by CONTENT HASH, the one `provenance_map`
+    computed, never by mtime. A note's OWN record never excludes it: a held
+    note stays eligible, as `pending` requires, and only its copies drop.
+    Notes with no hashed bytes (every non-MAIN sender) pass unchanged.
+    """
+    kept: list[Path] = []
+    for n in queue:
+        sha = _content_sha(n, verdicts)
+        if sha is not None and seen.get(sha, set()) - {n.name}:
+            continue
+        kept.append(n)
+    return kept
 
 
 def refusal_key(name: str, reasons: list[str]) -> str:
@@ -2893,8 +3047,13 @@ def _remember_refusal(
     agreement: str,
     bounced: bool,
     stamp: float,
+    sha256: str | None = None,
 ) -> bool:
     """Record one refusal. Bounded by literal caps, oldest note evicted first.
+
+    `sha256` is the content hash of the refused note's verified bytes (MAIN
+    only), so `drop_redrops` can refuse a byte-identical copy of a HELD note.
+    Appended at the END with a default, per this module's convention.
 
     EVICTION HERE CAN ONLY COST A DUPLICATE HOLD, never a duplicate bounce. The
     bounce ledger is a separate top-level block scoped to the agreement and is
@@ -2911,6 +3070,8 @@ def _remember_refusal(
         fingerprints.append(key)
     row["fingerprints"] = fingerprints[-MAX_REFUSAL_FINGERPRINTS:]
     row["last"] = stamp
+    if sha256 is not None:
+        row[ANSWERED_SHA_KEY] = sha256
     count = row.get("count")
     row["count"] = (count if isinstance(count, int) else 0) + 1
     if bounced and name not in notes and len(notes) < MAX_BOUNCED_NOTES:
@@ -3379,11 +3540,22 @@ def halt_sentinel() -> Path:
 
 
 def _halt_requested() -> bool:
-    """True when the sentinel is present. FAILS CLOSED: unreadable means halted."""
+    """True when ANY entry named HALT is present. FAILS CLOSED.
+
+    BY `os.lstat`, NOT `exists()` (S3 item f, the ruling S4 made for
+    `headless/runner.py`): `exists()` follows a link, so a DANGLING HALT
+    symlink read as go, and on 3.14 it swallows OSError itself, so the
+    fail-closed branch never ran and an unreadable sentinel read as go too.
+    Only FileNotFoundError or NotADirectoryError means go; any other error
+    means halted.
+    """
     try:
-        return halt_sentinel().exists()
+        os.lstat(halt_sentinel())
+    except (FileNotFoundError, NotADirectoryError):
+        return False
     except OSError:
         return True
+    return True
 
 
 def _halted_result(grammar: str) -> dict:
@@ -3546,6 +3718,9 @@ def _run_once(
     # the cycle: ordering, the bypass, the reply line and the prompt body all
     # read this map.
     verdicts = provenance_map(candidates, roots)
+    # RE-DROPS KEYED BY CONTENT HASH (S3 residual b): bytes already answered or
+    # held under another name are not picked again, whatever their mtime.
+    candidates = drop_redrops(candidates, verdicts, content_seen(DEFAULT_ANSWERED, DEFAULT_REFUSALS))
     queue = bypass_queue(main_first(candidates, verdicts, bounced), verdicts, bypass_only, answered)
     # GATE:empty-queue
     if not queue:
@@ -3712,7 +3887,8 @@ def _run_once(
         # necessary: that crash fired AFTER the bounce had gone out, so the
         # delivery happened and the record of it never did.
         recorded = _remember_refusal(
-            DEFAULT_REFUSALS, note.name, reasons, agreement, False, started
+            DEFAULT_REFUSALS, note.name, reasons, agreement, False, started,
+            _content_sha(note, verdicts),
         )
         # GATE:refusal-recorded
         if not recorded:
@@ -3786,6 +3962,9 @@ def _run_once(
         if not _remember_answered(DEFAULT_ANSWERED, note.name):
             print(f"responder: {ANSWERED_NOT_RECORDED}")
             result["reasons"] = [ANSWERED_NOT_RECORDED]
+        # THE CONTENT HASH, so a byte-identical re-drop under another name never
+        # spends a second reply (`drop_redrops`). A no-op for a non-MAIN note.
+        _remember_answered_sha(DEFAULT_ANSWERED, note.name, _content_sha(note, verdicts))
 
     finished = time.time()
     record_cycle(
