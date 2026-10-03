@@ -298,6 +298,12 @@ python -m ops.supervisor                         # the same worker, supervised
 python -m surface --port 8791                    # the dashboard
 ```
 
+A live `--once` pass now holds a machine-wide lane slot, exactly as each daemon
+pass does. When the bucket is full it waits roughly 300 seconds plus one retry
+interval - the governor checks its deadline and then sleeps 2 to 4 seconds
+before trying again, so the wait overruns the timeout by up to about 4 seconds -
+and then fails with exit code 1; `--dry-run` takes no slot.
+
 Under the supervisor, writing any content to `restart_trigger.txt` triggers a
 restart within about five seconds. Confirm it came back by reading the health
 file for a new pid, never by looking at a window:
