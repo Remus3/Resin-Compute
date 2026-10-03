@@ -17,6 +17,7 @@ reporting the mutation and not a defect in the copying.
 from __future__ import annotations
 
 import importlib.util
+import json
 import shutil
 from pathlib import Path
 from types import ModuleType
@@ -106,8 +107,39 @@ def test_a_mutated_claude_md_is_reported(tmp_path, old, new, expected):
     assert expected in KIT.conformance(root)
 
 
-def test_an_edited_kit_file_is_reported(tmp_path):
+#: The files kit v4 pins, per the MAIN 1204 ORDER. v4 added LICENSE and NOTICE
+#: (Apache-2.0, holder the operator) to v3's two files.
+V4_PINNED_FILES = ("FLEET-COMMON.md", "LICENSE", "NOTICE", "fleet_headless.py")
+
+
+def test_the_vendored_kit_is_v4_and_pins_its_licence_files():
+    """The ORDER adopted is v4; a v5 drop must update this arm deliberately."""
+    manifest = json.loads((KIT_DIR / "MANIFEST.json").read_text(encoding="ascii"))
+    assert KIT.KIT_VERSION == 4
+    assert manifest["version"] == 4
+    assert tuple(sorted(manifest["files"])) == V4_PINNED_FILES
+
+
+@pytest.mark.parametrize("name", V4_PINNED_FILES)
+def test_an_edited_kit_file_is_reported(tmp_path, name):
     root = _scratch_copy(tmp_path)
-    target = root / "ops" / "fleet_kit" / "fleet_headless.py"
+    target = root / "ops" / "fleet_kit" / name
     target.write_bytes(target.read_bytes() + b"\n# local edit\n")
-    assert "kit file missing or edited: fleet_headless.py" in KIT.conformance(root)
+    assert f"kit file missing or edited: {name}" in KIT.conformance(root)
+
+
+@pytest.mark.parametrize("name", ("LICENSE", "NOTICE"))
+def test_a_deleted_licence_file_is_reported(tmp_path, name):
+    """Apache-2.0 s4(a) and s4(d): the grant must travel with the code."""
+    root = _scratch_copy(tmp_path)
+    (root / "ops" / "fleet_kit" / name).unlink()
+    assert f"kit file missing or edited: {name}" in KIT.conformance(root)
+
+
+def test_a_manifest_version_mismatch_is_reported(tmp_path):
+    root = _scratch_copy(tmp_path)
+    path = root / "ops" / "fleet_kit" / "MANIFEST.json"
+    data = path.read_bytes()
+    assert b'"version": 4' in data, "mutation target absent - this mutant would be a no-op"
+    path.write_bytes(data.replace(b'"version": 4', b'"version": 3', 1))
+    assert "manifest v3 != kit v4" in KIT.conformance(root)
