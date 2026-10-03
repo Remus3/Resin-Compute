@@ -1329,3 +1329,132 @@ def test_the_anchor_check_catches_a_partial_enumeration_the_floor_cannot():
         assert anchor in got.reason, (
             f"the failure does not name the missing anchor: {got.reason}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Inbound - the vendored FLEET-KIT carries its own Apache-2.0 grant
+# ---------------------------------------------------------------------------
+#
+# MAIN's FLEET-KIT is vendored byte-for-byte at ops/fleet_kit/ (MAIN 1204
+# ORDER, kit v4). Since v4 the kit ships its OWN `LICENSE` (the Apache-2.0
+# text) and `NOTICE` (holder: the operator), and both are pinned by the kit's
+# MANIFEST.json. That makes this tree carry a SECOND licence file, which is
+# correct: Apache-2.0 section 4(a) requires the licence travel with the code
+# and section 4(d) requires the NOTICE be retained. Apache-2.0 into a
+# GPL-3.0-or-later work is one-way compatible, so the outbound root `LICENSE`
+# is unaffected and every outbound arm above still reads only the root files.
+#
+# The exemption is NAMED, one directory, with its reason. A second grant file
+# anywhere else in the tree is still a contradiction of the root `LICENSE` and
+# goes red below.
+
+KIT_DIR = REPO_ROOT / "ops" / "fleet_kit"
+
+#: Directories other than the root where a licence-grant file may be tracked,
+#: each with the reason. Named one at a time for the same reason as
+#: QUOTATION_EXEMPT: an exemption by glob widens on its own.
+SECOND_GRANT_DIRS = {
+    "ops/fleet_kit": (
+        "MAIN's FLEET-KIT, Apache-2.0, vendored unedited; s4(a) and s4(d) "
+        "require its LICENSE and NOTICE to travel with it, and its MANIFEST.json "
+        "pins both by sha256"
+    ),
+}
+
+#: A file whose NAME declares a grant. `LICENSE_NOTES.md` does not match: the
+#: stem must be followed by an extension dot or nothing.
+_GRANT_NAME = re.compile(r"(?:^|/)(?:LICEN[CS]E|NOTICE|COPYING)(?:\.[^/]*)?$", re.IGNORECASE)
+
+
+def _grant_files(paths: typing.Iterable[str]) -> list[str]:
+    return sorted(p for p in paths if _GRANT_NAME.search(p))
+
+
+def _unexpected_grants(paths: typing.Iterable[str]) -> list[str]:
+    """Grant files neither at the root nor in a named SECOND_GRANT_DIRS entry."""
+    return [
+        p for p in _grant_files(paths)
+        if "/" in p and p.rsplit("/", 1)[0] not in SECOND_GRANT_DIRS
+    ]
+
+
+def test_a_second_licence_file_sits_only_under_the_vendored_kit():
+    corpus = _real_corpus()
+    grants = _grant_files(corpus)
+    assert "LICENSE" in grants and "NOTICE" in grants, (
+        f"the grant-file sweep did not see the root LICENSE and NOTICE, so it "
+        f"examined the wrong corpus: {grants}"
+    )
+    assert "ops/fleet_kit/LICENSE" in grants and "ops/fleet_kit/NOTICE" in grants, (
+        "the vendored kit's LICENSE or NOTICE is not tracked; Apache-2.0 s4(a) "
+        f"and s4(d) require both to travel with the kit: {grants}"
+    )
+    assert _unexpected_grants(corpus) == [], (
+        "a licence-grant file is tracked outside the root and outside every "
+        f"named exemption: {_unexpected_grants(corpus)}"
+    )
+
+
+def test_the_second_grant_detector_fires_and_spares_its_neighbours():
+    """Non-vacuity: a stray grant fires; the root, the kit and the notes survive."""
+    paths = (
+        "LICENSE",
+        "NOTICE",
+        "docs/LICENSE_NOTES.md",
+        "ops/fleet_kit/LICENSE",
+        "ops/fleet_kit/NOTICE",
+        "shell/LICENSE",
+        "ops/fleet_kit/sub/COPYING.txt",
+    )
+    assert _unexpected_grants(paths) == ["ops/fleet_kit/sub/COPYING.txt", "shell/LICENSE"]
+    assert "docs/LICENSE_NOTES.md" not in _grant_files(paths)
+
+
+def test_the_kit_licence_and_notice_are_apache_and_pinned_by_its_manifest():
+    """The kit's grant is Apache-2.0, names a holder, and is the pinned bytes.
+
+    Checked against the kit's OWN MANIFEST.json rather than a second copy of
+    the digest here, so a kit upgrade re-pins in one place.
+    """
+    manifest = json.loads((KIT_DIR / "MANIFEST.json").read_text(encoding="ascii"))
+    for name in ("LICENSE", "NOTICE"):
+        raw = (KIT_DIR / name).read_bytes()
+        assert hashlib.sha256(raw).hexdigest() == manifest["files"][name], (
+            f"ops/fleet_kit/{name} does not match its MANIFEST.json pin"
+        )
+    licence = (KIT_DIR / "LICENSE").read_text(encoding="ascii")
+    for marker in ("Apache License", "Version 2.0, January 2004", "END OF TERMS AND CONDITIONS"):
+        assert marker in licence, f"ops/fleet_kit/LICENSE is missing {marker!r}"
+    assert "GNU GENERAL PUBLIC LICENSE" not in licence
+    notice = (KIT_DIR / "NOTICE").read_text(encoding="ascii")
+    assert "Apache License, Version 2.0" in notice
+    assert re.search(r"Copyright \d{4} \S", notice), "the kit NOTICE carries no rendered copyright line"
+
+
+#: Facts the LICENSE_NOTES row for the kit must carry ON THE SAME LINE as the
+#: path, mirroring tests/test_vendored_provenance.py's row rule.
+KIT_ROW_FIELDS = ("Apache-2.0", "the operator", "Byte-identical to upstream", "NOTICE")
+
+
+def _kit_row_offenders(text: str) -> list[str]:
+    rows = [line for line in text.splitlines() if line.startswith("| `ops/fleet_kit/`")]
+    if not rows:
+        return ["no provenance row for `ops/fleet_kit/`"]
+    return [f"row lacks {field!r}" for field in KIT_ROW_FIELDS if field not in rows[0]]
+
+
+def test_the_licence_notes_record_the_kit_and_its_notice_obligation():
+    notes = (REPO_ROOT / "docs" / "LICENSE_NOTES.md").read_text(encoding="utf-8")
+    assert _kit_row_offenders(notes) == []
+    flat = " ".join(notes.split())
+    assert "section 4(d)" in flat, "LICENSE_NOTES does not state the NOTICE-retention obligation"
+
+
+def test_the_kit_row_detector_fires():
+    complete = (
+        "| `ops/fleet_kit/` | MAIN | Apache License 2.0 | `Apache-2.0` | the operator "
+        "| **None.** Byte-identical to upstream; NOTICE retained |"
+    )
+    assert _kit_row_offenders(complete) == []
+    assert _kit_row_offenders("| `ops/loop/slots.py` | x |") == ["no provenance row for `ops/fleet_kit/`"]
+    assert _kit_row_offenders(complete.replace("the operator", "someone")) == ["row lacks 'the operator'"]

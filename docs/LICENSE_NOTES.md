@@ -81,7 +81,9 @@ Genshin Impact data.
 
 ## Vendored third-party artifacts, and their provenance
 
-Three tracked files here were authored elsewhere and copied in byte-wise.
+Three tracked files here were authored elsewhere and copied in byte-wise, plus
+one vendored directory, MAIN's FLEET-KIT under `ops/fleet_kit/`, which carries
+its own licence and NOTICE and is recorded in its own subsection below.
 Everything else under version control in this tree is this project's own work.
 Each row records what Apache-2.0 section 4 makes a redistributor answerable
 for - which notices arrived with the file, whether the bytes were changed, and
@@ -201,6 +203,56 @@ What that leaves this tree responsible for, per Apache-2.0 section 4:
 The first row is the one a strict reader may want tightened - the safest version
 is to vendor the Apache-2.0 text alongside. It is not done today, and saying so
 is better than implying a completeness this section does not have.
+
+### MAIN's FLEET-KIT under `ops/fleet_kit/` - vendored third-party code
+
+| Vendored path | Upstream | Inbound licence | SPDX | Copyright holder | Bytes changed here |
+|---|---|---|---|---|---|
+| `ops/fleet_kit/` (`fleet_headless.py`, `FLEET-COMMON.md`, `MANIFEST.json`, `LICENSE`, `NOTICE`) | MAIN, the supervisor tree; FLEET-KIT v4 per the MAIN 1204 ORDER of 2026-10-03 | Apache License 2.0 | `Apache-2.0` | the operator | **None.** Byte-identical to upstream; the kit's own `LICENSE` and `NOTICE` are retained verbatim beside the code |
+
+Every file was verified against MAIN's outbox copy by SHA-256 before it was
+copied, and is pinned after copying by the kit's own `MANIFEST.json`, which
+`conformance()` in `ops/fleet_kit/fleet_headless.py` checks and
+`tests/test_fleet_kit.py` runs. The licence facts were read from the kit's
+files on disk, not from the ORDER note: `ops/fleet_kit/LICENSE` is the
+Apache-2.0 text ("Apache License", "Version 2.0, January 2004"), and
+`ops/fleet_kit/NOTICE` carries the RENDERED grant - "Copyright 2026 the
+operator" - so trap 2 is checked: the `[yyyy] [name of copyright owner]`
+placeholder in that LICENSE is the licence's own how-to-apply appendix and
+not the grant. The NOTICE's SCOPE paragraph says the grant also covers the
+FLEET-COMMON block every fleet tree embeds byte-for-byte in its `CLAUDE.md`, so
+that block inside this tree's `CLAUDE.md` is Apache-2.0 material too.
+
+Combination: Apache-2.0 code combined into this GPL-3.0-or-later work is
+permitted, one-way, for the reason the compatibility subsection above gives.
+The combined work ships under the root `LICENSE`; the kit's files keep their
+own inbound terms. The root `LICENSE` and `NOTICE` remain the outbound
+declaration, and `ops/fleet_kit/` is the ONE directory where a second
+licence-grant file may be tracked - `tests/test_licence_posture.py` names it
+as the only exemption and fails on a grant file anywhere else.
+
+What Apache-2.0 section 4 asks of this tree for the kit, and where it is met:
+
+- **4(a), give recipients a copy of the licence:** met in-tree by
+  `ops/fleet_kit/LICENSE`. This is the one vendored artifact for which the
+  first row of the section 4 table above is fully satisfied.
+- **4(b), mark changed files:** nothing to mark - the kit's conformance test
+  fails on any local edit, and a defect is reported to MAIN instead.
+- **4(c), retain notices in the source form:** nothing was stripped; the
+  files are byte-identical.
+- **4(d), NOTICE preservation:** the kit ships a `NOTICE` file, so section
+  4(d) applies and requires any redistribution to carry its attribution
+  notices. `ops/fleet_kit/NOTICE` is tracked, pinned, and must never be
+  deleted or edited. If this tree ever needs its own statement about the kit,
+  it goes in a separate file beside it under another name (the kit's NOTICE
+  itself suggests one), never inside the kit's bytes.
+
+The holder is named here by its role, "the operator", exactly as the kit's
+NOTICE names it, for the same no-sibling-names reason as the section above.
+`tests/test_vendored_provenance.py` does not list the kit in its registry: its
+row rule fixes the holder as the holder of the three files above, and the
+kit's holder is written differently. The kit's row is guarded instead by
+`tests/test_licence_posture.py`, on the same same-line rule.
 
 ### The process finding, which is the part worth keeping
 
