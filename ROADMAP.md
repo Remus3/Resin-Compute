@@ -111,7 +111,12 @@ version. What follows is everything the scaffold deliberately did not do.
   runtime and data dirs, one level deep, and unlinks only a regular file whose
   name parses as an `atomic_io` temp, whose pid is not ours and not alive
   (`slots.pid_alive`), and whose age is at least `ORPHAN_TEMP_MIN_AGE_SECONDS`.
-  Dry runs and halted passes delete nothing. Arms in
+  Dry runs and halted passes delete nothing. After an adversary REFUTED the
+  first cut: a pid outside 1..2**32-1 never parses (`slots.pid_alive` raises
+  ctypes.ArgumentError past 32 bits), one bad entry is logged and skipped,
+  the pass-level call can never fail a pass or end the daemon, and a runtime
+  or data dir resolving outside the repo root is skipped (halt clause (a)).
+  Arms in
   `tests/test_headless_runner_orphan_temps.py`, neighbours-survive arm included.
   NOT SWEPT, fixed-name temps of other writers, bounded at one per target:
   `ops/health.py` fallback `health.json.tmp`, `ingest/enka_client.py`

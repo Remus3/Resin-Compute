@@ -72,7 +72,18 @@ def clean_registry():
 
 
 @pytest.fixture()
-def dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+def tmp_counts_as_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let a tmp root pass the halt-clause (a) check, for wiring arms only.
+
+    The check itself is measured, unpatched, in section 5.
+    """
+    monkeypatch.setattr(runner_mod, "_inside_repo_root", lambda path: True)
+
+
+@pytest.fixture()
+def dirs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tmp_counts_as_repo
+) -> dict[str, Path]:
     runtime = tmp_path / "runtime"
     data = tmp_path / "data"
     slots = tmp_path / "slots"
@@ -206,7 +217,7 @@ def test_os_exit_mid_write_orphans_a_temp_beside_an_untorn_target(tmp_path: Path
 
 
 def test_the_next_live_pass_sweeps_the_real_orphan(
-    tmp_path: Path, clean_registry, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, clean_registry, monkeypatch: pytest.MonkeyPatch, tmp_counts_as_repo
 ) -> None:
     """End to end: the orphan the child left is gone after the next live pass."""
     work = tmp_path / "work"
@@ -251,6 +262,9 @@ def test_the_pattern_matches_what_atomic_io_actually_names(tmp_path: Path) -> No
         "health.json.123.0123abcd.tmp",  # no leading dot
         ".health.json.123.0123abcd.tmp.bak",
         "..123.0123abcd.tmp",  # empty target name
+        ".health.json.4294967296.deadbeef.tmp",  # pid past 32 bits
+        ".health.json.0.deadbeef.tmp",  # pid 0 is never a writer
+        ".health.json.99999999999999999999.deadbeef.tmp",
     ],
 )
 def test_names_that_are_not_ours_do_not_parse(name: str) -> None:
@@ -365,3 +379,96 @@ def test_a_halted_pass_sweeps_nothing(dirs: dict[str, Path], clean_registry) -> 
     _register_probe()
     assert _run_live(dirs) == runner_mod.EXIT_JOB_FAILED
     assert in_runtime.exists(), "a halted pass deleted a file"
+
+
+# ---------------------------------------------------------------------------
+# 5. Refuted at b982c90: an unprobeable pid, and roots outside the repo
+# ---------------------------------------------------------------------------
+
+
+def test_a_pid_past_32_bits_is_skipped_and_the_sweep_carries_on(tmp_path: Path) -> None:
+    """The adversary's reproducer. `slots.pid_alive` raises ctypes.ArgumentError
+    on Windows for a pid >= 2**32, which used to end the whole sweep - and the
+    pass, and the daemon - at the first such name."""
+    huge = _plant(tmp_path, ".health.json.4294967296.deadbeef.tmp", age=7200.0)
+    if slots_mod.pid_alive(999999):
+        pytest.skip("pid 999999 is in use on this host")
+    plain = _plant(tmp_path, ".health.json.999999.deadbeef.tmp", age=7200.0)
+    removed = runner_mod.sweep_orphan_temps([tmp_path])
+    assert huge.exists(), "a pid that cannot be probed is never ours to delete"
+    assert removed == [plain] and not plain.exists()
+
+
+def test_one_entry_that_raises_does_not_stop_the_sweep(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dead = _dead_pid()
+    first = _plant(tmp_path, _temp_name("a.json", dead, "aaaaaaaa"))
+    second = _plant(tmp_path, _temp_name("b.json", dead, "bbbbbbbb"))
+    real = slots_mod.pid_alive
+    calls: list[int] = []
+
+    def _flaky(pid: int) -> bool:
+        calls.append(pid)
+        if len(calls) == 1:
+            raise RuntimeError("probe exploded")
+        return real(pid)
+
+    monkeypatch.setattr(slots_mod, "pid_alive", _flaky)
+    removed = runner_mod.sweep_orphan_temps([tmp_path])
+    assert len(calls) == 2, "non-vacuity: both entries were probed"
+    assert first.exists(), "the entry whose probe raised was kept"
+    assert removed == [second]
+
+
+def test_a_sweep_that_raises_never_fails_the_live_pass(
+    dirs: dict[str, Path], clean_registry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[object] = []
+
+    def _boom(directories) -> list[Path]:
+        calls.append(directories)
+        raise RuntimeError("sweep exploded")
+
+    monkeypatch.setattr(runner_mod, "sweep_orphan_temps", _boom)
+    _register_probe()
+    assert _run_live(dirs) == runner_mod.EXIT_OK
+    assert calls, "non-vacuity: the sweep was reached"
+
+
+def test_the_repo_root_check_measures_real_paths(tmp_path: Path) -> None:
+    repo = runner_mod.health_mod.REPO_ROOT
+    assert runner_mod._inside_repo_root(repo / "ops" / "runtime")
+    assert runner_mod._inside_repo_root(repo / "data")
+    assert not runner_mod._inside_repo_root(tmp_path)
+    assert not runner_mod._inside_repo_root(repo.parent)
+    assert not runner_mod._inside_repo_root(repo / ".." / "elsewhere")
+
+
+def test_a_root_outside_the_repo_is_not_swept_by_a_pass(
+    tmp_path: Path, clean_registry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Halt clause (a): no delete outside the repo root. A runtime or data dir
+    pointed outside it by env var is skipped by the pass, not swept."""
+    runtime = tmp_path / "runtime"
+    data = tmp_path / "data"
+    slots = tmp_path / "slots"
+    for path in (runtime, data, slots):
+        path.mkdir()
+    monkeypatch.setenv("RESINCOMPUTE_RUNTIME_DIR", str(runtime))
+    monkeypatch.setenv("RC_DATA_DIR", str(data))
+    assert not runner_mod._inside_repo_root(runtime)
+    dead = _dead_pid()
+    outside = [
+        _plant(runtime, _temp_name("health.json", dead)),
+        _plant(data, _temp_name("account_state.json", dead)),
+    ]
+    _register_probe()
+    code = _run_live({"runtime": runtime, "data": data, "slots": slots})
+    assert code == runner_mod.EXIT_OK
+    for path in outside:
+        assert path.exists(), f"a file outside the repo root was deleted: {path.name}"
+    # Control: the same files ARE removable once the root counts as inside.
+    monkeypatch.setattr(runner_mod, "_inside_repo_root", lambda path: True)
+    assert _run_live({"runtime": runtime, "data": data, "slots": slots}) == runner_mod.EXIT_OK
+    assert not any(path.exists() for path in outside)

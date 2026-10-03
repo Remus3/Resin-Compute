@@ -151,6 +151,8 @@ ORPHAN_TEMP_MIN_AGE_SECONDS = 3600
 #: `.<target name>.<pid>.<uuid4().hex[:8]>.tmp`. Coupled by test to the
 #: module's own output, never copied from its source, so a rename there turns
 #: the sweep's arm red instead of silently sweeping nothing.
+#: The largest pid a writer can carry - a Windows pid is a 32-bit DWORD.
+_MAX_PID = 0xFFFFFFFF
 _ORPHAN_TEMP_RE = re.compile(r"\A\.(?P<target>.+)\.(?P<pid>[0-9]+)\.[0-9a-f]{8}\.tmp\Z")
 
 
@@ -664,7 +666,44 @@ def parse_orphan_temp_name(name: str) -> tuple[str, int] | None:
     match = _ORPHAN_TEMP_RE.match(name)
     if match is None:
         return None
-    return match.group("target"), int(match.group("pid"))
+    pid = int(match.group("pid"))
+    # A pid this module could have written is a positive 32-bit value
+    # (`os.getpid()`; a Windows pid is a DWORD). Anything else is not ours,
+    # and `slots.pid_alive` raises ctypes.ArgumentError for it on Windows.
+    if not 0 < pid <= _MAX_PID:
+        return None
+    return match.group("target"), pid
+
+
+def _sweep_one(entry: Path, clock: float, floor: float, own_pid: int) -> bool:
+    """Remove `entry` if it is a provable orphan. True only when it was removed.
+
+    May raise; `sweep_orphan_temps` catches per entry, so one bad entry never
+    stops the rest of the sweep.
+    """
+    parsed = parse_orphan_temp_name(entry.name)
+    if parsed is None:
+        return False
+    _target, pid = parsed
+    try:
+        info = entry.lstat()
+    except OSError:
+        return False
+    if not stat_is_regular(info.st_mode):
+        return False
+    if clock - info.st_mtime < floor:
+        return False
+    if pid == own_pid or slots_mod.pid_alive(pid):
+        return False
+    try:
+        entry.unlink()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        log.warning("could not remove orphaned temp file %s", entry.name)
+        log.debug("orphan temp unlink failed", exc_info=True)
+        return False
+    return True
 
 
 def sweep_orphan_temps(
@@ -692,8 +731,13 @@ def sweep_orphan_temps(
          the unlink cannot belong to a fresh writer either.
 
     Each directory is scanned one level deep only. A missing directory, an
-    unreadable entry, or an unlink the OS refuses (a file still open on
-    Windows) is skipped and logged; the pass is never failed by its cleanup.
+    unreadable entry, an unlink the OS refuses (a file still open on Windows),
+    or any other error on one entry is skipped and logged, and the sweep moves
+    on to the next entry.
+
+    This function sweeps whatever it is given. The repo-root restriction of
+    CLAUDE.md halt clause (a) is applied by its pass-level caller,
+    `_runner_write_dirs`, so a test can still aim it at a tmp directory.
     A plain unlink, not the Recycle Bin: a half-written temp is replaceable by
     definition - its target holds the last good document.
     """
@@ -715,29 +759,12 @@ def sweep_orphan_temps(
             log.debug("orphan temp sweep could not list %s", base, exc_info=True)
             continue
         for entry in entries:
-            parsed = parse_orphan_temp_name(entry.name)
-            if parsed is None:
-                continue
-            _target, pid = parsed
             try:
-                info = entry.lstat()
-            except OSError:
-                continue
-            if not stat_is_regular(info.st_mode):
-                continue
-            if clock - info.st_mtime < floor:
-                continue
-            if pid == own_pid or slots_mod.pid_alive(pid):
-                continue
-            try:
-                entry.unlink()
-            except FileNotFoundError:
-                continue
-            except OSError:
-                log.warning("could not remove orphaned temp file %s", entry.name)
-                log.debug("orphan temp unlink failed", exc_info=True)
-                continue
-            removed.append(entry)
+                if _sweep_one(entry, clock, floor, own_pid):
+                    removed.append(entry)
+            except Exception:  # noqa: BLE001 - one bad entry never stops the sweep
+                log.warning("orphan temp sweep skipped %s after an error", entry.name)
+                log.debug("orphan temp sweep entry failed", exc_info=True)
     if removed:
         log.info(
             "removed %d orphaned temp file(s) left by a dead writer: %s",
@@ -761,7 +788,33 @@ def _runner_write_dirs(runtime_dir: str | None) -> list[Path]:
         dirs.append(Path(load_config().data_dir))
     except Exception:  # noqa: BLE001 - a sweep must never fail the pass
         log.debug("orphan temp sweep could not resolve the data dir", exc_info=True)
-    return dirs
+    inside = []
+    for directory in dirs:
+        if _inside_repo_root(directory):
+            inside.append(directory)
+        else:
+            # CLAUDE.md halt clause (a): no delete outside the repo root.
+            # RESINCOMPUTE_RUNTIME_DIR and RC_DATA_DIR can point anywhere, so
+            # such a root is left alone - logged, never swept.
+            log.info(
+                "orphan temp sweep skipped a directory outside the repo root (%s)",
+                directory.name,
+            )
+    return inside
+
+
+def _inside_repo_root(path: Path) -> bool:
+    """True when `path` resolves inside this repo's root. Never raises.
+
+    Resolved, so `..` segments and links cannot carry a sweep out of the tree.
+    A path that cannot be resolved counts as OUTSIDE.
+    """
+    try:
+        root = Path(health_mod.REPO_ROOT).resolve()
+        return Path(path).resolve().is_relative_to(root)
+    except Exception:  # noqa: BLE001 - unknown means outside
+        log.debug("could not resolve %s against the repo root", path, exc_info=True)
+        return False
 
 
 def _die_holding_slot(outcome: PassResult, runtime_dir: str | None, cycle: int) -> None:
@@ -889,7 +942,13 @@ def _run_governed_pass(
     # After the halt and abandoned-job gates, so a halted or blocked cycle
     # deletes nothing, and BEFORE the hold, because cleanup is not executor
     # work and must not occupy a shared lane.
-    sweep_orphan_temps(_runner_write_dirs(runtime_dir))
+    # Cleanup never fails a pass, and so never ends a daemon: anything it
+    # raises is logged and the pass goes on.
+    try:
+        sweep_orphan_temps(_runner_write_dirs(runtime_dir))
+    except Exception:  # noqa: BLE001 - the sweep is best effort
+        log.warning("cycle %d: the orphan temp sweep failed; the pass goes on", cycle)
+        log.debug("orphan temp sweep failed", exc_info=True)
 
     try:
         with slots_mod.hold(
