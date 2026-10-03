@@ -2,13 +2,17 @@
 
 WHY THIS EXISTS, MEASURED.
 
-Under a real `git push` the pre-push hook's `tests` suite reports 2 skips where
-the same command in an interactive shell reports 1. Naming the second one took a
-push to a scratch bare repository under a scratch `core.hooksPath`; it is
-`tests/test_hook_interpreter.py:1774`, and it is CORRECT. Git prepends
-`mingw64/libexec/git-core` to PATH for its own hooks, so `shutil.which("git")`
-resolves to a `git.exe` under `git-core`, which is not an install root, and that
-arm skips.
+Under a real `git push` the pre-push hook's `tests` suite once reported one MORE
+skip than the same command in an interactive shell. Naming the extra one took a
+push to a scratch bare repository under a scratch `core.hooksPath`; it was
+`test_the_git_install_discovery_still_fires_where_an_sh_demonstrably_sits` in
+`tests/test_hook_interpreter.py`. Git prepends `mingw64/libexec/git-core` to
+PATH for its own hooks, so `shutil.which("git")` resolved to the `git.exe` under
+`git-core`, the oracle recognised no install layout there, and the mutant-killer
+skipped under the very gate meant to run it. Closed 2026-10-03: the oracle now
+maps that layout to its install root, so that skip no longer fires under the
+hook, and `test_the_oracle_identifies_the_install_under_a_hook_shaped_path`
+pins it. Only -rs could have named it, which is why the flag stays.
 
 A GATE THAT CAN SEE A SKIP AND CANNOT SAY WHICH ONE IS THE DEFECT. The hook must
 therefore ask pytest to list its skips, so the operator reads the module and
@@ -298,8 +302,9 @@ def test_every_pytest_invocation_requests_skip_reporting() -> None:
         "the pre-push gate can see a skip and cannot say WHICH ONE for "
         f"{[inv.target for inv in silent]}: their `-r` specs are "
         f"{[inv.r_spec for inv in silent]!r}, and none of those characters lists skips. "
-        "Add s, a or A to the `-r` spec - under a real push this suite reports 2 skips "
-        "where a shell reports 1, and the second is tests/test_hook_interpreter.py"
+        "Add s, a or A to the `-r` spec - the hook runs under git's PATH, not a shell's, "
+        "and a skip that fires only there (as the git-install discovery arm in "
+        "tests/test_hook_interpreter.py once did) is invisible without it"
     )
 
 
@@ -321,7 +326,7 @@ def test_the_hook_records_why_skip_reporting_is_required() -> None:
     )
     comments = "\n".join(line for line in text.split("\n") if line.lstrip().startswith("#"))
     assert "test_hook_interpreter" in comments, (
-        "the hook must NAME the second skip a real push produces - "
+        "the hook must NAME the hook-only skip a real push once produced - "
         "tests/test_hook_interpreter.py - because an unnamed skip is the defect this "
         f"flag exists to remove. The comment block in {HOOK_PATH} does not mention it"
     )
