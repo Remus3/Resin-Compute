@@ -27,15 +27,23 @@ for it at most `JOB_DEADLINE_SECONDS`. A job still running then is recorded
 FAIL, its context's `cancel` event is set, the pass waits a short grace for it
 to notice, and the pass ends - so the slot is released on time. A Python thread
 cannot be killed, so a job that ignores `cancel` keeps running as an ABANDONED
-daemon thread. That is stated rather than hidden, and it is bounded in its
-effects: no further job in that pass starts, and no further LIVE pass takes a
-slot while any abandoned job is still alive, so abandoned work never overlaps
-new slotted work. The arms in section 4 measure each of those.
+daemon thread. On a DRY run that is the end of it: no further job in that pass
+starts, and no slot is involved. On a LIVE pass the invariant is that NO SLOT
+OF THIS PROCESS IS RELEASED WHILE A JOB OF THIS PROCESS IS STILL RUNNING, so
+the runner writes a health record saying so and ends the PROCESS with
+`EXIT_JOB_ABANDONED`, inside the hold, without releasing it. Process death
+kills the abandoned thread; the lock is left with a dead pid for the reap path
+in `ops/loop/slots.py`. The arms in section 4 measure each of those, and the
+live arms run the runner in a CHILD interpreter, never in this one.
 """
 from __future__ import annotations
 
 import ast
 import contextlib
+import json
+import os
+import subprocess
+import sys
 import threading
 import time
 import types
@@ -45,10 +53,23 @@ import pytest
 
 from headless import jobs as jobs_mod
 from headless import runner as runner_mod
+from ops import health as health_mod
 from ops.loop import slots as slots_mod
 
 JOB_A = "budget_first"
 JOB_B = "budget_second"
+
+
+@pytest.fixture(autouse=True)
+def never_exit_this_interpreter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`_die_holding_slot` ends the process with `os._exit`. In THIS process it
+    raises instead, so a regression that reaches it fails one arm rather than
+    killing the whole pytest run. The real exit is measured in a child below."""
+
+    def _refuse(*args, **kwargs) -> None:
+        raise AssertionError("the runner tried to os._exit the pytest process")
+
+    monkeypatch.setattr(runner_mod, "_die_holding_slot", _refuse)
 
 
 @pytest.fixture()
@@ -472,6 +493,35 @@ def test_a_cooperative_job_is_cancelled_and_leaks_no_thread(
     assert runner_mod.abandoned_jobs() == []
 
 
+def test_the_grace_period_lets_a_cooperative_job_finish_cleaning_up(
+    clean_registry, small_deadline, release, runtime: Path
+) -> None:
+    """Kills a no-grace mutant: without the grace wait, cleanup is cut off.
+
+    The job notices `cancel` and then needs a short, bounded moment - well
+    inside the grace - to finish. With the grace wait the pass returns only
+    after it has; without it the pass returns at once and the job is
+    misrecorded as abandoned.
+    """
+    events, workers = release
+    cleaned: list[str] = []
+
+    def _tidy(context: jobs_mod.JobContext) -> jobs_mod.JobResult:
+        workers.append(threading.current_thread())
+        context.cancel.wait(FAKE_CEILING)
+        time.sleep(SMALL_GRACE / 4)
+        cleaned.append("done")
+        return jobs_mod.passed(HUNG, "late")
+
+    _register(HUNG, _tidy)
+    outcome = runner_mod.run_pass(dry_run=True, job_names=[HUNG], runtime_dir=str(runtime))
+    (result,) = outcome.results
+    assert cleaned == ["done"], "the pass returned before the job's grace ran out"
+    assert result.status == jobs_mod.STATUS_FAIL
+    assert result.details["abandoned"] is False
+    assert runner_mod.abandoned_jobs() == []
+
+
 def test_an_uncooperative_job_is_tracked_until_it_ends(
     clean_registry, small_deadline, release, runtime: Path
 ) -> None:
@@ -511,44 +561,15 @@ def test_a_job_that_raises_on_its_worker_is_still_failed(
     assert "raw upstream" not in result.message
 
 
-def _slot_locks(root: Path) -> list[str]:
-    return sorted(p.name for p in root.glob("*.lock"))
-
-
-def test_live_once_with_a_hung_job_fails_and_releases_its_slot(
-    clean_registry, small_deadline, release, slot_root: Path, runtime: Path
-) -> None:
-    """A REAL hold under a tmp slot root: the lock is gone when the pass returns."""
-    gate = _register_hung(release, cooperative=False)
-    code = runner_mod.run_once(
-        uid=None,
-        dry_run=False,
-        job_names=[HUNG],
-        runtime_dir=str(runtime),
-        slot_root=slot_root,
-        slot_timeout=1,
-    )
-    assert code == runner_mod.EXIT_JOB_FAILED, "a hung job is never reported as success"
-    assert release[1][0].is_alive(), "fixture: the job is still hung"
-    assert _slot_locks(slot_root) == [], "the slot was not released"
-    gate.set()
-
-
 def test_no_live_pass_takes_a_slot_while_a_job_is_abandoned(
     clean_registry, small_deadline, release, fake_hold, slot_root: Path, runtime: Path
 ) -> None:
+    """The fence before the hold. A DRY pass abandons the job here, because a
+    LIVE pass that abandons one ends the process and must not run in pytest."""
     gate = _register_hung(release, cooperative=False)
     _register(JOB_A, _probe)
-    first = runner_mod.run_once(
-        uid=None,
-        dry_run=False,
-        job_names=[HUNG],
-        runtime_dir=str(runtime),
-        slot_root=slot_root,
-        slot_timeout=1,
-    )
-    assert first == runner_mod.EXIT_JOB_FAILED
-    assert len(fake_hold) == 1
+    runner_mod.run_pass(dry_run=True, job_names=[HUNG], runtime_dir=str(runtime))
+    assert runner_mod.abandoned_jobs() == [HUNG]
 
     blocked = runner_mod.run_once(
         uid=None,
@@ -559,7 +580,7 @@ def test_no_live_pass_takes_a_slot_while_a_job_is_abandoned(
         slot_timeout=1,
     )
     assert blocked == runner_mod.EXIT_JOB_FAILED
-    assert len(fake_hold) == 1, "a slot was taken while abandoned work was still running"
+    assert fake_hold == [], "a slot was taken while abandoned work was still running"
 
     gate.set()
     release[1][0].join(FAKE_CEILING)
@@ -572,7 +593,185 @@ def test_no_live_pass_takes_a_slot_while_a_job_is_abandoned(
         slot_timeout=1,
     )
     assert resumed == runner_mod.EXIT_OK, "neighbour: the lane resumes once the job ends"
-    assert len(fake_hold) == 2
+    assert len(fake_hold) == 1
+
+
+# ---------------------------------------------------------------------------
+# 5. A LIVE pass with an abandoned job: the process dies holding its slot
+# ---------------------------------------------------------------------------
+#
+# Every arm here runs the runner in a CHILD interpreter launched by
+# `sys.executable`, because the behaviour under test is `os._exit`. The child
+# gets a tmp runtime dir and a tmp slot root; it can never reach the live
+# bucket. After `run_once` returns the child stays alive for CHILD_LINGER
+# seconds, the way a daemon would carry on to its next interval - so a runner
+# that released the slot and carried on is caught red-handed.
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CHILD_LINGER = 3.0
+#: When the zombie job writes its late state, measured from the job's start.
+LATE_WRITE_AT = 1.2
+
+_CHILD = r"""
+import sys, time
+from pathlib import Path
+repo, work = sys.argv[1], Path(sys.argv[2])
+sys.path.insert(0, repo)
+from headless import jobs as jobs_mod
+from headless import runner as runner_mod
+
+beat = work / "heartbeat"
+late = work / "late_state"
+started = work / "started"
+
+def _zombie(context):
+    t0 = time.monotonic()
+    started.write_text("1", encoding="utf-8")
+    while time.monotonic() - t0 < 10.0:
+        with beat.open("a", encoding="utf-8") as fh:
+            fh.write(".")
+        if time.monotonic() - t0 >= float(sys.argv[3]) and not late.exists():
+            late.write_text("stale state from an abandoned job", encoding="utf-8")
+        time.sleep(0.02)
+    return jobs_mod.passed("zombie", "late")
+
+jobs_mod.register(jobs_mod.JobSpec(
+    name="zombie", description="ignores cancel",
+    cadence=jobs_mod.CADENCE_ON_DEMAND, func=_zombie))
+runner_mod.JOB_DEADLINE_SECONDS = 0.2
+runner_mod.JOB_CANCEL_GRACE_SECONDS = 0.1
+code = runner_mod.run_once(
+    uid=None, dry_run=False, job_names=["zombie"],
+    runtime_dir=str(work / "runtime"), slot_root=str(work / "slots"), slot_timeout=5)
+time.sleep(float(sys.argv[4]))
+sys.exit(90 + code)
+"""
+
+
+def _spawn_child(work: Path) -> subprocess.Popen[bytes]:
+    (work / "runtime").mkdir()
+    (work / "slots").mkdir()
+    env = dict(os.environ)
+    env["RESINCOMPUTE_RUNTIME_DIR"] = str(work / "runtime")
+    return subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            _CHILD,
+            str(REPO_ROOT),
+            str(work),
+            str(LATE_WRITE_AT),
+            str(CHILD_LINGER),
+        ],
+        cwd=str(REPO_ROOT),
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def _wait_for(predicate, ceiling: float = 20.0) -> bool:
+    end = time.monotonic() + ceiling
+    while time.monotonic() < end:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return predicate()
+
+
+def _try_second_holder(root: Path) -> bool:
+    """One non-blocking attempt at the 1-of-1 slot, as another process would."""
+    try:
+        with slots_mod.hold(
+            max_slots=1, repo="second-holder", root=root, timeout=0, backoff=0, jitter=0
+        ):
+            return True
+    except slots_mod.SlotTimeout:
+        return False
+
+
+def _beats(work: Path) -> int:
+    try:
+        return (work / "heartbeat").stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
+def test_a_second_holder_never_acquires_while_the_zombie_lives(tmp_path: Path) -> None:
+    """The adversary's probe shape, against a REAL hold under a tmp root."""
+    work = tmp_path / "work"
+    work.mkdir()
+    child = _spawn_child(work)
+    try:
+        assert _wait_for(lambda: (work / "started").exists()), "the zombie never started"
+        refused_while_alive = 0
+        acquired_alive: bool | None = None
+        end = time.monotonic() + 20.0
+        while time.monotonic() < end:
+            alive = child.poll() is None
+            if _try_second_holder(work / "slots"):
+                acquired_alive = alive and child.poll() is None
+                break
+            if alive:
+                refused_while_alive += 1
+            time.sleep(0.02)
+        assert acquired_alive is not None, "the slot never came free"
+        assert refused_while_alive > 0, "non-vacuity: the slot was never contended"
+        assert acquired_alive is False, "a second holder got the slot while the zombie ran"
+        settled = _beats(work)
+        time.sleep(0.3)
+        assert _beats(work) == settled, "the zombie kept running after the slot was taken"
+    finally:
+        if child.poll() is None:
+            child.kill()
+        child.wait(30)
+    assert child.returncode == runner_mod.EXIT_JOB_ABANDONED
+
+
+def test_the_process_dies_holding_its_slot_and_the_late_write_never_lands(
+    tmp_path: Path,
+) -> None:
+    """The late-write race is closed by construction: the writer is dead."""
+    work = tmp_path / "work"
+    work.mkdir()
+    child = _spawn_child(work)
+    try:
+        assert _wait_for(lambda: (work / "started").exists()), "the zombie never started"
+        job_started = time.monotonic()
+        child.wait(30)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(30)
+    assert child.returncode == runner_mod.EXIT_JOB_ABANDONED
+    assert child.returncode != 259, "STILL_ACTIVE would make a dead pid read as alive"
+    assert time.monotonic() - job_started < LATE_WRITE_AT, "the child outlived the late write"
+
+    # The slot was NOT released: the lock is still there, naming the dead pid.
+    lock = work / "slots" / "0.lock"
+    record = json.loads(lock.read_text(encoding="utf-8"))
+    assert record["pid"] == child.pid
+    assert not slots_mod.pid_alive(child.pid)
+
+    # Wait past the moment the zombie would have written its stale state.
+    remaining = LATE_WRITE_AT + 0.5 - (time.monotonic() - job_started)
+    if remaining > 0:
+        time.sleep(remaining)
+    assert not (work / "late_state").exists(), "an abandoned job wrote after its process ended"
+
+    # The health record says what happened, in friendly text.
+    health = json.loads(
+        health_mod.health_path(work / "runtime").read_text(encoding="utf-8")
+    )
+    assert health["alive"] is False
+    assert health["last_pass_ok"] is False
+    assert "overran" in health["message"]
+    assert "Traceback" not in json.dumps(health)
+
+    # The dead-pid reap path frees the lock promptly for the next holder.
+    t0 = time.monotonic()
+    assert _try_second_holder(work / "slots"), "a dead-pid lock was not reaped"
+    assert time.monotonic() - t0 < 2.0
 
 
 def test_the_job_deadline_is_read_at_call_time() -> None:
