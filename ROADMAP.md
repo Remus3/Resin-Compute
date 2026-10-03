@@ -107,10 +107,37 @@ version. What follows is everything the scaffold deliberately did not do.
   start per real spawn. REVERSE IF: a kit version (v5 gap list, item 2 above)
   ships an OS-held lock that frees on holder death and never unlinks.
 
-- **NEW 2026-10-03 (evening). KNOWN GAPS RECORDED, NOT FIXED.** An explicit
-  `--cleanup=whitespace` or `verbatim` on an editor commit hides `#` lines
-  from the commit-msg gate (`scripts/precommit_msg_check.py`); a forged
-  scheduledtask log label during a real
+- **DONE 2026-10-03 (night). THE EDITOR `--cleanup=` GAP.** An explicit
+  `--cleanup=whitespace` or `verbatim` on an editor commit no longer hides
+  `#` lines from either commit-msg half. Git passes no flag to the hook, but
+  writes its EFFECTIVE mode into the editor template ("will be ignored" vs
+  "will be kept"); `.githooks/commit-msg` exports the message path as
+  `RESIN_COMMIT_MSG_FILE` and `hash_lines_are_stripped` in
+  `scripts/precommit_msg_check.py` skips `#` lines in an editor commit ONLY
+  on the commit template's exact strip sentence. Keep sentence, no sentence
+  (`--no-status`, scissors, localised git) and the `git merge --edit`
+  template (which says "ignored" even under verbatim, measured) fail closed.
+  End-to-end arms with non-vacuity twins in `tests/test_hook_gate.py`.
+  RESIDUALS: `-F`/`-m` with `commit.cleanup=strip` configured plus an
+  explicit keeping flag (no template, flag invisible); a human who swaps the
+  keep sentence for the strip one. KNOWN FALSE-BLOCK SOURCES, each
+  worked around with `git commit -F <file>`: a localised git, whose
+  translated sentence reads as unknown, blocks a non-ASCII branch or path in
+  its template; an editor commit with `--no-status` or `commit.status=false`
+  after a merge conflict on a non-ASCII path blocks on the `#\t<path>` line
+  under `# Conflicts:`, which git strips (adversary refutation of ed2f4a0,
+  adjudicated KEEP fail-closed: special-casing `# Conflicts:` would skip
+  lines verbatim keeps; pinned BLOCKED in `tests/test_hook_gate.py`);
+  `git commit -v` scans the diff below the scissors line, which git cuts -
+  this one PREDATES the change and is reasoned from git's order, not yet
+  measured. ALTERNATIVES: parent-process argv (no
+  portable Windows read, blind to aliases) - rejected. REVERSE IF: git
+  changes or translates the template sentence on a supported lane, or starts
+  passing the cleanup mode to commit-msg.
+
+- **NEW 2026-10-03 (evening). KNOWN GAPS RECORDED, NOT FIXED.** (The editor
+  `--cleanup=` gap and the orphan runner `.tmp` are DONE, see their entries.)
+  A forged scheduledtask log label during a real
   fire is still excused by the drift check (`conftest.py`); the child
   reported only Read, not Grep/Glob, cause unconfirmed.
 
@@ -132,6 +159,11 @@ version. What follows is everything the scaffold deliberately did not do.
   or data dir resolving outside the repo root is skipped (halt clause (a)).
   Arms in
   `tests/test_headless_runner_orphan_temps.py`, neighbours-survive arm included.
+  ADVERSARY NOTES (round 2 NOT REFUTED), NOT FIXED: halt clause (a) also
+  covers WRITES - with RESINCOMPUTE_RUNTIME_DIR or RC_DATA_DIR pointing
+  outside the repo, the health file and other atomic writes still land there
+  (predates this change); a dir swapped for a junction between the root check
+  and the sweep is not caught (entries are still lstat regular-file only).
   NOT SWEPT, fixed-name temps of other writers, bounded at one per target:
   `ops/health.py` fallback `health.json.tmp`, `ingest/enka_client.py`
   `<uid>.json.tmp` (no `finally` there). REVERSE IF: `atomic_io` gains a
