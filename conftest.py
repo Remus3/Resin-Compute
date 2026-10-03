@@ -368,8 +368,9 @@ if not os.environ.get(_LOG_REDIRECT_ENV, "").strip():
 # WHAT IS NOT FENCED, measured by an adversary or known by construction:
 #
 #   - ALIAS SPELLINGS of the bucket, each of which normalises to a different
-#     string: the `\\?\C:\...` and `\\.\C:\...` device prefixes, the 8.3 short
-#     name (`C:\PROGRA~3\...`), a trailing dot or trailing space on a component,
+#     string: the `\\?\C:\...` and `\\.\C:\...` device prefixes, a trailing
+#     dot or trailing space on a component (the 8.3 short name `C:\PROGRA~3\...`
+#     IS fenced since S3 - see `_expand_short_names`),
 #     an administrative share such as `\\localhost\C$\...`, and any junction,
 #     symlink or `subst` drive that resolves into the bucket. The matcher is
 #     deliberately NOT widened to chase these: a spelling list is the shape
@@ -487,6 +488,49 @@ _SLOT_BUCKET_ABS_NORM = _bucket_norm() if _SLOT_BUCKET_IS_ABS else ""
 # are on the Windows host, where no dir_fd event can be raised at all.
 
 
+# 8.3 SHORT NAMES ARE THE SAME PATH TO THE KERNEL (S3 residual c, 2026-10-03).
+# Measured on this host: `C:\RESINC~1\...\ops\runtime\responder_runs.json`,
+# the 8.3 spelling of the home directory's `.claude.json` and `C:\PROGRA~3\...` all normcased to
+# strings that matched no fenced root, so a write by the short spelling passed
+# both fences. `_expand_short_names` maps the LONGEST EXISTING PREFIX through
+# `GetLongPathNameW` and re-joins the rest - a component that does not exist
+# yet has no short name to expand. NOT `os.path.realpath`: that also resolves
+# junctions and symlinks, and the fenced roots are spelled UNRESOLVED, so a
+# repo reached through a junction would stop matching its own fence.
+# PLATFORM-GUARDED by the import-time `os.name`, and gated on a `~` in the
+# text, so Linux CI and every ordinary path pay nothing. Still NOT fenced:
+# the device prefixes, admin shares, `subst` drives and links listed above.
+_GET_LONG_PATH: Any = None
+if _REAL_OS_NAME == "nt":
+    try:
+        import ctypes as _ctypes
+
+        _GET_LONG_PATH = _ctypes.WinDLL("kernel32").GetLongPathNameW
+        _LONG_PATH_BUF = 32768
+    except (ImportError, OSError, AttributeError):
+        _GET_LONG_PATH = None
+
+
+def _expand_short_names(text: str) -> str:
+    """`text` with 8.3 short components expanded; unchanged off Windows."""
+    if _GET_LONG_PATH is None or "~" not in text:
+        return text
+    head, tail = text, []
+    try:
+        while True:
+            buf = _ctypes.create_unicode_buffer(_LONG_PATH_BUF)
+            n = _GET_LONG_PATH(head, buf, _LONG_PATH_BUF)
+            if 0 < n < _LONG_PATH_BUF:
+                return os.path.join(buf.value, *reversed(tail))
+            parent, name = os.path.split(head)
+            if not name or parent == head:
+                return text
+            tail.append(name)
+            head = parent
+    except Exception:  # noqa: BLE001 - a fence must never break the test it watches
+        return text
+
+
 def _dir_fd_path(fd: int) -> str | None:
     """The directory an open fd names, or None when this host cannot say."""
     try:
@@ -511,7 +555,7 @@ def _resolve_event_path(path: Any, dir_fd: Any) -> str | None:
             text = os.path.join(base, text)
     except Exception:  # noqa: BLE001 - see `_under_slot_bucket`
         return None
-    return os.path.normcase(os.path.normpath(text))
+    return os.path.normcase(os.path.normpath(_expand_short_names(text)))
 
 
 def _event_paths(
@@ -748,7 +792,7 @@ def _norm(path: Any) -> str:
     text = os.fsdecode(os.fspath(path))
     if not os.path.isabs(text):
         text = os.path.join(os.getcwd(), text)
-    return os.path.normcase(os.path.normpath(text))
+    return os.path.normcase(os.path.normpath(_expand_short_names(text)))
 
 
 def _live_runtime_dirs() -> tuple[str, ...]:
@@ -902,8 +946,13 @@ class RuntimeFenceLedger:
 _FIRE_GRACE_SECONDS = 2.0
 #: A `start` with no closing line - a fire still running, or one that crashed -
 #: is held open at most this long, so a crashed fire cannot excuse for long.
-#: Five minutes is the task's own cadence: the next fire opens its own window.
-_FIRE_OPEN_CAP_SECONDS = 300.0
+#: NARROWED FROM 300 s (the task's five-minute cadence) TO THE MEASURED FIRE
+#: DURATION (S3 residual d): 176 closed `scheduledtask` fires in the live log
+#: on 2026-10-03 ran at most 104 s, so 150 s is that maximum plus margin. The
+#: window cannot go to zero: the live task writes these same records, and a
+#: size/mtime change alone cannot name its writer. Content attribution in
+#: `_runtime_drift` closes the excuse for every TEST-SHAPED change inside it.
+_FIRE_OPEN_CAP_SECONDS = 150.0
 _FIRE_STAMP_FORMAT = "%Y-%m-%dT%H:%M:%S"
 #: The ONLY source that may open an excuse window: the armed scheduled task's
 #: label, `SOURCE_SCHEDULED_TASK` in `tools/moon_sync_responder.py`. REFUTED
@@ -912,6 +961,15 @@ _FIRE_STAMP_FORMAT = "%Y-%m-%dT%H:%M:%S"
 #: the live log and excused its own writes. A test child can still FORGE this
 #: label by setting the source variable; that residual is stated, not hidden.
 _LIVE_FIRE_SOURCES = ("scheduledtask",)
+#: The sources a LIVE fire writes into the invocation log: its own label and
+#: `FAIL_CLOSED_SOURCE`, which a real fire writes on a busy run lock. A line
+#: appended during a test under ANY OTHER source is test-shaped - a child's
+#: `cli`, `suite`, `run_once` or probe line - and is a leak inside a fire too.
+_LIVE_WRITER_SOURCES = ("scheduledtask", "failclosed")
+#: The invocation log's name, which `_runtime_drift` reads line by line.
+_INVOCATION_LOG_NAME = "responder_invocations.log"
+#: Bytes of any one record read for content attribution; records are small.
+_CONTENT_READ_CAP = 1 << 20
 
 
 def _live_fire_windows(log_text: str, now: float) -> list[tuple[float, float]]:
@@ -938,6 +996,44 @@ def _live_fire_windows(log_text: str, now: float) -> list[tuple[float, float]]:
     return sorted(windows)
 
 
+def _appended_text(before: str, after: str) -> str:
+    """What a test ADDED to an append-only log: the tail, or all of a rotated one."""
+    return after[len(before):] if after.startswith(before) else after
+
+
+def _test_markers(*roots: str) -> tuple[str, ...]:
+    """Lower-cased spellings of the test temp roots, raw and JSON-escaped.
+
+    A record that newly carries one names a pytest tmp path, which no live fire
+    writes: the live task's inbox, roots and records are all repo paths.
+    """
+    back = chr(92)
+    found = {"pytest-of-"}
+    for root in roots:
+        if not root:
+            continue
+        for spelling in {root, _expand_short_names(root)}:
+            low = os.path.normcase(os.path.normpath(spelling)).lower()
+            found.update({low, low.replace(back, back * 2), low.replace(back, "/")})
+    return tuple(sorted(m for m in found if m))
+
+
+def _test_shaped(
+    appended: str, contents: dict[str, tuple[str, str]], markers: tuple[str, ...]
+) -> list[str]:
+    """Why a change is TEST-SHAPED by its content, whatever the clock says."""
+    why: list[str] = []
+    for line in appended.splitlines():
+        parts = line.split(chr(9))
+        if len(parts) == 4 and parts[1] not in _LIVE_WRITER_SOURCES:
+            why.append(f"the invocation log gained a {parts[1]!r} line")
+    for name, (old, new) in sorted(contents.items()):
+        low_old, low_new = old.lower(), new.lower()
+        if any(low_new.count(m) > low_old.count(m) for m in markers):
+            why.append(f"{os.path.basename(name)} gained a test temp path")
+    return why
+
+
 def _runtime_drift(
     before: dict[str, tuple[int, int]],
     after: dict[str, tuple[int, int]],
@@ -945,16 +1041,39 @@ def _runtime_drift(
     t1: float,
     log_text: str,
     now: float,
+    appended: str = "",
+    contents: dict[str, tuple[str, str]] | None = None,
+    markers: tuple[str, ...] = (),
 ) -> str | None:
-    """A finding when a live record changed during [t0, t1] outside every live fire."""
+    """A finding when a live record changed during [t0, t1] and no live fire explains it.
+
+    ATTRIBUTED BY CONTENT FIRST (S3 residual d). Overlap with a scheduled fire
+    used to excuse ANY change, so a child that leaked during a real fire was
+    invisible. A TEST-SHAPED change - `appended` log lines from a source no live
+    fire writes, or a record in `contents` (name -> (before, after)) that newly
+    carries one of `markers` - is a finding inside a window too. Only a change
+    with no test-shaped content is still excused, and the window is capped at
+    the measured fire duration. STATED RESIDUAL: a child that forges the
+    `scheduledtask` label and writes no temp path is still excused while a real
+    fire runs. The three trailing parameters have defaults, so the existing
+    positional callers are unchanged.
+    """
     changed = sorted(n for n in set(before) | set(after) if before.get(n) != after.get(n))
     if not changed:
         return None
+    detail = ", ".join(f"{n}: {before.get(n)} -> {after.get(n)}" for n in changed)
+    shaped = _test_shaped(appended, contents or {}, markers)
+    if shaped:
+        return (
+            "a LIVE responder record changed during this test and its CONTENT is "
+            f"test-shaped ({'; '.join(shaped)}) - (size, mtime_ns) {detail}. A live "
+            "fire does not excuse it. A child interpreter needs "
+            "RESINCOMPUTE_RUNTIME_DIR set explicitly."
+        )
     pad = _FIRE_GRACE_SECONDS + 1.0
     for start, end in _live_fire_windows(log_text, now):
         if start - pad <= t1 and t0 <= end + pad:
             return None
-    detail = ", ".join(f"{n}: {before.get(n)} -> {after.get(n)}" for n in changed)
     return (
         "a LIVE responder record changed during this test and no live fire was "
         f"running to explain it - (size, mtime_ns) {detail}. A child interpreter "
@@ -981,6 +1100,28 @@ def _live_runtime_snapshot() -> dict[str, tuple[int, int]]:
     return snap
 
 
+def _live_runtime_texts(paths: Any) -> dict[str, str]:
+    """The text of each record in `paths`, capped; unreadable reads as empty."""
+    texts: dict[str, str] = {}
+    for path in paths:
+        try:
+            with open(path, "rb") as handle:
+                texts[path] = handle.read(_CONTENT_READ_CAP).decode("ascii", "replace")
+        except OSError:
+            texts[path] = ""
+    return texts
+
+
+def _session_temp_roots(request: pytest.FixtureRequest) -> tuple[str, ...]:
+    """This session's pytest base temp and the system temp dir."""
+    roots = [tempfile.gettempdir()]
+    try:
+        roots.append(str(request.config._tmp_path_factory.getbasetemp()))
+    except Exception:  # noqa: BLE001 - a private pytest API; the marker set degrades
+        pass
+    return tuple(roots)
+
+
 def _live_invocation_log_text() -> str:
     for live in _LIVE_RUNTIME_DIRS:
         try:
@@ -999,6 +1140,7 @@ def _live_runtime_guard(request: pytest.FixtureRequest) -> Generator[RuntimeFenc
 
     ledger = RuntimeFenceLedger(len(_RUNTIME_FENCE_HITS))
     before = _live_runtime_snapshot()
+    before_texts = _live_runtime_texts(before)
     t0 = _time.time()
     yield ledger
     t1 = _time.time()
@@ -1014,7 +1156,18 @@ def _live_runtime_guard(request: pytest.FixtureRequest) -> Generator[RuntimeFenc
         )
     after = _live_runtime_snapshot()
     if after != before:
-        finding = _runtime_drift(before, after, t0, t1, _live_invocation_log_text(), _time.time())
+        changed = [n for n in set(before) | set(after) if before.get(n) != after.get(n)]
+        after_texts = _live_runtime_texts(changed)
+        contents = {n: (before_texts.get(n, ""), after_texts.get(n, "")) for n in changed}
+        appended = "".join(
+            _appended_text(old, new)
+            for n, (old, new) in contents.items()
+            if os.path.basename(n) == _INVOCATION_LOG_NAME
+        )
+        finding = _runtime_drift(
+            before, after, t0, t1, _live_invocation_log_text(), _time.time(),
+            appended, contents, _test_markers(*_session_temp_roots(request)),
+        )
         if finding is not None:
             pytest.fail(finding, pytrace=False)
 
