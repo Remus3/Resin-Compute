@@ -111,6 +111,9 @@ FUNCTION = "_run_once"
 #: Under `ops/runtime/`, which `.gitignore` excludes as `ops/runtime/*`. A
 #: report on a tracked path would be a merge conflict every campaign.
 DEFAULT_REPORT = REPO_ROOT / "ops" / "runtime" / "gate_mutation_report.txt"
+#: git's own hint when it finds a hook it cannot execute (no exec bit on a
+#: POSIX host). Its presence means the message lane graded a dead gate.
+IGNORED_HOOK_HINT = "hook was ignored because it's not set as executable"
 
 #: PERMISSIVE detector. Anything that a reader would call a gate tag.
 #:
@@ -1515,6 +1518,12 @@ class MessageGateRepo:
         hooks = sorted(path.name for path in hooks_src.iterdir() if path.is_file())
         for name in hooks:
             shutil.copyfile(hooks_src / name, root / ".githooks" / name)
+            # git runs a hook from the WORKING-TREE file, and copyfile drops the
+            # mode: `update-index --chmod=+x` below fixes only the index. On a
+            # POSIX host the copy must carry the exec bit itself or git ignores
+            # the hook, and every mutant reads SURVIVED (Linux CI, 2026-10-03).
+            hook_copy = root / ".githooks" / name
+            hook_copy.chmod(hook_copy.stat().st_mode | 0o111)
         for rel in hook_dependencies(hooks_src):
             if not (source / rel).is_file():
                 raise LaneToolError(f"a hook references $ROOT/{rel}, which is not a file under {source}")
@@ -1594,6 +1603,11 @@ class MessageGateRepo:
             )
         before = self.head()
         proc = self._commit(message)
+        if IGNORED_HOOK_HINT in (proc.stderr or ""):
+            # git skipped a hook it found but could not execute. Grading that
+            # attempt would score the dead gate's mutants SURVIVED and call it a
+            # finding about the gate; it is a finding about this lane.
+            raise LaneToolError(f"git ignored a hook in the probe repository: {proc.stderr.strip()[:300]}")
         after = self.head()
         landed: bytes | None = None
         if after != before:

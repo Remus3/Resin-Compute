@@ -1366,3 +1366,33 @@ def test_the_armed_repo_points_hooks_path_at_its_own_githooks(tmp_path: Path) ->
     assert (repo.root / ".githooks" / "commit-msg").read_bytes() == (
         REPO_ROOT / ".githooks" / "commit-msg"
     ).read_bytes()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no exec bit; git runs a hook there regardless")
+def test_the_armed_repos_hook_copies_carry_the_exec_bit(tmp_path: Path) -> None:
+    """Linux CI, 2026-10-03: `copyfile` dropped the mode and git IGNORED every
+    hook, so all fifteen mutants read SURVIVED. `update-index --chmod=+x` sets
+    only the index; git runs the working-tree file."""
+    _require_lane_tools()
+    repo = gmr.MessageGateRepo.create(tmp_path, armed=True)
+    for hook in sorted((repo.root / ".githooks").iterdir()):
+        assert hook.stat().st_mode & 0o100, f"{hook.name} is not executable"
+
+
+def test_an_ignored_hook_stops_the_lane_instead_of_grading_a_dead_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The hint git prints for a non-executable hook must raise, never be
+    graded: a dead gate scored as SURVIVED is a false finding about the gate."""
+    _require_lane_tools()
+    repo = gmr.MessageGateRepo.create(tmp_path, armed=True)
+    real = repo._commit
+
+    def hinted(message: bytes, no_verify: bool = False):
+        proc = real(message, no_verify=no_verify)
+        proc.stderr = (proc.stderr or "") + "hint: The '.githooks/commit-msg' " + gmr.IGNORED_HOOK_HINT + ".\n"
+        return proc
+
+    monkeypatch.setattr(repo, "_commit", hinted)
+    with pytest.raises(gmr.LaneToolError, match="ignored a hook"):
+        repo.attempt(b"docs(gate-probe): a clean ascii commit message\n")
