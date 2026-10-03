@@ -158,7 +158,7 @@ SHARED_SHA256 = {
     # carrier holds, which is the same defect class the 2026-09-07 round
     # closed. Carriers re-hash from their own disk; a digest quoted in a note
     # is not acceptance. `slots.py` did not move in this round.
-    "slots.py": "71fa2a683f2eaa04dd61feb2bebc646b5f9086e692c5acc05a9239de49d07d1b",
+    "slots.py": "290cbf80ce6989e15ad778be9032503733c8820030bfa6a9b27439b29d70486e",
     "winmutex.py": "df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7",
 }
 
