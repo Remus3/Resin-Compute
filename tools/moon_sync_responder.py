@@ -782,6 +782,11 @@ def _read_text(path: Path) -> str:
         raw = path.read_bytes()
     except OSError:
         return ""
+    # UTF-32 FIRST: its little-endian mark begins with UTF-16-LE's, so checked
+    # after it a UTF-32 note would decode as UTF-16 with NULs between letters.
+    # UTF-32 is not a channel encoding, so it reads as UNREADABLE outright.
+    if raw.startswith(_UTF32_MARKS):
+        return ""
     for mark, codec in _BOM_CODECS:
         if raw.startswith(mark):
             raw, encoding = raw[len(mark):], codec
@@ -789,10 +794,17 @@ def _read_text(path: Path) -> str:
     else:
         encoding = "utf-8"
     try:
-        return raw.decode(encoding).lstrip(_BOM)
+        text = raw.decode(encoding).lstrip(_BOM)
     except UnicodeDecodeError:
         return ""
+    # A NUL IN DECODED TEXT MEANS THE CODEC WAS WRONG - a mark-less UTF-16 or
+    # UTF-32 note decodes as "valid" UTF-8 with a NUL between every letter,
+    # which hides any tag from the matcher. Unreadable, so never answered.
+    return "" if chr(0) in text else text
 
+
+#: UTF-32 byte-order marks, LE then BE. Checked before `_BOM_CODECS`.
+_UTF32_MARKS: tuple[bytes, ...] = (b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")
 
 #: Byte-order marks and the codec each one names. UTF-8's mark is listed even
 #: though it never collides with the UTF-16 pair, so all three are explicit.
@@ -2247,12 +2259,18 @@ def backoff_active(path: Path, now: float) -> bool:
 
 
 def _finite_number(value: Any) -> bool:
-    """A real, finite int or float. bool, NaN and +/-Infinity are not."""
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
+    """A real, finite int or float. bool, NaN and +/-Infinity are not.
+
+    An int too large for a float (JSON happily parses `1` followed by 400
+    zeros) makes `math.isfinite` RAISE OverflowError, which escaped as a crash
+    and recorded `spawn-failed`. Any such error is NOT finite - fail closed.
+    """
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value) and math.isfinite(float(value))
+    except (OverflowError, TypeError, ValueError):
+        return False
 
 
 def _outbound_rows(path: Path, now: float) -> list[dict] | None:

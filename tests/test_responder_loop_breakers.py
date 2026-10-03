@@ -490,6 +490,66 @@ def test_n5_a_good_reservation_still_terminates_as_delivered(rsp, tmp_path, monk
     assert _armed(rsp, inbox, {"SS": tmp_path / "ss"})["termination"] == "delivered"
 
 
+_RSC_TAGGED = "[RSC-RESPONDER] auto\nmeasured.\n"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        _RSC_TAGGED.encode("utf-16-le"),
+        _RSC_TAGGED.encode("utf-16-be"),
+        b"\xff\xfe\x00\x00" + _RSC_TAGGED.encode("utf-32-le"),
+        b"\x00\x00\xfe\xff" + _RSC_TAGGED.encode("utf-32-be"),
+        _RSC_TAGGED.encode("utf-32-le"),
+    ],
+    ids=["utf16le-nobom", "utf16be-nobom", "utf32le-bom", "utf32be-bom", "utf32le-nobom"],
+)
+def test_f1_wide_encodings_read_as_unreadable_and_are_never_answered(rsp, tmp_path, raw):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    path = inbox / "2026-10-02-1000-from-SS-question.md"
+    path.write_bytes(raw)
+    text = rsp._read_text(path)
+    assert chr(0) not in text
+    assert text == "", f"read as {text!r}"
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
+
+
+def test_f1_a_plain_note_still_reads(rsp, tmp_path):
+    """Survival guard: the NUL rule did not empty ordinary ASCII mail."""
+    path = tmp_path / "n.md"
+    path.write_bytes(b"please measure\n")
+    assert rsp._read_text(path) == "please measure\n"
+
+
+def test_f2_a_huge_int_row_caps_every_sender_without_crashing(rsp):
+    now = time.time()
+    rsp.DEFAULT_OUTBOUND.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_OUTBOUND.write_bytes(
+        b'{"version": 1, "replies": [{"to": "SS", "at": 1' + b"0" * 400 + b"}]}"
+    )
+    assert rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, now) >= set(rsp.OPTED_IN)
+
+
+def test_f2_a_huge_int_backoff_is_usage_backoff_not_spawn_failed(rsp, tmp_path, monkeypatch):
+    import shutil
+
+    _agree(rsp)
+    _trust(rsp, monkeypatch)
+    monkeypatch.setattr(shutil, "which", lambda _n: str(ROOT / "fake-claude-shim.cmd"))
+    monkeypatch.setattr(rsp, "_headless_gate", lambda: he.Decision(True, {"PATH": "x"}, ""))
+    run = _Run("ok", returncode=0)
+    monkeypatch.setattr(subprocess, "run", run)
+    rsp.DEFAULT_BACKOFF.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_BACKOFF.write_bytes(b'{"until": 1' + b"0" * 400 + b"}")
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-02-1000-from-SS-question.md")
+    result = rsp.run_once(inbox=inbox, roots={"SS": tmp_path / "ss"}, bounds=rsp.Bounds(armed=True))
+    assert result["termination"] == "usage-backoff", result
+    assert run.calls == 0
+    assert "fail-closed" in rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii")
+
+
 def test_r5_a_limit_phrase_on_a_clean_long_exit_still_backs_off(rsp, routed, monkeypatch):
     text = rsp.RESPONDER_TAG + "\n" + "x" * 2000 + "\nYou've hit your limit\n"
     monkeypatch.setattr(subprocess, "run", _Run(text, returncode=0))
