@@ -26,6 +26,11 @@ USAGE
     python -m tools.gate_mutation_runner --dry-run
     python -m tools.gate_mutation_runner --gate bounce-mark
     python -m tools.gate_mutation_runner
+    python -m tools.gate_mutation_runner --messages
+
+`--messages` runs the MESSAGE lane instead - see the section of that name below.
+It mutates commit-message bytes, not source, and grades each mutant by a real
+commit through the real hooks in a throwaway repository.
 
 Exit code is 1 if any mutant SURVIVED or if any kill was a FALSE KILL, 0 only if
 every mutant was killed by a test that grades behaviour. Gates whose tagged
@@ -84,6 +89,7 @@ import shutil
 import subprocess
 import sys
 import time
+from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -1157,6 +1163,516 @@ def _write_atomic(path: Path, text: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# The message lane
+#
+# WHY THE LANE ABOVE CANNOT REACH THE MESSAGE GATE. Everything above mutates
+# PYTHON SOURCE - a tagged statement inside `_run_once` - and grades the mutant
+# by a pytest exit code. The commit-MESSAGE gate is neither: `.githooks/
+# commit-msg` is a shell script with no `# GATE:` tags and no `_run_once`, and
+# `tools/precommit_gate.py --message-file` is graded by whether a REAL commit
+# lands, which no pytest exit code over this tree's suite reports. So the
+# message half was structurally outside the campaign, and "the gates are
+# mutation-tested" was true of exactly one of the two halves.
+#
+# WHAT THIS LANE MUTATES INSTEAD. The MESSAGE BYTES. A clean, gate-legal message
+# is the base; each mutant is that base with one defect a gate exists to stop -
+# a banned glyph, a bad subject, an agent trailer. Each is fed to a REAL `git
+# commit -F` in a throwaway repository whose `core.hooksPath` points at a byte
+# copy of this tree's `.githooks/`, so the real hooks and the real
+# `precommit_gate.py` judge it.
+#
+# HOW A MUTANT IS GRADED - BEHAVIOUR, NEVER SHAPE.
+#
+#   REJECT  killed when the commit is refused AND HEAD did not move AND the
+#           gate's OWN marker is on stderr. A refusal without the marker is
+#           MISATTRIBUTED, not killed: git refuses an empty commit, a missing
+#           dependency kills every hook, and either would otherwise read as a
+#           perfect gate. That is the message-lane form of a FALSE-KILL.
+#   STRIP   the trailer half of `commit-msg` STRIPS rather than refuses, by
+#           operator policy. Killed when the commit LANDS and the landed
+#           message carries no trailer line and keeps the clean subject. A
+#           refusal is MISATTRIBUTED - it is not what that gate does.
+#
+# The two NON-VACUITY controls. A clean message must land, before and after the
+# mutants, or a gate that refuses everything would kill every REJECT mutant.
+# And the same table run through a DISARMED clone (`core.hooksPath` unset) must
+# let every mutant SURVIVE, or the grader cannot see a dead gate.
+# ---------------------------------------------------------------------------
+
+REJECT = "reject"
+STRIP = "strip"
+
+KILLED = "KILLED"
+SURVIVED = "SURVIVED"
+MISATTRIBUTED = "MISATTRIBUTED"
+
+#: The headline `tools/precommit_gate.py::_report` prints on a refusal.
+GLYPH_MARKER = "precommit_gate BLOCKED"
+
+#: The headline `scripts/precommit_msg_check.py::main` prints on a refusal.
+SUBJECT_MARKER = "commit-msg: subject line rejected"
+
+#: The base every mutant is derived from. Gate-legal on every rule the lane
+#: grades: ASCII, a Conventional Commits subject, no trailer.
+CLEAN_SUBJECT = b"docs(gate-probe): a clean ascii commit message"
+CLEAN_MESSAGE = CLEAN_SUBJECT + b"\n\nA body line in plain ascii - nothing banned here.\n"
+
+#: Generous: each commit spawns sh, then python several times, then git again.
+_LANE_TIMEOUT = 180
+
+
+class VacuousAttemptError(RuntimeError):
+    """A commit attempt with nothing staged. Git refuses it before any hook."""
+
+
+class LaneToolError(RuntimeError):
+    """A tool the lane needs could not be RUN. Never reported as an absence."""
+
+
+@dataclass(frozen=True)
+class MessageMutant:
+    """One mutated commit message and what the real gate must do with it.
+
+    `marker` is the stderr text that attributes a REJECT to the right gate, or
+    the trailer line prefix (matched case-insensitively) that must not land for
+    a STRIP.
+    """
+
+    name: str
+    message: bytes
+    expect: str
+    marker: str
+
+
+def _in_subject(insert: str) -> bytes:
+    """The clean message with `insert` spliced into the middle of its subject."""
+    head, tail = CLEAN_SUBJECT.split(b" a clean ", 1)
+    return head + b" a clean " + insert.encode("utf-8") + tail + CLEAN_MESSAGE[len(CLEAN_SUBJECT) :]
+
+
+def _in_body(insert: str) -> bytes:
+    """The clean message with `insert` spliced into its body line."""
+    return CLEAN_MESSAGE.replace(b"plain ascii", b"plain" + insert.encode("utf-8") + b"ascii", 1)
+
+
+def _subject(subject: bytes) -> bytes:
+    """The clean message with its subject replaced."""
+    return subject + CLEAN_MESSAGE[len(CLEAN_SUBJECT) :]
+
+
+def _trailer(line: str) -> bytes:
+    """The clean message with one trailer line appended after a blank line."""
+    return CLEAN_MESSAGE + b"\n" + line.encode("ascii") + b"\n"
+
+
+# The trailer KEYS are spelled in two halves so that no line of this file is an
+# anchored trailer line itself.
+_CO_AUTHOR = "Co-Authored-By" + ": Claude"
+_SESSION = "Claude" + "-Session:"
+
+#: THE TABLE. Every banned glyph is an escape, never a literal.
+MESSAGE_MUTANTS: tuple[MessageMutant, ...] = (
+    MessageMutant("glyph-subject-em-dash", _in_subject(chr(0x2014)), REJECT, GLYPH_MARKER),
+    MessageMutant("glyph-subject-en-dash", _in_subject(chr(0x2013)), REJECT, GLYPH_MARKER),
+    MessageMutant("glyph-body-em-dash", _in_body(chr(0x2014)), REJECT, GLYPH_MARKER),
+    MessageMutant("glyph-body-smart-dquote-open", _in_body(chr(0x201C)), REJECT, GLYPH_MARKER),
+    MessageMutant("glyph-body-smart-dquote-close", _in_body(chr(0x201D)), REJECT, GLYPH_MARKER),
+    MessageMutant("glyph-body-smart-quote-open", _in_body(chr(0x2018)), REJECT, GLYPH_MARKER),
+    MessageMutant("glyph-body-smart-quote-close", _in_body(chr(0x2019)), REJECT, GLYPH_MARKER),
+    MessageMutant("glyph-body-catch-all-times", _in_body(chr(0x00D7)), REJECT, GLYPH_MARKER),
+    MessageMutant("subject-unknown-type", _subject(b"feature(gate-probe): a clean ascii commit message"), REJECT, SUBJECT_MARKER),
+    MessageMutant("subject-uppercase-type", _subject(b"Docs(gate-probe): a clean ascii commit message"), REJECT, SUBJECT_MARKER),
+    MessageMutant("subject-no-type", _subject(b"a clean ascii commit message"), REJECT, SUBJECT_MARKER),
+    MessageMutant("subject-no-space-after-colon", _subject(b"docs(gate-probe):a clean ascii commit message"), REJECT, SUBJECT_MARKER),
+    MessageMutant("trailer-co-authored-by", _trailer(_CO_AUTHOR + " Opus <noreply@anthropic.com>"), STRIP, _CO_AUTHOR),
+    MessageMutant("trailer-co-authored-by-lowercase", _trailer(_CO_AUTHOR.lower() + " <noreply@anthropic.com>"), STRIP, _CO_AUTHOR.lower()),
+    MessageMutant("trailer-claude-session", _trailer(_SESSION + " https://claude.ai/code/session_probe"), STRIP, _SESSION),
+)
+
+
+#: MEASURED SURVIVORS - real gate defects, recorded rather than hidden.
+#:
+#: Both turn on one fact: `git commit -F <file>` defaults to `--cleanup=
+#: whitespace`, which KEEPS a line starting with `#` in the landed message,
+#: while `tools/precommit_gate.py::_check_message_file` and
+#: `scripts/precommit_msg_check.py::_read_subject` both SKIP such lines as
+#: "template comments". Measured 2026-10-03 through this lane: a `# note` line
+#: carrying an em-dash LANDED in history with exit 0. The `-F` path is the
+#: one this tree's own rules mandate for every commit, so it is not a corner.
+#:
+#: They are kept OUT of `MESSAGE_MUTANTS` so that table's verdict stays "every
+#: mutant killed", and their own arm asserts they still SURVIVE - when the gate
+#: is fixed that arm goes red, which is the signal to move them into the table.
+#: Fixing the gate is outside this tool's write-list.
+KNOWN_MESSAGE_SURVIVORS: tuple[MessageMutant, ...] = (
+    MessageMutant(
+        "glyph-in-hash-line",
+        CLEAN_MESSAGE + b"\n# note " + chr(0x2014).encode("utf-8") + b" kept by -F\n",
+        REJECT,
+        GLYPH_MARKER,
+    ),
+    MessageMutant(
+        "subject-hash-line",
+        b"# not a conventional subject\n" + CLEAN_MESSAGE,
+        REJECT,
+        SUBJECT_MARKER,
+    ),
+)
+
+
+def no_op_message_mutants(mutants: Iterable[MessageMutant], base: bytes = CLEAN_MESSAGE) -> list[str]:
+    """Names of mutants whose bytes equal the base. Such a mutant can only SURVIVE
+    or be MISATTRIBUTED, and in a table it reads as coverage it is not."""
+    return [mutant.name for mutant in mutants if mutant.message == base]
+
+
+@dataclass(frozen=True)
+class MessageAttempt:
+    """One real commit attempt: exit code, HEAD both sides, stderr, landed bytes."""
+
+    exit_code: int
+    head_before: str
+    head_after: str
+    stderr: str
+    landed: bytes | None = None
+
+    @property
+    def moved(self) -> bool:
+        return self.head_after != self.head_before
+
+
+def _landed_subject(landed: bytes) -> bytes:
+    for line in landed.splitlines():
+        if line.strip():
+            return line.rstrip()
+    return b""
+
+
+def grade_message(mutant: MessageMutant, attempt: MessageAttempt) -> str:
+    """KILLED, SURVIVED or MISATTRIBUTED, from what the commit DID."""
+    if mutant.expect == REJECT:
+        if attempt.moved:
+            return SURVIVED
+        if attempt.exit_code != 0 and mutant.marker in attempt.stderr:
+            return KILLED
+        return MISATTRIBUTED
+    if mutant.expect == STRIP:
+        if attempt.exit_code != 0 or not attempt.moved or attempt.landed is None:
+            return MISATTRIBUTED
+        prefix = mutant.marker.lower().encode("ascii")
+        if any(line.lower().startswith(prefix) for line in attempt.landed.splitlines()):
+            return SURVIVED
+        if _landed_subject(attempt.landed) != CLEAN_SUBJECT:
+            return MISATTRIBUTED
+        return KILLED
+    raise ValueError(f"mutant {mutant.name} expects {mutant.expect!r}, which is neither {REJECT} nor {STRIP}")
+
+
+def control_landed(attempt: MessageAttempt) -> bool:
+    """The non-vacuity control: the clean message landed, unaltered."""
+    return (
+        attempt.exit_code == 0
+        and attempt.moved
+        and attempt.landed is not None
+        and attempt.landed.strip() == CLEAN_MESSAGE.strip()
+    )
+
+
+def locate_posix_sh() -> str | None:
+    """A POSIX `sh` for the hooks, or None ONLY when the machine has none.
+
+    A tool failure while looking raises `LaneToolError`: "could not look" is
+    not "looked and found nothing", and conflating the two is a skip that lies
+    about the machine.
+    """
+    direct = shutil.which("sh")
+    if direct:
+        return direct
+    if os.name != "nt":
+        return None
+    try:
+        proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "--exec-path"],  # noqa: S607 - git is on PATH by policy
+            capture_output=True,
+            text=True,
+            timeout=_LANE_TIMEOUT,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise LaneToolError(f"`git --exec-path` could not be launched: {type(exc).__name__}: {exc}") from exc
+    text = proc.stdout.strip()
+    if proc.returncode != 0 or not text or not Path(text).is_absolute():
+        raise LaneToolError(f"`git --exec-path` exited {proc.returncode} printing {text!r}")
+    root = Path(text)
+    for base in [root, *root.parents]:
+        for rel in ("usr/bin", "bin"):
+            candidate = base / rel / "sh.exe"
+            if candidate.is_file():
+                return str(candidate)
+    return None
+
+
+def git_local_env_vars() -> tuple[str, ...]:
+    """The names git itself publishes as repository-local, via
+    `git rev-parse --local-env-vars`. A hand-picked scrub list covered 5 of
+    git's 15 when this tree last checked; asking git is the only complete one."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
+        ["git", "rev-parse", "--local-env-vars"],  # noqa: S607 - git is on PATH by policy
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=_LANE_TIMEOUT,
+        check=False,
+    )
+    names = tuple(line.strip() for line in proc.stdout.splitlines() if line.strip())
+    if proc.returncode != 0 or not names:
+        raise LaneToolError(f"`git rev-parse --local-env-vars` exited {proc.returncode} printing {proc.stdout!r}")
+    return names
+
+
+def scrubbed_git_env(
+    root: Path,
+    base: dict[str, str] | None = None,
+    sh_path: str | None = None,
+    local_vars: Iterable[str] | None = None,
+) -> dict[str, str]:
+    """The throwaway repository's environment.
+
+    Drops every `GIT_*` name AND every name git lists as local - the second is
+    a subset of the first today, and is unioned in so that the day git adds a
+    local variable outside that prefix, this scrub follows git rather than a
+    memory of it. Global and system config are cut off by pointing them at
+    paths that do not exist, so an inherited `core.hooksPath` or `autocrlf`
+    cannot make the lane measure the wrong repository.
+    """
+    source = dict(os.environ) if base is None else dict(base)
+    local = set(git_local_env_vars() if local_vars is None else local_vars)
+    env = {k: v for k, v in source.items() if not k.upper().startswith("GIT_") and k not in local}
+    env["GIT_CONFIG_GLOBAL"] = str(root / "no-global-gitconfig")
+    env["GIT_CONFIG_SYSTEM"] = str(root / "no-system-gitconfig")
+    env["PYTHON"] = sys.executable.replace("\\", "/")
+    if sh_path is not None:
+        # APPENDED: launched from PowerShell, the hooks otherwise die on
+        # `grep: command not found`, which grades the harness and not the gate.
+        env["PATH"] = env.get("PATH", "") + os.pathsep + str(Path(sh_path).parent)
+    return env
+
+
+#: `"$ROOT/<path>"` inside a hook body - the dependency the hook reaches for.
+_HOOK_ROOT_REF = re.compile(r"\$ROOT/([A-Za-z0-9_./-]+)")
+
+_COMMIT_ID = re.compile(r"^[0-9a-f]{40}(?:[0-9a-f]{24})?$")
+
+
+def hook_dependencies(hooks_dir: Path) -> list[str]:
+    """Every repo path the hooks reference through `$ROOT/`, derived from their
+    bytes rather than restated, so the copy cannot quietly stop being faithful."""
+    found: set[str] = set()
+    for hook in sorted(hooks_dir.iterdir()):
+        if hook.is_file():
+            found.update(_HOOK_ROOT_REF.findall(hook.read_text(encoding="utf-8")))
+    return sorted(found)
+
+
+class MessageGateRepo:
+    """A throwaway repository wired to a byte copy of this tree's hooks."""
+
+    def __init__(self, workdir: Path, root: Path, env: dict[str, str]) -> None:
+        self.workdir = workdir
+        self.root = root
+        self.env = env
+        self._n = 0
+
+    @classmethod
+    def create(cls, workdir: Path, armed: bool = True, source_root: Path | None = None) -> MessageGateRepo:
+        source = REPO_ROOT if source_root is None else Path(source_root)
+        sh_path = locate_posix_sh()
+        if sh_path is None:
+            raise LaneToolError("no POSIX sh on this machine, so the hooks cannot run")
+        workdir = Path(workdir)
+        root = workdir / "repo"
+        root.mkdir(parents=True)
+        repo = cls(workdir, root, scrubbed_git_env(workdir, sh_path=sh_path))
+        repo.git("init", check=True)
+        for key, value in (
+            ("user.name", "Message Lane Probe"),
+            ("user.email", "message-lane-probe@example.invalid"),
+            ("commit.gpgsign", "false"),
+        ):
+            repo.git("config", key, value, check=True)
+
+        hooks_src = source / ".githooks"
+        (root / ".githooks").mkdir()
+        hooks = sorted(path.name for path in hooks_src.iterdir() if path.is_file())
+        for name in hooks:
+            shutil.copyfile(hooks_src / name, root / ".githooks" / name)
+        for rel in hook_dependencies(hooks_src):
+            if not (source / rel).is_file():
+                raise LaneToolError(f"a hook references $ROOT/{rel}, which is not a file under {source}")
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source / rel, root / rel)
+        repo.git("add", "-A", check=True)
+        for name in hooks:
+            repo.git("update-index", "--chmod=+x", f".githooks/{name}", check=True)
+        if armed:
+            # EXPLICIT and absolute, at THIS repository's own copy.
+            repo.git("config", "core.hooksPath", (root / ".githooks").as_posix(), check=True)
+        baseline = repo._commit(b"chore(gate-probe): baseline scaffolding\n", no_verify=True)
+        if baseline.returncode != 0:
+            raise LaneToolError(f"baseline commit failed: {baseline.returncode} {baseline.stderr}")
+        repo.head()
+        return repo
+
+    def git(self, *args: str, check: bool = False) -> subprocess.CompletedProcess[str]:
+        try:
+            proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
+                ["git", *args],  # noqa: S607 - git is on PATH by policy
+                cwd=str(self.root),
+                env=self.env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=_LANE_TIMEOUT,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise LaneToolError(f"`git {' '.join(args)}` could not be run: {type(exc).__name__}: {exc}") from exc
+        if check and proc.returncode != 0:
+            raise LaneToolError(f"`git {' '.join(args)}` exited {proc.returncode}: {proc.stderr}")
+        return proc
+
+    def head(self) -> str:
+        """The current commit id. RAISES rather than returning '' - two empty
+        strings compare equal, and 'HEAD did not move' would then be a claim
+        about nothing."""
+        proc = self.git("rev-parse", "HEAD")
+        sha = proc.stdout.strip()
+        if proc.returncode != 0 or not _COMMIT_ID.match(sha):
+            raise LaneToolError(f"HEAD could not be read: exit {proc.returncode} {proc.stdout!r} {proc.stderr!r}")
+        return sha
+
+    def has_staged_changes(self) -> bool:
+        proc = self.git("diff", "--cached", "--quiet")
+        if proc.returncode == 1:
+            return True
+        if proc.returncode == 0:
+            return False
+        raise LaneToolError(f"`git diff --cached --quiet` exited {proc.returncode}: {proc.stderr}")
+
+    def _commit(self, message: bytes, no_verify: bool = False) -> subprocess.CompletedProcess[str]:
+        # `-F` from a file OUTSIDE the worktree, unique per attempt, never `-m`:
+        # argv can mangle a non-ASCII message before any hook sees it.
+        self._n += 1
+        message_file = self.workdir / f"message-{self._n:03d}.txt"
+        message_file.write_bytes(message)
+        args = ["commit", "-F", str(message_file)]
+        if no_verify:
+            args.insert(1, "--no-verify")
+        return self.git(*args)
+
+    def attempt(self, message: bytes, stage: bool = True) -> MessageAttempt:
+        """Stage a fresh ASCII file, then attempt a REAL commit with `message`."""
+        if stage:
+            self._n += 1
+            rel = f"probe-{self._n:03d}.txt"
+            (self.root / rel).write_bytes(f"probe {self._n}\n".encode("ascii"))
+            self.git("add", "--", rel, check=True)
+        if not self.has_staged_changes():
+            raise VacuousAttemptError(
+                "nothing is staged, so git would refuse this commit before any hook ran "
+                "and the refusal would grade git, not the gate"
+            )
+        before = self.head()
+        proc = self._commit(message)
+        after = self.head()
+        landed: bytes | None = None
+        if after != before:
+            log = self.git("log", "-1", "--format=%B", check=True)
+            landed = log.stdout.encode("utf-8")
+        return MessageAttempt(
+            exit_code=proc.returncode,
+            head_before=before,
+            head_after=after,
+            stderr=proc.stderr,
+            landed=landed,
+        )
+
+
+@dataclass(frozen=True)
+class MessageResult:
+    mutant: MessageMutant
+    attempt: MessageAttempt
+    verdict: str
+
+
+@dataclass(frozen=True)
+class MessageCampaign:
+    armed: bool
+    control_before: MessageAttempt
+    control_after: MessageAttempt
+    results: tuple[MessageResult, ...]
+
+    def result(self, name: str) -> MessageResult:
+        for entry in self.results:
+            if entry.mutant.name == name:
+                return entry
+        raise KeyError(name)
+
+    @property
+    def controls_landed(self) -> bool:
+        return control_landed(self.control_before) and control_landed(self.control_after)
+
+    @property
+    def passed(self) -> bool:
+        return self.controls_landed and bool(self.results) and all(r.verdict == KILLED for r in self.results)
+
+
+def run_message_campaign(
+    workdir: Path,
+    armed: bool = True,
+    mutants: Sequence[MessageMutant] = MESSAGE_MUTANTS,
+    source_root: Path | None = None,
+) -> MessageCampaign:
+    """Feed every mutant through a real commit, bracketed by two clean controls.
+
+    REFUSES a table holding a no-op mutant rather than reporting it.
+    """
+    no_ops = no_op_message_mutants(mutants)
+    if no_ops:
+        raise ValueError(f"these message mutants do not change the message bytes: {', '.join(no_ops)}")
+    repo = MessageGateRepo.create(Path(workdir), armed=armed, source_root=source_root)
+    before = repo.attempt(CLEAN_MESSAGE)
+    results = tuple(
+        MessageResult(mutant, attempt, grade_message(mutant, attempt))
+        for mutant, attempt in ((m, repo.attempt(m.message)) for m in mutants)
+    )
+    after = repo.attempt(CLEAN_MESSAGE)
+    return MessageCampaign(armed=armed, control_before=before, control_after=after, results=results)
+
+
+def format_message_report(campaign: MessageCampaign) -> str:
+    width = max((len(r.mutant.name) for r in campaign.results), default=1)
+    lines = [
+        "message gate mutation campaign",
+        f"  armed:    {campaign.armed}",
+        f"  control:  before={'landed' if control_landed(campaign.control_before) else 'DID NOT LAND'} "
+        f"after={'landed' if control_landed(campaign.control_after) else 'DID NOT LAND'}",
+        "",
+    ]
+    for r in campaign.results:
+        lines.append(f"  {r.verdict:<14}{r.mutant.name:<{width}}  expect={r.mutant.expect} exit={r.attempt.exit_code}")
+    counts = Counter(r.verdict for r in campaign.results)
+    lines.append("")
+    lines.append(
+        f"summary: {len(campaign.results)} mutants, {counts[KILLED]} killed, {counts[SURVIVED]} survived, "
+        f"{counts[MISATTRIBUTED]} misattributed; passed={campaign.passed}"
+    )
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -1183,6 +1699,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--report", default=None, help=f"report path (default {DEFAULT_REPORT})")
     parser.add_argument("--dry-run", action="store_true", help="print the mutant plan and touch nothing")
     parser.add_argument("--list", action="store_true", dest="list_tags", help="print the tags and touch nothing")
+    parser.add_argument(
+        "--messages",
+        action="store_true",
+        help="run the MESSAGE lane instead: real commits through the real hooks in a throwaway repo",
+    )
     return parser
 
 
@@ -1193,7 +1714,15 @@ def main(
 ) -> int:
     args = _parser().parse_args(list(argv) if argv is not None else None)
 
-    path = Path(target) if target is not None else Path(args.target) if args.target else RESPONDER
+    if args.messages:
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="message-lane-") as scratch:
+            campaign = run_message_campaign(Path(scratch), armed=True)
+        print(format_message_report(campaign))
+        return 0 if campaign.passed else 1
+
+    path =Path(target) if target is not None else Path(args.target) if args.target else RESPONDER
     root = Path(args.repo_root) if args.repo_root else REPO_ROOT
     report_path = Path(args.report) if args.report else DEFAULT_REPORT
 
