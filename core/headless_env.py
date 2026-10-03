@@ -55,6 +55,21 @@ CHILD_ENV_STRIPPED: tuple[str, ...] = (
 )
 
 
+#: Removed by EXACT name, beside the prefix strip (adversary C5 on a04f4c7).
+#: `NODE_OPTIONS` can `--require` arbitrary code into the node-based CLI before
+#: any of its own floors load. Other `NODE_` keys are left alone.
+#:
+#: RECORDED RESIDUALS, not stripped, each for a stated reason:
+#: - `HTTPS_PROXY` / `HTTP_PROXY`: an inherited proxy could observe or reroute
+#:   the child's traffic to the local headless proxy. Not stripped because the
+#:   loopback base URL is the route, and a host that needs a proxy for other
+#:   traffic would break; `NO_PROXY` handling is the CLI's.
+#: - `CLAUDE_CONFIG_DIR`: points the child at another settings and credentials
+#:   directory. Not stripped because `--bare` reads no OAuth and the floor is
+#:   pinned on argv; a planted config dir is a write to this host already.
+CHILD_ENV_STRIP_EXACT: tuple[str, ...] = ("NODE_OPTIONS",)
+
+
 def _norm(key: str) -> str:
     return key.upper() if os.name == "nt" else key
 
@@ -64,7 +79,7 @@ def _stripped(key: str) -> bool:
     norm = _norm(key)
     if norm in CHILD_ENV_KEEP:
         return False
-    return norm.startswith(CHILD_ENV_STRIP_PREFIXES)
+    return norm in CHILD_ENV_STRIP_EXACT or norm.startswith(CHILD_ENV_STRIP_PREFIXES)
 
 
 def harden_child_env(env: Mapping[str, str], keep: Iterable[str] = ()) -> dict[str, str]:
