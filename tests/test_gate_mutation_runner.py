@@ -1211,39 +1211,31 @@ def test_every_message_mutant_changes_the_message_bytes() -> None:
     assert len(names) == len(set(names)), Counter(names).most_common(3)
 
 
-@pytest.fixture(scope="module")
-def survivor_campaign(tmp_path_factory: pytest.TempPathFactory) -> gmr.MessageCampaign:
-    _require_lane_tools()
-    return gmr.run_message_campaign(
-        tmp_path_factory.mktemp("survivors"), armed=True, mutants=gmr.KNOWN_MESSAGE_SURVIVORS
-    )
-
-
-#: The two `#`-line mutants, by name. Pinned here so this arm cannot pass on an
-#: emptied or renamed `KNOWN_MESSAGE_SURVIVORS` without saying so.
+#: The two `#`-line mutants, by name. Pinned here so neither can leave the
+#: table, or be renamed, without this arm saying so.
 _HASH_LINE_MUTANTS = frozenset({"glyph-in-hash-line", "subject-hash-line"})
 
 
-def test_the_former_hash_line_survivors_are_now_killed_by_the_real_gate(
-    survivor_campaign: gmr.MessageCampaign,
+def test_the_former_hash_line_survivors_are_killed_in_the_main_table(
+    armed_campaign: gmr.MessageCampaign,
 ) -> None:
     """The two `#`-line defects are FIXED, and this pins that they stay fixed.
 
-    It was a characterisation asserting both SURVIVED; it went red the moment
-    `tools/precommit_gate.py` and `scripts/precommit_msg_check.py` stopped
-    skipping `#` lines that `git commit -F` keeps - observed 2026-10-03 as
-    `{'glyph-in-hash-line': 'KILLED', 'subject-hash-line': 'KILLED'}`.
-
-    OPEN SEAM: the mutants still live in `gmr.KNOWN_MESSAGE_SURVIVORS`, whose
-    module was off the fixing slice's write-list. When they move into
-    `gmr.MESSAGE_MUTANTS` and the survivors tuple is emptied, this arm reads
-    the two names from whichever table holds them.
+    It was a characterisation asserting both SURVIVED, run over
+    `KNOWN_MESSAGE_SURVIVORS`. It went red the moment `tools/precommit_gate.py`
+    and `scripts/precommit_msg_check.py` stopped skipping `#` lines that
+    `git commit -F` keeps - observed 2026-10-03 as
+    `{'glyph-in-hash-line': 'KILLED', 'subject-hash-line': 'KILLED'}` - and the
+    two moved into `MESSAGE_MUTANTS`, leaving the survivors tuple empty.
     """
-    assert survivor_campaign.controls_landed, gmr.format_message_report(survivor_campaign)
-    held = {m.name for m in (*gmr.MESSAGE_MUTANTS, *gmr.KNOWN_MESSAGE_SURVIVORS)}
-    assert _HASH_LINE_MUTANTS <= held, f"a `#`-line mutant left both tables: {sorted(held)}"
-    verdicts = {r.mutant.name: r.verdict for r in survivor_campaign.results}
-    assert verdicts == {m.name: gmr.KILLED for m in gmr.KNOWN_MESSAGE_SURVIVORS}, verdicts
+    assert gmr.KNOWN_MESSAGE_SURVIVORS == (), [m.name for m in gmr.KNOWN_MESSAGE_SURVIVORS]
+    held = {m.name for m in gmr.MESSAGE_MUTANTS}
+    assert _HASH_LINE_MUTANTS <= held, f"a `#`-line mutant left the table: {sorted(held)}"
+    assert armed_campaign.controls_landed, gmr.format_message_report(armed_campaign)
+    verdicts = {r.mutant.name: r.verdict for r in armed_campaign.results}
+    assert {name: verdicts.get(name) for name in _HASH_LINE_MUTANTS} == dict.fromkeys(
+        _HASH_LINE_MUTANTS, gmr.KILLED
+    ), verdicts
 
 
 def test_non_vacuity_the_no_op_detector_fires_on_a_planted_no_op() -> None:
