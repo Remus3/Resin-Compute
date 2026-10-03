@@ -999,6 +999,30 @@ def test_a_dangling_halt_symlink_still_halts(rsp, tmp_path):
     assert rsp._halt_requested() is True
 
 
+def test_a_halt_that_lands_after_the_tick_check_stops_the_spawn(
+    rsp, routed, monkeypatch, tmp_path, trusted
+):
+    """Refuted on 6f9dda2: the HALT check ran once per tick, so a sentinel that
+    appeared between that check and `kit.spawn` still launched a session."""
+    run = Run()
+    monkeypatch.setattr(subprocess, "run", run)
+    real_reserve = rsp.reserve_run
+
+    def reserve_then_halt(path, now):
+        sentinel = rsp.halt_sentinel()
+        sentinel.parent.mkdir(parents=True, exist_ok=True)
+        sentinel.write_text("halt\n")
+        return real_reserve(path, now)
+
+    monkeypatch.setattr(rsp, "reserve_run", reserve_then_halt)
+    result = _armed_cycle(rsp, tmp_path)
+
+    assert run.calls == 0, "a session launched after the HALT sentinel appeared"
+    assert result["termination"] == "halted", result
+    status = _status(rsp)
+    assert status["state"] == "halted" and status["task"] == "Halted", status
+
+
 def test_a_halt_directory_halts_and_an_absent_one_does_not(rsp):
     """Any ENTRY named HALT halts; nothing there is the one plain go."""
     sentinel = rsp.halt_sentinel()
@@ -1209,9 +1233,14 @@ def test_v4_survives_a_non_object_print(tmp_path, raw):
 
 def test_the_kit_is_handed_the_halt_sentinel(rsp, routed, monkeypatch):
     """`halt_file=` is native in v4: a HALT that lands after the tick's own
-    check is still honoured by the kit, before anything starts."""
+    check is still honoured by the kit, before anything starts.
+
+    The responder's own pre-spawn HALT check (S3 f) is stubbed off here, so this
+    arm still proves the KIT is handed the sentinel - the second, inner check.
+    """
     run = Run()
     monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(rsp, "_halt_requested", lambda: False)
     sentinel = rsp.halt_sentinel()
     sentinel.parent.mkdir(parents=True, exist_ok=True)
     sentinel.write_text("halt\n")

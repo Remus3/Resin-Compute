@@ -952,6 +952,9 @@ _FIRE_GRACE_SECONDS = 2.0
 #: window cannot go to zero: the live task writes these same records, and a
 #: size/mtime change alone cannot name its writer. Content attribution in
 #: `_runtime_drift` closes the excuse for every TEST-SHAPED change inside it.
+#: NOT PID-BOUNDED, by necessity: `log_invocation` writes stamp, source, note
+#: and outcome and no pid, so a fire's liveness cannot be read from its start
+#: line, and the cap is what bounds an unclosed one.
 _FIRE_OPEN_CAP_SECONDS = 150.0
 _FIRE_STAMP_FORMAT = "%Y-%m-%dT%H:%M:%S"
 #: The ONLY source that may open an excuse window: the armed scheduled task's
@@ -968,8 +971,6 @@ _LIVE_FIRE_SOURCES = ("scheduledtask",)
 _LIVE_WRITER_SOURCES = ("scheduledtask", "failclosed")
 #: The invocation log's name, which `_runtime_drift` reads line by line.
 _INVOCATION_LOG_NAME = "responder_invocations.log"
-#: Bytes of any one record read for content attribution; records are small.
-_CONTENT_READ_CAP = 1 << 20
 
 
 def _live_fire_windows(log_text: str, now: float) -> list[tuple[float, float]]:
@@ -996,19 +997,34 @@ def _live_fire_windows(log_text: str, now: float) -> list[tuple[float, float]]:
     return sorted(windows)
 
 
-def _appended_text(before: str, after: str) -> str:
-    """What a test ADDED to an append-only log: the tail, or all of a rotated one."""
-    return after[len(before):] if after.startswith(before) else after
+def _read_appended(path: Any, old_size: int) -> str:
+    """The bytes APPENDED to `path` since it was `old_size` long, as text.
+
+    REFUTED ON 6f9dda2: the content check read at most 1 MB of a record, so on
+    a log past 1 MB it compared two identical prefixes and saw nothing. This
+    seeks to the snapshot's size and reads only what follows, uncapped. A file
+    that SHRANK was rotated or rewritten, so all of it is new. Absent or
+    unreadable reads as empty.
+    """
+    try:
+        with open(path, "rb") as handle:
+            size = os.fstat(handle.fileno()).st_size
+            handle.seek(old_size if 0 <= old_size <= size else 0)
+            return handle.read().decode("ascii", "replace")
+    except OSError:
+        return ""
 
 
 def _test_markers(*roots: str) -> tuple[str, ...]:
-    """Lower-cased spellings of the test temp roots, raw and JSON-escaped.
+    """Lower-cased spellings of the pytest temp roots, raw and JSON-escaped.
 
-    A record that newly carries one names a pytest tmp path, which no live fire
-    writes: the live task's inbox, roots and records are all repo paths.
+    A record that newly carries one names this session's pytest tmp tree, which
+    no live fire writes: the live task's inbox, roots and records are all repo
+    paths. ONLY the roots given - the basetemp - and never the system temp dir
+    or a generic `pytest-of-` (ruling on the refutation of 6f9dda2).
     """
     back = chr(92)
-    found = {"pytest-of-"}
+    found: set[str] = set()
     for root in roots:
         if not root:
             continue
@@ -1101,25 +1117,31 @@ def _live_runtime_snapshot() -> dict[str, tuple[int, int]]:
 
 
 def _live_runtime_texts(paths: Any) -> dict[str, str]:
-    """The text of each record in `paths`, capped; unreadable reads as empty."""
+    """The whole text of each REWRITTEN record in `paths`, uncapped.
+
+    The invocation log is skipped: it is append-only and large, so its content
+    is read by `_read_appended` from the snapshot's size instead. The other
+    records are rewritten whole by `atomic_write_json` and are small, so a
+    before/after comparison of the full text is the honest diff for them.
+    """
     texts: dict[str, str] = {}
     for path in paths:
+        if os.path.basename(path) == _INVOCATION_LOG_NAME:
+            continue
         try:
             with open(path, "rb") as handle:
-                texts[path] = handle.read(_CONTENT_READ_CAP).decode("ascii", "replace")
+                texts[path] = handle.read().decode("ascii", "replace")
         except OSError:
             texts[path] = ""
     return texts
 
 
 def _session_temp_roots(request: pytest.FixtureRequest) -> tuple[str, ...]:
-    """This session's pytest base temp and the system temp dir."""
-    roots = [tempfile.gettempdir()]
+    """This session's pytest basetemp - the root of every tmp_path - only."""
     try:
-        roots.append(str(request.config._tmp_path_factory.getbasetemp()))
+        return (str(request.config._tmp_path_factory.getbasetemp()),)
     except Exception:  # noqa: BLE001 - a private pytest API; the marker set degrades
-        pass
-    return tuple(roots)
+        return ()
 
 
 def _live_invocation_log_text() -> str:
@@ -1158,12 +1180,13 @@ def _live_runtime_guard(request: pytest.FixtureRequest) -> Generator[RuntimeFenc
     if after != before:
         changed = [n for n in set(before) | set(after) if before.get(n) != after.get(n)]
         after_texts = _live_runtime_texts(changed)
-        contents = {n: (before_texts.get(n, ""), after_texts.get(n, "")) for n in changed}
-        appended = "".join(
-            _appended_text(old, new)
-            for n, (old, new) in contents.items()
-            if os.path.basename(n) == _INVOCATION_LOG_NAME
-        )
+        contents = {n: (before_texts.get(n, ""), after_texts[n]) for n in after_texts}
+        appended = ""
+        for n in changed:
+            if os.path.basename(n) == _INVOCATION_LOG_NAME:
+                tail = _read_appended(n, before[n][0] if n in before else 0)
+                appended += tail
+                contents[n] = ("", tail)
         finding = _runtime_drift(
             before, after, t0, t1, _live_invocation_log_text(), _time.time(),
             appended, contents, _test_markers(*_session_temp_roots(request)),

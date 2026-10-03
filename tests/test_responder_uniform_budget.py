@@ -797,11 +797,40 @@ def test_a_record_carrying_a_test_path_is_a_leak_inside_a_fire(tmp_path):
 
 def test_the_appended_tail_is_only_what_the_test_added():
     conf = _root_conftest()
-    assert conf._appended_text("a\nb\n", "a\nb\nc\n") == "c\n"
-    assert conf._appended_text("a\nb\n", "x\n") == "x\n", "a rotated log is all new"
+    log = Path(conf.__file__).parent / "never-written"  # an absent file reads empty
+    assert conf._read_appended(log, 0) == ""
+
+
+def test_appended_bytes_are_read_from_the_old_size_past_any_cap(tmp_path):
+    """Refuted on 6f9dda2: a 1 MB read cap blinded the content check on a log
+    already past 1 MB. Only the bytes APPENDED since the snapshot are read."""
+    conf = _root_conftest()
+    log = tmp_path / "responder_invocations.log"
+    big = b"2026-10-03T09:00:00\tscheduledtask\t-\tbudget\n" * 40000  # ~1.7 MB
+    log.write_bytes(big)
+    old = log.stat().st_size
+    assert old > (1 << 20), "non-vacuity: the log must be past the old cap"
+    with log.open("ab") as handle:
+        handle.write(b"2026-10-03T11:00:05\tcli\t-\tstart\n")
+    assert conf._read_appended(log, old) == "2026-10-03T11:00:05\tcli\t-\tstart\n"
+    log.write_bytes(b"rotated\n")
+    assert conf._read_appended(log, old) == "rotated\n", "a shrunk log is all new"
+
+
+def test_the_temp_marker_is_the_pytest_basetemp_not_the_system_temp(request):
+    import tempfile
+
+    conf = _root_conftest()
+    roots = conf._session_temp_roots(request)
+    assert roots == (str(request.config._tmp_path_factory.getbasetemp()),), roots
+    markers = conf._test_markers(*roots)
+    system = os.path.normcase(tempfile.gettempdir()).lower()
+    assert system not in markers and "pytest-of-" not in markers, markers
 
 
 def test_an_unclosed_fire_excuses_only_its_measured_duration():
-    """176 closed fires in the live log on 2026-10-03 ran at most 104 s."""
+    """176 closed fires in the live log on 2026-10-03 ran at most 104 s. The
+    start line carries no pid (`log_invocation` writes stamp, source, note,
+    outcome), so liveness cannot be read from it and the cap stays."""
     conf = _root_conftest()
     assert 104.0 < conf._FIRE_OPEN_CAP_SECONDS < 300.0, conf._FIRE_OPEN_CAP_SECONDS

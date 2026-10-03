@@ -704,6 +704,18 @@ class RunBudgetSpent(SpawnFailed):
     termination = "run-budget"
 
 
+class HaltedBeforeSpawn(RunBudgetSpent):
+    """The operator's HALT sentinel appeared after the tick's own check.
+
+    Raised by `_spawn_headless` immediately before `kit.spawn` (ruling on the
+    refutation of 6f9dda2), so a HALT that lands mid-tick starts no session.
+    A `RunBudgetSpent` subclass so the spawn site's ONE existing handler maps
+    it, to the `halted` termination the status file already renders.
+    """
+
+    termination = "halted"
+
+
 class RunLockBusy(RunBudgetSpent):
     """Another responder process holds the run lock, so nothing was started.
 
@@ -1777,6 +1789,9 @@ PROVENANCE_PREFIX = "[RSC-PROVENANCE]"
 PROVENANCE_TOKEN = "rsc-provenance"
 PROVENANCE_FORGED_REASON = "the session wrote the responder's provenance token, which only the responder may write"
 PROVENANCE_MISSING_REASON = "a reply to MAIN must carry exactly one provenance line, the responder's own"
+#: A canonical-form token (see `_canonical_token_text`) anywhere but the one
+#: real provenance line - a lookalike, or separator-only prose. Ruled wording.
+PROVENANCE_OUTSIDE_REASON = "provenance token outside the provenance line"
 
 #: The most leading lines `addresses_self` treats as a note's HEADER, even with
 #: no `## ` heading or `---` rule to end it. MAIN's house format puts its
@@ -2074,85 +2089,58 @@ def verified_body(note: Path, verdicts: dict[str, Provenance]) -> str | None:
     return None if prov is None or prov.body is None else _decode_note(prov.body)
 
 
-#: Digits a lookalike puts where a letter of the token belongs.
-_LOOKALIKE_DIGITS = str.maketrans({"0": "o", "5": "s", "3": "e", "4": "a"})
+#: The canonical token: `PROVENANCE_TOKEN` with everything but [a-z0-9] gone.
+_CANONICAL_TOKEN = "".join(c for c in PROVENANCE_TOKEN if c.isalnum())
 
-#: The token's letters with whatever separates them stripped - the FOLDED form.
-_FOLDED_TOKEN = "".join(c for c in PROVENANCE_TOKEN if c.isalpha())
+#: The confusable map, applied after NFKC and casefold. Digits a lookalike puts
+#: for a letter, and the Cyrillic and Greek letters that render as Latin ones.
+#: Code points are built with chr() so this file stays 7-bit ASCII.
+_CONFUSABLES = str.maketrans(
+    {
+        "0": "o", "1": "l", "3": "e", "4": "a", "5": "s",
+        # Cyrillic a e o p c y x k m t h b i j s
+        chr(0x430): "a", chr(0x435): "e", chr(0x43E): "o", chr(0x440): "p",
+        chr(0x441): "c", chr(0x443): "y", chr(0x445): "x", chr(0x43A): "k",
+        chr(0x43C): "m", chr(0x442): "t", chr(0x43D): "h", chr(0x432): "b",
+        chr(0x456): "i", chr(0x458): "j", chr(0x455): "s", chr(0x44C): "b",
+        # Greek alpha epsilon omicron rho nu kappa tau iota upsilon chi
+        chr(0x3B1): "a", chr(0x3B5): "e", chr(0x3BF): "o", chr(0x3C1): "p",
+        chr(0x3BD): "v", chr(0x3BA): "k", chr(0x3C4): "t", chr(0x3B9): "i",
+        chr(0x3C5): "u", chr(0x3C7): "x",
+    }
+)
 
-#: One letter of the folded token, or a non-ASCII letter standing in for it.
-#: `*` is what `_fold_token_text` writes for a non-ASCII letter.
-_FOLDED_PATTERN = re.compile("".join(f"[{c}*]" for c in _FOLDED_TOKEN))
 
-#: Joiners that fold away OUTSIDE brackets. Whitespace and sentence punctuation
-#: are deliberately absent: they are word boundaries in prose, and `TO RSC.
-#: Provenance verified.` must not read as a token.
-_TOKEN_JOINERS = frozenset("-_~*`'\"|+=/\\")
+def _canonical_token_text(text: str) -> str:
+    """`text` in the CANONICAL form the token is counted in.
 
-#: A bracketed span short enough to be a tag. Inside one, EVERY non-letter
-#: folds away, so `[RSC PROVENANCE]` and `[RSC.PROVENANCE]` are the token.
-_BRACKETED = re.compile(r"\[([^\[\]]{1,40})\]")
-
-
-def _fold_token_text(text: str, joiners: frozenset[str] | None = None) -> str:
-    """`text` reduced to the shape a token lookalike shares with the token.
-
-    NFKC first (fullwidth letters become ASCII), then case is folded and the
-    digits in `_LOOKALIKE_DIGITS` become the letters they imitate. ASCII letters
-    are kept; a non-ASCII letter NFKC could not map - a Cyrillic or Greek
-    homoglyph - becomes the wildcard `*`; format characters (zero-width space
-    and joiners, category Cf) are dropped. Any other character is dropped when
-    `joiners` is None or holds it, and otherwise ENDS the run as a space.
+    RULED on the adversary's refutation of 6f9dda2, replacing a list of
+    lookalikes that could not be finished: NFKC, casefold, `_CONFUSABLES`, then
+    EVERY character not in [a-z0-9] is deleted - separators, punctuation,
+    brackets, combining marks, variation selectors, bidi controls, zero-width
+    characters and every line separator `str.splitlines` knows. Applied to the
+    WHOLE text joined, so no separator of any kind can split a token.
     """
     import unicodedata
 
-    out: list[str] = []
-    for ch in unicodedata.normalize("NFKC", text).lower().translate(_LOOKALIKE_DIGITS):
-        if "a" <= ch <= "z":
-            out.append(ch)
-        elif ord(ch) > 127 and ch.isalpha():
-            out.append("*")
-        elif unicodedata.category(ch) == "Cf" or joiners is None or ch in joiners:
-            continue
-        else:
-            out.append(" ")
-    return "".join(out)
+    folded = unicodedata.normalize("NFKC", text).casefold().translate(_CONFUSABLES)
+    return "".join(c for c in folded if "a" <= c <= "z" or "0" <= c <= "9")
 
 
-def _line_has_lookalike(line: str) -> bool:
-    """Whether one line carries a folded lookalike of the provenance token."""
-    import unicodedata
-
-    if _FOLDED_PATTERN.search(_fold_token_text(line, _TOKEN_JOINERS)):
-        return True
-    bracketed = _BRACKETED.findall(unicodedata.normalize("NFKC", line))
-    return any(_FOLDED_PATTERN.search(_fold_token_text(span)) for span in bracketed)
+def _token_count(text: str) -> int:
+    """How many canonical provenance tokens `text` carries."""
+    return _canonical_token_text(text).count(_CANONICAL_TOKEN)
 
 
 def _carries_token(text: str) -> bool:
-    """Whether `text` carries the provenance token OR A LOOKALIKE OF IT.
+    """Whether `text` carries the provenance token in ANY spelling.
 
-    REFUTED AS AN EXACT SUBSTRING TEST (S3 residual, 2026-10-03): the old rule
-    was `rsc-provenance` in the lowercased text, so `[RSC-PR0VENANCE]`,
-    `[RSC_PROVENANCE]`, `[RSC PROVENANCE]`, a fullwidth spelling, a Cyrillic
-    `o` and a zero-width space inside the token all passed, and an ASCII one
-    reached MAIN as a second "verdict" line beside the responder's real one.
-    The draft-level ascii rule caught the non-ASCII ones; this rule now refuses
-    them ON ITS OWN, so the two are independent.
-
-    THE FOLD IS PER LINE, split as `str.splitlines` splits - the way
-    `provenance_reasons` splits - so letters on two lines never join.
-    Outside brackets only `_TOKEN_JOINERS` fold away, so prose keeps its word
-    boundaries: `the RSC provenance line` and `TO RSC. Provenance verified.`
-    are not tokens. Inside a short `[...]` span every non-letter folds away.
-    STATED COST, fail-closed direction: prose writing `RSC_provenance` or
-    `[RSC provenance]` is refused, and the session is told never to write the
-    tag in any form.
+    Counted in `_canonical_token_text`'s form over the whole text. STATED COST,
+    accepted by ruling: prose that runs RSC into provenance with only
+    separators between - `RSC/provenance`, `the RSC provenance line`, `TO RSC.
+    Provenance verified` - is refused, with `PROVENANCE_OUTSIDE_REASON`.
     """
-    for line in text.splitlines():
-        if PROVENANCE_TOKEN in line.lower() or _line_has_lookalike(line):
-            return True
-    return False
+    return _token_count(text) > 0
 
 
 def stamp_reply(draft: str, line: str | None, bounds: Bounds) -> str:
@@ -2187,15 +2175,25 @@ def provenance_reasons(
     so a bare CR or a form feed counts as a break. The missing-line reason is
     only added when the session's draft was otherwise sendable, so an empty
     draft stays `exhausted`.
+
+    (d) THE CANONICAL COUNT (ruling on the refutation of 6f9dda2). The session
+    draft must carry ZERO canonical tokens; the exact token is `FORGED`, any
+    other spelling `PROVENANCE_OUTSIDE_REASON`. A MAIN reply's FINAL text must
+    carry exactly as many canonical tokens as the one real line contributes,
+    counted over the WHOLE text joined, so no separator can split one away.
     """
     reasons: list[str] = []
-    if _carries_token(child):
+    if PROVENANCE_TOKEN in child.lower():
         reasons.append(PROVENANCE_FORGED_REASON)
+    elif _carries_token(child):
+        reasons.append(PROVENANCE_OUTSIDE_REASON)
     if line is not None and not validate_draft(child, bounds or Bounds()):
         lines = final.splitlines()
-        hits = [ln for ln in lines if _carries_token(ln)]
+        hits = [ln for ln in lines if PROVENANCE_TOKEN in ln.lower()]
         if hits != [line] or len(lines) < 2 or lines[1] != line:
             reasons.append(PROVENANCE_MISSING_REASON)
+        if _token_count(final) != _token_count(line) and PROVENANCE_OUTSIDE_REASON not in reasons:
+            reasons.append(PROVENANCE_OUTSIDE_REASON)
     return reasons
 
 
@@ -2763,9 +2761,62 @@ def _remember_answered_sha(path: Path, name: str, sha: str | None) -> bool:
 
 
 def _content_sha(note: Path, verdicts: dict[str, Provenance]) -> str | None:
-    """sha256 of the bytes the provenance check HASHED for `note`, or None."""
+    """The sha256 to RECORD for `note`: only when its verdict is MATCH, else None.
+
+    REFUTED ON 6f9dda2 (adversary probe pb.py): recording any verdict's hash let
+    a sibling plant real note X's bytes under an old MAIN name Z whose outbox
+    copy differs. Z verified MISMATCH, was answered as data, and its hash then
+    suppressed X. Only bytes MAIN's outbox vouches for under THAT name may feed
+    `drop_redrops`; MISMATCH, NOT-ADDRESSED and UNVERIFIABLE never do.
+    """
+    prov = verdicts.get(note.name)
+    if prov is None or prov.body is None or prov.verdict != PROVENANCE_MATCH:
+        return None
+    return prov.inbox_sha256
+
+
+def _inbox_sha(note: Path, verdicts: dict[str, Provenance]) -> str | None:
+    """The sha256 of the inbox bytes hashed for `note`, whatever the verdict.
+
+    Used only to MATCH a candidate against hashes already recorded, which are
+    MATCH-only by `_content_sha`; it never feeds a record.
+    """
     prov = verdicts.get(note.name)
     return None if prov is None or prov.body is None else prov.inbox_sha256
+
+
+def backfill_answered_hashes(path: Path, inbox: Path, roots: dict[str, Path]) -> int:
+    """Hash answered MAIN names that predate the sha map, IF they verify MATCH NOW.
+
+    A one-time, lazy migration: a name in the answered record with no hash is
+    hashed only while its inbox file still exists AND `main_provenance` says
+    MATCH for it now; anything else stays unhashed and is retried next cycle.
+    One write through `atomic_write_json` when at least one name landed, and
+    none otherwise, so an unverified record is never rewritten. Returns how
+    many names were hashed.
+    """
+    if not path.is_file() or not answered_usable(path)[0]:
+        return 0
+    names = _answered(path)
+    hashes = _answered_hashes(path)
+    added: dict[str, str] = {}
+    for name in sorted(names - set(hashes)):
+        if sender_of(name) != MAIN_CODE:
+            continue
+        note = inbox / name
+        try:
+            if not note.is_file():
+                continue
+        except OSError:
+            continue
+        sha = _content_sha(note, {name: main_provenance(note, roots)})
+        if sha is not None:
+            added[name] = sha
+    if not added:
+        return 0
+    if not atomic_write_json(path, _answered_doc(names, {**hashes, **added})):
+        return 0
+    return len(added)
 
 
 def content_seen(answered: Path, refusals: Path) -> dict[str, set[str]]:
@@ -2794,7 +2845,7 @@ def drop_redrops(
     """
     kept: list[Path] = []
     for n in queue:
-        sha = _content_sha(n, verdicts)
+        sha = _inbox_sha(n, verdicts)
         if sha is not None and seen.get(sha, set()) - {n.name}:
             continue
         kept.append(n)
@@ -3769,6 +3820,7 @@ def _run_once(
     verdicts = provenance_map(candidates, roots)
     # RE-DROPS KEYED BY CONTENT HASH (S3 residual b): bytes already answered or
     # held under another name are not picked again, whatever their mtime.
+    backfill_answered_hashes(DEFAULT_ANSWERED, inbox, roots)
     candidates = drop_redrops(candidates, verdicts, content_seen(DEFAULT_ANSWERED, DEFAULT_REFUSALS))
     queue = bypass_queue(main_first(candidates, verdicts, bounced), verdicts, bypass_only, answered)
     # GATE:empty-queue
@@ -4395,6 +4447,10 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
     # ABOVE the note (`build_prompt`); nothing is appended after the note.
     full_prompt = prompt
     finished: list[subprocess.CompletedProcess] = []
+    # HALT AGAIN, immediately before the session: the tick checked once at its
+    # start, and a sentinel that landed since must still mean no spawn.
+    if _halt_requested():
+        raise HaltedBeforeSpawn("the operator's HALT sentinel is present")
     try:
         line = kit.spawn(
             _kit_root(),
