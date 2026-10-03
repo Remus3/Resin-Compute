@@ -1860,10 +1860,10 @@ def test_banned_glyph_in_commit_message_is_refused(gate_repo: _ThrowawayRepo):
 # commit-msg. The one signal git gives the hook is `GIT_EDITOR=:`, exported
 # into the hook's environment exactly when no editor was used.
 #
-# So the two halves differ. The GLYPH half scans every line, comments included:
-# a glyph in a comment costs nothing to remove. The SUBJECT half reads the
-# first line git will keep, and treats `#` lines as content whenever it cannot
-# show git will strip them.
+# So both halves share ONE predicate, `hash_lines_are_stripped()`: `#` lines
+# are content - scanned for glyphs, and eligible as the subject - whenever it
+# cannot show git will strip them. The glyph half once scanned every line;
+# that falsely blocked the editor flows in the section below.
 # ---------------------------------------------------------------------------
 
 SUBJECT_MARKER = "commit-msg: subject line rejected"
@@ -2000,6 +2000,155 @@ def test_the_editor_flow_commits_clean_with_template_comments_present(
     assert b"\n# " in judged, (
         f"the hook was never handed a template comment, so this arm graded nothing: {judged!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# GIT'S OWN TEMPLATE IS NOT ASCII - five flows an adversary found falsely
+# blocked at 8436e68, when the glyph half scanned every `#` line.
+#
+# In an editor flow git writes branch names, author names and paths into its
+# `#` template lines and strips them AFTER the hook runs. The landed message
+# is pure ASCII, so a refusal there is a FALSE block. The glyph half now skips
+# `#` lines exactly when the subject half does - `hash_lines_are_stripped()`.
+# `--no-edit` keeps them and the U+00E9 LANDS, so that block is correct.
+# ---------------------------------------------------------------------------
+
+E_ACUTE = chr(0x00E9)
+NA_NAME = "caf" + E_ACUTE
+
+
+def _git_with_editor(
+    repo: _ThrowawayRepo, tmp_path: Path, *args: str, authored: bytes | None = None
+) -> subprocess.CompletedProcess:
+    """Run git with an editor launched by `sys.executable`. With `authored` it
+    writes that message above git's template; without, it leaves the file."""
+    script = tmp_path / "editor.py"
+    py = sys.executable.replace("\\", "/")
+    if authored is None:
+        script.write_bytes(b"import sys\n")
+        editor = f'"{py}" "{script.as_posix()}"'
+    else:
+        script.write_bytes(_EDITOR_SCRIPT)
+        authored_file = tmp_path / "authored.txt"
+        authored_file.write_bytes(authored)
+        editor = f'"{py}" "{script.as_posix()}" "{authored_file.as_posix()}"'
+    env = dict(repo.env)
+    env["GIT_EDITOR"] = editor
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(repo.root),
+        env=env,
+        capture_output=True,
+        timeout=_TIMEOUT,
+        check=False,
+    )
+
+
+def _make_resolved_conflict(repo: _ThrowawayRepo, relpath: str) -> None:
+    """A merge of `side` into the base branch that conflicts on `relpath`,
+    resolved and staged, with the merge commit still to be made."""
+    base = repo.git("rev-parse", "--abbrev-ref", "HEAD", check=True).stdout.strip()
+    repo.git("checkout", "-q", "-b", "side", check=True)
+    repo.stage(relpath, b"side\n")
+    assert repo.commit(b"feat(gate-probe): side\n", no_verify=True).returncode == 0
+    repo.git("checkout", "-q", base, check=True)
+    repo.stage(relpath, b"main\n")
+    assert repo.commit(b"feat(gate-probe): main\n", no_verify=True).returncode == 0
+    merge = repo.git("merge", "side")
+    assert merge.returncode != 0, f"the merge did not conflict: {merge.stdout}"
+    repo.stage(relpath, b"resolved\n")
+
+
+def _assert_landed_ascii(
+    repo: _ThrowawayRepo, before: str, proc: subprocess.CompletedProcess
+) -> None:
+    stderr = proc.stderr.decode("utf-8", "replace")
+    assert proc.returncode == 0 and repo.head() != before, (
+        f"FALSE BLOCK: git would have landed a pure-ASCII message.\nstderr: {stderr}"
+    )
+    landed = _landed_message(repo)
+    assert landed.isascii(), f"the landed message is not ASCII: {landed!r}"
+    judged = (repo.root / ".git" / "COMMIT_EDITMSG").read_bytes()
+    assert E_ACUTE.encode("utf-8") in judged, (
+        f"the hook was never handed a non-ASCII template line, so this arm graded nothing: {judged!r}"
+    )
+
+
+def test_an_editor_commit_after_a_conflict_on_a_non_ascii_path_lands(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    _make_resolved_conflict(gate_repo, NA_NAME + ".txt")
+    before = gate_repo.head()
+    _assert_landed_ascii(gate_repo, before, _git_with_editor(gate_repo, tmp_path, "commit"))
+
+
+def test_merge_continue_after_a_conflict_on_a_non_ascii_path_lands(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    _make_resolved_conflict(gate_repo, NA_NAME + ".txt")
+    before = gate_repo.head()
+    _assert_landed_ascii(
+        gate_repo, before, _git_with_editor(gate_repo, tmp_path, "merge", "--continue")
+    )
+
+
+def test_an_amend_with_a_non_ascii_author_lands(gate_repo: _ThrowawayRepo, tmp_path: Path):
+    gate_repo.stage("note.txt", CLEAN_CONTENT)
+    gate_repo.message_file.write_bytes(CLEAN_MESSAGE)
+    authored = gate_repo.git(
+        "-c", "user.name=Jos" + E_ACUTE, "commit", "--no-verify", "-q",
+        "-F", str(gate_repo.message_file),
+    )
+    assert authored.returncode == 0, authored.stderr
+    before = gate_repo.head()
+    _assert_landed_ascii(
+        gate_repo, before, _git_with_editor(gate_repo, tmp_path, "commit", "--amend")
+    )
+
+
+def test_an_editor_commit_on_a_non_ascii_branch_lands(gate_repo: _ThrowawayRepo, tmp_path: Path):
+    gate_repo.git("checkout", "-q", "-b", NA_NAME, check=True)
+    gate_repo.stage("note.txt", CLEAN_CONTENT)
+    before = gate_repo.head()
+    _assert_landed_ascii(
+        gate_repo, before, _git_with_editor(gate_repo, tmp_path, "commit", authored=CLEAN_MESSAGE)
+    )
+
+
+def test_an_editor_commit_with_quotepath_false_and_a_non_ascii_path_lands(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    gate_repo.git("config", "core.quotePath", "false", check=True)
+    gate_repo.stage(NA_NAME + ".txt", CLEAN_CONTENT)
+    before = gate_repo.head()
+    _assert_landed_ascii(
+        gate_repo, before, _git_with_editor(gate_repo, tmp_path, "commit", authored=CLEAN_MESSAGE)
+    )
+
+
+def test_a_no_edit_commit_after_a_non_ascii_conflict_stays_blocked(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    """`--no-edit` exports GIT_EDITOR=: and keeps `#` lines, so the U+00E9 in
+    the conflict list would LAND. Refusing it closes an old hole."""
+    _make_resolved_conflict(gate_repo, NA_NAME + ".txt")
+    before = gate_repo.head()
+    proc = _git_with_editor(gate_repo, tmp_path, "commit", "--no-edit")
+    stderr = proc.stderr.decode("utf-8", "replace")
+    assert gate_repo.head() == before, f"a non-ASCII `#` line landed via --no-edit: {stderr}"
+    assert proc.returncode != 0 and GATE_MARKER in stderr, stderr
+
+
+def test_non_vacuity_an_unconfigured_clone_lands_the_non_ascii_conflict_line_via_no_edit(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    """The block above refuses bytes git really keeps: proven, not assumed."""
+    gate_repo.disarm()
+    _make_resolved_conflict(gate_repo, NA_NAME + ".txt")
+    before = gate_repo.head()
+    proc = _git_with_editor(gate_repo, tmp_path, "commit", "--no-edit")
+    assert proc.returncode == 0 and gate_repo.head() != before, proc.stderr
+    assert E_ACUTE.encode("utf-8") in _landed_message(gate_repo)
 
 
 # ---------------------------------------------------------------------------

@@ -1319,7 +1319,10 @@ MESSAGE_MUTANTS: tuple[MessageMutant, ...] = (
 #: runs commit-msg before cleanup and does not tell the hook the flag, so
 #: `scripts/precommit_msg_check.py::hash_lines_are_stripped` reads the editor
 #: default (strip) and skips a `#` first line that will in fact land as the
-#: subject. The glyph half is unaffected - it scans every line. The lane
+#: subject. The glyph half shares that predicate and so the gap: a glyph on a
+#: `#` line lands unscanned there too. Scanning every line instead falsely
+#: blocks editor flows, whose git template carries non-ASCII branch, author
+#: and path names that git strips after the hook. The lane
 #: commits through `-F` only, where git exports `GIT_EDITOR=:` and the hook
 #: fails closed, so no row here could grade the gap.
 KNOWN_MESSAGE_SURVIVORS: tuple[MessageMutant, ...] = ()
