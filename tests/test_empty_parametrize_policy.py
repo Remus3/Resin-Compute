@@ -7,7 +7,7 @@ emptied - collects as one SKIPPED item and the run stays green. That is a
 guard silently testing nothing. ``pytest.ini`` therefore pins
 ``empty_parameter_set_mark = fail_at_collect``.
 
-Three arms:
+Five arms:
 
 * the ini arm reads ``pytest.ini`` with ``configparser`` and asserts the key;
 * the probe arm writes a one-test module with an empty parametrize into
@@ -16,7 +16,12 @@ Three arms:
 * the control arm runs the same probe with the option overridden back to
   ``skip`` and asserts it passes with a skip - the non-vacuity arm proving the
   probe can tell the two policies apart rather than failing for some other
-  reason.
+  reason;
+* the confinement arm plants a raising ``conftest.py`` one directory ABOVE
+  the child's working directory and asserts the child never imports it - the
+  child must collect only its probe file, never walk the shared ``%TEMP%``;
+* its control arm widens ``--confcutdir`` to the trap's directory and asserts
+  the trap fires, so the confinement arm cannot be green vacuously.
 
 The message literal is pytest's own, from ``_pytest/mark/structures.py``
 (``get_empty_parameterset_mark``), pytest 9.0.3.
@@ -38,6 +43,8 @@ _PYTEST = (sys.executable, "-m", "pytest")
 
 _FAIL_MESSAGE = "Empty parameter set in 'test_probe'"
 
+_TRAP_MARKER = "outside-trap-conftest-was-imported"
+
 _PROBE_SOURCE = (
     "import pytest\n"
     "\n"
@@ -54,15 +61,26 @@ def _child_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if not k.upper().startswith("PYTEST_")}
 
 
-def _run_probe(tmp_path: Path, *extra: str) -> subprocess.CompletedProcess[str]:
-    probe = tmp_path / "test_empty_probe.py"
+def _run_probe(workdir: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+    workdir.mkdir(parents=True, exist_ok=True)
+    probe = workdir / "test_empty_probe.py"
     probe.write_bytes(_PROBE_SOURCE.encode("ascii"))
     cmd = [
         *_PYTEST,
         "-c",
         str(PYTEST_INI),
         "--rootdir",
-        str(tmp_path),
+        str(workdir),
+        # Without this, `-c` makes confcutdir the REPO root, and pytest then
+        # collects every ancestor of the probe that is not an ancestor of the
+        # repo - up to the drive root - as a Dir, scanning the shared %TEMP%
+        # (_pytest/main.py Session.collect, _pytest/config Config._preparse,
+        # pytest 9.0.3). Pinned to the probe's own directory so the child
+        # collects that one file and nothing above it. Placed BEFORE *extra
+        # so the control arm below can widen it again; argparse keeps the
+        # last value.
+        "--confcutdir",
+        str(workdir),
         "-p",
         "no:cacheprovider",
         "-rs",
@@ -71,7 +89,7 @@ def _run_probe(tmp_path: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     ]
     return subprocess.run(
         cmd,
-        cwd=tmp_path,
+        cwd=workdir,
         env=_child_env(),
         capture_output=True,
         text=True,
@@ -111,3 +129,42 @@ def test_control_the_probe_skips_when_the_policy_is_overridden_to_skip(
     assert "1 skipped" in output, output
     assert "got empty parameter set" in output, output
     assert _FAIL_MESSAGE not in output, output
+
+
+def _plant_outside_trap(tmp_path: Path) -> Path:
+    # A conftest.py in the PARENT of the child's working directory that
+    # raises on import. A child whose collection is confined to its own
+    # directory never imports it; a child that walks upward does, and fails.
+    # The trap lives inside this test's own tmp_path, never in the shared
+    # basetemp, so it cannot reach a sibling test's child run.
+    (tmp_path / "conftest.py").write_bytes(
+        b"raise RuntimeError('" + _TRAP_MARKER.encode("ascii") + b"')\n"
+    )
+    return tmp_path / "inner"
+
+
+def test_the_child_collection_is_confined_to_its_own_directory(
+    tmp_path: Path,
+) -> None:
+    # Regression: with `-c <repo>/pytest.ini` the child's confcutdir defaulted
+    # to the REPO root, so every ancestor of the probe that was not also an
+    # ancestor of the repo - up to the drive root - was collected as a Dir.
+    # That scanned the shared %TEMP% and failed when a concurrent process's
+    # temp dir vanished mid-scan. The upward walk is observable here as the
+    # import of the planted conftest.
+    proc = _run_probe(_plant_outside_trap(tmp_path))
+    output = proc.stdout + proc.stderr
+    assert _TRAP_MARKER not in output, output
+    assert _FAIL_MESSAGE in output, output
+
+
+def test_control_the_outside_trap_fires_when_confcutdir_is_widened(
+    tmp_path: Path,
+) -> None:
+    # Non-vacuity: the same trap, with confcutdir widened back to the trap's
+    # own directory. If the trap could not fire, the confinement arm above
+    # would be green for a reason other than confinement.
+    proc = _run_probe(_plant_outside_trap(tmp_path), "--confcutdir", str(tmp_path))
+    output = proc.stdout + proc.stderr
+    assert proc.returncode != 0, output
+    assert _TRAP_MARKER in output, output
