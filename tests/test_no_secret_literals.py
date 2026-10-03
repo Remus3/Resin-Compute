@@ -21,7 +21,8 @@ are ACTUALLY diagnostic of a secret and are never diagnostic of a digest:
 
   1. A VENDOR-PREFIXED TOKEN. Real credentials from these services carry a fixed
      prefix that a hash never has - `sk-`, `ghp_`, `github_pat_`, `AIza`,
-     `RGAPI-`, `xox[bapsr]-`, `sk-ant-`.
+     `RGAPI-`, `xox[bapsr]-`, `sk-ant-`, with the `sk-ant-admin01-` and
+     `sk-ant-api03-` families named on their own rows.
   2. A KNOWN SECRET VARIABLE NAME BOUND TO A LITERAL. `NIMBLE_API_KEY = "..."`,
      `"ANTHROPIC_API_KEY": "..."`, `GITHUB_PERSONAL_ACCESS_TOKEN=...`. The
      variable name is the evidence; the value's entropy is irrelevant. This is
@@ -500,21 +501,47 @@ def test_the_sweep_and_the_publisher_agree_that_a_literal_is_a_literal(literal):
 # tool. An arm that iterated the tool's own table would be checking the list
 # against itself and would stay green when a prefix was deleted from it.
 
-#: Every vendor prefix the two detectors named between them, HAND COUNTED by
-#: vendor: five Slack spellings, two OpenAI/Anthropic, two GitHub, one Google,
-#: one Riot. Eleven.
+#: Every vendor prefix the two detectors name between them, HAND COUNTED by
+#: vendor: five Slack spellings, three Anthropic, one OpenAI, two GitHub, one
+#: Google, one Riot. Thirteen.
+#:
+#: THE ANTHROPIC FAMILIES ARE NAMED, NOT INHERITED. Until 2026-10-03 the only
+#: Anthropic row was the generic `sk-ant-`, filed in one bucket with OpenAI's
+#: `sk-`, and an admin key (`sk-ant-admin01-`) was caught only because it
+#: happens to begin with both. Measured that day: with the `sk-ant-` and `sk-`
+#: rows removed from `pns.VENDOR_TOKENS`, a 40-character admin-shaped probe
+#: matched NO remaining row. So deleting or narrowing the generic rule would
+#: have blinded both detectors to the admin family with every arm green. The
+#: ordinary API family `sk-ant-api03-` is named for the same reason; it is the
+#: spelling this module already plants in its own fixtures below.
+#:
+#: ASSUMPTION, stated rather than buried: the two family prefixes are taken from
+#: this tree's own fixtures (`sk-ant-api03-`) and from the dispatch that opened
+#: this change (`sk-ant-admin01-`, Anthropic's Admin API key family). They were
+#: not re-derived from a web search.
 _SLACK_PREFIXES = ("xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-")
-_OPENAI_PREFIXES = ("sk-ant-", "sk-")
+_ANTHROPIC_FAMILY_PREFIXES = ("sk-ant-admin01-", "sk-ant-api03-")
+_ANTHROPIC_PREFIXES = _ANTHROPIC_FAMILY_PREFIXES + ("sk-ant-",)
+_OPENAI_PREFIXES = ("sk-",)
 _GITHUB_PREFIXES = ("ghp_", "github_pat_")
 _GOOGLE_PREFIXES = ("AIza",)
 _RIOT_PREFIXES = ("RGAPI-",)
 VENDOR_PREFIX_ROSTER = (
-    _SLACK_PREFIXES + _OPENAI_PREFIXES + _GITHUB_PREFIXES + _GOOGLE_PREFIXES + _RIOT_PREFIXES
+    _SLACK_PREFIXES
+    + _ANTHROPIC_PREFIXES
+    + _OPENAI_PREFIXES
+    + _GITHUB_PREFIXES
+    + _GOOGLE_PREFIXES
+    + _RIOT_PREFIXES
 )
+
+#: The GENERIC rows a named family must not depend on. Both, because `sk-` alone
+#: also matches every `sk-ant-` token.
+_GENERIC_SK_PREFIXES = ("sk-ant-", "sk-")
 
 #: SYNTHETIC, and deliberately not credential-shaped beyond its length: forty
 #: repeated zeros. Every vendor's character class accepts a digit, so one body
-#: drives all eleven prefixes. Nothing in this file is or resembles a live key.
+#: drives all thirteen prefixes. Nothing in this file is or resembles a live key.
 SYNTHETIC_BODY = "0" * 40
 
 
@@ -522,14 +549,100 @@ def test_the_vendor_roster_buckets_sum_to_a_hand_counted_population():
     """A floor. An emptied population parametrizes to nothing and SKIPS at rc 0."""
     buckets = (
         _SLACK_PREFIXES,
+        _ANTHROPIC_PREFIXES,
         _OPENAI_PREFIXES,
         _GITHUB_PREFIXES,
         _GOOGLE_PREFIXES,
         _RIOT_PREFIXES,
     )
-    assert sum(len(bucket) for bucket in buckets) == 11
-    assert len(VENDOR_PREFIX_ROSTER) == 11
-    assert len(set(VENDOR_PREFIX_ROSTER)) == 11, "a prefix is rostered twice"
+    assert sum(len(bucket) for bucket in buckets) == 13
+    assert len(VENDOR_PREFIX_ROSTER) == 13
+    assert len(set(VENDOR_PREFIX_ROSTER)) == 13, "a prefix is rostered twice"
+    assert len(_ANTHROPIC_FAMILY_PREFIXES) == 2, "an Anthropic family was dropped"
+
+
+@pytest.mark.parametrize("family", _ANTHROPIC_FAMILY_PREFIXES)
+def test_each_anthropic_family_is_a_named_row_of_the_single_source(family):
+    """Named in the table both detectors are built from, not merely matched by it."""
+    table = [entry.prefix for entry in pns.VENDOR_TOKENS]
+    assert family in table, (
+        "Anthropic family " + family + " has no row of its own in "
+        "pns.VENDOR_TOKENS; it is caught only through the generic sk-ant- / sk- "
+        "rows, so removing those would drop it silently"
+    )
+    # Alternation order: a family row must precede the generic rows, or the
+    # sweep's alternation names the shorter prefix instead of the family.
+    for generic in _GENERIC_SK_PREFIXES:
+        if generic in table:
+            assert table.index(family) < table.index(generic), (
+                family + " sits after the generic " + generic + " row"
+            )
+
+
+def _without_generic_sk_rows() -> tuple:
+    return tuple(
+        entry for entry in pns.VENDOR_TOKENS if entry.prefix not in _GENERIC_SK_PREFIXES
+    )
+
+
+def test_disabling_the_generic_rows_really_disables_them():
+    """Non-vacuity for the arm below: the patched table is genuinely blind.
+
+    A bare `sk-ant-` token outside every named family must be caught by the
+    real table and MISSED by the patched one. If the patch stopped removing the
+    generic rows, the survival arm would pass by riding on them.
+    """
+    stray = "sk-ant-" + "zz" + "0" * 40
+    assert pns.scan_for_leaks("token " + stray) != [], "the real table missed sk-ant-"
+    patched = _without_generic_sk_rows()
+    assert not any(entry.prefix in _GENERIC_SK_PREFIXES for entry in patched)
+    assert not any(re.search(entry.pattern(), stray) for entry in patched), (
+        "a generic-shaped token is still caught with the generic rows removed, "
+        "so the survival arm cannot tell a named row from the generic rule"
+    )
+
+
+@pytest.mark.parametrize("family", _ANTHROPIC_FAMILY_PREFIXES)
+def test_an_anthropic_family_is_caught_by_its_own_row_without_the_generic_rule(
+    family, monkeypatch
+):
+    """The mutation the roster exists to survive: the generic rows deleted.
+
+    The planted key is BUILT AT RUNTIME from the family prefix and a synthetic
+    body of repeated zeros, so this file holds no credential-shaped literal.
+    """
+    planted = family + "0" * 40
+    patched = _without_generic_sk_rows()
+    monkeypatch.setattr(pns, "VENDOR_TOKENS", patched)
+    leaks = pns.scan_for_leaks("token " + planted)
+    assert leaks != [], (
+        "with the generic sk-ant- / sk- rows removed, THE PUBLISHER no longer "
+        "refuses a " + family + " key"
+    )
+    assert any(repr(family) in detail for _, detail in leaks), (
+        "the refusal does not name " + family + " - it fired on some other row"
+    )
+    sweep_alternation = re.compile("(?:" + "|".join(e.pattern() for e in patched) + ")")
+    match = sweep_alternation.search("token " + planted)
+    assert match is not None and match.group(0).startswith(family), (
+        "with the generic rows removed, the sweep's alternation no longer "
+        "catches a " + family + " key by its own row"
+    )
+
+
+#: Prose that NAMES a family without carrying a key body. Must stay legal: a
+#: guard that refused a sentence documenting the prefix would be deleted.
+ANTHROPIC_FAMILY_PROSE = (
+    "admin keys start sk-ant-admin01- and are rotated monthly",
+    "the sk-ant-admin family",
+    "see sk-ant-api03- in the console",
+)
+
+
+@pytest.mark.parametrize("prose", ANTHROPIC_FAMILY_PROSE)
+def test_prose_naming_an_anthropic_family_is_not_a_credential(prose):
+    assert scan_text(prose) == [], "the sweep flagged prose: " + prose
+    assert pns.scan_for_leaks(prose) == [], "THE PUBLISHER flagged prose: " + prose
 
 
 @pytest.mark.parametrize("prefix", VENDOR_PREFIX_ROSTER)
@@ -709,7 +822,7 @@ def test_a_name_outside_the_roster_is_not_treated_as_a_secret():
 # because its identifier segments were two characters too long.
 #
 # SCALE, re-derived here by a DECLARED METHOD rather than by listing cases: the
-# full cartesian product of the eleven rostered vendor prefixes and the four
+# full cartesian product of the eleven vendor prefixes rostered at the time and the four
 # segmentation layouts below, 44 tokens. THIRTY of the 44 were caught by an old
 # detector and missed by BOTH new ones.
 #
@@ -777,12 +890,12 @@ VENDOR_LAYOUT_PROBES = tuple(
 def test_the_probe_set_is_the_declared_product_and_is_not_empty():
     """The floor. An emptied parametrize is `1 skipped` at exit code 0."""
     assert len(SEGMENTATION_LAYOUTS) == 4, "a segmentation layout was dropped"
-    assert len(VENDOR_PREFIX_ROSTER) == 11
-    assert len(VENDOR_LAYOUT_PROBES) == 44, (
-        "the probe set is no longer 11 prefixes x 4 layouts; a shrunken product "
+    assert len(VENDOR_PREFIX_ROSTER) == 13
+    assert len(VENDOR_LAYOUT_PROBES) == 52, (
+        "the probe set is no longer 13 prefixes x 4 layouts; a shrunken product "
         "reports green over whatever survived"
     )
-    assert len({token for _, _, token in VENDOR_LAYOUT_PROBES}) == 44
+    assert len({token for _, _, token in VENDOR_LAYOUT_PROBES}) == 52
 
 
 def test_the_adversary_probe_is_shaped_as_described():

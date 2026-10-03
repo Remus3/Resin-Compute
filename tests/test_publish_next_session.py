@@ -723,7 +723,9 @@ def test_hyphen_segmented_prose_still_publishes(innocent):
 
 from tests.test_no_secret_literals import (  # noqa: E402
     ADVERSARY_PROBE,
+    SEGMENTATION_LAYOUTS,
     VENDOR_LAYOUT_PROBES,
+    VENDOR_PREFIX_ROSTER,
 )
 
 
@@ -743,8 +745,18 @@ def test_no_vendor_layout_combination_is_accepted_by_the_publish_gate(prefix, la
 
 
 def test_the_probe_set_reaching_this_module_is_not_empty():
-    """The floor. An emptied import parametrizes to nothing and skips at rc 0."""
-    assert len(VENDOR_LAYOUT_PROBES) == 44
+    """The floor. An emptied import parametrizes to nothing and skips at rc 0.
+
+    DERIVED, NOT SPELLED. The literal that sat here went stale the moment the
+    roster grew. The expectation is the declared product - prefixes times
+    layouts - and never `len(VENDOR_LAYOUT_PROBES)` itself, which would compare
+    the probe set to itself and pass when it was emptied. The `> 0` floor is
+    what still catches an emptied roster, where the product is zero too; the
+    hand-counted population lives in `tests/test_no_secret_literals.py`.
+    """
+    expected = len(VENDOR_PREFIX_ROSTER) * len(SEGMENTATION_LAYOUTS)
+    assert expected > 0, "the roster or the layout set reaching this module is empty"
+    assert len(VENDOR_LAYOUT_PROBES) == expected
 
 
 def test_the_adversary_probe_token_never_reaches_disk(tmp_path):
