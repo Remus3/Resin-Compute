@@ -24,8 +24,6 @@ from pathlib import Path
 
 import pytest
 
-from core import headless_env as he
-
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "tools" / "moon_sync_responder.py"
 
@@ -109,22 +107,29 @@ def test_the_trust_check_is_handed_spawn_cwd(rsp, sentinel, tmp_path, monkeypatc
     )
 
 
-def test_the_subprocess_spawn_is_handed_spawn_cwd(rsp, sentinel, monkeypatch):
-    """Drive `_spawn_headless` to `subprocess.run` and record its `cwd`."""
-    import shutil
+def test_the_subprocess_spawn_is_handed_spawn_cwd(rsp, sentinel, monkeypatch, tmp_path):
+    """Drive `_spawn_headless` to `subprocess.run` and record its `cwd`.
+
+    The fleet kit hands its OWN root to `run` as `cwd`; the responder's `run=`
+    wrapper must replace it with `SPAWN_CWD`. `kit_route` puts the kit's root
+    at a third directory, so a wrapper that passed the kit's cwd through would
+    record that and go red here.
+    """
+    import json
+
+    from tests.test_headless_env import kit_route
 
     calls: list[dict] = []
 
     def run(*args, **kwargs):
         calls.append(kwargs)
-        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="ok", stderr="")
+        return subprocess.CompletedProcess(
+            args=args[0], returncode=0, stdout=json.dumps({"result": "ok"}), stderr=""
+        )
 
     monkeypatch.setattr(subprocess, "run", run)
-    monkeypatch.setattr(shutil, "which", lambda _n: str(ROOT / "fake-claude-shim.cmd"))
-    monkeypatch.setattr(
-        rsp, "_headless_gate",
-        lambda: he.Decision(True, {"PATH": "x", he.ENV_CHILD_BASE_URL: "http://proxy.invalid:9"}, ""),
-    )
+    kit_route(rsp, monkeypatch, tmp_path)
+    assert Path(rsp.KIT_ROOT).resolve() != sentinel.resolve(), "non-vacuity: the roots must differ"
 
     assert rsp._spawn_headless("a prompt", rsp.Bounds()) == "ok"
 

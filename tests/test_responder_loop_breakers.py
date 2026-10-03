@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from core import headless_env as he
+from tests.test_headless_env import kit_route
 
 ROOT = Path(__file__).resolve().parents[1]
 RESPONDER_PATH = ROOT / "tools" / "moon_sync_responder.py"
@@ -90,11 +90,9 @@ class _Run:
 
 
 @pytest.fixture()
-def routed(rsp, monkeypatch):
-    import shutil
-
-    monkeypatch.setattr(shutil, "which", lambda _n: str(ROOT / "fake-claude-shim.cmd"))
-    monkeypatch.setattr(rsp, "_headless_gate", lambda: he.Decision(True, {"PATH": "x"}, ""))
+def routed(rsp, monkeypatch, tmp_path):
+    """Routed through the fleet kit with a loopback stub URL and an injected dial."""
+    kit_route(rsp, monkeypatch, tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -532,12 +530,9 @@ def test_f2_a_huge_int_row_caps_every_sender_without_crashing(rsp):
 
 
 def test_f2_a_huge_int_backoff_is_usage_backoff_not_spawn_failed(rsp, tmp_path, monkeypatch):
-    import shutil
-
     _agree(rsp)
     _trust(rsp, monkeypatch)
-    monkeypatch.setattr(shutil, "which", lambda _n: str(ROOT / "fake-claude-shim.cmd"))
-    monkeypatch.setattr(rsp, "_headless_gate", lambda: he.Decision(True, {"PATH": "x"}, ""))
+    kit_route(rsp, monkeypatch, tmp_path)
     run = _Run("ok", returncode=0)
     monkeypatch.setattr(subprocess, "run", run)
     rsp.DEFAULT_BACKOFF.parent.mkdir(parents=True, exist_ok=True)
