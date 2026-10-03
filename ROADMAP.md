@@ -13,18 +13,85 @@ version. What follows is everything the scaffold deliberately did not do.
 
 - **NEW 2026-10-03 (evening), HIGHEST PRIORITY. FLEET-KIT v4 WRAP-UP,
   INCLUDING THE /120 USAGE COUNTER.** Operator: first thing next session.
-  (1) The /120 counter and its reset: the responder reserves runs in its own
-  OS-locked ledger while the kit keeps a separate `RunBudget` under
-  ops/loop/control (unbackticked: gitignored); the status file shows the
-  binding cap. Reconcile what [n/120] shows, when it resets (rolling 24 h,
-  `cap_frees_at`), and whether the two ledgers should become one. The v4 kit
-  lock outlives a dead holder by up to 120 s and its stale cleanup unlinks
-  the lock, both pinned against here by `tests/test_responder_uniform_budget.py`.
+  (1) SETTLED 2026-10-03, uncommitted pending verification - see the
+  adjudicated call below and `docs/LEDGER.md`.
   (2) Send MAIN the kit v5 gap list: should_skip damps quoted markers in
   non-ORDER classes; spawn exposes no is_error/subtype; RunBudget lock
-  lifetime; halt_file read with exists() (dangling link reads as go).
+  lifetime; halt_file read with exists() (dangling link reads as go);
+  `RunBudget` has no public single-read snapshot (`used`/`can_start`/
+  `frees_at` each re-read and swallow the error, so a caller cannot tell
+  unreadable from full without the private `_load`); and RunBudget readers
+  take no lock, so an unlocked reader can make the kit's atomic replace
+  raise PermissionError on Windows, which escapes `kit.spawn` as an OSError
+  and lands as `SpawnFailed` AFTER the responder run is reserved; and
+  `_iso` raises OverflowError on an Infinity or epoch-ms stamp while
+  `_status_quietly` suppresses only OSError, so such a stamp under the cap
+  escapes `kit.spawn` after its start is counted.
   (3) Responder provenance still uses its own outbox hash, not v4
   `verify_main` (committed blob).
+
+- **DECIDED 2026-10-03. THE /120 COUNTER: TWO LEDGERS STAY, THE BINDING ONE
+  REPORTS.** Status schema 1 is unchanged - no new field pair. Its
+  `runs_in_window`/`runs_cap`/`window_s`/`cap_frees_at` always come from ONE
+  ledger, the one that binds, via `_status_budget` in
+  `tools/moon_sync_responder.py`: no cap binding, or the responder's own run
+  budget binding, reads the responder ledger, so the widget shows [n/120]
+  with n = runs reserved in the rolling 24 h window; MAIN's per-sender reply
+  cap binding reads [replies/cap] from the outbound ledger; the kit's own
+  `RunBudget` binding (new termination `kit-run-budget`,
+  `KitRunBudgetSpent`) reads the kit ledger. BOTH RUN LEDGERS FULL (adversary
+  2026-10-03): a run needs headroom in both, so the status reports whichever
+  run ledger frees LAST, whole - count, cap, window and free time from that
+  one ledger (`_binding_run_budget`), whichever of the two refused. RESET:
+  rolling 24 h per ledger; `cap_frees_at` = that ledger's oldest in-window
+  row + its window. A limit with no computable free time (corrupt ledger)
+  or with headroom on re-read (a transient read, a race) reads Backing Off,
+  never limit. An UNREADABLE kit ledger (pre-check `readable()` false, or
+  `kit.BudgetUnreadable` inside `kit.spawn`) is `KitBudgetUnreadable`,
+  reusing termination `usage-backoff` (status Backing Off), not
+  `run-locked` (status Idle would hide a record refusing every start);
+  the termination reads usage-backoff, so the invocation log also gets a
+  durable `fail-closed:kit-run-budget-unreadable` line, like its sibling
+  unreadable records. Unreadable is TRANSIENT (a PermissionError under a
+  concurrent writer, measured 2026-10-03 on about 1 read in 13) or CORRUPT
+  (the kit refuses every start until a person repairs or removes it); the
+  log cannot tell which. EVERY kit-ledger decision takes ONE read through
+  the kit's own `_load` - the pre-check and the status (`_status_budget`) -
+  and one tick's status reads each run ledger once, since the public API
+  cannot tell unreadable from full in one call and two reads mixed a failed
+  count with a real free time (a false limit ~22 h late); a kit rename of
+  `_load` turns `tests/test_headless_env.py` red. UNPRINTABLE STAMPS
+  (adversary round 4): a ledger row whose age-out time the kit's `_iso`
+  cannot print (Infinity, or epoch milliseconds) makes that ledger
+  UNREADABLE for any decision naming a time - counted as its cap, null
+  `cap_frees_at`, never a limit (`_stamps_printable`, plus a backstop in
+  `_StatusBudget`); the kit pre-check refuses such a ledger as
+  `KitBudgetUnreadable`; and both status writers (`_write_tick_status`,
+  `_write_idle`) now log OverflowError fail-closed instead of raising it out
+  of the tick. An idle tick over such a responder ledger stays Idle (the
+  lane is not blocked; the count reads as the cap), as a corrupt one did. `window_s` and `runs_cap` now ship as ints.
+  Proven in `tests/test_headless_env.py`.
+  WHY NO SEPARATE RUN-BUDGET PAIR: schema 1 (MAIN 0915) declares no
+  extension rule, `kit.write_status` writes a fixed dict and the responder
+  writes only through it, and the widget renders only the one pair; a
+  second pair would need a responder-side writer beside the kit's.
+  ALTERNATIVES: (A) extra `run_budget_used`/`run_budget_cap` fields - rejected
+  as above; (B) always report the run ledger and only borrow `cap_frees_at`
+  from the binding cap - rejected, it breaks the widget owner's invariant
+  "counts come from the binding cap's ledger" pinned in
+  `tests/test_headless_env.py`. REVERSE IF: MAIN ships a schema 2 or a kit
+  writer that accepts extra fields, or the widget owner rules [n/120] must
+  show while the MAIN reply cap binds.
+  UNIFY ONTO THE KIT `RunBudget`: NO, NOT NOW. `tests/test_responder_uniform_budget.py`
+  pins "a holder that dies frees the lock at once" and "no stale-timeout path
+  is left and the lock file is never unlinked"; v4's `RunBudget._lock` is an
+  O_EXCL lock file that a dead holder leaves for up to `lock_stale` 120 s and
+  whose stale steal and release both unlink it. ALTERNATIVES: (A) feed the
+  kit `RunBudget` only and drop the responder ledger - rejected, loses both
+  pinned properties; (B) mirror responder reservations into the kit file -
+  rejected, the kit file is the kit's and `kit.spawn` already appends one
+  start per real spawn. REVERSE IF: a kit version (v5 gap list, item 2 above)
+  ships an OS-held lock that frees on holder death and never unlinks.
 
 - **NEW 2026-10-03 (evening). KNOWN GAPS RECORDED, NOT FIXED.** An explicit
   `--cleanup=whitespace` or `verbatim` on an editor commit hides `#` lines
