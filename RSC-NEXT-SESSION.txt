@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-03, gates measured at commit 9061eb4 on main. Everything below
+Stamped 2026-10-03, gates measured at commit 14b1ee5 on main. Everything below
 is a READING taken that day, not a promise about now. Re-measure before citing.
 
 BOOTSTRAP - READ IN THIS ORDER
@@ -37,11 +37,12 @@ pytest.ini already carries one and a second makes -qq, which prints no summary
 line at all. mypy is ADVISORY and traverses only mypy.ini's files= roots, so it
 says NOTHING about headless/, ops/, surface/, scripts/ or tests/.
 
-STATE OBSERVED 2026-10-03 AT 9061eb4 (pre-push run)
-  tests 3467 passed 4 skipped; pity_engine 80. Earlier seam readings the same
+STATE OBSERVED 2026-10-03 AT 14b1ee5 (pre-push run)
+  tests 3479 passed 4 skipped; pity_engine 80. CI ci GREEN at 14b1ee5
+  (CI was RED 9061eb4..7551604 - see 2d108ee). Earlier seam readings the same
   day: node 52, licence 47, docs 42, qa 17 passed 2 skipped 3 noted, mypy 40
   source files. A real push at 9f49813 read 3348 passed 4 skipped - the old
-  pre-push-only extra skip is gone. CI result: see banner.
+  pre-push-only extra skip is gone.
 
 WHAT LANDED 2026-10-03, SECOND HALF
   bcbabc7  pytest.ini empty_parameter_set_mark = fail_at_collect;
@@ -60,6 +61,9 @@ WHAT LANDED 2026-10-03, SECOND HALF
            It then answered MAIN 0815 and 0830 unattended.
   9061eb4  two tests wrote the live runtime; conftest fence + drift check;
            run record backfilled 8 -> 2 real rows.
+  2d108ee  fence resolves paths through dir_fd (Linux rmtree) and uses
+           os.O_CREAT; this is what turned CI green again.
+  14b1ee5  empty-parametrize probe child confined with --confcutdir.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
   1. MAIN 0912 overhead cut, the remainder: --setting-sources project,local;
@@ -71,8 +75,9 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
   2. MAIN 0915: responder writes an inbox status JSON (schema 1) in a new loop
      control directory under ops. Not yet gitignored - ignore it in the same
      commit that first writes it.
-  3. MAIN 0955 FLEET-KIT v1: order note plus a 3-file payload directory in the
-     inbox. Unread. Condense CLAUDE.md, route headless spawns through the kit.
+  3. MAIN FLEET-KIT: v1 (0955) and v2 (1014) are SUPERSEDED by v3 (1016),
+     order note plus a 3-file payload directory in the inbox. Unread.
+     MAIN 1029 says a kit bundle is a DIRECTORY - hash each file inside. Condense CLAUDE.md, route headless spawns through the kit.
      Verify sha256 against MAIN's outbox; read the payload bytes.
   4. Responder residuals: ASCII lookalike provenance tokens pass (the real
      verdict stays on line 2); a byte-identical re-drop of an unanswered MAIN
@@ -92,6 +97,11 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
   the C4 landing, the responder provenance/budget/floor, the test-leak fence.
 
 TRAPS MEASURED - none are hypothetical
+  AN AUDIT-HOOK FENCE GREEN ON WINDOWS CAN BE RED ON LINUX. Linux rmtree
+  emits path events relative to a dir_fd that Windows never emits, and an
+  O_* literal like 0x100 means different flags per platform. Read CI after
+  every fence change; a local green proves nothing about Linux.
+
   USER-SCOPE SETTINGS DEFAULT TO bypassPermissions HERE. A headless child's
   --allowed-tools is NOT a floor without --permission-mode dontAsk. Measure a
   floor live; never infer it from the flags.

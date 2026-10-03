@@ -12,6 +12,26 @@ now.
 
 ---
 
+## 2026-10-03 (close) - CI was red from 9061eb4 to 7551604; 2d108ee and 14b1ee5 turned it green
+
+The live-runtime fence from `9061eb4` passed on Windows and failed on Linux CI
+(both `ci` and `docs-guards`). Cause, measured from the CI log and reproduced
+with synthetic events: Linux `shutil.rmtree` removes entries by name relative
+to an open directory handle, so pytest's own `tmp_path` cleanup raised
+`('os.rmdir', ('moon_sync_inbox', fd))`; the fence joined the bare name onto
+the cwd (the repo root) and reported the live inbox. Windows never emits that
+event. `2d108ee` resolves every fenced path through `_resolve_event_path(path,
+dir_fd)` in `conftest.py`, pinned by `tests/test_live_runtime_fence.py`, and
+replaces a Windows-only `0x100` literal with `os.O_CREAT` in
+`tests/test_responder_uniform_budget.py`. The pre-push run then caught a second
+defect: the empty-parametrize probe child walked the shared temp directory up
+to the drive root; `14b1ee5` confines it with `--confcutdir`, pinned by a
+trap-conftest arm in `tests/test_empty_parametrize_policy.py`. Readings,
+2026-10-03 at `14b1ee5`: pre-push tests 3479 passed 4 skipped, pity_engine 80;
+CI `ci` success.
+
+---
+
 ## 2026-10-03 (second half) - C4 landed, a HALT sentinel and lock budget, MAIN provenance in the responder, and a test leak fenced
 
 Landed as `bcbabc7`, `a875e48`, `9f49813`, `be03565`, `3d62942`, `1829b9d`
