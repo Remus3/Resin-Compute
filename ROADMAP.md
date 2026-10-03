@@ -106,8 +106,17 @@ version. What follows is everything the scaffold deliberately did not do.
   End-to-end arms with non-vacuity twins in `tests/test_hook_gate.py`.
   RESIDUALS: `-F`/`-m` with `commit.cleanup=strip` configured plus an
   explicit keeping flag (no template, flag invisible); a human who swaps the
-  keep sentence for the strip one; a localised git falsely blocks a non-ASCII
-  branch or path in its template. ALTERNATIVES: parent-process argv (no
+  keep sentence for the strip one. KNOWN FALSE-BLOCK SOURCES, each
+  worked around with `git commit -F <file>`: a localised git, whose
+  translated sentence reads as unknown, blocks a non-ASCII branch or path in
+  its template; an editor commit with `--no-status` or `commit.status=false`
+  after a merge conflict on a non-ASCII path blocks on the `#\t<path>` line
+  under `# Conflicts:`, which git strips (adversary refutation of ed2f4a0,
+  adjudicated KEEP fail-closed: special-casing `# Conflicts:` would skip
+  lines verbatim keeps; pinned BLOCKED in `tests/test_hook_gate.py`);
+  `git commit -v` scans the diff below the scissors line, which git cuts -
+  this one PREDATES the change and is reasoned from git's order, not yet
+  measured. ALTERNATIVES: parent-process argv (no
   portable Windows read, blind to aliases) - rejected. REVERSE IF: git
   changes or translates the template sentence on a supported lane, or starts
   passing the cleanup mode to commit-msg.

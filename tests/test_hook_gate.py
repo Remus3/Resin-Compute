@@ -2332,6 +2332,38 @@ def test_non_vacuity_a_keeping_editor_commit_lands_the_hash_glyph_line(
     assert ("# note " + EM_DASH).encode("utf-8") in _landed_message(gate_repo)
 
 
+def test_a_no_status_editor_commit_after_a_non_ascii_conflict_is_blocked(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    """A CHOSEN FALSE BLOCK, pinned so it cannot change silently. `--no-status`
+    drops the strip sentence but git still writes `# Conflicts:` and the
+    U+00E9 path, and strips them. Adjudicated KEEP fail-closed: skipping
+    `# Conflicts:` lines would also skip them under verbatim, where they land.
+    Workaround: `git commit -F`. See ROADMAP.md."""
+    _make_resolved_conflict(gate_repo, NA_NAME + ".txt")
+    before = gate_repo.head()
+    proc = _git_with_editor(gate_repo, tmp_path, "commit", "--no-status")
+    stderr = proc.stderr.decode("utf-8", "replace")
+    assert gate_repo.head() == before, f"the pinned trade-off changed - it landed: {stderr}"
+    assert proc.returncode != 0 and GATE_MARKER in stderr, stderr
+    judged = (gate_repo.root / ".git" / "COMMIT_EDITMSG").read_bytes()
+    assert b"# Conflicts:" in judged and E_ACUTE.encode("utf-8") in judged, judged
+
+
+def test_non_vacuity_a_no_status_editor_commit_after_a_non_ascii_conflict_lands_ascii(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    """The twin: with no hooks git lands the same commit, conflict line
+    stripped - which is what makes the block above a FALSE one."""
+    gate_repo.disarm()
+    _make_resolved_conflict(gate_repo, NA_NAME + ".txt")
+    before = gate_repo.head()
+    proc = _git_with_editor(gate_repo, tmp_path, "commit", "--no-status")
+    assert proc.returncode == 0 and gate_repo.head() != before, proc.stderr
+    landed = _landed_message(gate_repo)
+    assert landed.isascii(), f"git kept a non-ASCII line, so the block is not false: {landed!r}"
+
+
 def test_non_vacuity_a_merge_edit_with_cleanup_verbatim_lands_the_hash_glyph_line(
     gate_repo: _ThrowawayRepo, tmp_path: Path
 ):
