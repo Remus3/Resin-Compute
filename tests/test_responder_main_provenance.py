@@ -697,3 +697,126 @@ def test_an_empty_child_draft_on_a_main_note_is_still_exhausted(rsp, tmp_path):
     assert result["termination"] == "exhausted", result
     # A bounce may land - it is a fixed template without the tag - but no REPLY.
     assert [r for r in _replies(main) if rsp.RESPONDER_TAG in r] == []
+
+
+# ---------------------------------------------------------------------------
+# MAIN 1029 FIX: a kit bundle is a DIRECTORY. Provenance is per file, at the
+# same relative path under MAIN's outbox copy of that directory. Opening the
+# directory itself raises PermissionError on Windows (IsADirectoryError
+# elsewhere), so the verdict must never be computed by hashing the directory.
+# ---------------------------------------------------------------------------
+
+BUNDLE = "2026-10-03-1029-from-MAIN-FLEET-KIT-v3"
+BUNDLE_FILES = {
+    "fleet_headless.py": b"KIT_VERSION = 3\n",
+    "MANIFEST.json": b'{"version": 3}\n',
+    "sub/FLEET-COMMON.md": b"# common\n",
+}
+
+
+def _bundle_bed(tmp_path, inbox_files=None, outbox_files=None):
+    inbox = tmp_path / "inbox"
+    main = tmp_path / "main"
+    (main / "moon_sync_inbox").mkdir(parents=True)
+    for base, files in (
+        (inbox / BUNDLE, BUNDLE_FILES if inbox_files is None else inbox_files),
+        (main / "moon_sync_outbox" / BUNDLE, BUNDLE_FILES if outbox_files is None else outbox_files),
+    ):
+        base.mkdir(parents=True)
+        for rel, data in files.items():
+            target = base / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+    return inbox, main
+
+
+def test_a_bundle_directory_matches_per_file(rsp, tmp_path):
+    inbox, main = _bundle_bed(tmp_path)
+    prov = rsp.main_provenance(inbox / BUNDLE, {"MAIN": main})
+    assert prov.verdict == rsp.PROVENANCE_MATCH, prov
+    assert prov.error is None, prov
+    assert prov.outbox_sha256 == prov.inbox_sha256
+    assert len(prov.outbox_sha256 or "") == 64
+
+
+def test_a_bundle_never_opens_the_directory_itself(rsp, tmp_path, monkeypatch):
+    """The Windows failure mode, reproduced on every platform: opening a
+    directory raises PermissionError. Per-file provenance never does that."""
+    inbox, main = _bundle_bed(tmp_path)
+    real_open = Path.open
+    opened_dirs: list[Path] = []
+
+    def guarded(self, *args, **kwargs):
+        if self.is_dir():
+            opened_dirs.append(self)
+            raise PermissionError(13, "Permission denied")
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", guarded)
+    prov = rsp.main_provenance(inbox / BUNDLE, {"MAIN": main})
+    assert opened_dirs == [], opened_dirs
+    assert prov.verdict == rsp.PROVENANCE_MATCH, prov
+
+
+def test_the_open_guard_fires_on_a_directory(tmp_path, monkeypatch):
+    """Non-vacuity for the arm above: the guard does raise on a directory."""
+    real_open = Path.open
+
+    def guarded(self, *args, **kwargs):
+        if self.is_dir():
+            raise PermissionError(13, "Permission denied")
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", guarded)
+    with pytest.raises(PermissionError):
+        tmp_path.open("rb")
+
+
+@pytest.mark.parametrize(
+    "inbox_files, outbox_files, verdict",
+    [
+        # One byte changed in one file.
+        ({**BUNDLE_FILES, "MANIFEST.json": b'{"version": 4}\n'}, None, "MISMATCH"),
+        # An extra file in our copy that MAIN never shipped.
+        ({**BUNDLE_FILES, "extra.py": b"x\n"}, None, "MISMATCH"),
+        # A file MAIN shipped that our copy lacks.
+        ({k: v for k, v in BUNDLE_FILES.items() if k != "MANIFEST.json"}, None, "MISMATCH"),
+        # The same bytes at a DIFFERENT relative path.
+        (
+            {
+                "fleet_headless.py": b"KIT_VERSION = 3\n",
+                "MANIFEST.json": b'{"version": 3}\n',
+                "FLEET-COMMON.md": b"# common\n",
+            },
+            None,
+            "MISMATCH",
+        ),
+        # An empty bundle proves nothing.
+        ({}, {}, "UNVERIFIABLE"),
+    ],
+    ids=["byte-changed", "extra-file", "missing-file", "moved-file", "empty"],
+)
+def test_a_bundle_that_differs_anywhere_is_not_a_match(
+    rsp, tmp_path, inbox_files, outbox_files, verdict
+):
+    inbox, main = _bundle_bed(tmp_path, inbox_files, outbox_files)
+    prov = rsp.main_provenance(inbox / BUNDLE, {"MAIN": main})
+    assert prov.verdict == verdict, prov
+
+
+def test_a_bundle_whose_outbox_twin_is_a_file_is_unverifiable(rsp, tmp_path):
+    inbox, main = _bundle_bed(tmp_path, outbox_files={})
+    twin = main / "moon_sync_outbox" / BUNDLE
+    twin.rmdir()
+    twin.write_bytes(b"not a directory\n")
+    prov = rsp.main_provenance(inbox / BUNDLE, {"MAIN": main})
+    assert prov.verdict == rsp.PROVENANCE_UNVERIFIABLE, prov
+
+
+def test_a_bundle_is_skipped_by_the_queue_and_spawns_nothing(rsp, tmp_path):
+    """A verified bundle is still not a note to answer: no spawn, no reply."""
+    inbox, main = _bundle_bed(tmp_path)
+    result, prompts = _cycle(rsp, tmp_path, inbox, {"MAIN": main})
+    assert prompts == []
+    assert result["note"] is None, result
+    assert _replies(main) == []
