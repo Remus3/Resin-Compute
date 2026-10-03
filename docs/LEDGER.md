@@ -12,6 +12,23 @@ now.
 
 ---
 
+## 2026-10-03 (late) - MAIN provenance adjudicated: the outbox byte hash stays (ADR-011)
+
+DECISION RECORDED, NO CODE CHANGE. FLEET-KIT v4 item (3) asked whether the
+responder should replace `tools/moon_sync_responder.py::main_provenance` (raw-
+byte SHA-256 of MAIN's outbox copy, 4 MiB cap `MAX_PROVENANCE_BYTES`, no git)
+with the kit's `verify_main` (committed blob). An adjudicator chose A, keep it,
+against the pinned operator wording in CLAUDE.md and the v4 order's section 7
+scope (7.1 adds `verify_main` for the v4 delivery note and its five bundle
+files only; the 7.3 adoption list excludes provenance; 7.4 is advice).
+Rejected: B kit-only, C both plus retry, D either. Evidence, measured
+2026-10-03: over 27 real MAIN notes in the inbox both checks agreed and all
+passed; three other `-from-MAIN-` named files were this tree's own auto-reply
+files; the commit-lag case was never observed. Two items filed in
+`ROADMAP.md`: the UNVERIFIABLE-recorded-answered liveness gap, and the
+untested roots-map common-mode risk. See
+`docs/adr/ADR-011-main-provenance.md`.
+
 ## 2026-10-03 (late) - the /120 counter settled: the binding ledger reports, kit refusals included
 
 RESIDUAL CLOSED. A refusal by the fleet kit's own `RunBudget` (the read-only
