@@ -138,6 +138,18 @@ def spawned(rsp, monkeypatch):
     """
     import shutil
 
+    # THE HEADLESS ROUTE AND THE USAGE BACKOFF ARE STUBBED, so this arm grades
+    # the spawn's kwargs and not the host. Unstubbed, the gate reads the live
+    # user environment store and probes the live proxy: green on a host where
+    # both exist, red on CI where neither does. The backoff read would reach the
+    # live runtime record, which this fixture does not redirect.
+    from core import headless_env
+
+    monkeypatch.setattr(
+        rsp, "_headless_gate", lambda: headless_env.Decision(True, {"PATH": "x"}, "")
+    )
+    monkeypatch.setattr(rsp, "backoff_active", lambda *_a, **_k: False)
+
     record = _Captured()
     monkeypatch.setattr(shutil, "which", lambda _name: str(ROOT / "fake-claude-shim.cmd"))
     monkeypatch.setattr(subprocess, "run", record)
