@@ -824,15 +824,20 @@ def emit_health(context: JobContext) -> JobResult:
     if context.dry_run:
         return skipped(name, "dry run - would write the heartbeat")
 
+    from headless import quarantine
     from ops import health
 
+    # The quarantine's degraded flag rides on the heartbeat too, so not even
+    # the in-pass write drops it.
+    extra, suffix = quarantine.health_fields(context.runtime_dir)
     try:
         path = health.write_health(
             alive=True,
             started_at=context.started_at or None,
             uid=context.uid,
             role="headless-runner",
-            message="pass in progress",
+            message="pass in progress" + suffix,
+            extra=extra,
             jobs=[r.as_dict() for r in context.results.values()],
             engine_version_value=health.engine_version(),
             base=Path(context.runtime_dir) if context.runtime_dir else None,

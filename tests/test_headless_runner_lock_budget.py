@@ -698,7 +698,14 @@ def _beats(work: Path) -> int:
 
 
 def test_a_second_holder_never_acquires_while_the_zombie_lives(tmp_path: Path) -> None:
-    """The adversary's probe shape, against a REAL hold under a tmp root."""
+    """The adversary's probe shape, against a REAL hold under a tmp root.
+
+    Liveness is judged by `slots.pid_alive` - the reaper's OWN predicate - and
+    by the zombie's heartbeat, never by `Popen.poll()`. `poll()` can lag the
+    exit code the reaper reads, so a poll-judged arm flaked 5 in 25 against a
+    correct runner. `poll()` is still CALLED each turn, only to reap the child
+    on POSIX, where an unreaped zombie pid reads as alive.
+    """
     work = tmp_path / "work"
     work.mkdir()
     child = _spawn_child(work)
@@ -708,9 +715,10 @@ def test_a_second_holder_never_acquires_while_the_zombie_lives(tmp_path: Path) -
         acquired_alive: bool | None = None
         end = time.monotonic() + 20.0
         while time.monotonic() < end:
-            alive = child.poll() is None
+            child.poll()
+            alive = slots_mod.pid_alive(child.pid)
             if _try_second_holder(work / "slots"):
-                acquired_alive = alive and child.poll() is None
+                acquired_alive = slots_mod.pid_alive(child.pid)
                 break
             if alive:
                 refused_while_alive += 1
@@ -767,6 +775,12 @@ def test_the_process_dies_holding_its_slot_and_the_late_write_never_lands(
     assert health["last_pass_ok"] is False
     assert "overran" in health["message"]
     assert "Traceback" not in json.dumps(health)
+    assert health["abandoned_jobs"] == ["zombie"]
+
+    # The abandonment was counted BEFORE the process ended, so the restart
+    # the supervisor makes can see it.
+    record = json.loads((work / "runtime" / "job_abandonments.json").read_text(encoding="utf-8"))
+    assert record["zombie"]["consecutive"] == 1
 
     # The dead-pid reap path frees the lock promptly for the next holder.
     t0 = time.monotonic()

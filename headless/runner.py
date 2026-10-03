@@ -51,6 +51,7 @@ from pathlib import Path
 from typing import Any
 
 from headless import jobs as jobs_mod
+from headless import quarantine as quarantine_mod
 from ops import health as health_mod
 from ops.loop import slots as slots_mod
 
@@ -157,6 +158,8 @@ class PassResult:
     deadline_skipped: int = 0
     #: Jobs recorded FAIL because they overran JOB_DEADLINE_SECONDS.
     overran: int = 0
+    #: Jobs not started because they are quarantined after repeated hangs.
+    quarantine_skipped: int = 0
 
     @property
     def failed(self) -> list[jobs_mod.JobResult]:
@@ -185,6 +188,8 @@ class PassResult:
             line += f"; deadline reached: {self.deadline_skipped} jobs not started"
         if self.overran:
             line += f"; {self.overran} job overran its deadline and was failed"
+        if self.quarantine_skipped:
+            line += f"; {self.quarantine_skipped} quarantined job not started"
         return line
 
 
@@ -406,9 +411,15 @@ def run_pass(
     # Monotonic, never `time.time`: a wall-clock step must not end a pass early
     # or extend it. Looked up at call time, not bound at import.
     deadline = float(PASS_DEADLINE_SECONDS)
+    # Quarantine: a job abandoned on consecutive passes is skipped by a FULL
+    # pass. Naming it with `--job` runs it anyway - that is the operator's
+    # retry, and its one successful completion lifts the quarantine.
+    record = quarantine_mod.load(runtime_dir)
+    explicit = set(job_names or ())
     pass_start = time.monotonic()
     for spec in specs:
         elapsed = time.monotonic() - pass_start
+        entry = record.get(spec.name)
         if outcome.overran:
             # A job overran and may still be running, mutating the shared
             # context. Nothing after it may read that context, so the rest of
@@ -431,10 +442,25 @@ def run_pass(
                 deadline_seconds=int(deadline),
             )
             outcome.deadline_skipped += 1
+        elif entry and entry["quarantined"] and spec.name not in explicit:
+            result = jobs_mod.skipped(
+                spec.name,
+                f"not started - quarantined after hanging on {entry['consecutive']} "
+                f"consecutive passes; run it alone with --job {spec.name} to retry",
+            )
+            outcome.quarantine_skipped += 1
         else:
             result, overran = _run_job_bounded(spec, context)
             if overran:
                 outcome.overran += 1
+            # Written NOW, before the next job and before any process exit,
+            # so a pass that ends the process still leaves the count behind.
+            # A dry run writes nothing.
+            abandoned = bool(result.details.get("abandoned"))
+            if not dry_run and quarantine_mod.apply_result(
+                record, spec.name, result.status, abandoned
+            ):
+                quarantine_mod.save(runtime_dir, record)
         context.results[spec.name] = result
         outcome.results.append(result)
         log.info("%-6s %-16s %s", result.status, result.name, result.message)
@@ -451,7 +477,12 @@ def run_pass(
 
 
 def _write_summary(outcome: PassResult, runtime_dir: str | None) -> None:
-    """Persist the pass summary to the health file. Never raises."""
+    """Persist the pass summary to the health file. Never raises.
+
+    Carries the quarantine's degraded flag, read from the record at write time,
+    so a later summary can never silently clear it.
+    """
+    extra, suffix = quarantine_mod.health_fields(runtime_dir)
     try:
         health_mod.write_health(
             alive=True,
@@ -462,7 +493,8 @@ def _write_summary(outcome: PassResult, runtime_dir: str | None) -> None:
             engine_version_value=health_mod.engine_version(),
             role="headless-runner",
             uid=outcome.uid,
-            message=outcome.summary_line(),
+            message=outcome.summary_line() + suffix,
+            extra=extra,
             base=Path(runtime_dir) if runtime_dir else None,
         )
     except OSError:
@@ -636,6 +668,8 @@ def _die_holding_slot(outcome: PassResult, runtime_dir: str | None, cycle: int) 
         ", ".join(names),
         EXIT_JOB_ABANDONED,
     )
+    extra, suffix = quarantine_mod.health_fields(runtime_dir)
+    extra.update({"abandoned_jobs": names, "exit_code": EXIT_JOB_ABANDONED})
     try:
         health_mod.write_health(
             alive=False,
@@ -649,8 +683,9 @@ def _die_holding_slot(outcome: PassResult, runtime_dir: str | None, cycle: int) 
             message=(
                 "a job overran its deadline and could not be stopped, so the runner "
                 "exited to stop it; it restarts under its supervisor"
-            ),
-            extra={"abandoned_jobs": names, "exit_code": EXIT_JOB_ABANDONED},
+            )
+            + suffix,
+            extra=extra,
             base=Path(runtime_dir) if runtime_dir else None,
         )
     except Exception:  # noqa: BLE001 - nothing may stop the exit below
@@ -896,11 +931,13 @@ def run_once(
 
 def _write_shutdown_health(runtime_dir: str | None) -> None:
     """Mark the health file not-alive on a clean exit. Never raises."""
+    extra, suffix = quarantine_mod.health_fields(runtime_dir)
     try:
         health_mod.write_health(
             alive=False,
             role="headless-runner",
-            message="stopped cleanly",
+            message="stopped cleanly" + suffix,
+            extra=extra,
             base=Path(runtime_dir) if runtime_dir else None,
         )
     except OSError:
