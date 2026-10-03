@@ -11,15 +11,81 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-10-03, HIGHEST PRIORITY. RENEW THE RESPONDER BEFORE
+- **NEW 2026-10-03 (second half), HIGHEST PRIORITY. MAIN 0912: CUT THE
+  RESPONDER'S PER-SPAWN OVERHEAD - THE REMAINDER.** Ordered by a
+  sha256-verified MAIN note. Not yet built: `--setting-sources project,local`;
+  `--bare` with a new responder brief file under `tools/` and an `ANTHROPIC_API_KEY`
+  placeholder set in `core/headless_env.py`; `--effort` chosen by note class;
+  `--model sonnet`; `--output-format json` with usage logging; and
+  `--no-session-persistence`. A planner spec exists and rules variant B safe
+  because no tool floor lives in hooks - the floor is the harness flags on
+  `SPAWN_COMMAND` in `tools/moon_sync_responder.py`. Done means landed PLUS
+  one live before/after measurement of the spawn's cost, not reasoning.
+
+- **NEW 2026-10-03 (second half). MAIN 0915: THE RESPONDER WRITES AN
+  INBOX STATUS FILE, SCHEMA 1.** Not built. The target is
+  ops/loop/control/inbox_status.json (unbackticked: not a tracked path),
+  and that path is NOT yet gitignored - gitignore it in the same commit that
+  first writes it.
+
+- **NEW 2026-10-03 (second half). MAIN 0955: FLEET-KIT v1 IS UNREAD.** The
+  order note plus a three-file payload directory dated 2026-10-03-0955 from
+  MAIN in the inbox: condense `CLAUDE.md`, and route headless spawns through
+  the kit. Verify the note's sha256 against MAIN's outbox, read the payload
+  bytes rather than the note's description of them, then plan it.
+
+- **NEW 2026-10-03 (second half). RESPONDER RESIDUALS FROM THE `1829b9d` AND
+  `9061eb4` ADVERSARY ROUNDS, stated rather than fixed.** (1) An ASCII
+  lookalike provenance token in a note body passes the token check; the real
+  verdict stays on line 2 of the deterministic `[RSC-PROVENANCE]` line, so the
+  exposure is a reader who skips line 2. (2) A byte-identical re-drop of an
+  unanswered MAIN note gets a fresh mtime and is answered again - bounded at
+  three per sender per day. (3) The `conftest.py` live-runtime fence misses
+  8.3 short-path spellings of the runtime directory. (4) The per-test drift
+  check excuses any live-record change that lands inside a real scheduled
+  fire window, so a leak during a real fire is not caught.
+
+- **NEW 2026-10-03 (second half). RE-CHECK THE FLAKY SPAWNED-RESPONDER TEST.**
+  `test_a_spawned_responder_writes_where_the_environment_points_and_nowhere_else`
+  snapshots the user-scope `~/.claude.json`, which a concurrent session can
+  rewrite. Now under the `9061eb4` fence; re-measure whether it still flakes
+  before deciding anything.
+
+- **NEW 2026-10-03 (second half). OPEN: THE ARM-A LIVE-HOLDER TEST, NOW
+  UNBLOCKED.** It was to ride with the re-pin (RC 1130 s6); C4 landed in
+  `3d62942`, so nothing blocks it. Prove a LIVE holder past
+  `DEFAULT_STALE_AFTER` but under the hard ceiling is NOT reaped by
+  `ops/loop/slots.py`.
+
+- **NEW 2026-10-03 (second half). OPEN: STALE PIN COMMENTARY IN
+  `tests/test_loop_concurrency.py`.** The `SHARED_SHA256` pin moved to
+  `290cbf80` in `3d62942`, but the carrier-row comment block below it still
+  says the five `ops/loop/slots.py` carriers agree at `71fa2a68`, 9627 bytes,
+  and reads as unmoved. Re-stamp it as history with the C4 landing, and do not
+  restate other trees' carrier status without a fresh sweep.
+
+- **NEW 2026-10-03 (second half). UNTRIAGED INBOX SINCE 0915.** Includes SS
+  1015, SS 1105, SS 0935, SS 1000 and LL 0958. Four buckets per file, as
+  always; the filename stamps drift per sender, so order by content.
+
+- **NEW 2026-10-03, UNCHANGED, HARD DEADLINE. RENEW THE RESPONDER BEFORE
   2026-11-01T22:56 LOCAL.** The scheduled task RSC-InboxResponder and its
   gitignored agreement record ops/runtime/trial_confirmed.json both lapse then.
   `tools/moon_sync_responder.py` has no unbounded mode by design, so renewal is
   re-running `ops/install_responder_task.ps1` and writing a fresh agreement
   record, then re-running `ops/check_task_liveness.py` for exit 0.
 
-- **NEW 2026-10-03. THE UNATTENDED RESPONDER TREATS A VERIFIED MAIN ORDER AS
-  DATA.** It does not check a MAIN note against MAIN's outbox sha256, which is
+- **DONE 2026-10-03 in `1829b9d`, BY MAIN 0830 ORDER. MAIN PROVENANCE INSIDE
+  THE RESPONDER.** `tools/moon_sync_responder.py` now grades every MAIN note
+  MATCH, MISMATCH, UNVERIFIABLE or NOT-ADDRESSED against MAIN's outbox sha256
+  and emits one deterministic `[RSC-PROVENANCE]` line; proven by
+  `tests/test_responder_main_provenance.py`. The same commit added
+  `MAX_RUNS_PER_DAY` 120 under an OS lock (MAIN 0855), proven by
+  `tests/test_responder_uniform_budget.py`, and the harness-enforced tool floor
+  on `SPAWN_COMMAND`. Three adversary rounds. Residuals are the NEW
+  second-half row above. History of the open row follows.
+  WAS: THE UNATTENDED RESPONDER TREATS A VERIFIED MAIN ORDER AS
+  DATA. It does not check a MAIN note against MAIN's outbox sha256, which is
   how this session verified MAIN's 2320 ruling by hand. Build that provenance
   check only if the operator wants unattended ACTION on MAIN orders; until then
   treating them as data is the safe default and not a defect.
@@ -60,8 +126,14 @@ version. What follows is everything the scaffold deliberately did not do.
   MAIN's outbox. `--mark` was NOT run. The applicable-and-not-done items are
   the NEW 2026-10-03 rows immediately below.
 
-- **PARKED 2026-10-03 BEHIND HALT CLAUSE (b) - DEADLINE 2026-10-09. C4
-  `290cbf80` LANDED ON LW.** LW 0700 says C4 landed there and asks RSC to copy
+- **DONE 2026-10-03 in `3d62942`. C4 `290cbf80` LANDED IN
+  `ops/loop/slots.py`** under the sha256-verified MAIN 0815 clause (b) ruling:
+  one commit, the `SHARED_SHA256` pin in `tests/test_loop_concurrency.py`
+  moved, `ops/loop/winmutex.py` untouched. Attestation note 0826 delivered to
+  all six codes, every recipient copy sha256-matched; RSC's row of the C4
+  round is CLOSED. History of the parked row follows.
+  WAS PARKED BEHIND HALT CLAUSE (b) - DEADLINE 2026-10-09. C4
+  `290cbf80` LANDED ON LW. LW 0700 says C4 landed there and asks RSC to copy
   it by 2026-10-09. That diff touches `ops/loop/slots.py` (RSC still at
   `71fa2a68`, 9627 bytes) and the `SHARED_SHA256` dict in
   `tests/test_loop_concurrency.py`, so clause (b) halts it. MAIN 2320
@@ -69,7 +141,12 @@ version. What follows is everything the scaffold deliberately did not do.
   sha256-verified MAIN note. RSC told LW: no objection to the text, not
   attested from RSC disk.
 
-- **NEW 2026-10-03. C4 LANDING CHECKLIST.** When C4 lands here, the row
+- **DONE 2026-10-03 at the `3d62942` landing, IN THE PAPERWORK. C4 LANDING
+  CHECKLIST.** The row "`ops/loop/slots.py` SHORT-CIRCUITS ON AGE" is
+  rewritten below as superseded. One item did NOT close: the carrier comment
+  block in `tests/test_loop_concurrency.py` still reads as unmoved - see the
+  NEW second-half OPEN row at the top of Now. Original text: when C4 lands
+  here, the row
   "`ops/loop/slots.py` SHORT-CIRCUITS ON AGE" becomes false and must be
   rewritten in the same commit (SS 2300). The stale freeze line naming
   `da35f8b1` was annotated this session (LW 2355).
@@ -84,7 +161,18 @@ version. What follows is everything the scaffold deliberately did not do.
   "check 2" (MAIN 0835 / RSC 1030). (5) An all-objects history census
   including a full-history secret scan (LW 1800 item 6, SS 09-27 1400).
 
-- **NEW 2026-10-03. THE LOCK LIFETIME IS UNBOUNDED BELOW THE STALE WINDOW.**
+- **MOSTLY DONE 2026-10-03 in `be03565`. THE LOCK LIFETIME.** `headless/runner.py`
+  now consults a durable HALT sentinel before `hold()` (`HALT_SENTINEL_NAME`,
+  in the runtime directory, `os.stat` fails closed, never deleted by the
+  runner), caps the slot wait at `MAX_SLOT_WAIT_SECONDS` 300 and the pass at a
+  monotonic `PASS_DEADLINE_SECONDS` 3600; proven by
+  `tests/test_headless_runner_halt.py` and
+  `tests/test_headless_runner_lock_budget.py`. Answers RC 1330 s3 and SS 0000.
+  LL's age-only surplus reaper hazard (LL 2136) is CLOSED on LL's side by LL
+  `474a165` (LL 0815). STILL OPEN: the arm-A live-holder test (row at the top
+  of Now); a HUNG job is unbounded, because the deadline is checked between
+  jobs and cannot interrupt one; and a DANGLING HALT symlink reads as go.
+  Original row: THE LOCK LIFETIME IS UNBOUNDED BELOW THE STALE WINDOW.
   Nothing caps slot wait plus run plus drain below `DEFAULT_STALE_AFTER`, so a
   live holder can outlive it (SS 0000). Siblings: LL's age-only surplus reaper
   hazard (LL 2136); an arm-A live-holder test to ride with the re-pin (RC 1130
@@ -100,16 +188,24 @@ version. What follows is everything the scaffold deliberately did not do.
 - **NEW 2026-10-03, ATTENDED SESSION ONLY. REDACTION DECISION ON RSC'S COPY OF
   SS 2241,** plus a `git log -S` sweep for the same bytes in history (SS 2340).
 
-- **NEW 2026-10-03. THE SECRET SCANNER CATCHES THE ANTHROPIC ADMIN-KEY FAMILY
-  ONLY INCIDENTALLY,** through the shared `sk-ant-` prefix rather than a rule
+- **DONE 2026-10-03 in `a875e48`.** The admin and api03 key families are now
+  named in `VENDOR_TOKENS` in `tools/publish_next_session.py`, proven by
+  `tests/test_no_secret_literals.py`. Original row: THE SECRET SCANNER
+  CATCHES THE ANTHROPIC ADMIN-KEY FAMILY ONLY INCIDENTALLY, through the shared `sk-ant-` prefix rather than a rule
   of its own (CS 1820 item 2).
 
 - **NEW 2026-10-03. TWO TEST-INSTRUMENT GAPS FROM THE CHANNEL.**
-  `gate_mutation_runner` cannot mutate failure MESSAGES (RSC 0830, conceded);
-  and `empty_parameter_set_mark` is not set to `fail_at_collect`, so an empty
-  parametrize skips instead of failing (LL 0930).
+  `gate_mutation_runner` cannot mutate failure MESSAGES (RSC 0830, conceded) -
+  STILL OPEN; and `empty_parameter_set_mark` is not set to `fail_at_collect`,
+  so an empty parametrize skips instead of failing (LL 0930) - DONE in
+  `bcbabc7`: `pytest.ini` sets it, proven by
+  `tests/test_empty_parametrize_policy.py`, verified on 3.11.9 with pytest
+  9.1.1.
 
-- **NEW 2026-10-03. S1 ACK TEST-STRENGTH GAP.** Verifier mutant A: removing
+- **DONE 2026-10-03 in `be03565`.** The zero-hit worker arm
+  `test_a_worker_acknowledge_with_no_fence_hit_still_fails` is in
+  `tests/test_headless_runner_slots.py`. Original row: S1 ACK TEST-STRENGTH
+  GAP. Verifier mutant A: removing
   refusal recording in `SlotFenceLedger.acknowledge` in `conftest.py` does not
   turn `test_acknowledging_from_a_worker_thread_fails` red. Fix: a sibling arm
   where a ZERO-hit worker thread calls `acknowledge(0)`.
@@ -514,9 +610,20 @@ version. What follows is everything the scaffold deliberately did not do.
   at that file for the complete enumeration, so the hook's claim is false
   whenever the file lags. Derive the population from `unseen_entries` instead.
 
-- **NEW 2026-09-20. `ops/loop/slots.py` SHORT-CIRCUITS ON AGE BEFORE IT EVER
+- **SUPERSEDED 2026-10-03 BY C4 IN `3d62942` - THIS ROW'S PREMISE IS NOW
+  FALSE.** Under C4 `290cbf80`, `is_stale` in `ops/loop/slots.py` consults
+  `pid_alive` on a readable typed record, and age alone decides only above a
+  hard ceiling of `HARD_STALE_MULTIPLE` (2.0) times `stale_after`, kept so a
+  reused pid cannot hold the bucket forever. A LIVE holder past
+  `DEFAULT_STALE_AFTER` but under that ceiling is therefore no longer
+  reapable. What C4 did NOT change, read from the module's own comment: the
+  unreadable-or-half-written fallback is still AGE-ONLY on mtime and returns
+  True on OSError, with no liveness check. The arm-A test that proves the
+  live-holder behaviour is still OPEN at the top of Now. The original row and
+  its 2026-09-20 corpus follow as history.
+  WAS: `ops/loop/slots.py` SHORT-CIRCUITS ON AGE BEFORE IT EVER
   ASKS WHETHER THE HOLDER IS ALIVE, AND THIS TREE CANNOT MEASURE THE
-  CONSEQUENCE.** In `is_stale`, the age comparison against `stale_after`
+  CONSEQUENCE. In `is_stale`, the age comparison against `stale_after`
   returns True FIRST and `pid_alive` is consulted only if that comparison
   fails. So a LIVE holder that has held longer than the window is declared
   stale and is reapable, with liveness never consulted. The governing window is
@@ -4686,6 +4793,13 @@ version. What follows is everything the scaffold deliberately did not do.
   `-r s`, a line continuation and a plain reorder, all of which are correct
   hooks. Widening the matcher was not the answer; asking what the mechanism can
   claim was.
+
+  DONE 2026-10-03 in `9f49813`, THE ORACLE HALF: the git-install oracle in
+  `tests/test_hook_interpreter.py` now recognises the hook-shaped `git-core`
+  PATH and grades it instead of skipping, and `.githooks/pre-push` was updated
+  with `tests/test_prepush_skip_reporting.py`. The extra pre-push-only skip is
+  gone; reading 2026-10-03 under a real push: 3348 passed 4 skipped. The
+  "untouched" sentence in the next paragraph is history.
 
   STILL OPEN, and it is the other half: nothing inspects hook OUTPUT. The arms
   are a token scan of a shell script. No push was run and no scratch remote

@@ -12,6 +12,80 @@ now.
 
 ---
 
+## 2026-10-03 (second half) - C4 landed, a HALT sentinel and lock budget, MAIN provenance in the responder, and a test leak fenced
+
+Landed as `bcbabc7`, `a875e48`, `9f49813`, `be03565`, `3d62942`, `1829b9d`
+and `9061eb4`, all on `main`.
+
+WHAT CHANGED. `bcbabc7` sets `empty_parameter_set_mark = fail_at_collect` in
+`pytest.ini`, so an empty parametrize list fails at collection instead of
+skipping (LL 0930); proven by `tests/test_empty_parametrize_policy.py`,
+verified on 3.11.9 with pytest 9.1.1 as well as the host interpreter.
+`a875e48` names the Anthropic admin and api03 key families in `VENDOR_TOKENS`
+in `tools/publish_next_session.py` rather than catching them incidentally
+through the shared prefix (CS 1820 item 2); proven by
+`tests/test_no_secret_literals.py`. `9f49813` teaches the git-install oracle
+in `tests/test_hook_interpreter.py` the hook-shaped `git-core` PATH, so it
+grades instead of skipping; the extra pre-push-only skip is gone (reading
+under a real push: 3348 passed 4 skipped).
+
+`be03565` gives `headless/runner.py` a durable HALT sentinel in the runtime
+directory, consulted before `hold()`, failing closed on an `os.stat` error and
+never deleted by the runner; a slot-wait cap `MAX_SLOT_WAIT_SECONDS` of 300;
+and a monotonic pass deadline `PASS_DEADLINE_SECONDS` of 3600. Proven by
+`tests/test_headless_runner_halt.py` and
+`tests/test_headless_runner_lock_budget.py`; it also adds the zero-hit worker
+ack arm in `tests/test_headless_runner_slots.py`, closing the S1 test-strength
+gap. Answers RC 1330 s3 and SS 0000. RESIDUALS, recorded in `ROADMAP.md`: a
+hung job is unbounded (the deadline is checked between jobs), and a dangling
+HALT symlink reads as go.
+
+`3d62942` lands C4 `290cbf80` in `ops/loop/slots.py` under the
+sha256-verified MAIN 0815 clause (b) ruling: one commit, the `SHARED_SHA256`
+pin moved, `ops/loop/winmutex.py` untouched. `is_stale` now consults liveness
+below a hard ceiling of twice the stale window, so the 2026-09-20
+"SHORT-CIRCUITS ON AGE" row is superseded. Attestation note 0826 delivered to
+six codes, 6 of 6 recipient copies sha256-matched; RSC's row of the C4 round
+is CLOSED. LL's age-only reaper hazard (LL 2136) was closed on LL's side by
+LL `474a165` (LL 0815).
+
+`1829b9d` puts MAIN provenance inside `tools/moon_sync_responder.py`: each
+MAIN note grades MATCH, MISMATCH, UNVERIFIABLE or NOT-ADDRESSED against MAIN's
+outbox sha256, with one deterministic `[RSC-PROVENANCE]` line and an
+addressing rule (`tests/test_responder_main_provenance.py`). It adds one
+`MAX_RUNS_PER_DAY` budget of 120 under an OS lock per MAIN 0855
+(`tests/test_responder_uniform_budget.py`), restores the 0845 knobs, bypasses
+the exhausted hop budget for MATCH MAIN notes only (adjudicated), and damps
+TERMINAL / no-reply notes. MEASURED: user-scope settings default to
+`bypassPermissions`, so the child's tool floor held only by the child's own
+choice; `SPAWN_COMMAND` now carries `--permission-mode dontAsk
+--strict-mcp-config --tools Read,Grep,Glob,Bash`, and the floor was measured
+harness-denied live. Three adversary rounds. The responder then answered
+MAIN 0815 (as 0921) and MAIN 0830 (as 0926) unattended.
+
+`9061eb4` fixes a test leak: the contention arm in
+`tests/test_responder_uniform_budget.py` spawned children without
+`RESINCOMPUTE_RUNTIME_DIR`, and the `rsp` fixture in
+`tests/test_responder_no_console_window.py` redirected no `DEFAULT_` path, so
+each suite run wrote this checkout's live runtime and spent real budget rows.
+Both now use tmp dirs. `conftest.py` gains an audit-hook fence on the live
+responder records plus a per-test drift check, excused only by a real
+scheduled-task fire window. BACKFILLED: the gitignored run record was
+rewritten from 8 rows to the 2 real ones.
+
+DECISIONS. The MAIN provenance check was built by MAIN 0830 order, closing the
+"only if the operator wants" row. The hop-budget bypass applies to MATCH MAIN
+notes only, by adjudication. Residuals are stated in `ROADMAP.md` rather than
+fixed: lookalike provenance tokens, a re-dropped MAIN note answered again
+(bounded three per day), 8.3 short paths past the fence, and leaks during a
+real fire excused by the drift check.
+
+READINGS, 2026-10-03, at `9061eb4` under pre-push: tests 3467 passed 4
+skipped; pity_engine 80. Earlier seam readings the same day: node 52, licence
+47, docs 42, qa 17 passed 2 skipped 3 noted, mypy 40 source files.
+
+---
+
 ## 2026-10-03 - one spawn cwd, a widened env-render detector, a governed --once, and the inbox triaged
 
 Landed as `662ee0a`, `8f892b2` and `6f7a629`, all on `main`.
