@@ -50,6 +50,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -340,6 +341,289 @@ if not os.environ.get(_LOG_REDIRECT_ENV, "").strip():
     os.environ[_LOG_REDIRECT_ENV] = _log_redirect_dir
 
 
+# ---------------------------------------------------------------------------
+# No test may touch the MACHINE-WIDE slot bucket. A behavioural fence.
+# ---------------------------------------------------------------------------
+#
+# `ops.loop.slots.DEFAULT_ROOT` is a directory under C:\ProgramData that sibling
+# repositories hold lanes in LIVE. Since `headless/runner.py` wraps every live
+# pass in `slots.hold()`, any test that drives a live pass without naming its
+# own `slot_root` acquires there - consuming a sibling's lane, or waiting out a
+# 300-second timeout when the bucket is full.
+#
+# WHY A HOOK AND NOT ANOTHER SHAPE GUARD. The AST guards in
+# `tests/test_headless_runner.py` and `tests/test_headless_runner_slots.py` read
+# call SHAPES. An adversary showed they cannot carry the claim: turning an
+# in-process `main(["--once", "--dry-run"])` into `main(["--once"])` defeated
+# both while the arm went to the live bucket. This hook reads the PATH ARGUMENT
+# of an audit event instead, so how the Python call that produced the event was
+# written does not matter. How the PATH is spelled does - see below.
+#
+# EXACTLY WHAT IS FENCED. An audit event that is (1) raised IN THIS INTERPRETER,
+# (2) named in `_FENCED_EVENTS` below, and (3) carries a str, bytes or PathLike
+# argument at a listed position which, after `os.path.normpath` and
+# `os.path.normcase` - and joining onto the cwd when relative - EQUALS the
+# normalised `DEFAULT_ROOT` or starts with it plus a separator.
+#
+# WHAT IS NOT FENCED, measured by an adversary or known by construction:
+#
+#   - ALIAS SPELLINGS of the bucket, each of which normalises to a different
+#     string: the `\\?\C:\...` and `\\.\C:\...` device prefixes, the 8.3 short
+#     name (`C:\PROGRA~3\...`), a trailing dot or trailing space on a component,
+#     an administrative share such as `\\localhost\C$\...`, and any junction,
+#     symlink or `subst` drive that resolves into the bucket. The matcher is
+#     deliberately NOT widened to chase these: a spelling list is the shape
+#     matcher again, and it cannot be finished.
+#   - CHILD PROCESSES. Audit hooks are per-interpreter and nothing launched by a
+#     test inherits this one. The early-warning shape guard in
+#     `tests/test_headless_runner.py` parses ONLY ITS OWN FILE, so it watches
+#     the literal child launches in that one file and nothing else. A child
+#     process launched from ANY OTHER test file is watched by no guard in THIS
+#     process; the one exception is a child pytest that loads a copy of this
+#     conftest, which installs its own fence inside that child.
+#     Extending the fence via a
+#     PYTHONPATH `sitecustomize` would alter the environment the
+#     interpreter-pinning and env-scrub arms measure, so it was not done.
+#   - NATIVE CODE that emits no path event: `sqlite3` opening a database file,
+#     `ctypes` calling `CreateFileW` or any other Win32 file API, and any C
+#     extension doing its own IO.
+#   - EVENTS NOT IN THE TABLE, e.g. `os.chown`, `os.chflags`, the xattr family,
+#     `os.startfile`; and READS that raise no event at all, such as `os.stat`
+#     and `Path.exists`.
+#   - `dir_fd`-RELATIVE CALLS: a relative path resolved against a directory
+#     descriptor is joined here onto the cwd instead, so one aimed into the
+#     bucket is misjudged.
+#   - PYTEST-XDIST RUNS, for the session-finish backstop described below. Under
+#     `-n`, each worker's `pytest_sessionfinish` result never reaches the
+#     controller's exit status: measured by an adversary with pytest-xdist
+#     3.8.0, installed on this host, at `-n 2`, a
+#     hit during collection and a leftover-thread hit in a worker both exited
+#     0. Per-test attribution still fails the test that a hit lands in. No
+#     xdist plumbing is built: `pytest.ini`, `.github/workflows/ci.yml`,
+#     `.github/workflows/docs-guards.yml`, `.githooks/` and `scripts/` never
+#     pass `-n`.
+#
+# HOW A HIT FAILS, AND WHY IT IS LOUD IN ANY THREAD. Audit events are raised
+# BEFORE the operation, so a fenced event raises and the operation does not
+# happen. The error derives from BaseException on purpose: `slots.try_acquire`
+# swallows OSError in a loop and the job runner absorbs Exception. But an
+# exception inside a `threading.Thread` does not fail the test that started it
+# - pytest only warns - so every hit is ALSO appended to `_SLOT_FENCE_HITS`. The
+# autouse fixture `_slot_fence_attribution` fails the test during whose run a
+# hit was recorded unless that test acknowledged it through the
+# `slot_fence_ledger` fixture - `acknowledge(expected)` may be called ONLY from
+# the main thread, and it fails unless exactly `expected` hits carrying the main
+# thread's ident landed during this test. It COUNTS hits; it does not identify
+# which ones. Main-thread-only is what makes the count trustworthy: a worker's
+# ident can be reused by a later thread, the main thread's cannot while the
+# session runs - and `pytest_sessionfinish` fails
+# the run (outside xdist, see above) for any
+# hit never attributed to a test (one recorded during collection, say). A hit
+# from a thread that OUTLIVES its test is charged to whichever test is running
+# when it lands, and one landing after the last teardown is reported at
+# session finish; one landing after session finish is not reported.
+#
+# COST. `sys.addaudithook` cannot be removed, and it sees EVERY audit event in
+# the process. The first statement is a dict lookup that drops every event not
+# in the table, so the steady-state cost is one hash per event.
+#
+# THE ROOT IS READ FROM THE MODULE, never spelled here. A plain import of
+# `ops.loop.slots` has no side effect and changes nothing in it. A relative
+# DEFAULT_ROOT - which is what the Windows literal becomes on POSIX - is resolved
+# against the cwd AT EVENT TIME, because that is how `hold()` will resolve it.
+#
+# The arms live in `tests/test_headless_runner_slots.py`, sections 7 and 8.
+#
+# WHEN `ops` IS NOT IMPORTABLE THE FENCE IS NOT INSTALLED. That happens only when
+# this file is copied OUT of the tree - `tests/test_report_renderability.py`
+# does exactly that, into a bare temp directory - and there no code that could
+# reach the bucket is importable either. Inside the tree a silent disable cannot
+# pass unnoticed: section 7's arms raise a SYNTHETIC event and go red, and the
+# live arm there refuses to drive a pass at all, when no hook refuses it.
+try:
+    from ops.loop import slots as _slots  # noqa: E402 - after the sys.path insert
+except ImportError:
+    _slots = None  # type: ignore[assignment]
+
+
+class SlotBucketFenceError(BaseException):
+    """A test reached the machine-wide slot bucket. Never caught by Exception."""
+
+
+_SLOT_BUCKET_RAW = os.fspath(_slots.DEFAULT_ROOT) if _slots is not None else ""
+_SLOT_BUCKET_IS_ABS = bool(_SLOT_BUCKET_RAW) and os.path.isabs(_SLOT_BUCKET_RAW)
+
+
+def _bucket_norm() -> str:
+    raw = _SLOT_BUCKET_RAW if _SLOT_BUCKET_IS_ABS else os.path.join(os.getcwd(), _SLOT_BUCKET_RAW)
+    return os.path.normcase(os.path.normpath(raw))
+
+
+_SLOT_BUCKET_ABS_NORM = _bucket_norm() if _SLOT_BUCKET_IS_ABS else ""
+
+#: Fenced audit events, each mapped to the argument positions that carry a path.
+_FENCED_EVENTS: dict[str, tuple[int, ...]] = {
+    "open": (0,),
+    "os.mkdir": (0,),
+    "os.remove": (0,),
+    "os.rmdir": (0,),
+    "os.rename": (0, 1),
+    "os.link": (0, 1),
+    "os.symlink": (0, 1),
+    "os.listdir": (0,),
+    "os.scandir": (0,),
+    "os.chmod": (0,),
+    "os.utime": (0,),
+    "os.truncate": (0,),
+    "glob.glob": (0,),
+    "shutil.rmtree": (0,),
+    "shutil.copyfile": (0, 1),
+    "shutil.move": (0, 1),
+}
+
+
+def _under_slot_bucket(path: Any) -> bool:
+    """True when `path` is the bucket or lies under it. A pure path predicate."""
+    if isinstance(path, int):
+        return False
+    try:
+        text = os.fsdecode(os.fspath(path))
+        bucket = _SLOT_BUCKET_ABS_NORM or _bucket_norm()
+        if not os.path.isabs(text):
+            text = os.path.join(os.getcwd(), text)
+    except Exception:  # noqa: BLE001 - see below
+        # A path that cannot be read is not the bucket, and the fence must never
+        # break an unrelated test - several patch `os` internals on purpose.
+        return False
+    text = os.path.normcase(os.path.normpath(text))
+    return text == bucket or text.startswith(bucket + os.sep)
+
+
+def _slot_bucket_fence(event: str, args: tuple[Any, ...]) -> None:
+    positions = _FENCED_EVENTS.get(event)
+    if positions is None:
+        return
+    for index in positions:
+        if index < len(args) and _under_slot_bucket(args[index]):
+            message = (
+                f"{event} on {args[index]!r} is inside the MACHINE-WIDE slot bucket "
+                f"{_SLOT_BUCKET_RAW}, which sibling repositories hold live. Pass a "
+                "slot_root under tmp_path."
+            )
+            # Recorded BEFORE raising: in a thread the raise reaches no test.
+            # `list.append` is atomic under the GIL, so no lock is needed.
+            _SLOT_FENCE_HITS.append(
+                {
+                    "message": message,
+                    "thread": threading.current_thread().name,
+                    "thread_ident": threading.get_ident(),
+                    "attributed_to": None,
+                    "acknowledged": False,
+                }
+            )
+            raise SlotBucketFenceError(message)
+
+
+#: Every fence hit this session, in order. Each record is attributed to the test
+#: during whose run it landed, or stays unattributed and fails the session.
+_SLOT_FENCE_HITS: list[dict[str, Any]] = []
+
+if _SLOT_BUCKET_RAW:
+    sys.addaudithook(_slot_bucket_fence)
+
+
+class SlotFenceLedger:
+    """The hits recorded since the current test started.
+
+    A test that trips the fence ON PURPOSE calls `acknowledge(expected)` FROM
+    THE MAIN THREAD with the number of hits it caused there. Only hits recorded
+    with the main thread's ident are acknowledged, and the call fails the test
+    unless exactly `expected` of them landed during this test.
+
+    WHY ONLY THE MAIN THREAD. A thread ident is reused once its thread exits, so
+    a worker that acknowledged by ident could clear a DEAD thread's hit that
+    carried the same number. The main thread outlives every other thread, so its
+    ident cannot be reused while the session runs. The check counts hits; it
+    does not identify WHICH hits, so it is only as precise as that ident is
+    unique. A call from any other thread is refused and the refusal is recorded,
+    so it fails the test at teardown even though a raise inside a worker thread
+    would only warn.
+    """
+
+    def __init__(self, start: int) -> None:
+        self._start = start
+        self.refusals: list[str] = []
+
+    def hits(self) -> list[dict[str, Any]]:
+        return _SLOT_FENCE_HITS[self._start:]
+
+    def acknowledge(self, expected: int) -> int:
+        if threading.current_thread() is not threading.main_thread():
+            reason = (
+                "acknowledge() was called from thread "
+                f"{threading.current_thread().name!r}; only the main thread may "
+                "acknowledge fence hits"
+            )
+            self.refusals.append(reason)
+            pytest.fail(reason, pytrace=False)
+        me = threading.get_ident()
+        mine = [hit for hit in self.hits() if hit["thread_ident"] == me]
+        if len(mine) != expected:
+            pytest.fail(
+                f"acknowledge expected {expected} fence hit(s) from this thread "
+                f"during this test, but {len(mine)} landed",
+                pytrace=False,
+            )
+        for hit in mine:
+            hit["acknowledged"] = True
+        return len(mine)
+
+
+@pytest.fixture(autouse=True)
+def _slot_fence_attribution(request: pytest.FixtureRequest) -> Generator[SlotFenceLedger, None, None]:
+    """Fail the current test if a fence hit landed during it, in ANY thread."""
+    ledger = SlotFenceLedger(len(_SLOT_FENCE_HITS))
+    yield ledger
+    landed = ledger.hits()
+    for hit in landed:
+        hit["attributed_to"] = request.node.nodeid
+    if ledger.refusals:
+        pytest.fail("\n".join(ledger.refusals), pytrace=False)
+    loud = [hit for hit in landed if not hit["acknowledged"]]
+    if loud:
+        detail = "\n".join(f"  [{hit['thread']}] {hit['message']}" for hit in loud)
+        pytest.fail(
+            f"{len(loud)} slot-bucket fence hit(s) landed during this test and were "
+            f"not acknowledged:\n{detail}",
+            pytrace=False,
+        )
+
+
+@pytest.fixture()
+def slot_fence_ledger(_slot_fence_attribution: SlotFenceLedger) -> SlotFenceLedger:
+    """The current test's ledger, for arms that trip the fence on purpose."""
+    return _slot_fence_attribution
+
+
+def _report_unattributed_fence_hits(session: pytest.Session) -> None:
+    """Fail the run for any fence hit that no test was charged with."""
+    stray = [hit for hit in _SLOT_FENCE_HITS if hit["attributed_to"] is None]
+    if not stray:
+        return
+    lines = [
+        f"{len(stray)} slot-bucket fence hit(s) were never attributed to a test "
+        "(collection, or a thread outliving its test):"
+    ]
+    lines += [f"  [{hit['thread']}] {hit['message']}" for hit in stray]
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    for line in lines:
+        if reporter is not None:
+            reporter.write_line(line, red=True)
+        else:
+            print(line, file=sys.stderr)
+    session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Remove the redirected log directory this conftest created.
 
@@ -348,7 +632,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     `logging.shutdown()` closes the file handler first, because Windows refuses
     to unlink a file that is still open, and `ignore_errors` keeps a failed
     cleanup from turning a green run red.
+
+    It first fails the run for any slot-bucket fence hit never attributed to a
+    test - see the fence block above.
     """
+    _report_unattributed_fence_hits(session)
     if _log_redirect_dir is None:
         return
     logging.shutdown()

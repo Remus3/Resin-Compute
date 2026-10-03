@@ -489,6 +489,57 @@ def run_daemon(
     return EXIT_OK if last_ok else EXIT_JOB_FAILED
 
 
+#: How long a live `--once` pass waits for a lane slot before it fails. A daemon
+#: waits one interval because its next tick retries; a one-shot has no next
+#: tick of its own, so it waits one DEFAULT interval - the cadence a scheduled
+#: one-shot stands in for - and then fails with EXIT_JOB_FAILED.
+ONCE_SLOT_TIMEOUT_SECONDS = DEFAULT_INTERVAL_SECONDS
+
+
+def run_once(
+    uid: str | None,
+    dry_run: bool,
+    job_names: Sequence[str] | None,
+    runtime_dir: str | None,
+    slot_root: str | Path | None = None,
+    slot_timeout: float | None = None,
+) -> int:
+    """Run ONE pass, governed exactly as a daemon pass is, and return an exit code.
+
+    A live `--once` pass reaches the same rate-limited resource a daemon pass
+    does, so it holds one machine-wide lane slot through `_run_governed_pass`
+    rather than calling `run_pass` bare. A dry run takes no slot - the same
+    helper owns that rule for both modes, so they cannot drift apart.
+
+    A `SlotTimeout` is a FAILED pass: the pass does not run and the exit code is
+    `EXIT_JOB_FAILED`, never `EXIT_OK`. A pass that raises propagates, and the
+    slot is released by the vendored `hold()`'s own finally.
+
+    `slot_root` defaults to the vendored governor's machine-wide bucket and is
+    overridden only by tests, which must never touch that bucket.
+    """
+    timeout = (
+        float(ONCE_SLOT_TIMEOUT_SECONDS) if slot_timeout is None else float(slot_timeout)
+    )
+    outcome = _run_governed_pass(
+        uid=uid,
+        dry_run=dry_run,
+        job_names=job_names,
+        runtime_dir=runtime_dir,
+        run_id=uuid.uuid4().hex[:12],
+        cycle=1,
+        slot_root=slot_root,
+        slot_timeout=timeout,
+    )
+    # A dry run never fails the exit code on a job outcome: it computed and
+    # logged, which is all it promised to do. It also never starves, because
+    # it takes no slot, so `outcome` is never None here on the dry path.
+    if dry_run:
+        return EXIT_OK
+    # None is a starved pass, and it is a FAILURE - never read as "no news".
+    return EXIT_OK if outcome is not None and outcome.ok else EXIT_JOB_FAILED
+
+
 def _write_shutdown_health(runtime_dir: str | None) -> None:
     """Mark the health file not-alive on a clean exit. Never raises."""
     try:
@@ -608,19 +659,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     # `--once` is the default shape: a bare invocation runs a single pass
-    # rather than sitting there doing nothing.
-    outcome = run_pass(
+    # rather than sitting there doing nothing. It is governed by the same lane
+    # slot as a daemon pass; see `run_once`.
+    return run_once(
         uid=uid,
         dry_run=args.dry_run,
         job_names=args.job_names,
         runtime_dir=runtime_dir,
     )
-
-    # A dry run never fails the exit code on a job outcome: it computed and
-    # logged, which is all it promised to do.
-    if args.dry_run:
-        return EXIT_OK
-    return EXIT_OK if outcome.ok else EXIT_JOB_FAILED
 
 
 def _entrypoint() -> int:

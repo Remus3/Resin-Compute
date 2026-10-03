@@ -9,6 +9,7 @@ returning, a stray import that needs the network. `python -m headless.runner
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 import subprocess
@@ -20,19 +21,57 @@ import pytest
 from headless import jobs as jobs_mod
 from headless import runner as runner_mod
 from ops import health as health_mod
+from ops.loop import slots as slots_mod
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 SMOKE_TEST = ["--once", "--dry-run"]
 
 
-def run_cli(args: list[str], cwd: Path, runtime_dir: Path | None = None) -> subprocess.CompletedProcess:
+def _slot_redirect_prelude(slot_root: Path) -> str:
+    """Python source that points the child's slot bucket at `slot_root`.
+
+    `slots.hold` reads the module-level `DEFAULT_ROOT` at CALL time, so
+    rebinding it before the runner runs redirects every acquisition. Without
+    this a live child acquires in the MACHINE-WIDE bucket under C:\\ProgramData.
+    """
+    return (
+        "import pathlib as _pathlib\n"
+        "from ops.loop import slots as _slots\n"
+        f"_slots.DEFAULT_ROOT = _pathlib.Path({str(slot_root)!r})\n"
+    )
+
+
+def run_cli(
+    args: list[str],
+    cwd: Path,
+    runtime_dir: Path | None = None,
+    slot_root: Path | None = None,
+) -> subprocess.CompletedProcess:
     """Invoke the real entrypoint the way CI does.
 
     `cwd` is a temp directory, not the repo, so any stray file the runner
     writes lands somewhere the test can see it. The repo reaches the child
     through PYTHONPATH instead.
+
+    `slot_root` is REQUIRED for a live invocation - see the guard at the foot
+    of this module. With it the child runs `headless.runner` as `__main__`
+    through `runpy`, the same module-as-script path `-m` takes, after the slot
+    bucket has been redirected. A dry run keeps the literal `-m` command.
     """
+    # One binding with `sys.executable` as its literal head, so the
+    # interpreter-pinning census can resolve argv[0]. Only the tail varies.
+    tail = (
+        [
+            "-c",
+            _slot_redirect_prelude(slot_root)
+            + "import runpy, sys\n"
+            + f"sys.argv = ['headless.runner', *{list(args)!r}]\n"
+            + "runpy.run_module('headless.runner', run_name='__main__', alter_sys=True)\n",
+        ]
+        if slot_root is not None
+        else ["-m", "headless.runner", *args]
+    )
     env = dict(os.environ)
     env["PYTHONPATH"] = str(REPO_ROOT)
     env.pop("RESINCOMPUTE_UID", None)
@@ -45,7 +84,7 @@ def run_cli(args: list[str], cwd: Path, runtime_dir: Path | None = None) -> subp
     else:
         env.pop(health_mod.ENV_RUNTIME_DIR, None)
     return subprocess.run(
-        [sys.executable, "-m", "headless.runner", *args],
+        [sys.executable, *tail],
         cwd=str(cwd),
         env=env,
         capture_output=True,
@@ -187,7 +226,10 @@ def test_an_unknown_job_name_exits_non_zero_with_a_friendly_message(tmp_path: Pa
 
 def test_an_unknown_job_name_names_the_valid_options(tmp_path: Path) -> None:
     proc = run_cli(
-        ["--once", "--job", "nope"], cwd=tmp_path, runtime_dir=tmp_path / "runtime"
+        ["--once", "--job", "nope"],
+        cwd=tmp_path,
+        runtime_dir=tmp_path / "runtime",
+        slot_root=tmp_path / "slots",
     )
     for name in jobs_mod.job_names():
         assert name in proc.stderr
@@ -196,10 +238,14 @@ def test_an_unknown_job_name_names_the_valid_options(tmp_path: Path) -> None:
 def test_an_unknown_job_name_runs_nothing(tmp_path: Path) -> None:
     """Validation happens before any work starts."""
     runtime = tmp_path / "runtime"
-    proc = run_cli(["--once", "--job", "nope"], cwd=tmp_path, runtime_dir=runtime)
+    slot_root = tmp_path / "slots"
+    proc = run_cli(
+        ["--once", "--job", "nope"], cwd=tmp_path, runtime_dir=runtime, slot_root=slot_root
+    )
     assert proc.returncode == runner_mod.EXIT_USAGE
     assert "pass start" not in proc.stderr
     assert not runtime.exists()
+    assert not slot_root.exists(), "a usage error reached the slot bucket"
 
 
 def test_select_jobs_preserves_registry_order_not_argument_order() -> None:
@@ -260,11 +306,13 @@ def test_a_failing_job_exits_non_zero_in_a_live_run(tmp_path: Path) -> None:
     only way to inject a failure into a genuine subprocess invocation.
     """
     runtime = tmp_path / "runtime"
+    slot_root = tmp_path / "slots"
     driver = tmp_path / "driver.py"
     driver.write_text(
         "import sys\n"
         f"sys.path.insert(0, {str(REPO_ROOT)!r})\n"
-        "from headless import jobs, runner\n"
+        + _slot_redirect_prelude(slot_root)
+        + "from headless import jobs, runner\n"
         "@jobs.job(name='always_fails', description='x', cadence=jobs.CADENCE_ON_DEMAND)\n"
         "def _boom(context):\n"
         "    raise RuntimeError('raw upstream detail 0xdeadbeef')\n"
@@ -284,6 +332,8 @@ def test_a_failing_job_exits_non_zero_in_a_live_run(tmp_path: Path) -> None:
         timeout=120,
     )
     assert proc.returncode == runner_mod.EXIT_JOB_FAILED, proc.stderr
+    assert slot_root.is_dir(), "the live pass never reached the redirected bucket"
+    assert list(slot_root.glob("*.lock")) == [], "the live pass leaked its slot"
 
     payload = json.loads((runtime / health_mod.HEALTH_FILENAME).read_text(encoding="utf-8"))
     assert payload["last_pass_ok"] is False
@@ -316,8 +366,18 @@ def test_a_dry_run_never_fails_the_exit_code_on_a_job_outcome(
 
 def test_a_live_pass_writes_the_run_summary(tmp_path: Path) -> None:
     runtime = tmp_path / "runtime"
-    proc = run_cli(["--once", "--uid", "900000000"], cwd=tmp_path, runtime_dir=runtime)
+    slot_root = tmp_path / "slots"
+    proc = run_cli(
+        ["--once", "--uid", "900000000"],
+        cwd=tmp_path,
+        runtime_dir=runtime,
+        slot_root=slot_root,
+    )
     assert proc.returncode == 0, proc.stderr
+    # Positive control on the redirect: the live pass acquired in the private
+    # bucket (so it exists) and released (so it holds no lock).
+    assert slot_root.is_dir(), "the live pass never reached the redirected bucket"
+    assert list(slot_root.glob("*.lock")) == [], "the live pass leaked its slot"
 
     payload = json.loads((runtime / health_mod.HEALTH_FILENAME).read_text(encoding="utf-8"))
     assert payload["version"] == health_mod.SCHEMA_VERSION
@@ -399,7 +459,12 @@ def test_the_documented_cli_surface_exists() -> None:
 
 
 def test_once_and_daemon_are_mutually_exclusive(tmp_path: Path) -> None:
-    proc = run_cli(["--once", "--daemon"], cwd=tmp_path, runtime_dir=tmp_path / "runtime")
+    proc = run_cli(
+        ["--once", "--daemon"],
+        cwd=tmp_path,
+        runtime_dir=tmp_path / "runtime",
+        slot_root=tmp_path / "slots",
+    )
     assert proc.returncode == runner_mod.EXIT_USAGE
 
 
@@ -410,3 +475,161 @@ def test_an_invalid_log_level_falls_back_rather_than_crashing(tmp_path: Path) ->
         runtime_dir=tmp_path / "runtime",
     )
     assert proc.returncode == 0, proc.stderr
+
+
+# ---------------------------------------------------------------------------
+# EARLY WARNING, NOT THE FENCE: live child invocations redirect the slot bucket
+# ---------------------------------------------------------------------------
+#
+# A LIVE pass - `--once` or `--daemon` without `--dry-run` - holds a lane slot in
+# `ops.loop.slots.DEFAULT_ROOT`, a MACHINE-WIDE bucket under C:\ProgramData that
+# sibling repositories hold against for real. A child process cannot receive a
+# `slot_root` keyword, so every live child here must be launched with the bucket
+# redirected to a temp directory: `run_cli(..., slot_root=...)` for a CLI arm,
+# `_slot_redirect_prelude(...)` inside a driver script for a `runner.main` arm.
+#
+# THIS IS A SHAPE MATCHER AND IT CANNOT CARRY THE CLAIM "NO ARM REACHES THE
+# BUCKET". An adversary measured it missing 11 of 13 synthetic shapes, and an
+# in-process `runner_mod.main(["--once"])` is invisible to it by construction.
+# The FENCE is the audit hook in the root `conftest.py`. EXACTLY WHAT IT FENCES:
+# an audit event in its `_FENCED_EVENTS` table, raised in the PYTEST
+# interpreter, whose path argument normalises (normpath, normcase, cwd-joined
+# when relative) to the real `DEFAULT_ROOT` or a path under it. WHAT IT DOES NOT
+# FENCE: alias spellings of the bucket (`\\?\C:\...`, `\\.\C:\...`, the 8.3
+# short name `PROGRA~3`, a trailing dot or space, `\\localhost\C$\...`,
+# junctions, symlinks, `subst` drives); native IO with no path event, such as
+# `sqlite3` and `ctypes` `CreateFileW`; events outside its table; reads with no
+# event such as `os.stat`; `dir_fd`-relative calls; and EVERY CHILD PROCESS,
+# because audit hooks do not cross a process boundary. This early warning parses
+# ONLY THIS FILE, so it watches the literal child launches written here and
+# nothing else: a child process launched from any other test file is watched by
+# no guard in the pytest process - except that a child pytest loading a copy of
+# the root conftest installs its own fence inside that child. It catches the common literal shapes cheaply; treat a green
+# here as "no known shape in this file", never as "no child reaches the bucket".
+
+#: Flags that make an invocation write-free and slot-free. Anything else is live.
+_SLOT_FREE_FLAGS = frozenset({"--dry-run", "--list-jobs"})
+
+#: A driver-script call WITH a literal argv. Module level on purpose: the scan
+#: reads string constants inside FUNCTION bodies, so a marker spelled inside
+#: the scanner would be read as a live driver by the scanner itself.
+_DRIVER_MARKER = "runner.main(["
+
+
+def _str_elts(node: ast.List) -> list[str]:
+    return [
+        e.value for e in node.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)
+    ]
+
+
+def _resolve_args(node: ast.expr, names: dict[str, list[str]]) -> list[str] | None:
+    """A literal argv, or None when it cannot be read statically."""
+    if isinstance(node, ast.List) and all(
+        isinstance(e, ast.Constant) and isinstance(e.value, str) for e in node.elts
+    ):
+        return _str_elts(node)
+    if isinstance(node, ast.Name) and node.id in names:
+        return names[node.id]
+    return None
+
+
+def _early_warning_live_child_sites(source: str) -> tuple[int, list[str]]:
+    """Return (live child sites found, the ones that do NOT redirect the bucket).
+
+    Three shapes are read: a `run_cli(...)` call, a driver script whose text
+    calls `runner.main(`, and a bare argv list naming `headless.runner`. An argv
+    that cannot be read statically is reported UNRESOLVED, never as clean.
+    """
+    tree = ast.parse(source)
+    names: dict[str, list[str]] = {}
+    for stmt in tree.body:
+        if (
+            isinstance(stmt, ast.Assign)
+            and len(stmt.targets) == 1
+            and isinstance(stmt.targets[0], ast.Name)
+            and isinstance(stmt.value, ast.List)
+        ):
+            names[stmt.targets[0].id] = _str_elts(stmt.value)
+
+    live = 0
+    bad: list[str] = []
+    for func in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)):
+        if func.name == "run_cli":
+            # The helper itself. Its every CALLER is checked by the first rule.
+            continue
+        calls = [n for n in ast.walk(func) if isinstance(n, ast.Call)]
+        for call in calls:
+            if isinstance(call.func, ast.Name) and call.func.id == "run_cli" and call.args:
+                argv = _resolve_args(call.args[0], names)
+                if argv is None:
+                    bad.append(f"line {call.lineno}: UNRESOLVED run_cli argv")
+                    continue
+                if _SLOT_FREE_FLAGS & set(argv):
+                    continue
+                live += 1
+                if "slot_root" not in {kw.arg for kw in call.keywords}:
+                    bad.append(f"line {call.lineno}: live run_cli {argv} without slot_root")
+        fragments = [
+            n.value for n in ast.walk(func)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)
+        ]
+        drivers = [f for f in fragments if _DRIVER_MARKER in f]
+        if drivers and not any(_SLOT_FREE_FLAGS & set(f.split("'")) for f in drivers):
+            live += 1
+            redirected = any(
+                isinstance(c.func, ast.Name) and c.func.id == "_slot_redirect_prelude"
+                for c in calls
+            )
+            if not redirected:
+                bad.append(f"line {func.lineno}: live runner.main driver in {func.name}")
+        for lst in (n for n in ast.walk(func) if isinstance(n, ast.List)):
+            argv = _str_elts(lst)
+            if "headless.runner" in argv and not (_SLOT_FREE_FLAGS & set(argv)):
+                live += 1
+                bad.append(f"line {lst.lineno}: live bare headless.runner argv {argv}")
+    return live, bad
+
+
+def test_early_warning_live_child_invocations_redirect_the_slot_bucket() -> None:
+    live, bad = _early_warning_live_child_sites(Path(__file__).read_text(encoding="utf-8"))
+    assert live >= 2, (
+        f"the guard found only {live} live child site(s) in this module, so it is "
+        "no longer looking at the arms it exists to police"
+    )
+    assert bad == [], (
+        "a live child invocation here would acquire in the MACHINE-WIDE bucket "
+        f"{slots_mod.DEFAULT_ROOT}, which sibling repositories hold live: {bad}"
+    )
+
+
+def test_the_slot_guard_fires_on_every_unredirected_shape_and_spares_dry_ones() -> None:
+    """Non-vacuity, and the neighbours: each bad shape is caught, dry ones are not."""
+    source = (
+        "SMOKE = ['--once', '--dry-run']\n"
+        "def test_cli(tmp_path):\n"
+        "    run_cli(['--once', '--uid', '1'], cwd=tmp_path)\n"
+        "def test_driver(tmp_path):\n"
+        "    text = \"sys.exit(runner.main(['--once', '--job', 'x']))\"\n"
+        "def test_bare(tmp_path):\n"
+        "    subprocess.run([sys.executable, '-m', 'headless.runner', '--once'])\n"
+        "def test_opaque(tmp_path, argv):\n"
+        "    run_cli(argv, cwd=tmp_path)\n"
+        "def test_dry_cli(tmp_path):\n"
+        "    run_cli(SMOKE, cwd=tmp_path)\n"
+        "def test_dry_bare(tmp_path):\n"
+        "    subprocess.run([sys.executable, '-m', 'headless.runner', '--once', '--dry-run'])\n"
+        "def test_dry_driver(tmp_path):\n"
+        "    text = \"runner.main(['--once', '--dry-run'])\"\n"
+        "def test_good_cli(tmp_path):\n"
+        "    run_cli(['--once'], cwd=tmp_path, slot_root=tmp_path)\n"
+        "def test_good_driver(tmp_path):\n"
+        "    text = _slot_redirect_prelude(tmp_path) + \"runner.main(['--once'])\"\n"
+    )
+    live, bad = _early_warning_live_child_sites(source)
+    joined = "\n".join(bad)
+    assert len(bad) == 4, bad
+    assert "line 3: live run_cli" in joined
+    assert "live runner.main driver in test_driver" in joined
+    assert "live bare headless.runner" in joined
+    assert "UNRESOLVED" in joined
+    assert live == 5, f"the two redirected live arms were not counted as live: {live}"
