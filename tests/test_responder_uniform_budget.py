@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -522,7 +523,9 @@ def test_the_fence_refuses_an_in_process_write_to_a_live_record(runtime_fence_le
         ("os.rename", ("{tmp}/x", "{live}/responder_invocations.log", -1, -1)),
         ("os.remove", ("{live}/responder_runs.json.lock", -1)),
         ("open", ("{live}/.responder_runs.json.123.abcd1234.tmp", "w", 0)),
-        ("open", ("{live}/responder/held/n.md", None, 0x100)),
+        # The HOST's O_CREAT, never a literal: 0x100 is O_CREAT on Windows but
+        # O_NOCTTY on Linux, where it is no write at all (CI run 37131711357).
+        ("open", ("{live}/responder/held/n.md", None, os.O_CREAT)),
     ],
 )
 def test_the_fence_covers_every_write_route(runtime_fence_ledger, tmp_path, event, args):

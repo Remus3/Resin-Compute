@@ -461,52 +461,115 @@ def _bucket_norm() -> str:
 
 _SLOT_BUCKET_ABS_NORM = _bucket_norm() if _SLOT_BUCKET_IS_ABS else ""
 
-#: Fenced audit events, each mapped to the argument positions that carry a path.
-_FENCED_EVENTS: dict[str, tuple[int, ...]] = {
-    "open": (0,),
-    "os.mkdir": (0,),
-    "os.remove": (0,),
-    "os.rmdir": (0,),
-    "os.rename": (0, 1),
-    "os.link": (0, 1),
-    "os.symlink": (0, 1),
-    "os.listdir": (0,),
-    "os.scandir": (0,),
-    "os.chmod": (0,),
-    "os.utime": (0,),
-    "os.truncate": (0,),
-    "glob.glob": (0,),
-    "shutil.rmtree": (0,),
-    "shutil.copyfile": (0, 1),
-    "shutil.move": (0, 1),
+# RESOLVE A PATH THE WAY THE KERNEL WILL - shared by both fences in this file.
+# A relative path in an audit event is relative to the event's DIR_FD when one
+# is given, and to the cwd only when it is not. Measured on CI run 37131711357
+# (ubuntu, 3.11.16): POSIX `shutil.rmtree` removes each entry by NAME against an
+# open directory fd - `os.rmdir(entry.name, dir_fd=topfd)` raises the audit
+# event ('os.rmdir', ('moon_sync_inbox', 13)) - and pytest's own tmp_path
+# teardown ran that over a tmp tree. Joining the bare name onto the cwd (the
+# repo root) named the LIVE inbox, the fence raised a BaseException inside
+# pytest's teardown, whose finalizer loop catches Exception only, and 141 arms
+# went red behind it. Windows never raises such an event: `dir_fd=` fails with
+# NotImplementedError there BEFORE any audit event, which is why the host was
+# green. Each table below therefore pairs a path position with the position of
+# the dir_fd that governs it, or None where the event carries none. Measured
+# layouts (a recording audit hook over real calls, 3.14.4): os.remove/os.rmdir
+# (path, dir_fd); os.mkdir/os.chmod (path, mode, dir_fd); os.utime (path,
+# times, ns, dir_fd); os.rename/os.link (src, dst, src_dir_fd, dst_dir_fd);
+# os.symlink (src, dst, dir_fd) where dir_fd governs dst only; shutil.rmtree
+# (path, dir_fd) with None for absent; "open" carries NO dir_fd at all, so an
+# os.open(name, dir_fd=fd) WRITE is still read against the cwd - a stated
+# residual. A negative dir_fd (-1, or AT_FDCWD) means the cwd.
+# UNRESOLVABLE IS NOT LIVE: when a dir_fd cannot be named (`_dir_fd_path` is
+# None - any host without /proc), the path is not called fenced. Guessing the
+# cwd instead is exactly the defect above. The live runtime and the live bucket
+# are on the Windows host, where no dir_fd event can be raised at all.
+
+
+def _dir_fd_path(fd: int) -> str | None:
+    """The directory an open fd names, or None when this host cannot say."""
+    try:
+        return os.readlink(f"/proc/self/fd/{fd}")
+    except (OSError, ValueError, NotImplementedError):
+        return None
+
+
+def _resolve_event_path(path: Any, dir_fd: Any) -> str | None:
+    """`path` as the kernel resolves it, normcased; None if unreadable or unresolvable."""
+    if isinstance(path, int):
+        return None
+    try:
+        text = os.fsdecode(os.fspath(path))
+        if not os.path.isabs(text):
+            if isinstance(dir_fd, int) and not isinstance(dir_fd, bool) and dir_fd >= 0:
+                base = _dir_fd_path(dir_fd)
+                if base is None:
+                    return None
+            else:
+                base = os.getcwd()
+            text = os.path.join(base, text)
+    except Exception:  # noqa: BLE001 - see `_under_slot_bucket`
+        return None
+    return os.path.normcase(os.path.normpath(text))
+
+
+def _event_paths(
+    spec: tuple[tuple[int, int | None], ...], args: tuple[Any, ...]
+) -> list[tuple[Any, Any]]:
+    """(path argument, its governing dir_fd or None) for each position in `spec`."""
+    found: list[tuple[Any, Any]] = []
+    for index, fd_index in spec:
+        if index >= len(args):
+            continue
+        dir_fd = args[fd_index] if fd_index is not None and fd_index < len(args) else None
+        found.append((args[index], dir_fd))
+    return found
+
+
+#: Fenced audit events: each maps to (path position, governing dir_fd position).
+_FENCED_EVENTS: dict[str, tuple[tuple[int, int | None], ...]] = {
+    "open": ((0, None),),
+    "os.mkdir": ((0, 2),),
+    "os.remove": ((0, 1),),
+    "os.rmdir": ((0, 1),),
+    "os.rename": ((0, 2), (1, 3)),
+    "os.link": ((0, 2), (1, 3)),
+    "os.symlink": ((0, None), (1, 2)),
+    "os.listdir": ((0, None),),
+    "os.scandir": ((0, None),),
+    "os.chmod": ((0, 2),),
+    "os.utime": ((0, 3),),
+    "os.truncate": ((0, None),),
+    "glob.glob": ((0, None),),
+    "shutil.rmtree": ((0, 1),),
+    "shutil.copyfile": ((0, None), (1, None)),
+    "shutil.move": ((0, None), (1, None)),
 }
 
 
-def _under_slot_bucket(path: Any) -> bool:
+def _under_slot_bucket(path: Any, dir_fd: Any = -1) -> bool:
     """True when `path` is the bucket or lies under it. A pure path predicate."""
-    if isinstance(path, int):
+    # A path that cannot be read is not the bucket, and the fence must never
+    # break an unrelated test - several patch `os` internals on purpose.
+    text = _resolve_event_path(path, dir_fd)
+    if text is None:
         return False
     try:
-        text = os.fsdecode(os.fspath(path))
         bucket = _SLOT_BUCKET_ABS_NORM or _bucket_norm()
-        if not os.path.isabs(text):
-            text = os.path.join(os.getcwd(), text)
-    except Exception:  # noqa: BLE001 - see below
-        # A path that cannot be read is not the bucket, and the fence must never
-        # break an unrelated test - several patch `os` internals on purpose.
+    except Exception:  # noqa: BLE001 - same reason
         return False
-    text = os.path.normcase(os.path.normpath(text))
     return text == bucket or text.startswith(bucket + os.sep)
 
 
 def _slot_bucket_fence(event: str, args: tuple[Any, ...]) -> None:
-    positions = _FENCED_EVENTS.get(event)
-    if positions is None:
+    spec = _FENCED_EVENTS.get(event)
+    if spec is None:
         return
-    for index in positions:
-        if index < len(args) and _under_slot_bucket(args[index]):
+    for raw, dir_fd in _event_paths(spec, args):
+        if _under_slot_bucket(raw, dir_fd):
             message = (
-                f"{event} on {args[index]!r} is inside the MACHINE-WIDE slot bucket "
+                f"{event} on {raw!r} is inside the MACHINE-WIDE slot bucket "
                 f"{_SLOT_BUCKET_RAW}, which sibling repositories hold live. Pass a "
                 "slot_root under tmp_path."
             )
@@ -724,14 +787,16 @@ def _live_extra_paths() -> tuple[str, ...]:
 _LIVE_EXTRA_PATHS = _live_extra_paths()
 
 
-def _is_live_responder_record(path: Any) -> bool:
+def _is_live_responder_record(path: Any, dir_fd: Any = -1) -> bool:
     """True for a responder record, its lock or temp sibling, the staging tree,
-    or one of the out-of-runtime `DEFAULT_` paths in `_LIVE_EXTRA_PATHS`."""
-    if isinstance(path, int):
-        return False
-    try:
-        text = _norm(path)
-    except Exception:  # noqa: BLE001 - an unreadable path is not a record
+    or one of the out-of-runtime `DEFAULT_` paths in `_LIVE_EXTRA_PATHS`.
+
+    A relative `path` is resolved against `dir_fd` when one is given, exactly as
+    the slot fence does - see `_resolve_event_path` for the CI run that made
+    joining it onto the cwd a defect."""
+    # An unreadable path, or one whose dir_fd cannot be named, is not a record.
+    text = _resolve_event_path(path, dir_fd)
+    if text is None:
         return False
     for extra in _LIVE_EXTRA_PATHS:
         if text == extra or text.startswith(extra + os.sep):
@@ -747,20 +812,21 @@ def _is_live_responder_record(path: Any) -> bool:
 
 _WRITE_OPEN_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_TRUNC
 
-#: Write-side audit events, each mapped to the argument positions holding a path.
-_RUNTIME_WRITE_EVENTS: dict[str, tuple[int, ...]] = {
-    "os.rename": (0, 1),
-    "os.remove": (0,),
-    "os.rmdir": (0,),
-    "os.mkdir": (0,),
-    "os.link": (0, 1),
-    "os.symlink": (0, 1),
-    "os.chmod": (0,),
-    "os.utime": (0,),
-    "os.truncate": (0,),
-    "shutil.rmtree": (0,),
-    "shutil.copyfile": (1,),
-    "shutil.move": (0, 1),
+#: Write-side audit events: (path position, governing dir_fd position), as in
+#: `_FENCED_EVENTS` above.
+_RUNTIME_WRITE_EVENTS: dict[str, tuple[tuple[int, int | None], ...]] = {
+    "os.rename": ((0, 2), (1, 3)),
+    "os.remove": ((0, 1),),
+    "os.rmdir": ((0, 1),),
+    "os.mkdir": ((0, 2),),
+    "os.link": ((0, 2), (1, 3)),
+    "os.symlink": ((0, None), (1, 2)),
+    "os.chmod": ((0, 2),),
+    "os.utime": ((0, 3),),
+    "os.truncate": ((0, None),),
+    "shutil.rmtree": ((0, 1),),
+    "shutil.copyfile": ((1, None),),
+    "shutil.move": ((0, None), (1, None)),
 }
 
 _RUNTIME_FENCE_HITS: list[dict[str, Any]] = []
@@ -778,16 +844,16 @@ def _live_runtime_fence(event: str, args: tuple[Any, ...]) -> None:
     if event == "open":
         if not args or not _is_write_open(args):
             return
-        positions: tuple[int, ...] = (0,)
+        spec: tuple[tuple[int, int | None], ...] = ((0, None),)
     else:
         found = _RUNTIME_WRITE_EVENTS.get(event)
         if found is None:
             return
-        positions = found
-    for index in positions:
-        if index < len(args) and _is_live_responder_record(args[index]):
+        spec = found
+    for raw, dir_fd in _event_paths(spec, args):
+        if _is_live_responder_record(raw, dir_fd):
             message = (
-                f"{event} on {args[index]!r} writes a LIVE responder record. Redirect "
+                f"{event} on {raw!r} writes a LIVE responder record. Redirect "
                 "every DEFAULT_ path of the responder under tmp_path, and give any "
                 "child interpreter RESINCOMPUTE_RUNTIME_DIR explicitly."
             )
