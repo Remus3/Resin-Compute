@@ -1228,23 +1228,40 @@ def pending(
         text = _read_text(child)
         if is_auto_reply(child.name, text):
             continue
-        # THE FLEET KIT'S NOTE RULE, v4, WITH THE NOTE'S HEAD (MAIN 1204 s7
-        # step 3). v4's `should_skip` damps only a whole TERMINAL / NOREPLY /
-        # NO-REPLY token in the name or a marker-only line, and never an ORDER,
-        # FIX or RULING. MEASURED against every arm here: v4 alone gets each
-        # MAIN case right, so the v3-era workarounds are DELETED - the head=""
-        # call (kit gap 3) and the both-readers-say-MAIN bypass (C6 and the
-        # re-check). A note it skips is not recorded: this filter re-skips it
-        # every cycle, and writing it to the answered record would claim a
-        # reply that was never sent.
+        # MAIN IS DECIDED BY TWO CHECKS ONLY (RULED, adversary on f51d899).
+        # The bypass holds only when BOTH readers say MAIN - this tree's
+        # case-blind `sender_of` and the kit's upper-case `note_sender` - so a
+        # `-from-main-from-RSC-` name still meets the kit's self-skip. For such
+        # a note the kit's head and body MARKER test is NOT applied: v4 treats a
+        # quoted `> TERMINAL`, a `- TERMINAL` list line or a bare `NO REPLY`
+        # line in the head as terminal, and exempts only ORDER, FIX and RULING,
+        # so a MAIN CORRECTION, ACTION, ANSWER or INFORMATION note quoting a
+        # sibling was silenced forever. Only the kit's self test and this
+        # tree's narrow NAME-token check (`is_terminal_note`, name only) apply.
+        # A body declaration no longer silences MAIN: never answering MAIN is
+        # the costlier error. Recorded for the kit v5 report: the body-marker
+        # test damps QUOTED markers in non-ORDER classes for every sender.
+        #
+        # Every other sender gets the kit's v4 rule with the note's head, then
+        # this tree's narrow name-and-body check. A note either skips is not
+        # recorded: this filter re-skips it every cycle, and writing it to the
+        # answered record would claim a reply that was never sent.
+        main_by_both = code == MAIN_CODE and kit.note_sender(child.name) == MAIN_CODE
+        if main_by_both:
+            # The kit's self test is satisfied by construction here: the kit
+            # has just read the sender as MAIN, not as this tree. Empty text
+            # makes `is_terminal_note` a NAME-only check.
+            if is_terminal_note(child.name, ""):
+                continue
+            out.append(child)
+            continue
         if kit.should_skip(child.name, SELF_CODE, text[:NOTE_HEAD_CHARS]) is not None:
             continue
         # LOOP BREAKER (c): never spawn on a note its sender marked TERMINAL or
         # no-reply. MAIN 0845 makes this a fleet floor. KEPT BESIDE THE KIT:
         # v4 reads only a marker-ONLY line, so a declaration inside a sentence
         # - "ACK: read. TERMINAL, no reply wanted." - passes the kit and is
-        # caught here (pinned in tests/test_responder_uniform_budget.py). It
-        # yields to the kit's NEVER_DAMP classes, so an ORDER is never damped.
+        # caught here (pinned in tests/test_responder_uniform_budget.py).
         if is_terminal_note(child.name, text):
             continue
         out.append(child)
@@ -1276,9 +1293,12 @@ def is_terminal_note(name: str, text: str) -> bool:
     """Whether the sender marked this note TERMINAL / no-reply, by name or body.
 
     Never for an ORDER, FIX or RULING (`kit.NEVER_DAMP`, read from the kit and
-    not restated): fleet law since v4 is that those are never damped.
+    not restated): fleet law since v4 is that those are never damped. THE
+    CLASS COMES FROM THE FILENAME ONLY (adversary on f51d899): read from the
+    title line, a sibling's `# From LL - FIX` lifted the TERMINAL-in-name loop
+    breaker that MAIN 0845 makes a floor.
     """
-    if kit.note_class(name, text[:NOTE_HEAD_CHARS]) in kit.NEVER_DAMP:
+    if kit.note_class(name) in kit.NEVER_DAMP:
         return False
     return _TERMINAL_NAME.search(name) is not None or _TERMINAL_BODY.search(text) is not None
 
