@@ -101,6 +101,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from core import headless_env  # noqa: E402
 from core.atomic_io import atomic_write_json, atomic_write_text, read_json  # noqa: E402
 
 # `ENV_RUNTIME_DIR` IS RE-EXPORTED ON PURPOSE and is not dead. It is this
@@ -179,6 +180,16 @@ TERMINATIONS = (
     # ANSWERED record cannot be. Reusing one string would have made the two
     # indistinguishable in the only evidence that survives a cycle.
     TERMINATION_UNANSWERABLE,
+    # THE HEADLESS ROUTE REFUSED. Operator directive 2026-10-02: every headless
+    # spawn goes through the proxy named by CLAUDE_HEADLESS_BASE_URL and fails
+    # CLOSED. Unset (the kill switch), malformed or unreachable all land here,
+    # with the reason, and nothing is spawned by any other route.
+    "headless-refused",
+    # THE SESSION RAN AND WAS REFUSED FOR USAGE. A backoff is recorded and the
+    # cycle ends; it is never retried another way.
+    "usage-limited",
+    # A RECORDED BACKOFF IS STILL IN FORCE, so this fire spawned nothing.
+    "usage-backoff",
 )
 
 #: Set on the delivered path when the reply LANDED and the answered record did
@@ -305,6 +316,18 @@ DEFAULT_ANSWERED = RUNTIME_DIR / "responder_answered.json"
 #: a new defect in the draft is the one thing an operator reads that directory
 #: to find.
 DEFAULT_REFUSALS = RUNTIME_DIR / "responder_refusals.json"
+
+#: THE USAGE-LIMIT BACKOFF. `{"until": epoch}`, written when a session is
+#: refused for usage and consulted before the next spawn. A usage limit backs
+#: off; it never retries another way - see `UsageLimited`.
+DEFAULT_BACKOFF = RUNTIME_DIR / "responder_backoff.json"
+
+#: Used when a usage-limit refusal carries no reset time, and the ceiling on
+#: one that does, so a garbled stamp cannot park the responder for a year.
+USAGE_BACKOFF_SECONDS = 3600.0
+USAGE_BACKOFF_MAX_SECONDS = 86400.0
+USAGE_LIMITED_REASON = "the session was refused for usage - backing off, no retry by another route"
+USAGE_BACKOFF_REASON = "a usage-limit backoff is in force - nothing spawned"
 
 #: LITERAL CAPS ON THE RECORD, because the record is otherwise the held
 #: directory again in JSON. A note whose reasons vary every cycle would
@@ -577,6 +600,33 @@ class SpawnFailed(RuntimeError):
     These are two different facts and only one of them is a finding about the
     channel. See `_spawn_headless` for what conflating them would have
     published.
+    """
+
+
+class HeadlessRefused(SpawnFailed):
+    """The headless route refused BEFORE anything was spawned.
+
+    Its text is one of `core.headless_env`'s fixed `REFUSE_*` reasons and never
+    carries the configured URL, so it is safe to record.
+    """
+
+
+class UsageLimited(SpawnFailed):
+    """The session ran and was refused for usage. Back off; never reroute.
+
+    `reset_at` is the epoch the refusal named, or None when it named none.
+    """
+
+    def __init__(self, reset_at: float | None) -> None:
+        super().__init__("usage limit")
+        self.reset_at = reset_at
+
+
+class UsageBackoff(SpawnFailed):
+    """A recorded usage-limit backoff is in force, so nothing was spawned.
+
+    Checked INSIDE the spawn rather than as its own branch in `_run_once`, so
+    the backoff binds exactly the real session and nothing else.
     """
 
 
@@ -2041,6 +2091,28 @@ def bounce_name(note: Path, stamp: float) -> str:
     return f"{when}-from-{SELF_CODE}-bounce-{stem}{BOUNCE_SUFFIX}"
 
 
+def backoff_active(path: Path, now: float) -> bool:
+    """Whether a recorded usage-limit backoff is still in force at `now`.
+
+    An unreadable or malformed record reads as NO backoff: this is a rate
+    limiter, not the billing gate. The billing gate is the headless route,
+    which fails closed on its own.
+    """
+    doc = read_json(path, {})
+    until = doc.get("until") if isinstance(doc, dict) else None
+    return isinstance(until, (int, float)) and now < float(until)
+
+
+def record_backoff(path: Path, reset_at: float | None, now: float) -> bool:
+    """Record a backoff from a usage-limit refusal. Clamped, never unbounded."""
+    until = now + USAGE_BACKOFF_SECONDS
+    if reset_at is not None and now < reset_at <= now + USAGE_BACKOFF_MAX_SECONDS:
+        until = reset_at
+    if not _ensure_parent(path):
+        return False
+    return atomic_write_json(path, {"until": until, "recorded": now})
+
+
 def _hold(
     staging: Path, name: str, text: str, reasons: list[str], stamp: float | None = None
 ) -> Path | None:
@@ -2266,6 +2338,27 @@ def _run_once(
     # GATE:spawn-failure
     try:
         draft = (spawn or _spawn_headless)(prompt, bounds)
+    except UsageLimited as exc:
+        # BACK OFF, NEVER REROUTE. The next fire inside the backoff spawns
+        # nothing; no other route is tried. Nothing is held - there is no draft.
+        print(f"responder: {USAGE_LIMITED_REASON}")
+        record_backoff(DEFAULT_BACKOFF, exc.reset_at, started)
+        result["reasons"] = [USAGE_LIMITED_REASON]
+        result["termination"] = "usage-limited"
+        return result
+    except UsageBackoff:
+        print(f"responder: {USAGE_BACKOFF_REASON}")
+        result["reasons"] = [USAGE_BACKOFF_REASON]
+        result["termination"] = "usage-backoff"
+        return result
+    except HeadlessRefused as exc:
+        # FAIL CLOSED AND SAY WHY. No hold and no metrics row: nothing ran, and
+        # with the kill switch thrown this repeats every fire. The invocation
+        # log records the termination per fire.
+        print(f"responder: REFUSING to spawn - {exc}")
+        result["reasons"] = [str(exc)]
+        result["termination"] = "headless-refused"
+        return result
     except Exception:  # noqa: BLE001 - a responder must survive ANY session failure
         # The raw string never reaches a reported surface. A responder that
         # tracebacks out of a scheduled task surfaces nothing at all.
@@ -2473,6 +2566,31 @@ SPAWN_COMMAND: tuple[str, ...] = (
     "Read,Grep,Glob,Bash(python -m pytest:*),Bash(git log:*),Bash(git status:*)",
 )
 
+#: THE HEADLESS ROUTE. Operator directive 2026-10-02: every unattended `claude`
+#: spawn goes through `core.headless_env`, which reads the proxy URL live and
+#: fails closed. A module attribute so an arm can substitute it; production
+#: never does.
+_headless_gate = headless_env.prepare_headless_env
+
+#: A usage-limit refusal, as the CLI or the proxy words it. Consulted on a
+#: non-zero exit, or on a SHORT untagged stdout, so a real draft that merely
+#: discusses limits is not mistaken for one.
+_USAGE_LIMIT = re.compile(r"usage limit|limit reached|rate[ _-]?limit|\b429\b", re.IGNORECASE)
+_RESET_EPOCH = re.compile(r"\|(\d{10})\b")
+_SHORT_REFUSAL_CHARS = 300
+
+
+def _usage_limited(done: subprocess.CompletedProcess) -> tuple[bool, float | None]:
+    """`(limited, reset epoch or None)` for one finished session."""
+    out = done.stdout or ""
+    err = done.stderr or ""
+    short_untagged = len(out.strip()) <= _SHORT_REFUSAL_CHARS and RESPONDER_TAG not in out
+    hay = out + "\n" + err if done.returncode != 0 or short_untagged else err
+    if not _USAGE_LIMIT.search(hay):
+        return False, None
+    stamp = _RESET_EPOCH.search(hay)
+    return True, (float(stamp.group(1)) if stamp else None)
+
 
 def _spawn_headless(prompt: str, bounds: Bounds) -> str:
     """Run one headless session and return whatever it printed.
@@ -2500,6 +2618,17 @@ def _spawn_headless(prompt: str, bounds: Bounds) -> str:
     # RESOLVE THE EXECUTABLE. On Windows the entry point is a `.CMD` shim and
     # `subprocess` will not launch a bare `claude`. Measured here: the first
     # live spawn raised FileNotFoundError, which is section 2's whole story.
+    # A USAGE LIMIT BACKS OFF. Inside a recorded backoff nothing is spawned and
+    # no other route is tried; the cycle ends and the next fire looks again.
+    if backoff_active(DEFAULT_BACKOFF, time.time()):
+        raise UsageBackoff(USAGE_BACKOFF_REASON)
+
+    # THE ROUTE, and fail closed. Nothing below runs unless the headless proxy
+    # is configured and accepting connections; there is no direct route.
+    route = _headless_gate()
+    if not route.ok or route.env is None:
+        raise HeadlessRefused(route.reason)
+
     exe = shutil.which(SPAWN_COMMAND[0])
     if exe is None:
         raise SpawnFailed("the session command was not found on PATH")
@@ -2514,6 +2643,7 @@ def _spawn_headless(prompt: str, bounds: Bounds) -> str:
             cwd=str(REPO_ROOT),
             check=False,
             creationflags=_NO_WINDOW,
+            env=route.env,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         # RAISED, NEVER RETURNED AS EMPTY, and that distinction is the point.
@@ -2527,6 +2657,9 @@ def _spawn_headless(prompt: str, bounds: Bounds) -> str:
         # a negative that is a statement about the instrument rather than the
         # world. The class of `exc` is used, never its text.
         raise SpawnFailed(exc.__class__.__name__) from None
+    limited, reset_at = _usage_limited(done)
+    if limited:
+        raise UsageLimited(reset_at)
     if done.returncode != 0 and not done.stdout:
         raise SpawnFailed(f"the session exited {done.returncode} with no output")
     return done.stdout or ""
