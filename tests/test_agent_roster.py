@@ -641,3 +641,95 @@ def test_the_ignore_probe_still_fires_on_a_genuinely_ignored_sibling():
     assert not _git_ignores(".claude/agents/scratch-notes.md")
     assert _git_ignores("logs/some.log"), "an unrelated known-ignored path stopped registering"
     assert not _git_ignores("CLAUDE.md")
+
+
+# ---------------------------------------------------------------------------
+# Guard 8 - long work reports as it goes (FLEET-COMMON item 12)
+# ---------------------------------------------------------------------------
+#
+# FLEET-COMMON item 12, vendored at ops/fleet_kit/FLEET-COMMON.md, requires every
+# sub-agent doing work expected to take over five minutes to write a progress
+# file after each step, so the main session can read percent, ETA and status
+# mid-run instead of waiting for the final report. Subagent context does NOT
+# inherit the main thread's, so the requirement reaches an agent only if its own
+# definition states it - which is the same reason Guard 4 exists.
+#
+# The read-only agents get a second assertion. Their contract says "never edit,
+# create", and a progress file is a file they create. The adjudicated ruling is
+# that a GITIGNORED progress file under ops/loop/control/progress/ is NOT a repo
+# edit and is allowed; an agent that was never told so either skips the file or
+# reads its own contract as broken. So the ruling must be recorded in each file.
+
+#: The directory every progress file lives in. Gitignored - asserted below.
+PROGRESS_DIR = "ops/loop/control/progress/"
+
+#: The six keys of the progress record, as JSON-quoted names, plus the status
+#: enumeration. Quoted so that the word `step` in passing prose cannot satisfy
+#: the field.
+PROGRESS_TOKENS = ('"task"', '"pct"', '"step"', '"eta_s"', '"status"', '"updated"', "running|done|failed")
+
+#: The ruling phrase each read-only agent must carry. Case-sensitive: the
+#: shouted NOT is the ruling, and "is not a repo edit" in passing would be prose.
+READ_ONLY_PROGRESS_RULING = "NOT a repo edit"
+
+DISPATCH_PROTOCOL = REPO_ROOT / ".claude" / "commands" / "orchestrated-run.md"
+
+#: FLEET-COMMON item 3: status on request is these four, one short line each.
+STATUS_VOCABULARY = "done / left / +added / -retracted"
+
+
+def _missing_progress_tokens(text: str) -> list[str]:
+    return [token for token in (PROGRESS_DIR, *PROGRESS_TOKENS) if token not in text]
+
+
+@pytest.mark.parametrize("agent", sorted(EXPECTED_AGENTS))
+def test_every_agent_states_the_progress_file_requirement(agent: str):
+    missing = _missing_progress_tokens(_read_agent(agent))
+    assert not missing, (
+        f"{agent}.md never states {missing} - FLEET-COMMON item 12 reaches a subagent "
+        "only through its own definition"
+    )
+
+
+@pytest.mark.parametrize("agent", READ_ONLY_AGENTS)
+def test_every_read_only_agent_records_the_progress_file_ruling(agent: str):
+    assert READ_ONLY_PROGRESS_RULING in _read_agent(agent), (
+        f"{agent}.md never records that a gitignored progress file is {READ_ONLY_PROGRESS_RULING!r}, "
+        "so its never-create contract reads as forbidding the file item 12 requires"
+    )
+
+
+def test_the_progress_directory_is_gitignored():
+    """The ruling rests on this. If the directory stopped being ignored, a
+    progress file WOULD be a repo edit and every read-only agent's licence to
+    write one would be void."""
+    assert _git_ignores(PROGRESS_DIR + "sliceX.json")
+
+
+def test_the_dispatch_protocol_names_the_progress_file_and_the_status_vocabulary():
+    text = DISPATCH_PROTOCOL.read_text(encoding="utf-8")
+    missing = _missing_progress_tokens(text)
+    assert not missing, f"orchestrated-run.md never states {missing}"
+    assert "names the progress file" in text, "the dispatch protocol never requires the prompt to name the file"
+    assert STATUS_VOCABULARY in text, "orchestrated-run.md does not carry the FLEET-COMMON item 3 status shape"
+
+
+def test_the_progress_sweep_fires_on_a_missing_token_and_a_missing_ruling(tmp_path):
+    """Non-vacuity, one planted case per side, plus the survivor."""
+    full = "\n".join((PROGRESS_DIR, *PROGRESS_TOKENS, READ_ONLY_PROGRESS_RULING))
+    whole = _plant(tmp_path, "verifier", _synthetic_agent("verifier", vocabulary=(full,)))
+    assert _missing_progress_tokens(whole.read_text(encoding="utf-8")) == []
+
+    thinned = full.replace('"eta_s"', "eta")
+    thin = _plant(tmp_path, "planner", _synthetic_agent("planner", vocabulary=(thinned,)))
+    assert _missing_progress_tokens(thin.read_text(encoding="utf-8")) == ['"eta_s"']
+
+    prose = _plant(tmp_path, "adversary", _synthetic_agent("adversary", vocabulary=("it is not a repo edit",)))
+    assert READ_ONLY_PROGRESS_RULING not in prose.read_text(encoding="utf-8")
+    assert _missing_progress_tokens(_synthetic_agent("bare")) == [PROGRESS_DIR, *PROGRESS_TOKENS]
+
+
+def test_the_ignore_probe_distinguishes_the_progress_directory_from_a_tracked_neighbour():
+    """Non-vacuity for the gitignore arm: a tracked sibling under ops/loop/ is
+    NOT ignored, so the arm above cannot pass by ignoring everything."""
+    assert not _git_ignores("ops/loop/slots.py")
