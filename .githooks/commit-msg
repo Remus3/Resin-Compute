@@ -53,6 +53,14 @@ tmp="$1.rcfilt"
 grep -v -i -e '^Co-Authored-By: Claude' -e '^Claude-Session:' "$1" > "$tmp" || true
 mv "$tmp" "$1"
 
+# Both scripts below share one predicate - will git strip `#` lines? - and in
+# the editor flow it is answered by git's OWN template in this file, which
+# carries the effective `--cleanup=` mode that git never passes to a hook. The
+# path is exported so the predicate reads the file git handed us: `$1` is
+# COMMIT_EDITMSG for `git commit` but MERGE_MSG for `git merge`.
+RESIN_COMMIT_MSG_FILE="$1"
+export RESIN_COMMIT_MSG_FILE
+
 # 2. Banned glyphs in the MESSAGE.
 #
 # This half CANNOT live in pre-commit. Git's order is

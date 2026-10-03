@@ -16,15 +16,21 @@ which keeps `#` lines - so a `#` first line IS the landed subject there.
 Measured 2026-10-03; `hash_lines_are_stripped` holds the decision and the
 measured table. Every unknown fails closed, with one exception.
 
-KNOWN GAP: an explicit `--cleanup=whitespace` or `--cleanup=verbatim` on an
-EDITOR commit. Git does not pass the flag to the hook, so this module assumes
-the editor default (strip) and skips a `#` first line that will in fact land
-as the subject. The glyph half in `tools/precommit_gate.py` SHARES this
-predicate, so it shares the gap: there a glyph on a `#` line also lands
-unscanned. It cannot scan every line instead, because git's own editor
-template carries non-ASCII branch names, author names and paths that git
-strips after the hook. The same gap is recorded beside
-`KNOWN_MESSAGE_SURVIVORS` in `tools/gate_mutation_runner.py`.
+AN EXPLICIT `--cleanup=` FLAG on an EDITOR commit is read from git's own
+template, not guessed. Git passes no flag to the hook, but it writes its
+EFFECTIVE cleanup mode into the editor template in the very file the hook is
+handed: "will be ignored" under strip, "will be kept" under whitespace and
+verbatim. `.githooks/commit-msg` exports that file's path as
+`RESIN_COMMIT_MSG_FILE`, and only the commit template's exact two-line strip
+sentence, with no keep sentence beside it, lets `#` lines be skipped.
+
+RESIDUALS, each measured or reasoned in `hash_lines_are_stripped`:
+`-F`/`-m` with `commit.cleanup=strip` in config AND an explicit
+`--cleanup=whitespace|verbatim` on the command line (no template, flag
+invisible) still skips `#` lines that land; a human who deletes git's keep
+sentence and types its strip sentence defeats the read on purpose. A
+localised git that translates the sentence reads as "unknown" and fails
+closed, which can falsely block a non-ASCII branch or path in its template.
 
 Bypass with `--no-verify` if absolutely necessary; please do not make a habit
 of it.
@@ -106,23 +112,81 @@ def _git_config_get(key: str) -> str | None:
     return proc.stdout.decode("utf-8", "replace").strip()
 
 
+# Git's editor template, byte-exact from git 2.53.0.windows.3, measured
+# 2026-10-03 (the wrap is inside git's own translatable string, not ours). Only
+# `git commit` writes these; `git merge --edit` writes its own text, which says
+# "ignored" in EVERY cleanup mode, verbatim included - so it is not a signal.
+TEMPLATE_STRIP_HINT = (
+    "# Please enter the commit message for your changes. Lines starting",
+    "# with '#' will be ignored, and an empty message aborts the commit.",
+)
+TEMPLATE_KEEP_HINT = (
+    "# Please enter the commit message for your changes. Lines starting",
+    "# with '#' will be kept; you may remove them yourself if you want to.",
+)
+
+#: Exported by `.githooks/commit-msg` as the path git handed the hook.
+MESSAGE_FILE_ENV = "RESIN_COMMIT_MSG_FILE"
+
+
+def _has_pair(lines: list[str], pair: tuple[str, str]) -> bool:
+    return any(
+        lines[i] == pair[0] and lines[i + 1] == pair[1] for i in range(len(lines) - 1)
+    )
+
+
+def template_says_stripped(message: str) -> bool | None:
+    """What git's OWN editor template says about `#` lines in this message.
+
+    True for the strip sentence, False for the keep sentence, None when
+    neither is there (`--no-status`, scissors, a merge, a localised git, a
+    template the author deleted). The keep sentence wins over the strip one: an
+    amend can carry an old landed strip sentence above a new keep sentence.
+    """
+    lines = message.splitlines()
+    if _has_pair(lines, TEMPLATE_KEEP_HINT):
+        return False
+    if _has_pair(lines, TEMPLATE_STRIP_HINT):
+        return True
+    return None
+
+
+def _message_from_env(env: Mapping[str, str]) -> str | None:
+    path = env.get(MESSAGE_FILE_ENV)
+    if not path:
+        return None
+    try:
+        return Path(path).read_bytes().decode("utf-8", "replace")
+    except OSError:
+        return None
+
+
 def hash_lines_are_stripped(
     env: Mapping[str, str] | None = None,
     config_get: Callable[[str], str | None] | None = None,
+    message: str | None = None,
 ) -> bool:
     """True only when git provably strips `#` lines from THIS commit.
 
     MEASURED 2026-10-03 on git 2.53.0.windows.3: commit-msg is handed the
     PRE-cleanup bytes in every mode, the editor flow included. `-F` and `-m`
     default to cleanup=whitespace and KEEP `#` lines; the editor flow defaults
-    to cleanup=strip. The one signal git gives the hook is `GIT_EDITOR=:`,
-    exported exactly when no editor was used, and `GIT_INDEX_FILE`, exported to
-    every commit hook. A `--cleanup=` flag on the command line is INVISIBLE
-    here; see the residual in the module docstring.
+    to cleanup=strip. `GIT_EDITOR=:` is exported exactly when no editor was
+    used, and `GIT_INDEX_FILE` to every commit hook.
+
+    NO EDITOR: `commit.cleanup` decides. A `--cleanup=` flag here is
+    INVISIBLE - no template is written - so `-F --cleanup=verbatim` under a
+    configured `strip` is the residual named in the module docstring.
+
+    EDITOR: git's template decides, never the config, because the template
+    carries the EFFECTIVE mode with any `--cleanup=` flag applied. `message`
+    is the hook's message text; when None it is read from the path in
+    `RESIN_COMMIT_MSG_FILE`. Only the strip sentence answers True.
 
     Fails CLOSED - False, so `#` lines are judged as content - whenever the
     answer is not known: outside a commit hook, a config git cannot read, an
-    unknown cleanup mode, or a comment character other than `#`.
+    unknown cleanup mode, a comment character other than `#`, or an editor
+    commit whose template does not carry the strip sentence.
     """
     env = os.environ if env is None else env
     config_get = _git_config_get if config_get is None else config_get
@@ -134,17 +198,17 @@ def hash_lines_are_stripped(
             value = config_get(key)
             if value is not None and value != "#":
                 return False
+        if editor_used:
+            if message is None:
+                message = _message_from_env(env)
+            return message is not None and template_says_stripped(message) is True
         mode = (config_get("commit.cleanup") or "default").strip().lower()
     except ConfigUnreadable:
         return False
-    if mode == "strip":
-        return True
-    if mode == "default":
-        return editor_used
-    # whitespace, verbatim and scissors KEEP `#` lines - scissors truncates at
-    # its marker line and keeps every `#` line above it, measured in editor
-    # mode. Anything else is a mode this function does not know: fail closed.
-    return False
+    # Without an editor the default IS whitespace. whitespace, verbatim and
+    # scissors KEEP `#` lines - scissors truncates at its marker line and keeps
+    # every `#` line above it. Anything else is unknown: fail closed.
+    return mode == "strip"
 
 
 def _read_subject(msg_file: Path, *, hash_is_content: bool = True) -> str:
@@ -169,7 +233,10 @@ def main() -> int:
         print(f"commit-msg: file not found: {msg_file}", file=sys.stderr)
         return 1
 
-    subject = _read_subject(msg_file, hash_is_content=not hash_lines_are_stripped())
+    message = msg_file.read_bytes().decode("utf-8", "replace")
+    subject = _read_subject(
+        msg_file, hash_is_content=not hash_lines_are_stripped(message=message)
+    )
     ok, err = validate(subject)
     if not ok:
         print(
