@@ -2152,6 +2152,201 @@ def test_non_vacuity_an_unconfigured_clone_lands_the_non_ascii_conflict_line_via
 
 
 # ---------------------------------------------------------------------------
+# AN EXPLICIT `--cleanup=whitespace|verbatim` ON AN EDITOR COMMIT
+#
+# Git does not pass the flag to the hook and exports nothing for it. What it
+# DOES do is write its effective cleanup mode into the editor template, in the
+# very file the hook is handed - measured 2026-10-03 on git 2.53.0.windows.3:
+#
+#   strip (default)      "# with '#' will be ignored, and an empty message ..."
+#   whitespace/verbatim  "# with '#' will be kept; you may remove them ..."
+#   scissors             the ">8" cut line, no '#' sentence
+#   --no-status          no template at all
+#   git merge --edit     its OWN text, which says "ignored" in EVERY mode
+#
+# So the predicate trusts the commit template's strip sentence and nothing
+# else: the keep sentence, a missing sentence and the merge template all fail
+# closed and every `#` line is judged as content.
+# ---------------------------------------------------------------------------
+
+HASH_GLYPH_AUTHORED = CLEAN_MESSAGE + ("# note " + EM_DASH + " kept by the flag\n").encode("utf-8")
+
+
+@pytest.mark.parametrize("mode", ["whitespace", "verbatim"])
+def test_an_editor_commit_with_a_keeping_cleanup_refuses_a_glyph_on_a_hash_line(
+    gate_repo: _ThrowawayRepo, tmp_path: Path, mode: str
+):
+    gate_repo.stage("note.txt", CLEAN_CONTENT)
+    before = gate_repo.head()
+    assert before, "the fixture left HEAD unborn, so 'HEAD did not move' proves nothing"
+    proc = _git_with_editor(
+        gate_repo, tmp_path, "commit", "--cleanup=" + mode, authored=HASH_GLYPH_AUTHORED
+    )
+    stderr = proc.stderr.decode("utf-8", "replace")
+    assert gate_repo.head() == before, (
+        f"A BANNED GLYPH ON A `#` LINE LANDED through an editor commit with "
+        f"--cleanup={mode}, which keeps `#` lines.\nstderr: {stderr}"
+    )
+    assert proc.returncode != 0 and GATE_MARKER in stderr, stderr
+
+
+@pytest.mark.parametrize("mode", ["whitespace", "verbatim"])
+def test_an_editor_commit_with_a_keeping_cleanup_judges_a_hash_first_line(
+    gate_repo: _ThrowawayRepo, tmp_path: Path, mode: str
+):
+    gate_repo.stage("note.txt", CLEAN_CONTENT)
+    before = gate_repo.head()
+    assert before, "the fixture left HEAD unborn, so 'HEAD did not move' proves nothing"
+    proc = _git_with_editor(
+        gate_repo, tmp_path, "commit", "--cleanup=" + mode, authored=HASH_SUBJECT_MESSAGE
+    )
+    stderr = proc.stderr.decode("utf-8", "replace")
+    assert gate_repo.head() == before, (
+        f"a `#` first line became the landed subject under --cleanup={mode} "
+        f"without being validated.\nstderr: {stderr}"
+    )
+    assert proc.returncode != 0 and SUBJECT_MARKER in stderr, stderr
+
+
+def test_an_editor_commit_with_cleanup_whitespace_on_a_non_ascii_branch_is_refused(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    """Here git's OWN template lines land, branch name included - the U+00E9
+    reaches history, so the block is correct and not a false one."""
+    gate_repo.git("checkout", "-q", "-b", NA_NAME, check=True)
+    gate_repo.stage("note.txt", CLEAN_CONTENT)
+    before = gate_repo.head()
+    proc = _git_with_editor(
+        gate_repo, tmp_path, "commit", "--cleanup=whitespace", authored=CLEAN_MESSAGE
+    )
+    stderr = proc.stderr.decode("utf-8", "replace")
+    assert gate_repo.head() == before, f"a non-ASCII template line landed: {stderr}"
+    assert proc.returncode != 0 and GATE_MARKER in stderr, stderr
+
+
+def test_an_editor_commit_with_no_status_and_verbatim_refuses_a_glyph_on_a_hash_line(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    """`--no-status` drops the template, and with it the only signal: unknown
+    mode, so fail closed."""
+    gate_repo.stage("note.txt", CLEAN_CONTENT)
+    before = gate_repo.head()
+    proc = _git_with_editor(
+        gate_repo, tmp_path, "commit", "--no-status", "--cleanup=verbatim",
+        authored=HASH_GLYPH_AUTHORED,
+    )
+    stderr = proc.stderr.decode("utf-8", "replace")
+    assert gate_repo.head() == before, f"a `#` glyph line landed under --no-status: {stderr}"
+    assert proc.returncode != 0 and GATE_MARKER in stderr, stderr
+
+
+def _make_mergeable_side(repo: _ThrowawayRepo) -> None:
+    """A `side` branch that merges into the base branch without conflict."""
+    base = repo.git("rev-parse", "--abbrev-ref", "HEAD", check=True).stdout.strip()
+    repo.git("checkout", "-q", "-b", "side", check=True)
+    repo.stage("side.txt", b"side\n")
+    assert repo.commit(b"feat(gate-probe): side\n", no_verify=True).returncode == 0
+    repo.git("checkout", "-q", base, check=True)
+    repo.stage("main.txt", b"main\n")
+    assert repo.commit(b"feat(gate-probe): main\n", no_verify=True).returncode == 0
+
+
+def test_a_merge_edit_with_cleanup_verbatim_refuses_a_glyph_on_a_hash_line(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    """The merge template says "will be ignored" even under verbatim, so it is
+    not a signal and the predicate must not trust it."""
+    _make_mergeable_side(gate_repo)
+    before = gate_repo.head()
+    proc = _git_with_editor(
+        gate_repo, tmp_path, "merge", "--edit", "--cleanup=verbatim", "side",
+        authored=HASH_GLYPH_AUTHORED,
+    )
+    stderr = proc.stderr.decode("utf-8", "replace")
+    assert gate_repo.head() == before, f"a `#` glyph line landed via merge --edit: {stderr}"
+    assert proc.returncode != 0 and GATE_MARKER in stderr, stderr
+
+
+# The LEGITIMATE neighbours: modes that really strip must still land.
+
+
+def test_an_editor_commit_with_cleanup_strip_on_a_non_ascii_branch_lands(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    gate_repo.git("checkout", "-q", "-b", NA_NAME, check=True)
+    gate_repo.stage("note.txt", CLEAN_CONTENT)
+    before = gate_repo.head()
+    _assert_landed_ascii(
+        gate_repo,
+        before,
+        _git_with_editor(gate_repo, tmp_path, "commit", "--cleanup=strip", authored=CLEAN_MESSAGE),
+    )
+
+
+def test_an_explicit_strip_flag_beats_a_keeping_config_in_the_editor_flow(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    """`commit.cleanup=whitespace` in config, `--cleanup=strip` on the command
+    line: git strips, its template says so, and the template wins."""
+    gate_repo.git("config", "commit.cleanup", "whitespace", check=True)
+    gate_repo.git("checkout", "-q", "-b", NA_NAME, check=True)
+    gate_repo.stage("note.txt", CLEAN_CONTENT)
+    before = gate_repo.head()
+    _assert_landed_ascii(
+        gate_repo,
+        before,
+        _git_with_editor(gate_repo, tmp_path, "commit", "--cleanup=strip", authored=CLEAN_MESSAGE),
+    )
+
+
+def test_a_plain_merge_edit_still_lands(gate_repo: _ThrowawayRepo, tmp_path: Path):
+    """Failing closed on the merge template costs nothing on ASCII: its own
+    comment lines are fixed English text."""
+    _make_mergeable_side(gate_repo)
+    before = gate_repo.head()
+    proc = _git_with_editor(gate_repo, tmp_path, "merge", "--edit", "side")
+    assert proc.returncode == 0 and gate_repo.head() != before, (
+        proc.stderr.decode("utf-8", "replace")
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("commit", "--cleanup=whitespace"),
+        ("commit", "--cleanup=verbatim"),
+        ("commit", "--no-status", "--cleanup=verbatim"),
+    ],
+    ids=["whitespace", "verbatim", "no-status-verbatim"],
+)
+def test_non_vacuity_a_keeping_editor_commit_lands_the_hash_glyph_line(
+    gate_repo: _ThrowawayRepo, tmp_path: Path, args: tuple[str, ...]
+):
+    """The refusals above judge bytes git really KEEPS: with no hooks, the `#`
+    line and its em-dash reach history."""
+    gate_repo.disarm()
+    gate_repo.stage("note.txt", CLEAN_CONTENT)
+    before = gate_repo.head()
+    proc = _git_with_editor(gate_repo, tmp_path, *args, authored=HASH_GLYPH_AUTHORED)
+    assert proc.returncode == 0 and gate_repo.head() != before, proc.stderr
+    assert ("# note " + EM_DASH).encode("utf-8") in _landed_message(gate_repo)
+
+
+def test_non_vacuity_a_merge_edit_with_cleanup_verbatim_lands_the_hash_glyph_line(
+    gate_repo: _ThrowawayRepo, tmp_path: Path
+):
+    gate_repo.disarm()
+    _make_mergeable_side(gate_repo)
+    before = gate_repo.head()
+    proc = _git_with_editor(
+        gate_repo, tmp_path, "merge", "--edit", "--cleanup=verbatim", "side",
+        authored=HASH_GLYPH_AUTHORED,
+    )
+    assert proc.returncode == 0 and gate_repo.head() != before, proc.stderr
+    assert ("# note " + EM_DASH).encode("utf-8") in _landed_message(gate_repo)
+
+
+# ---------------------------------------------------------------------------
 # NON-VACUITY - the same bytes, through an unconfigured clone, land clean
 #
 # These are the paired arms the tree's conventions require: a guard is not
