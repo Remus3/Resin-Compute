@@ -660,12 +660,12 @@ def test_a_leaking_child_cannot_excuse_itself_with_its_own_start_line(source):
     assert conf._runtime_drift({}, {"responder_invocations.log": (90, 1)}, t0, t1, log, now) is not None
 
 
-def test_an_unclosed_scheduled_start_excuses_at_most_five_minutes():
+def test_an_unclosed_scheduled_start_excuses_at_most_its_cap():
     log = "2026-10-03T10:00:00\tscheduledtask\t-\tstart\n"
     start = _at("2026-10-03T10:00:00")
     conf = _root_conftest()
 
-    assert conf._live_fire_windows(log, start + 3600) == [(start, start + 300.0)]
+    assert conf._live_fire_windows(log, start + 3600) == [(start, start + conf._FIRE_OPEN_CAP_SECONDS)]
     late = conf._runtime_drift({}, {"responder_runs.json": (1, 1)}, start + 600, start + 601, log, start + 3600)
     assert late is not None, "a crashed fire excused a change ten minutes later"
 
@@ -681,3 +681,127 @@ def test_a_created_record_is_drift():
         {}, {"responder_runs.json.lock": (0, 5)}, 0.0, 1.0, "", 2.0
     )
     assert verdict is not None and "responder_runs.json.lock" in verdict
+
+
+# ---------------------------------------------------------------------------
+# S3 (c): an 8.3 SHORT spelling of a fenced path is the same path to the kernel.
+# Measured on this host 2026-10-03: `C:\RESINC~1\...\ops\runtime\responder_runs.json`
+# and the 8.3 spelling of the home directory's `.claude.json` both read as NOT
+# live before the fix.
+# ---------------------------------------------------------------------------
+
+
+def _short_spelling(path: Path) -> str:
+    """The 8.3 spelling of an EXISTING `path`, or skip with the reason."""
+    if os.name != "nt":
+        pytest.skip("8.3 short names are a Windows filesystem feature; this host is not Windows")
+    import ctypes
+
+    buf = ctypes.create_unicode_buffer(32768)
+    n = ctypes.windll.kernel32.GetShortPathNameW(str(path), buf, 32768)
+    if not n or n >= 32768:
+        pytest.skip(f"GetShortPathNameW gave no short spelling for {path} on this host")
+    if "~" not in buf.value:
+        pytest.skip(f"8.3 names are disabled for {path} on this volume, so no short spelling exists")
+    return buf.value
+
+
+def test_a_short_spelling_of_the_live_runtime_is_fenced():
+    conf = _root_conftest()
+    root = Path(conf.__file__).resolve().parent
+    short = _short_spelling(root)
+    target = os.path.join(short, "ops", "runtime", "responder_runs.json")
+    assert conf._is_live_responder_record(os.path.join(root, "ops", "runtime", "responder_runs.json"))
+    assert conf._is_live_responder_record(target), target
+
+
+def test_a_short_spelling_of_the_user_scope_config_is_fenced():
+    conf = _root_conftest()
+    short = _short_spelling(Path.home())
+    target = os.path.join(short, ".claude.json")
+    assert conf._is_live_responder_record(target), target
+
+
+def test_a_short_spelling_of_a_tmp_path_is_still_not_live(tmp_path):
+    """The neighbour: expanding short names must not make everything live."""
+    conf = _root_conftest()
+    (tmp_path / "responder_runs.json").write_text("{}")
+    short = _short_spelling(tmp_path)
+    assert not conf._is_live_responder_record(os.path.join(short, "responder_runs.json"))
+    assert os.path.normcase(conf._expand_short_names(short)) == os.path.normcase(str(tmp_path))
+
+
+def test_a_short_spelling_of_the_slot_bucket_is_fenced():
+    conf = _root_conftest()
+    bucket = Path(conf._SLOT_BUCKET_RAW)
+    existing = next((p for p in [bucket, *bucket.parents] if p.exists()), None)
+    if existing is None or existing == Path(existing.anchor):
+        pytest.skip("no existing parent of the slot bucket carries a short spelling here")
+    short = _short_spelling(existing)
+    spelled = os.path.join(short, os.path.relpath(bucket, existing), "lane.lock")
+    assert conf._under_slot_bucket(spelled), spelled
+
+
+def test_short_name_expansion_is_identity_off_windows(monkeypatch):
+    """Linux CI: no kernel32, so the helper hands back its input unchanged."""
+    conf = _root_conftest()
+    monkeypatch.setattr(conf, "_GET_LONG_PATH", None)
+    assert conf._expand_short_names("/tmp/LONGNA~1/x") == "/tmp/LONGNA~1/x"
+
+
+# ---------------------------------------------------------------------------
+# S3 (d): a change inside a scheduled fire is attributed by CONTENT. A
+# test-shaped record is a leak even while the live task is running.
+# ---------------------------------------------------------------------------
+
+_OPEN_FIRE = "2026-10-03T11:00:00\tscheduledtask\t-\tstart\n"
+
+
+@pytest.mark.parametrize("source", ["cli", "run_once", "suite", "cliprobe"])
+def test_a_test_shaped_log_line_is_a_leak_inside_a_fire(source):
+    t0, t1, now = _at("2026-10-03T11:00:05"), _at("2026-10-03T11:00:06"), _at("2026-10-03T11:00:07")
+    appended = f"2026-10-03T11:00:05\t{source}\t-\tstart\n"
+    verdict = _root_conftest()._runtime_drift(
+        {"responder_invocations.log": (10, 1)}, {"responder_invocations.log": (60, 2)},
+        t0, t1, _OPEN_FIRE, now, appended,
+    )
+    assert verdict is not None and source in verdict, verdict
+
+
+@pytest.mark.parametrize("source", ["scheduledtask", "failclosed"])
+def test_a_live_writers_log_line_inside_a_fire_is_still_excused(source):
+    """The neighbour: the task's own lines, and its fail-closed lines, are live."""
+    t0, t1, now = _at("2026-10-03T11:00:05"), _at("2026-10-03T11:00:06"), _at("2026-10-03T11:00:07")
+    appended = f"2026-10-03T11:00:05\t{source}\t-\tbudget\n"
+    verdict = _root_conftest()._runtime_drift(
+        {"responder_invocations.log": (10, 1)}, {"responder_invocations.log": (60, 2)},
+        t0, t1, _OPEN_FIRE, now, appended,
+    )
+    assert verdict is None, verdict
+
+
+def test_a_record_carrying_a_test_path_is_a_leak_inside_a_fire(tmp_path):
+    t0, t1, now = _at("2026-10-03T11:00:05"), _at("2026-10-03T11:00:06"), _at("2026-10-03T11:00:07")
+    conf = _root_conftest()
+    leaked = json.dumps({"rows": [{"dest": str(tmp_path / "rc" / "moon_sync_inbox")}]})
+    clean = json.dumps({"rows": [{"note": "2026-10-03-1100-from-RC-q.md"}]})
+    markers = conf._test_markers(str(tmp_path.parent))
+    args = ({"responder_outbound.json": (1, 1)}, {"responder_outbound.json": (2, 2)}, t0, t1, _OPEN_FIRE, now)
+
+    verdict = conf._runtime_drift(*args, "", {"responder_outbound.json": ("{}", leaked)}, markers)
+    assert verdict is not None and "responder_outbound.json" in verdict, verdict
+    assert conf._runtime_drift(*args, "", {"responder_outbound.json": ("{}", clean)}, markers) is None
+    # A marker already present BEFORE the test is history, not this test's leak.
+    assert conf._runtime_drift(*args, "", {"responder_outbound.json": (leaked, leaked)}, markers) is None
+
+
+def test_the_appended_tail_is_only_what_the_test_added():
+    conf = _root_conftest()
+    assert conf._appended_text("a\nb\n", "a\nb\nc\n") == "c\n"
+    assert conf._appended_text("a\nb\n", "x\n") == "x\n", "a rotated log is all new"
+
+
+def test_an_unclosed_fire_excuses_only_its_measured_duration():
+    """176 closed fires in the live log on 2026-10-03 ran at most 104 s."""
+    conf = _root_conftest()
+    assert 104.0 < conf._FIRE_OPEN_CAP_SECONDS < 300.0, conf._FIRE_OPEN_CAP_SECONDS
