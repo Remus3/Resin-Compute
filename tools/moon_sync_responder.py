@@ -3394,21 +3394,21 @@ def _halted_result(grammar: str) -> dict:
     }
 
 
-#: termination -> (status state, task). MAIN 0915 schema 1 states and its
-#: basic task names. ONE NAME IS NOT IN THAT LIST: "MAIN Reply Limit", for a
-#: tick that answered nothing because MAIN is at its per-sender reply cap
-#: (ruled distinct from the budget limit, MAIN 0955 s2.5). Recorded as a
-#: deliberate addition rather than folded into "Turn Limit Reached", which
-#: would send an operator to the wrong cap.
+#: termination -> (status state, task). MAIN 0915 schema 1 states and ONLY its
+#: basic task names: the operator's widget renders any other name as [?]
+#: (operator report, 2026-10-03). Every binding cap - run budget or MAIN's
+#: per-sender reply cap - is state "limit" with task "Turn Limit Reached";
+#: which cap binds is told by cap_frees_at and the log, never by a private
+#: task name. A refused route retries next tick, so it reads "Backing Off".
 _TICK_STATES: dict[str, tuple[str, str]] = {
     "halted": ("halted", "Halted"),
     "usage-limited": ("backoff", "Backing Off"),
     "usage-backoff": ("backoff", "Backing Off"),
     "run-budget": ("limit", "Turn Limit Reached"),
     "run-locked": ("idle", "Idle"),
-    "headless-refused": ("refused", "Idle"),
+    "headless-refused": ("refused", "Backing Off"),
 }
-MAIN_REPLY_LIMIT_TASK = "MAIN Reply Limit"
+MAIN_REPLY_LIMIT_TASK = "Turn Limit Reached"
 
 
 def _write_tick_status(result: dict | None) -> None:
