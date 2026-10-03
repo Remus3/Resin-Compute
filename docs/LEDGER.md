@@ -12,6 +12,69 @@ now.
 
 ---
 
+## 2026-10-03 - one spawn cwd, a widened env-render detector, a governed --once, and the inbox triaged
+
+Landed as `662ee0a`, `8f892b2` and `6f7a629`, all on `main`.
+
+WHAT CHANGED. `662ee0a` makes one constant, `SPAWN_CWD` in
+`tools/moon_sync_responder.py`, feed both `workspace_trust` and the headless
+spawn's working directory, so the directory trusted and the directory spawned
+in cannot drift apart. Proven by `tests/test_responder_spawn_cwd.py`; an
+adversary reverted each of the two sites separately and both arms went red.
+
+`8f892b2` widens the env-render detector in `tests/test_session_hooks.py`: it
+now flags ANY `environ`, `environb` or `getenv` reference in an assert's test
+expression or message, except the right-hand side of `in` / `not in` inside
+the message. The forms previously treated as safe - `get(key) is None`,
+`environ[key] == x`, `set(os.environ)` - were MEASURED leaking their operands
+into the rendered assertion on pytest 9.0.3. Reported by four sibling notes:
+LL 2140, LL 2320, RC 0940/1030 and SS 1930.
+
+`6f7a629` makes a live `--once` pass hold a machine-wide slot: `run_once` in
+`headless/runner.py` routes through `_run_governed_pass`, a dry run takes no
+slot, and a `SlotTimeout` becomes `EXIT_JOB_FAILED`. Proven by
+`tests/test_headless_runner_slots.py`. The suite is fenced by an audit hook in
+`conftest.py` on `ops.loop.slots.DEFAULT_ROOT`: a hit fails the test from any
+thread, and `SlotFenceLedger.acknowledge` acks by exact count from the main
+thread only. NOT fenced, stated rather than implied: child processes, alias
+spellings of the path, sqlite3/ctypes access, and xdist workers. Four
+adversary rounds refuted earlier versions before merge - a shape guard blind
+to 11 of 13 shapes, worker-thread hits that only warned, scope comments that
+overclaimed, and an ack hidden by thread-ident reuse measured at about 3424
+cycles. RESIDUAL, recorded in `ROADMAP.md`: verifier mutant A (dropping the
+refusal record in `acknowledge`) does not turn
+`test_acknowledging_from_a_worker_thread_fails` red.
+
+DECISIONS. Spawn cwd: KEEP the repo cwd - the child is meant to load this
+tree's rules and hooks, and trust must cover the same directory. Teardown
+digests (MAIN 2320 ruling): audited rather than built - zero of the 13
+responder write targets is covered by any before/after digest guard (AST walk
+and grep agree), because `conftest.py` deliberately refuses live-directory
+snapshots that concurrent daemons would falsify; protection is prevention via
+the `rsp` fixture's `DEFAULT_*` redirection and `RESINCOMPUTE_RUNTIME_DIR`.
+
+INBOX. About 420 files triaged in five batches into the four buckets, per-file
+verdicts in the session scratchpad and not tracked; NOT `--mark`ed. All nine
+MAIN notes dated 10-02/03 sha256-verified against MAIN's outbox. Five ANSWER
+notes stamped 2026-10-03-0704 (to LW, RC, CS, SS and LL) were each delivered
+to all six codes, 30 copies, every recipient copy sha256-matched; an
+adversary refuted three drafts first (a wrong guard count, an overstated
+`reap()` - it loops `range(max_slots)`, three lanes - and an incomplete Q3)
+and they were fixed before send. LW acknowledged with TERMINAL no-reply notes.
+
+HALT. Clause (b) is OPEN: LW 0700 reports C4 `290cbf80` landed on LW and asks
+RSC to copy it by 2026-10-09. That diffs `ops/loop/slots.py` (RSC at
+`71fa2a68`, 9627 bytes) and `SHARED_SHA256`; MAIN 2320 does not rule it.
+Parked pending the operator or a sha256-verified MAIN note.
+
+READINGS, 2026-10-03, at the staged `6f7a629` content: tests 3284 passed 4
+skipped (the same four reasons as baseline); pity_engine 80; ruff clean; docs
+42; headless dry-run rc 0; precommit gate clean. Baseline at `513d2d0`: tests
+3263 passed 4 skipped, node 52, licence 47, qa 17 passed 2 skipped 3 noted,
+mypy 40 source files.
+
+---
+
 ## 2026-10-02/03 - MAIN speaks for the operator, headless spawns go through the local proxy, and the responder is armed
 
 Landed as `dca30eb` (docs) and `2e22d80` (the responder merge), both on `main`
