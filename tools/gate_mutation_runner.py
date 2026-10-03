@@ -1287,24 +1287,10 @@ MESSAGE_MUTANTS: tuple[MessageMutant, ...] = (
     MessageMutant("trailer-co-authored-by", _trailer(_CO_AUTHOR + " Opus <noreply@anthropic.com>"), STRIP, _CO_AUTHOR),
     MessageMutant("trailer-co-authored-by-lowercase", _trailer(_CO_AUTHOR.lower() + " <noreply@anthropic.com>"), STRIP, _CO_AUTHOR.lower()),
     MessageMutant("trailer-claude-session", _trailer(_SESSION + " https://claude.ai/code/session_probe"), STRIP, _SESSION),
-)
-
-
-#: MEASURED SURVIVORS - real gate defects, recorded rather than hidden.
-#:
-#: Both turn on one fact: `git commit -F <file>` defaults to `--cleanup=
-#: whitespace`, which KEEPS a line starting with `#` in the landed message,
-#: while `tools/precommit_gate.py::_check_message_file` and
-#: `scripts/precommit_msg_check.py::_read_subject` both SKIP such lines as
-#: "template comments". Measured 2026-10-03 through this lane: a `# note` line
-#: carrying an em-dash LANDED in history with exit 0. The `-F` path is the
-#: one this tree's own rules mandate for every commit, so it is not a corner.
-#:
-#: They are kept OUT of `MESSAGE_MUTANTS` so that table's verdict stays "every
-#: mutant killed", and their own arm asserts they still SURVIVE - when the gate
-#: is fixed that arm goes red, which is the signal to move them into the table.
-#: Fixing the gate is outside this tool's write-list.
-KNOWN_MESSAGE_SURVIVORS: tuple[MessageMutant, ...] = (
+    # The two `#`-line mutants. `git commit -F <file>` defaults to
+    # `--cleanup=whitespace`, which KEEPS a `#` line in the landed message.
+    # Both message halves used to skip such lines as "template comments";
+    # both survived this lane until 7e52ada fixed the gate.
     MessageMutant(
         "glyph-in-hash-line",
         CLEAN_MESSAGE + b"\n# note " + chr(0x2014).encode("utf-8") + b" kept by -F\n",
@@ -1318,6 +1304,25 @@ KNOWN_MESSAGE_SURVIVORS: tuple[MessageMutant, ...] = (
         SUBJECT_MARKER,
     ),
 )
+
+
+#: MEASURED SURVIVORS - real gate defects, recorded rather than hidden. EMPTY.
+#:
+#: It held `glyph-in-hash-line` and `subject-hash-line` from 2026-10-03, when
+#: this lane measured a `# note` line carrying an em-dash LANDING through
+#: `git commit -F` with exit 0. The gate fix in 7e52ada killed both, the pin
+#: arm went red as designed, and they moved into `MESSAGE_MUTANTS`. A new
+#: survivor goes here, with its own arm asserting it still SURVIVES.
+#:
+#: KNOWN GAP, NOT A MUTANT, because this lane cannot drive it: an explicit
+#: `--cleanup=whitespace` or `--cleanup=verbatim` on an EDITOR commit. Git
+#: runs commit-msg before cleanup and does not tell the hook the flag, so
+#: `scripts/precommit_msg_check.py::hash_lines_are_stripped` reads the editor
+#: default (strip) and skips a `#` first line that will in fact land as the
+#: subject. The glyph half is unaffected - it scans every line. The lane
+#: commits through `-F` only, where git exports `GIT_EDITOR=:` and the hook
+#: fails closed, so no row here could grade the gap.
+KNOWN_MESSAGE_SURVIVORS: tuple[MessageMutant, ...] = ()
 
 
 def no_op_message_mutants(mutants: Iterable[MessageMutant], base: bytes = CLEAN_MESSAGE) -> list[str]:

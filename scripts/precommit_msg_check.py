@@ -14,9 +14,14 @@ draft of it.
 the PRE-cleanup bytes, and `git commit -F` / `-m` default to cleanup=whitespace,
 which keeps `#` lines - so a `#` first line IS the landed subject there.
 Measured 2026-10-03; `hash_lines_are_stripped` holds the decision and the
-measured table. RESIDUAL: an explicit `--cleanup=whitespace|verbatim` on an
-EDITOR commit is invisible to a hook, so there a `#` first line is still
-skipped. Every other unknown fails closed.
+measured table. Every unknown fails closed, with one exception.
+
+KNOWN GAP: an explicit `--cleanup=whitespace` or `--cleanup=verbatim` on an
+EDITOR commit. Git does not pass the flag to the hook, so this module assumes
+the editor default (strip) and skips a `#` first line that will in fact land
+as the subject. The glyph half in `tools/precommit_gate.py` is unaffected,
+because it scans every line. The same gap is recorded beside
+`KNOWN_MESSAGE_SURVIVORS` in `tools/gate_mutation_runner.py`.
 
 Bypass with `--no-verify` if absolutely necessary; please do not make a habit
 of it.
