@@ -1068,6 +1068,86 @@ def test_a_main_reply_limit_tick_is_its_own_state(rsp, tmp_path, trusted):
     assert status["task"] != "Turn Limit Reached"
 
 
+# MAIN 1325 FIX: the status file must name WHEN a binding cap frees, and count
+# the runs the responder actually reserved in its own record, against its cap.
+
+
+def _seed_main_cap(rsp, stamps):
+    rsp.DEFAULT_OUTBOUND.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_OUTBOUND.write_text(json.dumps(
+        {"version": 1, "replies": [{"to": "MAIN", "at": at} for at in stamps]}
+    ))
+
+
+def _seed_runs(rsp, stamps):
+    rsp.DEFAULT_RUNS.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_RUNS.write_text(json.dumps({"version": 1, "runs": list(stamps)}))
+
+
+def test_a_main_reply_limit_tick_names_when_the_oldest_reply_ages_out(rsp, tmp_path, trusted):
+    from tests.test_moon_sync_responder import _agree
+
+    _agree(rsp)
+    now = time.time()
+    oldest = now - 3600
+    _seed_main_cap(rsp, [now - 60, oldest, now - 600])
+    _seed_runs(rsp, [now - 120, now - 30])
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-03-1700-from-MAIN-ORDER-x.md", "TO RSC. do it\n")
+
+    rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
+    status = _status(rsp)
+
+    assert status["state"] == "limit" and status["task"] == "MAIN Reply Limit", status
+    assert status["cap_frees_at"] == kit._iso(oldest + rsp.OUTBOUND_WINDOW_SECONDS), status
+    assert status["runs_in_window"] == 2, "the responder's own reserved runs were not counted"
+    assert status["runs_cap"] == rsp.MAX_RUNS_PER_DAY
+    assert status["window_s"] == rsp.RUNS_WINDOW_SECONDS
+
+
+def test_a_run_budget_tick_names_when_the_oldest_run_ages_out(rsp, tmp_path, trusted):
+    now = time.time()
+    oldest = now - 7200
+    _seed_runs(rsp, [now - 60, oldest])
+
+    def spawn(prompt, bounds):
+        raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
+
+    _armed_cycle(rsp, tmp_path, spawn=spawn)
+    status = _status(rsp)
+    assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
+    assert status["cap_frees_at"] == kit._iso(oldest + rsp.RUNS_WINDOW_SECONDS), status
+    assert status["runs_in_window"] == 2 and status["runs_cap"] == rsp.MAX_RUNS_PER_DAY
+
+
+def test_a_hop_budget_tick_reports_no_free_time_and_says_why(rsp, tmp_path, trusted):
+    """The hop budget counts tagged notes in the inbox and never ages out."""
+    from tests.test_moon_sync_responder import _agree
+
+    _agree(rsp)
+    _seed_runs(rsp, [time.time() - 60])
+    inbox = tmp_path / "inbox"
+    for i in range(rsp.Bounds().max_hops):
+        _note(inbox, f"2026-10-03-17{i:02d}-from-RSC-reply.md", rsp.RESPONDER_TAG + "\nx\n")
+
+    result = rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
+    status = _status(rsp)
+
+    assert result["termination"] == "budget", result
+    assert status["state"] == "limit", status
+    assert status["cap_frees_at"] is None, "a hop budget that never ages out was given a time"
+    assert status["task"] == rsp.HOP_LIMIT_TASK and "no expiry" in status["task"], status
+
+
+def test_an_idle_tick_counts_the_responders_own_runs(rsp, tmp_path):
+    now = time.time()
+    _seed_runs(rsp, [now - 100, now - 50, now - 10])
+    rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
+    status = _status(rsp)
+    assert status["runs_in_window"] == 3 and status["runs_cap"] == rsp.MAX_RUNS_PER_DAY, status
+    assert not (rsp._kit_root() / kit.BUDGET_REL).exists(), "non-vacuity: the kit record is absent"
+
+
 def test_a_refused_route_tick_reads_refused(rsp, tmp_path, monkeypatch, trusted):
     monkeypatch.setattr(subprocess, "run", Run())
     kit_route(rsp, monkeypatch, tmp_path, accept=False)

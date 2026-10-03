@@ -3579,8 +3579,57 @@ _TICK_STATES: dict[str, tuple[str, str]] = {
     "run-budget": ("limit", "Turn Limit Reached"),
     "run-locked": ("idle", "Idle"),
     "headless-refused": ("refused", "Idle"),
+    # MAIN 1325: the hop budget binding is a LIMIT, and it has no free time.
+    "budget": ("limit", "Hop Limit (no expiry)"),
 }
 MAIN_REPLY_LIMIT_TASK = "MAIN Reply Limit"
+#: The hop budget counts responder-TAGGED notes in the inbox (`hops_used`);
+#: nothing ages out, so its `cap_frees_at` is null and the task text says so.
+HOP_LIMIT_TASK = _TICK_STATES["budget"][1]
+
+
+class _StatusBudget:
+    """What `kit.write_status` reads from its `budget` argument, from THIS
+    responder's own records (MAIN 1325 FIX).
+
+    `used()` and `cap` are the runs reserved in `DEFAULT_RUNS` against
+    `MAX_RUNS_PER_DAY` - the kit's own budget record is not where this tree
+    reserves runs. `frees_at()` is the epoch the BINDING cap frees, or None
+    when that cap never ages out. Duck-typed to the kit's `RunBudget`, so the
+    kit is called with its own parameters and is not edited.
+    """
+
+    def __init__(self, used: int, frees: float | None) -> None:
+        self.cap = MAX_RUNS_PER_DAY
+        self.window = RUNS_WINDOW_SECONDS
+        self._used, self._frees = used, frees
+
+    def used(self) -> int:
+        return self._used
+
+    def frees_at(self) -> float | None:
+        return self._frees
+
+
+def _status_budget(task: str, now: float) -> _StatusBudget:
+    """The responder's run count, and when the cap binding this `task` frees.
+
+    MAIN reply cap: the OLDEST counted reply to MAIN ages out of
+    `OUTBOUND_WINDOW_SECONDS`. Hop budget: never - None. Otherwise (the run
+    budget, or nothing binding) the oldest reserved run ages out of
+    `RUNS_WINDOW_SECONDS`, the kit's own `frees_at` meaning. A corrupt run
+    record counts as the cap and names no time, as the kit does.
+    """
+    runs = _run_rows(DEFAULT_RUNS, now)
+    used = MAX_RUNS_PER_DAY if runs is None else len(runs)
+    frees: float | None = min(runs) + RUNS_WINDOW_SECONDS if runs else None
+    if task == HOP_LIMIT_TASK:
+        frees = None
+    elif task == MAIN_REPLY_LIMIT_TASK:
+        rows = _outbound_rows(DEFAULT_OUTBOUND, now) or []
+        mine = [float(r["at"]) for r in rows if r["to"] == MAIN_CODE]
+        frees = min(mine) + OUTBOUND_WINDOW_SECONDS if mine else None
+    return _StatusBudget(used, frees)
 
 
 def _write_tick_status(result: dict | None) -> None:
@@ -3602,7 +3651,7 @@ def _write_tick_status(result: dict | None) -> None:
     try:
         kit.write_status(
             root, SELF_CODE, state, task, time.time(),
-            kit.RunBudget(root / kit.BUDGET_REL),
+            _status_budget(task, time.time()),
             next_tick=time.time() + RESPONDER_TICK_SECONDS,
         )
     except (OSError, ValueError) as exc:
@@ -4185,7 +4234,7 @@ def _write_idle() -> None:
     try:
         kit.write_status(
             _kit_root(), SELF_CODE, "idle", "Idle", None,
-            kit.RunBudget(_kit_root() / kit.BUDGET_REL),
+            _status_budget("Idle", time.time()),
             next_tick=time.time() + RESPONDER_TICK_SECONDS,
         )
     except OSError as exc:
