@@ -110,6 +110,33 @@ def _register_probe(seen: list[int], root: Path, plant: Path | None = None) -> N
     )
 
 
+def _is_sentinel(path, sentinel: Path) -> bool:
+    try:
+        return Path(os.fspath(path)) == sentinel
+    except TypeError:
+        return False
+
+
+def _fault_sentinel(
+    monkeypatch: pytest.MonkeyPatch, sentinel: Path, name: str, outcome
+) -> None:
+    """Replace `os.<name>` so the SENTINEL path alone gets `outcome`.
+
+    `outcome` is an exception instance to raise, or a value to return. Every
+    other path is delegated to the real call, so pytest and logging still work.
+    """
+    real = getattr(os, name)
+
+    def _patched(path, *args, **kwargs):
+        if _is_sentinel(path, sentinel):
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, name, _patched)
+
+
 def _plant(runtime: Path) -> Path:
     path = runtime / SENTINEL
     path.write_text("operator disarm\n", encoding="utf-8")
@@ -257,26 +284,17 @@ def test_unreadable_sentinel_state_fails_closed(
 ) -> None:
     """If the sentinel cannot be checked, the lane stays disarmed.
 
-    The fault is injected at `os.stat` itself, for the sentinel path only, and
-    the REAL path object is used. A fake path object would hide the defect this
-    arm exists for: `Path.exists()` swallows OSError on 3.14 (and some Windows
-    errors on 3.11) and answers False, which would RUN the pass.
+    The fault is injected at `os.lstat` AND `os.stat`, for the sentinel path
+    only, and the REAL path object is used. Both are faulted so the arm holds
+    whichever of the two the predicate reads. A fake path object would hide the
+    defect this arm exists for: `Path.exists()` swallows OSError on 3.14 (and
+    some Windows errors on 3.11) and answers False, which would RUN the pass.
     """
     hold_spy, pass_spy = spies
     _register_probe([], slot_root)
     sentinel = runtime / SENTINEL
-    real_stat = os.stat
-
-    def _stat(path, *args, **kwargs):
-        try:
-            hit = Path(os.fspath(path)) == sentinel
-        except TypeError:
-            hit = False
-        if hit:
-            raise PermissionError(13, "Access is denied", str(sentinel))
-        return real_stat(path, *args, **kwargs)
-
-    monkeypatch.setattr(os, "stat", _stat)
+    _fault_sentinel(monkeypatch, sentinel, "lstat", PermissionError(13, "Access is denied"))
+    _fault_sentinel(monkeypatch, sentinel, "stat", PermissionError(13, "Access is denied"))
     code = runner_mod.run_once(
         uid=None,
         dry_run=False,
@@ -431,3 +449,126 @@ def test_halt_log_line_is_friendly(
         )
     assert any("halted by operator sentinel" in r.getMessage() for r in caplog.records)
     assert not any("Traceback" in r.getMessage() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# 4. A DANGLING sentinel is still a sentinel
+# ---------------------------------------------------------------------------
+#
+# The ruling: any HALT directory entry that EXISTS - `os.lstat` succeeds -
+# means HALTED, whether or not it resolves. Only a clean "no entry" (lstat
+# raises FileNotFoundError, or NotADirectoryError for a non-directory parent)
+# means go. Every other error means halted. `os.stat` follows a symlink, so a
+# link whose target is missing raises FileNotFoundError there and would read as
+# "no HALT" - the defect these arms exist for.
+
+
+def _run_once_live(runtime: Path, slot_root: Path) -> int:
+    return runner_mod.run_once(
+        uid=None,
+        dry_run=False,
+        job_names=[PROBE_JOB],
+        runtime_dir=str(runtime),
+        slot_root=slot_root,
+        slot_timeout=1,
+    )
+
+
+def test_real_dangling_symlink_sentinel_halts(
+    clean_registry, spies, slot_root: Path, runtime: Path
+) -> None:
+    hold_spy, pass_spy = spies
+    _register_probe([], slot_root)
+    sentinel = runtime / SENTINEL
+    try:
+        os.symlink(runtime / "no-such-target", sentinel)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(
+            "this host cannot create a symlink (Windows needs the symlink privilege "
+            f"or developer mode): {type(exc).__name__}; the lstat arm below covers it"
+        )
+    # Non-vacuity of the fixture: the entry exists and does NOT resolve.
+    os.lstat(sentinel)
+    with pytest.raises(FileNotFoundError):
+        os.stat(sentinel)
+
+    code = _run_once_live(runtime, slot_root)
+
+    assert code == runner_mod.EXIT_JOB_FAILED, "a dangling HALT link must halt"
+    assert hold_spy.calls == 0
+    assert pass_spy.calls == 0
+    assert list(slot_root.iterdir()) == []
+    assert os.path.islink(sentinel), "the runner must never delete the sentinel"
+
+
+def test_dangling_entry_halts_on_every_host(
+    monkeypatch: pytest.MonkeyPatch, clean_registry, spies, slot_root: Path, runtime: Path
+) -> None:
+    """Runs everywhere: lstat finds an entry, stat cannot resolve it."""
+    hold_spy, pass_spy = spies
+    _register_probe([], slot_root)
+    sentinel = runtime / SENTINEL
+    entry = os.lstat(runtime)
+    _fault_sentinel(monkeypatch, sentinel, "lstat", entry)
+    _fault_sentinel(
+        monkeypatch, sentinel, "stat", FileNotFoundError(2, "No such file or directory")
+    )
+
+    assert _run_once_live(runtime, slot_root) == runner_mod.EXIT_JOB_FAILED
+    assert hold_spy.calls == 0
+    assert pass_spy.calls == 0
+
+
+@pytest.mark.parametrize(
+    "error",
+    [FileNotFoundError(2, "No such file"), NotADirectoryError(20, "Not a directory")],
+    ids=["no-entry", "parent-not-a-directory"],
+)
+def test_a_clean_no_entry_from_lstat_is_go(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_registry,
+    spies,
+    slot_root: Path,
+    runtime: Path,
+    error: OSError,
+) -> None:
+    """Neighbour of the dangling arms: the gate is not simply closed."""
+    hold_spy, pass_spy = spies
+    _register_probe([], slot_root)
+    _fault_sentinel(monkeypatch, runtime / SENTINEL, "lstat", error)
+
+    assert _run_once_live(runtime, slot_root) == runner_mod.EXIT_OK
+    assert pass_spy.calls == 1
+    assert hold_spy.calls == 1
+
+
+@pytest.mark.parametrize(
+    "error",
+    [PermissionError(13, "Access is denied"), OSError(22, "Invalid argument")],
+    ids=["permission", "other-oserror"],
+)
+def test_any_other_lstat_error_is_halted(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_registry,
+    spies,
+    slot_root: Path,
+    runtime: Path,
+    error: OSError,
+) -> None:
+    hold_spy, pass_spy = spies
+    _register_probe([], slot_root)
+    _fault_sentinel(monkeypatch, runtime / SENTINEL, "lstat", error)
+
+    assert _run_once_live(runtime, slot_root) == runner_mod.EXIT_JOB_FAILED
+    assert hold_spy.calls == 0
+    assert pass_spy.calls == 0
+
+
+def test_the_halt_predicate_reads_lstat_not_stat(
+    monkeypatch: pytest.MonkeyPatch, runtime: Path
+) -> None:
+    """Direct arm on the predicate, no job, no slot: a dangling entry is halted."""
+    sentinel = runtime / SENTINEL
+    _fault_sentinel(monkeypatch, sentinel, "lstat", os.lstat(runtime))
+    _fault_sentinel(monkeypatch, sentinel, "stat", FileNotFoundError(2, "No such file"))
+    assert runner_mod._halt_requested(str(runtime), cycle=1) is True

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -148,6 +149,11 @@ class JobContext:
     profile: Any = None
     results: dict[str, JobResult] = field(default_factory=dict)
     options: dict[str, Any] = field(default_factory=dict)
+    #: Set by the runner when a job overruns its per-job deadline. A job that
+    #: can block for long should poll it (or `wait` on it) and return early;
+    #: one that ignores it is abandoned and keeps running on a daemon thread.
+    #: Appended last with a default, per the tree's dataclass convention.
+    cancel: threading.Event = field(default_factory=threading.Event)
 
     @property
     def allow_service_calls(self) -> bool:

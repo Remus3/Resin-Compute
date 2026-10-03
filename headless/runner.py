@@ -98,9 +98,22 @@ HALT_SENTINEL_NAME = "HALT"
 # and `slots.DEFAULT_STALE_AFTER` must exceed that sum, or a live lock is reaped
 # as stale and the bucket over-admits. Each term is bounded here, and
 # `tests/test_headless_runner_lock_budget.py` re-runs the arithmetic from these
-# attributes. RESIDUAL, accepted: the deadline is checked BETWEEN jobs, so one
-# job that never returns is still unbounded. A hard cap needs the job in a
-# subprocess that can be killed, which this lane does not do.
+# attributes. The pass deadline is checked BETWEEN jobs; the job running when it
+# passes is itself bounded by JOB_DEADLINE_SECONDS plus JOB_CANCEL_GRACE_SECONDS,
+# so the run term is the sum of the three.
+#
+# HOW A JOB IS BOUNDED, and why a thread and not a subprocess. Jobs share one
+# in-process JobContext - `state` is threaded from job to job, and test fakes
+# are registered as closures - so a subprocess would need every context and
+# every job to pickle, which none of them do. Each job therefore runs on a
+# daemon worker thread and the pass waits for it at most the deadline. A job
+# still running then is FAILED, `context.cancel` is set, and the pass waits a
+# short grace for it to notice. RESIDUAL, accepted and bounded: a Python thread
+# cannot be killed, so a job that ignores `cancel` keeps running, ABANDONED.
+# Its effects are fenced: no further job in that pass starts (it may still be
+# mutating the shared context), and no further LIVE pass takes a slot while
+# any abandoned job is alive, so abandoned work never overlaps new slotted
+# work. It is a daemon thread, so it never blocks interpreter exit.
 
 #: Ceiling on any slot wait, daemon or one-shot, whatever `--interval` says.
 MAX_SLOT_WAIT_SECONDS = 300
@@ -108,6 +121,13 @@ MAX_SLOT_WAIT_SECONDS = 300
 #: Once a pass has run this long, it starts no further jobs; the rest are
 #: recorded as SKIP and run on the next pass.
 PASS_DEADLINE_SECONDS = 3600
+
+#: The longest one job may run before it is recorded FAIL and the pass moves on.
+JOB_DEADLINE_SECONDS = 900
+
+#: After a job overruns and its `cancel` event is set, how long the pass waits
+#: for it to return before abandoning it.
+JOB_CANCEL_GRACE_SECONDS = 5
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +147,8 @@ class PassResult:
     #: Jobs not started because the pass ran past PASS_DEADLINE_SECONDS.
     #: Appended last with a default, per the tree's dataclass convention.
     deadline_skipped: int = 0
+    #: Jobs recorded FAIL because they overran JOB_DEADLINE_SECONDS.
+    overran: int = 0
 
     @property
     def failed(self) -> list[jobs_mod.JobResult]:
@@ -153,6 +175,8 @@ class PassResult:
         # not read as a plain green pass either.
         if self.deadline_skipped:
             line += f"; deadline reached: {self.deadline_skipped} jobs not started"
+        if self.overran:
+            line += f"; {self.overran} job overran its deadline and was failed"
         return line
 
 
@@ -264,6 +288,85 @@ def select_jobs(names: Sequence[str] | None) -> list[jobs_mod.JobSpec]:
     return [spec for spec in ordered if spec.name in set(wanted)]
 
 
+#: Jobs that overran, ignored `cancel`, and are still running. Keyed by the
+#: Thread OBJECT, never by `ident` - idents are reused once a thread ends, so
+#: an ident-keyed record can name a thread that is not the job's.
+_abandoned_lock = threading.Lock()
+_abandoned: list[tuple[str, threading.Thread]] = []
+
+
+def abandoned_jobs() -> list[str]:
+    """Names of overrun jobs whose worker thread is STILL alive, oldest first.
+
+    Ended workers are pruned on every call, so the list never grows past the
+    jobs that are actually still running.
+    """
+    with _abandoned_lock:
+        _abandoned[:] = [(name, worker) for name, worker in _abandoned if worker.is_alive()]
+        return [name for name, _ in _abandoned]
+
+
+def _run_job_bounded(
+    spec: jobs_mod.JobSpec, context: jobs_mod.JobContext
+) -> tuple[jobs_mod.JobResult, bool]:
+    """Run one job on a worker thread, waiting at most JOB_DEADLINE_SECONDS.
+
+    Returns `(result, overran)`. A job that overruns is ALWAYS a FAIL - a late
+    success is discarded, never recorded. See the budget note at the constants
+    for why this is a thread and what the residual is.
+
+    Both constants are read at call time, so a test can inject a small one.
+    """
+    limit = float(JOB_DEADLINE_SECONDS)
+    grace = float(JOB_CANCEL_GRACE_SECONDS)
+    box: list[jobs_mod.JobResult] = []
+
+    def _work() -> None:
+        # run_job absorbs every Exception into a FAIL; a BaseException ends
+        # the thread with `box` empty, which is handled below.
+        box.append(jobs_mod.run_job(spec, context))
+
+    worker = threading.Thread(target=_work, name=f"headless-job-{spec.name}", daemon=True)
+    start = time.monotonic()
+    worker.start()
+    worker.join(limit)
+    if not worker.is_alive():
+        if box:
+            return box[0], False
+        log.error("job %s ended without a result", spec.name)
+        return (
+            jobs_mod.failed(spec.name, "job ended without a result - see the log"),
+            False,
+        )
+
+    context.cancel.set()
+    worker.join(grace)
+    elapsed = time.monotonic() - start
+    abandoned = worker.is_alive()
+    if abandoned:
+        with _abandoned_lock:
+            _abandoned.append((spec.name, worker))
+    log.error(
+        "job %s overran its %gs deadline (%.1fs) and was recorded FAIL; %s",
+        spec.name,
+        limit,
+        elapsed,
+        "it ignored cancel and is still running, abandoned"
+        if abandoned
+        else "it stopped after cancel",
+    )
+    result = jobs_mod.JobResult(
+        name=spec.name,
+        status=jobs_mod.STATUS_FAIL,
+        message=(
+            f"did not finish within its {limit:g}s deadline - recorded as failed"
+        ),
+        duration_ms=elapsed * 1000.0,
+        details={"deadline_seconds": limit, "abandoned": abandoned},
+    )
+    return result, True
+
+
 def run_pass(
     uid: str | None = None,
     dry_run: bool = False,
@@ -298,7 +401,17 @@ def run_pass(
     pass_start = time.monotonic()
     for spec in specs:
         elapsed = time.monotonic() - pass_start
-        if elapsed > deadline:
+        if outcome.overran:
+            # A job overran and may still be running, mutating the shared
+            # context. Nothing after it may read that context, so the rest of
+            # the pass is not started. SKIP, not FAIL: the overrun job already
+            # carries the failure.
+            result = jobs_mod.skipped(
+                spec.name,
+                "not started - an earlier job overran its deadline; "
+                "it will run on the next pass",
+            )
+        elif elapsed > deadline:
             # Checked BEFORE a job starts, never during one: a running job is
             # not interrupted, which is the residual named at the budget
             # constants. The remaining jobs are a SKIP, not a FAIL - they did
@@ -311,7 +424,9 @@ def run_pass(
             )
             outcome.deadline_skipped += 1
         else:
-            result = jobs_mod.run_job(spec, context)
+            result, overran = _run_job_bounded(spec, context)
+            if overran:
+                outcome.overran += 1
         context.results[spec.name] = result
         outcome.results.append(result)
         log.info("%-6s %-16s %s", result.status, result.name, result.message)
@@ -448,15 +563,20 @@ def _halt_requested(runtime_dir: str | None, cycle: int) -> bool:
     a stop control that silently reads as "go" when it cannot be read is not a
     stop control. The raw error goes to the debug log, never to a surface.
 
-    `os.stat` directly, NEVER `Path.exists()`: on 3.14 `exists()` swallows
+    `os.lstat` directly, NEVER `Path.exists()`: on 3.14 `exists()` swallows
     every OSError and answers False, and on 3.11 it still swallows some Windows
     errors (WinError 123), so an unreadable sentinel would read as absent and
-    the pass would RUN. Only "the file is not there" - FileNotFoundError, or
+    the pass would RUN. Only "there is no entry" - FileNotFoundError, or
     NotADirectoryError when a parent is not a directory - means not halted.
+
+    `lstat`, never `stat`: `stat` follows a symlink, so a HALT link whose
+    target is missing raises FileNotFoundError there and would read as "go".
+    Any directory entry named HALT - a file, a directory, a dangling or live
+    link - is the operator's stop. What it points at is not consulted.
     """
     path = halt_sentinel_path(runtime_dir)
     try:
-        os.stat(path)
+        os.lstat(path)
         present = True
     except (FileNotFoundError, NotADirectoryError):
         present = False
@@ -528,6 +648,20 @@ def _run_governed_pass(
 
     if _halt_requested(runtime_dir, cycle):
         return HALTED
+
+    # An abandoned job from an earlier pass is executor work still running
+    # outside any slot. Taking a new slot now would let the two overlap, so
+    # the cycle FAILS, exactly like a starved one, until that job ends.
+    still_running = abandoned_jobs()
+    if still_running:
+        log.error(
+            "cycle %d failed - %d overrun job(s) from an earlier pass still running "
+            "(%s). The pass did NOT run and took no slot.",
+            cycle,
+            len(still_running),
+            ", ".join(still_running),
+        )
+        return None
 
     try:
         with slots_mod.hold(
