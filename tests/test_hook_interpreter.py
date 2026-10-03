@@ -1391,11 +1391,20 @@ _ORACLE_GIT_EXE_RELATIVE = frozenset({
     "mingw64/bin/git.exe",
     "mingw32/bin/git.exe",
     "usr/bin/git.exe",
+    # GIT'S OWN HOOK PATH. Git prepends its exec-path to PATH for every hook it
+    # runs, and that directory carries a git.exe, so under the real pre-push
+    # hook `shutil.which("git")` lands HERE. Measured 2026-10-03 against
+    # `git --exec-path`: `<install>/mingw64/libexec/git-core`, putting the root
+    # three levels above git-core. Without these entries the mutant-killer
+    # below skipped under the very gate meant to run it.
+    "mingw64/libexec/git-core/git.exe",
+    "mingw32/libexec/git-core/git.exe",
 })
-# How far up to look for that marker. Four clears the deepest marker above with
-# a level to spare, and unlike the count it replaces OVERSHOOTING IS HARMLESS:
-# an ancestor without the marker is rejected, never searched.
-_ORACLE_ANCESTOR_SEARCH = 4
+# How far up to look for that marker. Five clears the deepest marker above (the
+# git-core entries, four components) with a level to spare, and unlike the count
+# it replaces OVERSHOOTING IS HARMLESS: an ancestor without the marker is
+# rejected, never searched.
+_ORACLE_ANCESTOR_SEARCH = 5
 
 # WHY THE THREE ORACLE-WRAPPER ARMS BELOW SKIP OFF WINDOWS.
 #
@@ -1713,6 +1722,87 @@ def test_the_oracle_admits_it_cannot_identify_the_install_behind_a_shim(
         f"no sh - the two skips mean different things: {graded.detail}"
     )
     assert "carries none" not in graded.detail, graded.detail
+
+
+@pytest.mark.skipif(os.name != "nt", reason=_ORACLE_WINDOWS_ONLY_SKIP)
+def test_the_oracle_identifies_the_install_under_a_hook_shaped_path(
+    monkeypatch, tmp_path: Path,
+):
+    """DEFEAT REPRODUCED AND CLOSED, 2026-10-03. The mutant-killer skipped under the gate.
+
+    Git prepends its exec-path, `<install>/mingw64/libexec/git-core`, to PATH
+    for every hook it runs, and a `git.exe` sits in that directory. Under the
+    real pre-push hook `shutil.which("git")` therefore resolved THERE, no
+    install marker matched, the oracle answered could-not-identify, and
+    `test_the_git_install_discovery_still_fires_where_an_sh_demonstrably_sits`
+    SKIPPED - so the authoritative gate could not catch the one mutation that
+    arm exists to kill. Measured: hook-shaped PATH 1 skipped, plain shell 1
+    passed, same tree.
+
+    The PATH lookup here is the REAL `shutil.which` over a monkeypatched PATH,
+    not a stubbed answer, so this grades the same resolution the hook performs.
+    """
+    install = tmp_path / "Program Files" / "Git"
+    core = install / "mingw64" / "libexec" / "git-core"
+    core.mkdir(parents=True)
+    (core / "git.exe").write_bytes(b"")
+    (install / "usr" / "bin").mkdir(parents=True)
+    (install / "usr" / "bin" / "sh.exe").write_bytes(b"")
+
+    monkeypatch.setenv("PATH", str(core))
+    resolved = shutil.which("git")
+    # NON-VACUITY: the hook-shaped PATH really does resolve git INSIDE git-core,
+    # which is the exact position that defeated the oracle.
+    assert resolved is not None and Path(resolved).parent == core, resolved
+    assert _git_install_root(core / "git.exe") == install, (
+        "a git.exe in mingw64/libexec/git-core must identify the install three "
+        "levels above git-core, or the gate's own PATH blinds the mutant-killer"
+    )
+    monkeypatch.setattr(os, "name", "nt")
+    graded = _oracle_sh_under_git_install()
+    assert graded.status == "FOUND", (
+        f"under a hook-shaped PATH the oracle could not grade the install: {graded.detail}"
+    )
+    assert graded.path is not None and Path(graded.path).parent == install / "usr" / "bin"
+
+    # THE NEIGHBOUR SURVIVES. A git-core directory that is NOT under a mingw
+    # prefix is no layout this oracle knows, and must still read could-not-
+    # identify rather than be widened into a guess at some ancestor.
+    stray = tmp_path / "stray" / "libexec" / "git-core"
+    stray.mkdir(parents=True)
+    (stray / "git.exe").write_bytes(b"")
+    assert _git_install_root(stray / "git.exe") is None, (
+        "the git-core marker was widened past the mingw prefix it was measured under"
+    )
+    monkeypatch.setenv("PATH", str(stray))
+    unknown = _oracle_sh_under_git_install()
+    assert unknown.status == "NONE" and "cannot be identified" in unknown.detail, (
+        unknown.detail
+    )
+
+
+@pytest.mark.skipif(os.name != "nt", reason=_ORACLE_WINDOWS_ONLY_SKIP)
+def test_the_oracle_grades_this_box_when_git_core_leads_path(monkeypatch):
+    """The same defeat on THIS box's real install, PATH shaped as git shapes it.
+
+    The exec-path is asked of git itself rather than hardcoded. When this box's
+    git-core carries no `git.exe`, the hook-shaped PATH cannot resolve there and
+    this arm has nothing to say, so it skips with that reason.
+    """
+    try:
+        query = _query_exec_path()
+    except (OSError, subprocess.SubprocessError) as exc:
+        pytest.skip(f"git --exec-path could not be run here: {exc!r}")
+    if query.returncode != 0 or not query.stdout.strip():
+        pytest.skip(f"git --exec-path answered rc={query.returncode}: {query.stderr!r}")
+    core = Path(os.path.normpath(query.stdout.strip()))
+    if not (core / "git.exe").is_file():
+        pytest.skip(f"no git.exe in this box's exec-path {str(core)!r}")
+    monkeypatch.setenv("PATH", str(core) + os.pathsep + os.environ.get("PATH", ""))
+    graded = _oracle_sh_under_git_install()
+    assert "cannot be identified" not in graded.detail, (
+        f"with git's own exec-path leading PATH the oracle went blind: {graded.detail}"
+    )
 
 
 def test_a_bat_shim_git_is_a_shim_shape_and_not_a_broken_git(monkeypatch, tmp_path: Path):

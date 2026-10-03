@@ -83,12 +83,18 @@ fi
 #
 # WHY -rs, AND IT IS NOT COSMETIC. A GATE THAT CAN SEE A SKIP AND CANNOT SAY
 # WHICH ONE is the defect. Measured: under a REAL `git push` this hook's `tests`
-# run reports 2 skips where the SAME command in an interactive shell reports 1.
+# run reported one MORE skip than the SAME command in an interactive shell.
 # Naming the second one required pushing to a scratch bare repository under a
-# scratch core.hooksPath, and it is tests/test_hook_interpreter.py:1774 - which
-# is CORRECT to skip there. Git prepends mingw64/libexec/git-core to PATH for
-# its own hooks, so shutil.which("git") resolves to the git.exe under git-core,
-# which is not an install root, and that arm has nothing to measure.
+# scratch core.hooksPath, and it was
+# test_the_git_install_discovery_still_fires_where_an_sh_demonstrably_sits in
+# tests/test_hook_interpreter.py. Git prepends mingw64/libexec/git-core to PATH
+# for its own hooks, so shutil.which("git") resolves to the git.exe under
+# git-core, and that arm's oracle did not recognise git-core as an install
+# layout - so THE MUTANT-KILLER SKIPPED UNDER THE GATE MEANT TO RUN IT. Closed
+# 2026-10-03: the oracle now maps <install>/mingw64/libexec/git-core/git.exe
+# to its install root, so that skip no longer fires under this hook, and
+# test_the_oracle_identifies_the_install_under_a_hook_shaped_path pins it.
+# The skip itself survives for a genuinely unrecognised layout such as a shim.
 #
 # GENERALISES, and this is the part worth carrying: THE PRE-PUSH HOOK RUNS WITH
 # A PATH THAT IS NOT YOUR SHELL'S. Any arm keyed on RESOLVING a tool answers a
