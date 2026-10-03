@@ -761,11 +761,13 @@ def test_a_main_order_is_not_damped_by_the_kits_name_test(rsp, tmp_path, name):
     assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
 
 
-def test_a_main_note_that_declares_terminal_is_still_skipped(rsp, tmp_path):
-    """The neighbour: a MAIN declaration is still damped by this tree's check."""
+def test_a_main_note_with_a_terminal_name_token_is_still_skipped(rsp, tmp_path):
+    """The neighbour: for MAIN, this tree's narrow NAME-token check still damps.
+    RULED (adversary on f51d899): only that check and the kit's self test apply
+    to a MAIN note; a body declaration no longer silences MAIN - the costlier
+    error is a MAIN note that is never answered."""
     inbox = tmp_path / "inbox"
     _note(inbox, "2026-10-03-1303-from-MAIN-ACK-x-TERMINAL.md")
-    _note(inbox, "2026-10-03-1304-from-MAIN-ack.md", "TO RSC. TERMINAL, no reply wanted.\n")
     assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
 
 
@@ -1114,4 +1116,72 @@ def test_v4_budget_still_lacks_dead_holder_release_so_the_responders_is_kept(tmp
     with pytest.raises(kit.Refused):
         budget.start()
     assert lock.exists()
+
+
+# ---------------------------------------------------------------------------
+# Adversary on f51d899: the skip rules (MAIN bypass restored; class from the
+# filename only).
+# ---------------------------------------------------------------------------
+
+MAIN_QUOTING_PROBES = [
+    (
+        "2026-10-03-1400-from-MAIN-CORRECTION-the-marker-rule.md",
+        "# From MAIN - CORRECTION\n\nThe kit damps a note whose line is one of:\n"
+        "- TERMINAL\n- NO-REPLY\nAnswer with your sha256.\n",
+    ),
+    (
+        "2026-10-03-1401-from-MAIN-ACTION-x.md",
+        "# From MAIN - ACTION\n\nLL wrote:\n> TERMINAL\nThat damped an order. Fix it and reply.\n",
+    ),
+    ("2026-10-03-1402-from-MAIN-1204.md", "# From MAIN\n\nNO REPLY\nis wrong; reply.\n"),
+]
+
+
+@pytest.mark.parametrize(("name", "body"), MAIN_QUOTING_PROBES, ids=["dash-list", "quote", "bare-line"])
+def test_a_main_note_quoting_a_marker_line_is_answered(rsp, tmp_path, name, body):
+    inbox = tmp_path / "inbox"
+    kept = _note(inbox, name, body)
+    assert kit.should_skip(name, rsp.SELF_CODE, body[: rsp.NOTE_HEAD_CHARS]) == "terminal", (
+        "non-vacuity: kit v4's marker test would silence this MAIN note"
+    )
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
+
+
+def test_the_main_bypass_needs_both_readers(rsp, tmp_path):
+    """Survival of the re-check ruling: a lowercase `-from-main-` that the kit
+    reads as this tree still gets the kit's self-skip."""
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-03-1403-from-main-from-RSC-y.md", "# From MAIN - ORDER\n")
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
+
+
+def test_a_sibling_quoting_a_marker_line_is_still_damped_by_the_kit(rsp, tmp_path):
+    """MEASURED FOR THE KIT v5 REPORT, not a property this tree wants: v4's
+    should_skip body-marker test damps a QUOTED marker line in a non-ORDER
+    class. Only MAIN is exempted here; a sibling note stays damped. If v5
+    narrows the test, this arm goes red and the note can be dropped."""
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-03-1404-from-LL-ANSWER-x.md", "# From LL - ANSWER\n\nRC wrote:\n> TERMINAL\n")
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
+
+
+def test_a_title_class_never_overrides_a_terminal_name_token(rsp, tmp_path):
+    """(b): the class that exempts a note is read from the FILENAME only. A
+    sibling title `# From LL - FIX` must not lift the TERMINAL-in-name loop
+    breaker (MAIN 0845 floor)."""
+    inbox = tmp_path / "inbox"
+    name = "2026-10-03-1405-from-LL-1205-TERMINAL.md"
+    _note(inbox, name, "# From LL - FIX\nTERMINAL, no reply wanted.\n")
+    assert kit.should_skip(name, rsp.SELF_CODE, "# From LL - FIX\n") is None, (
+        "non-vacuity: the kit lets the title exempt it"
+    )
+    assert rsp.is_terminal_note(name, "# From LL - FIX\n") is True
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
+
+
+def test_a_filename_order_class_is_still_never_damped(rsp, tmp_path):
+    """Neighbour for (b): an ORDER named so in the FILENAME is still exempt."""
+    inbox = tmp_path / "inbox"
+    kept = _note(inbox, "2026-10-03-1406-from-LL-ORDER-no-reply-loops.md", "do it\n")
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
 
