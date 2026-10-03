@@ -12,6 +12,69 @@ now.
 
 ---
 
+## 2026-10-03 (evening) - FLEET-KIT v4 adopted, the responder spawns through the kit, six backlog slices landed, and a Linux-only CI red closed
+
+FLEET KIT. Every MAIN kit file was hashed against MAIN's outbox at the same
+relative path before use: v3 3/3 plus the 1016 and 1029 notes MATCH; v4 the
+1204 note plus five files 6/6 MATCH. `65cca9a` vendored v3, `49c06f2`
+replaced it with all five v4 files in one commit (`ops/fleet_kit/`), Apache-2.0
+recorded in `docs/LICENSE_NOTES.md` as one-way compatible into GPL-3.0 with
+NOTICE preserved. `tests/test_fleet_kit.py` failed first on the missing
+CLAUDE.md markers and reads `conformance('.') == []` at v4. `CLAUDE.md` went
+29605 -> 21856 bytes with FLEET-COMMON embedded byte-for-byte; the old text
+is verbatim in `docs/claude-md-history.md`; an adversary found ten rules the
+condense dropped and `ee2cb73` restored them. `/done` now prints one line
+(`.claude/commands/done.md`); roster agents write progress files
+(`tests/test_agent_roster.py` Guard 8). `68c3a54` made the pre-commit gate's
+ruff half pass `--force-exclude` so it honours ruff.toml excludes as CI does.
+
+RESPONDER ON THE KIT. The one headless spawn, `_spawn_headless` in
+`tools/moon_sync_responder.py`, goes through `fleet_headless.spawn` with
+bare, stdin, cwd, halt_file and note, and extra carrying `--permission-mode
+dontAsk` and a Read,Grep,Glob floor. Adversary rounds found and the builder
+fixed fail-first: an error JSON accepted as a draft; a kit refusal burning a
+responder run; a Bash floor escape (`git log --output=` then `python -m
+pytest`), so Bash left the child floor and the parent passes git facts in a
+nonce-delimited block a note cannot forge; drafts scrubbed for credential
+shapes; a quoted TERMINAL line silencing MAIN notes once the MAIN bypass was
+dropped (restored in `2ecc226`). Proven by `tests/test_headless_env.py` and
+`tests/test_responder_main_provenance.py`. LIVE PROBE, 2 runs: the local
+proxy accepted the kit placeholder key; Write and Bash were never offered to
+the child and no probe file was written; about 1748 and 1413 input tokens per
+run; `dontAsk` itself was never exercised.
+
+STATUS FILE. `850bd79` keeps every task name in the MAIN 0915 set (the
+widget had shown [?] for "MAIN Reply Limit"); `46c2b3e` makes a limit tick
+carry counts and `cap_frees_at` from the cap that binds, never null. Read
+back live 2026-10-03T14:31:01-05:00: limit, Turn Limit Reached, 3/3, frees
+2026-10-03T23:11:00-05:00. MAIN 1325 answered, 1/1 reached by hash.
+
+BACKLOG SLICES. S2 `227712b`: slots.py pin comments re-derived (290cbf80,
+11426 B) and the arm-A live-holder test in `tests/test_loop_concurrency.py`,
+which kills an age-first `is_stale` mutant 12 other arms let through. S3
+`50d25c3`..`22a5472`: provenance tokens matched on a canonical whole-draft
+form, re-drop dedupe on MATCH-only content hashes, HALT via lstat and
+re-checked before the run is reserved and before spawn, the root
+`conftest.py` fence expands 8.3 names and attributes drift by appended LINES.
+S4 `4828eba`..`1280bde`: `headless/runner.py` bounds each job
+(`JOB_DEADLINE_SECONDS`), exits holding the slot when a job is abandoned,
+quarantines a job abandoned twice (`headless/quarantine.py`), HALT via lstat;
+`tests/test_headless_runner_quarantine.py`; the merger re-ran the
+second-holder arm 30/30. S5 `439bcc2`: a commit-message lane in
+`tools/gate_mutation_runner.py`. S6 `7e52ada`..`4b739c0`: the commit-msg
+gate judges the bytes git will keep (`#` lines under -F/-m), three adversary
+passes, `tests/test_precommit_gate_message.py`.
+
+CI RED, CLOSED. `ci` failed from `65c1622` to `22a5472`: on Linux the
+message lane's hook copies had no exec bit, git ignored the hooks and every
+mutant read SURVIVED; Windows has no exec bit, so every local run was green.
+The fix commit after `22a5472` sets the bit on disk and raises on git's
+ignored-hook hint. Readings at `22a5472`, 2026-10-03: tests 3816 passed 4
+skipped, pity_engine 80, node 52, licence 52, docs 42, qa 17 passed 2
+skipped, mypy 40 files clean, kit v4 conformance [].
+
+---
+
 ## 2026-10-03 (close) - CI was red from 9061eb4 to 7551604; 2d108ee and 14b1ee5 turned it green
 
 The live-runtime fence from `9061eb4` passed on Windows and failed on Linux CI
