@@ -87,6 +87,8 @@ ordering rather than the wording.
 from __future__ import annotations
 
 import hashlib
+import json
+import math
 import os
 import re
 import subprocess
@@ -101,6 +103,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from core import headless_env  # noqa: E402
 from core.atomic_io import atomic_write_json, atomic_write_text, read_json  # noqa: E402
 
 # `ENV_RUNTIME_DIR` IS RE-EXPORTED ON PURPOSE and is not dead. It is this
@@ -113,9 +116,12 @@ from ops.health import ENV_RUNTIME_DIR, runtime_dir  # noqa: E402, F401
 #: This repo's code in the `from-<CODE>-` convention.
 SELF_CODE = "RSC"
 
-#: Opted in for the PAIRWISE trial. One edge, not four. Sibling-A's section 5:
-#: five repos is twenty edges before anything is known to work.
-OPTED_IN: tuple[str, ...] = ("RC",)
+#: Every channel participant, by codename. Widened from the pairwise RC-only
+#: trial by the operator's 2026-10-02 directive to read and answer this tree's
+#: whole channel inbox. Never `SELF_CODE`: `pending` also drops it, so a
+#: self-reply loop is impossible twice over. Hop budget, window and every other
+#: halt are unchanged - this widens the audience and lifts no bound.
+OPTED_IN: tuple[str, ...] = ("CS", "LL", "LW", "MAIN", "RC", "SS")
 
 #: M5. Every responder-authored note carries this on its own line, so the
 #: transcript separates cleanly from human traffic after the trial and so the
@@ -179,6 +185,19 @@ TERMINATIONS = (
     # ANSWERED record cannot be. Reusing one string would have made the two
     # indistinguishable in the only evidence that survives a cycle.
     TERMINATION_UNANSWERABLE,
+    # THE HEADLESS ROUTE REFUSED. Operator directive 2026-10-02: every headless
+    # spawn goes through the proxy named by CLAUDE_HEADLESS_BASE_URL and fails
+    # CLOSED. Unset (the kill switch), malformed or unreachable all land here,
+    # with the reason, and nothing is spawned by any other route.
+    "headless-refused",
+    # THE SESSION RAN AND WAS REFUSED FOR USAGE. A backoff is recorded and the
+    # cycle ends; it is never retried another way.
+    "usage-limited",
+    # A RECORDED BACKOFF IS STILL IN FORCE, so this fire spawned nothing.
+    "usage-backoff",
+    # THE OUTBOUND ROW COULD NOT BE RESERVED, so nothing was delivered and the
+    # note was recorded answered - dropped on purpose, the safe side.
+    "reserve-failed",
 )
 
 #: Set on the delivered path when the reply LANDED and the answered record did
@@ -305,6 +324,26 @@ DEFAULT_ANSWERED = RUNTIME_DIR / "responder_answered.json"
 #: a new defect in the draft is the one thing an operator reads that directory
 #: to find.
 DEFAULT_REFUSALS = RUNTIME_DIR / "responder_refusals.json"
+
+#: THE USAGE-LIMIT BACKOFF. `{"until": epoch}`, written when a session is
+#: refused for usage and consulted before the next spawn. A usage limit backs
+#: off; it never retries another way - see `UsageLimited`.
+DEFAULT_BACKOFF = RUNTIME_DIR / "responder_backoff.json"
+
+#: LOOP BREAKER (b), THE OUTBOUND CAP. `{"version": 1, "replies": [{"to":
+#: CODE, "at": epoch}]}`, this tree's own durable record of replies DELIVERED,
+#: so the bound holds even though the replies themselves leave the repo and the
+#: hop budget, which counts only this inbox, never sees them.
+DEFAULT_OUTBOUND = RUNTIME_DIR / "responder_outbound.json"
+MAX_REPLIES_PER_SENDER = 3
+OUTBOUND_WINDOW_SECONDS = 86400.0
+
+#: Used when a usage-limit refusal carries no reset time, and the ceiling on
+#: one that does, so a garbled stamp cannot park the responder for a year.
+USAGE_BACKOFF_SECONDS = 3600.0
+USAGE_BACKOFF_MAX_SECONDS = 86400.0
+USAGE_LIMITED_REASON = "the session was refused for usage - backing off, no retry by another route"
+USAGE_BACKOFF_REASON = "a usage-limit backoff is in force - nothing spawned"
 
 #: LITERAL CAPS ON THE RECORD, because the record is otherwise the held
 #: directory again in JSON. A note whose reasons vary every cycle would
@@ -580,6 +619,33 @@ class SpawnFailed(RuntimeError):
     """
 
 
+class HeadlessRefused(SpawnFailed):
+    """The headless route refused BEFORE anything was spawned.
+
+    Its text is one of `core.headless_env`'s fixed `REFUSE_*` reasons and never
+    carries the configured URL, so it is safe to record.
+    """
+
+
+class UsageLimited(SpawnFailed):
+    """The session ran and was refused for usage. Back off; never reroute.
+
+    `reset_at` is the epoch the refusal named, or None when it named none.
+    """
+
+    def __init__(self, reset_at: float | None) -> None:
+        super().__init__("usage limit")
+        self.reset_at = reset_at
+
+
+class UsageBackoff(SpawnFailed):
+    """A recorded usage-limit backoff is in force, so nothing was spawned.
+
+    Checked INSIDE the spawn rather than as its own branch in `_run_once`, so
+    the backoff binds exactly the real session and nothing else.
+    """
+
+
 class _DraftRefused(ValueError):
     """The gate refused this draft, as distinct from a destination being unusable.
 
@@ -653,17 +719,100 @@ def is_responder_authored(text: str) -> bool:
     return RESPONDER_TAG in text
 
 
+#: ANY TREE'S RESPONDER TAG, not only ours. Ours is `[RSC-RESPONDER] ...` at the
+#: start of a line (`RESPONDER_TAG`); a sibling running this same responder
+#: under its own codename writes `[<CODE>-RESPONDER]` in the same place, so the
+#: SHAPE is matched rather than the one literal.
+_ANY_RESPONDER_TAG = re.compile(r"^\[[A-Z]{2,4}-RESPONDER\]", re.MULTILINE)
+
+#: A body that DECLARES it was written by a machine, for a sibling whose tag
+#: shape is not known. Mirrors the sentence `RESPONDER_TAG` itself carries.
+_DECLARED_AUTOMATED = re.compile(
+    r"written by an? (?:unattended|headless) responder", re.IGNORECASE
+)
+
+#: The reply filename convention `_reply_name` writes.
+_AUTO_REPLY_NAME = "-auto-reply-to-"
+
+#: U+FEFF, spelled by code point so this file stays 7-bit.
+_BOM = chr(0xFEFF)
+
+
+def is_auto_reply(name: str, text: str) -> bool:
+    """Whether a note is itself a responder's auto-reply, from ANY tree.
+
+    LOOP BREAKER (a). Such a note is never auto-answered: two responders that
+    answer each other's replies have no exit but the hop budget, and that budget
+    counts only what lands in THIS inbox. Matched on four signals, any one
+    sufficient: this tree's own tag, any tree's tag shape, a body declaring an
+    unattended or headless responder wrote it, or the auto-reply filename.
+
+    FAILS CLOSED, ruled 2026-10-02. A leading byte-order mark is stripped first,
+    because a BOM in front of a sibling's tag hid it from the line-anchored
+    match. An EMPTY body reads as an auto-reply too: `_read_text` degrades an
+    unreadable note to empty, and a note this module cannot read is never one
+    it should answer.
+    """
+    text = text.lstrip(_BOM)
+    if not text.strip():
+        return True
+    return (
+        _AUTO_REPLY_NAME in name
+        or RESPONDER_TAG in text
+        or _ANY_RESPONDER_TAG.search(text) is not None
+        or _DECLARED_AUTOMATED.search(text) is not None
+    )
+
+
 def _read_text(path: Path) -> str:
     """Bytes to text without ever raising. Unreadable reads as empty.
 
     Empty is the safe direction here: an unreadable note is not answered and is
     not counted as a hop, so the failure is a missed reply rather than an
     unbounded chain.
+
+    THE ENCODING IS TAKEN FROM THE BOM, ruled 2026-10-02: FF FE is UTF-16-LE,
+    FE FF is UTF-16-BE, EF BB BF is UTF-8 with a mark; no mark is strict UTF-8.
+    A UTF-16 sibling reply decoded as UTF-8 hid its tag behind NUL bytes.
+    Bytes that do not decode under the chosen codec read as UNREADABLE, which
+    `is_auto_reply` treats as never-answer - it was `replace` before, which
+    answered a note it had not actually read.
     """
     try:
-        return path.read_bytes().decode("utf-8", "replace")
+        raw = path.read_bytes()
     except OSError:
         return ""
+    # UTF-32 FIRST: its little-endian mark begins with UTF-16-LE's, so checked
+    # after it a UTF-32 note would decode as UTF-16 with NULs between letters.
+    # UTF-32 is not a channel encoding, so it reads as UNREADABLE outright.
+    if raw.startswith(_UTF32_MARKS):
+        return ""
+    for mark, codec in _BOM_CODECS:
+        if raw.startswith(mark):
+            raw, encoding = raw[len(mark):], codec
+            break
+    else:
+        encoding = "utf-8"
+    try:
+        text = raw.decode(encoding).lstrip(_BOM)
+    except UnicodeDecodeError:
+        return ""
+    # A NUL IN DECODED TEXT MEANS THE CODEC WAS WRONG - a mark-less UTF-16 or
+    # UTF-32 note decodes as "valid" UTF-8 with a NUL between every letter,
+    # which hides any tag from the matcher. Unreadable, so never answered.
+    return "" if chr(0) in text else text
+
+
+#: UTF-32 byte-order marks, LE then BE. Checked before `_BOM_CODECS`.
+_UTF32_MARKS: tuple[bytes, ...] = (b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")
+
+#: Byte-order marks and the codec each one names. UTF-8's mark is listed even
+#: though it never collides with the UTF-16 pair, so all three are explicit.
+_BOM_CODECS: tuple[tuple[bytes, str], ...] = (
+    (b"\xef\xbb\xbf", "utf-8"),
+    (b"\xff\xfe", "utf-16-le"),
+    (b"\xfe\xff", "utf-16-be"),
+)
 
 
 #: Prefix for the transient directory-writability probe, and the SELECTOR the
@@ -920,6 +1069,7 @@ def pending(
     answered: set[str],
     since: float | None = None,
     deprioritise: set[str] | None = None,
+    capped: set[str] | None = None,
 ) -> list[Path]:
     """Notes from an opted-in sender that have not been answered yet.
 
@@ -977,6 +1127,13 @@ def pending(
                     continue
             except OSError:
                 continue
+        # LOOP BREAKER (b): a sender already sent `MAX_REPLIES_PER_SENDER`
+        # replies in the rolling day is not answered again until one ages out.
+        if code in (capped or set()):
+            continue
+        # LOOP BREAKER (a): never auto-answer an auto-reply, from any tree.
+        if is_auto_reply(child.name, _read_text(child)):
+            continue
         out.append(child)
     return out
 
@@ -1082,6 +1239,14 @@ def counterparty_agreed(path: Path, now: float | None = None) -> tuple[bool, str
     an agreement to run tonight is not an agreement to run next week, and a
     confirmation file left behind is otherwise a standing authorisation nobody
     remembers granting.
+
+    ONE RECORD ARMS THE WHOLE AUDIENCE, BY MERGER RULING 2026-10-02. The record
+    names one counterparty, yet `OPTED_IN` now holds every participant, so a
+    refuter read this as one agreement arming six. The ruling: the operator's
+    2026-10-02 directive went to EVERY tree and stands in for the per-pair trial
+    agreement, so no per-sender confirmation is required. What is NOT relaxed is
+    the floor - the record must still exist, be well formed and be unexpired,
+    so the expiry still ends every edge at once.
     """
     payload = read_json(path, default=None)
     if not isinstance(payload, dict):
@@ -2041,6 +2206,187 @@ def bounce_name(note: Path, stamp: float) -> str:
     return f"{when}-from-{SELF_CODE}-bounce-{stem}{BOUNCE_SUFFIX}"
 
 
+#: The caller label a fail-closed line carries in the invocation log.
+FAIL_CLOSED_SOURCE = "failclosed"
+OUTBOUND_UNRESERVED_REASON = (
+    "the outbound record could not be reserved, so nothing was delivered (fail closed)"
+)
+
+_MISSING = object()
+
+
+def _load_record(path: Path) -> Any:
+    """A JSON record, `_MISSING` when absent, None when present and unreadable.
+
+    `read_json` cannot tell absent from corrupt - both return the default - and
+    the two records below need exactly that distinction: absent is the healthy
+    first-run state, corrupt must FAIL CLOSED.
+    """
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return _MISSING
+    except OSError:
+        return None
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def _log_fail_closed(note: str | None, what: str) -> None:
+    """Say so where an unattended run can be read back: the invocation log."""
+    print(f"responder: FAIL CLOSED - {what}")
+    log_invocation(FAIL_CLOSED_SOURCE, note, f"fail-closed:{what}")
+
+
+def backoff_active(path: Path, now: float) -> bool:
+    """Whether a recorded usage-limit backoff is still in force at `now`.
+
+    FAILS CLOSED, ruled 2026-10-02: a record that is present but unreadable,
+    malformed, or whose `until` is not a number reads as an ACTIVE backoff.
+    Only an absent record means no backoff.
+    """
+    doc = _load_record(path)
+    if doc is _MISSING:
+        return False
+    until = doc.get("until") if isinstance(doc, dict) else None
+    if not _finite_number(until):
+        _log_fail_closed(None, "backoff-record-unreadable")
+        return True
+    # `_finite_number` already proved this; the isinstance restates it for mypy.
+    return isinstance(until, (int, float)) and now < float(until)
+
+
+def _finite_number(value: Any) -> bool:
+    """A real, finite int or float. bool, NaN and +/-Infinity are not.
+
+    An int too large for a float (JSON happily parses `1` followed by 400
+    zeros) makes `math.isfinite` RAISE OverflowError, which escaped as a crash
+    and recorded `spawn-failed`. Any such error is NOT finite - fail closed.
+    """
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value) and math.isfinite(float(value))
+    except (OverflowError, TypeError, ValueError):
+        return False
+
+
+def _outbound_rows(path: Path, now: float) -> list[dict] | None:
+    """Rows inside the rolling window; [] when absent; None when CORRUPT.
+
+    Corrupt means present but unreadable, not a document, or any row
+    malformed. The caller treats None as every sender at the cap.
+    """
+    doc = _load_record(path)
+    if doc is _MISSING:
+        return []
+    rows = doc.get("replies") if isinstance(doc, dict) else None
+    if not isinstance(rows, list):
+        return None
+    good = [
+        r for r in rows
+        if isinstance(r, dict)
+        and isinstance(r.get("to"), str)
+        and _finite_number(r.get("at"))
+    ]
+    if len(good) != len(rows):
+        return None
+    floor = now - OUTBOUND_WINDOW_SECONDS
+    return [r for r in good if floor < float(r["at"]) <= now + OUTBOUND_WINDOW_SECONDS]
+
+
+def senders_at_cap(path: Path, now: float) -> set[str]:
+    """Senders already sent `MAX_REPLIES_PER_SENDER` replies in the rolling day.
+
+    A CORRUPT record caps EVERY participant, and says so: a cap that cannot be
+    counted is not a cap, so nobody is answered until the record is repaired.
+    """
+    rows = _outbound_rows(path, now)
+    if rows is None:
+        _log_fail_closed(None, "outbound-record-unreadable")
+        return set(OPTED_IN)
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row["to"]] = counts.get(row["to"], 0) + 1
+    return {code for code, n in counts.items() if n >= MAX_REPLIES_PER_SENDER}
+
+
+def record_outbound(path: Path, to: str, now: float, delivered: bool) -> bool:
+    """RESERVE one reply to `to` in the durable record. True only if it landed.
+
+    Called BEFORE the delivery, so the row exists before any byte leaves this
+    repo; a reply whose row could not be written is not sent. `delivered=False`
+    records nothing. A corrupt record is never overwritten here - that would
+    erase the very count the cap reads - so it refuses and stays capped.
+    """
+    if not delivered:
+        return False
+    # RE-READ AND RE-CHECK IMMEDIATELY BEFORE THE WRITE. The cap that filtered
+    # the queue was read at the top of the cycle; a pass that overlapped this
+    # one may have reserved since. Narrows the window to this read-then-write;
+    # it is not a cross-process lock - the scheduled task's
+    # MultipleInstancesPolicy IgnoreNew is what keeps passes from overlapping.
+    rows = _outbound_rows(path, now)
+    if rows is None or not _ensure_parent(path):
+        return False
+    if sum(1 for r in rows if r["to"] == to) >= MAX_REPLIES_PER_SENDER:
+        return False
+    return atomic_write_json(path, {"version": 1, "replies": [*rows, {"to": to, "at": now}]})
+
+
+def _reserve_targets(
+    path: Path, note: Path, dests: list[Path], inbox: Path, now: float
+) -> tuple[list[Path], list[Path], list[str]]:
+    """(sibling inboxes, own-copy inboxes, reasons) for one reply.
+
+    Reserves the outbound row first. When it cannot be written, both target
+    lists are EMPTY, so `deliver` writes nothing and the cycle reports the
+    reply undelivered with the reason. Kept out of `_run_once` so the cycle
+    gains no branch.
+    """
+    if record_outbound(path, sender_of(note.name) or "", now, True):
+        return [d / "moon_sync_inbox" for d in dests], [inbox], []
+    _log_fail_closed(note.name, "outbound-unreserved-note-dropped")
+    return [], [], [OUTBOUND_UNRESERVED_REASON]
+
+
+def _reply_termination(reserve_reasons: list[str]) -> str:
+    """`reserve-failed` when the reservation refused, `delivered` otherwise.
+
+    A helper so `_run_once` gains no branch. The note is still recorded as
+    answered on `reserve-failed` - dropped, the safe side - and the drop is in
+    the invocation log twice: the fail-closed line and this termination.
+    """
+    return "reserve-failed" if reserve_reasons else "delivered"
+
+
+def record_backoff(path: Path, reset_at: float | None, now: float) -> bool:
+    """Record a backoff from a usage-limit refusal. Clamped, never unbounded."""
+    until = now + USAGE_BACKOFF_SECONDS
+    if reset_at is not None and now < reset_at <= now + USAGE_BACKOFF_MAX_SECONDS:
+        until = reset_at
+    if not _ensure_parent(path):
+        return False
+    return atomic_write_json(path, {"until": until, "recorded": now})
+
+
+def _usage_limited_termination(
+    path: Path, reset_at: float | None, now: float, note: str | None
+) -> str:
+    """Record the backoff; the cycle's termination either way.
+
+    FAILS CLOSED, ruled 2026-10-02: when the backoff cannot be written the
+    pass ends as `usage-backoff` anyway and a fail-closed line is logged, so a
+    broken record can never read as permission to try again.
+    """
+    if record_backoff(path, reset_at, now):
+        return "usage-limited"
+    _log_fail_closed(note, "backoff-unrecorded")
+    return "usage-backoff"
+
+
 def _hold(
     staging: Path, name: str, text: str, reasons: list[str], stamp: float | None = None
 ) -> Path | None:
@@ -2220,6 +2566,7 @@ def _run_once(
         _answered(DEFAULT_ANSWERED),
         since=bounds.window_opens,
         deprioritise=bounced_notes(DEFAULT_REFUSALS, agreement_id(DEFAULT_CONFIRMATION)),
+        capped=senders_at_cap(DEFAULT_OUTBOUND, started),
     )
     # GATE:empty-queue
     if not queue:
@@ -2266,6 +2613,28 @@ def _run_once(
     # GATE:spawn-failure
     try:
         draft = (spawn or _spawn_headless)(prompt, bounds)
+    except UsageLimited as exc:
+        # BACK OFF, NEVER REROUTE. The next fire inside the backoff spawns
+        # nothing; no other route is tried. Nothing is held - there is no draft.
+        print(f"responder: {USAGE_LIMITED_REASON}")
+        result["reasons"] = [USAGE_LIMITED_REASON]
+        result["termination"] = _usage_limited_termination(
+            DEFAULT_BACKOFF, exc.reset_at, started, note.name
+        )
+        return result
+    except UsageBackoff:
+        print(f"responder: {USAGE_BACKOFF_REASON}")
+        result["reasons"] = [USAGE_BACKOFF_REASON]
+        result["termination"] = "usage-backoff"
+        return result
+    except HeadlessRefused as exc:
+        # FAIL CLOSED AND SAY WHY. No hold and no metrics row: nothing ran, and
+        # with the kill switch thrown this repeats every fire. The invocation
+        # log records the termination per fire.
+        print(f"responder: REFUSING to spawn - {exc}")
+        result["reasons"] = [str(exc)]
+        result["termination"] = "headless-refused"
+        return result
     except Exception:  # noqa: BLE001 - a responder must survive ANY session failure
         # The raw string never reaches a reported surface. A responder that
         # tracebacks out of a scheduled task surfaces nothing at all.
@@ -2384,18 +2753,23 @@ def _run_once(
         if repeat and already_bounced and not result["held"] and not result["bounced"]:
             return result
     else:
-        written = deliver(
-            draft, reply_name, [d / "moon_sync_inbox" for d in dests], source=source
+        # RESERVED BEFORE DELIVERED, FAIL CLOSED. The outbound row is written
+        # first; if it cannot be, both target lists come back empty, nothing is
+        # written anywhere, and the reason rides on the result.
+        targets, own_copy, reserve_reasons = _reserve_targets(
+            DEFAULT_OUTBOUND, note, dests, inbox, started
         )
+        result["reasons"] = reserve_reasons
+        written = deliver(draft, reply_name, targets, source=source)
         # Our own copy, so a cold session sees both halves of the conversation.
-        deliver(draft, reply_name, [inbox], source=source)
+        deliver(draft, reply_name, own_copy, source=source)
         # THE `bool(written)` TERM IS THE GUARD, not decoration: `all([])` is
         # vacuously True, so without it a delivery to zero destinations would
         # report itself delivered.
         # GATE:delivery-write-all
         result["delivered"] = all(ok for ok, _ in written) and bool(written)
         result["actions"] = ["A5"]
-        result["termination"] = "delivered"
+        result["termination"] = _reply_termination(reserve_reasons)
 
         # THE RETURN VALUE IS OBSERVED, AND IT WAS A BARE STATEMENT HERE. A False
         # reached neither `result`, nor `record_cycle`'s reasons column, nor the
@@ -2473,6 +2847,39 @@ SPAWN_COMMAND: tuple[str, ...] = (
     "Read,Grep,Glob,Bash(python -m pytest:*),Bash(git log:*),Bash(git status:*)",
 )
 
+#: THE HEADLESS ROUTE. Operator directive 2026-10-02: every unattended `claude`
+#: spawn goes through `core.headless_env`, which reads the proxy URL live and
+#: fails closed. A module attribute so an arm can substitute it; production
+#: never does.
+_headless_gate = headless_env.prepare_headless_env
+
+#: A usage-limit refusal, as the CLI or the proxy words it. Searched ANYWHERE
+#: in stdout and stderr, whatever the exit code and length - ruled 2026-10-02.
+#: A real draft that merely mentions a limit is a false positive, and a false
+#: positive only backs off, which is the safe side.
+#:
+#: THE REAL CLI AND PROXY TEXT WAS NOT CAPTURED. These phrases are the wording
+#: the refutation of c695ad1 enumerated, plus the legacy `usage limit reached|`
+#: shape; a live refusal has never been observed through this route. An
+#: `overloaded` error is deliberately ABSENT: it is a transient failure, recorded
+#: as `spawn-failed`, and treating it as a usage limit would park the responder
+#: for an hour on a blip.
+_USAGE_LIMIT = re.compile(
+    r"usage[ _-]?limit|limit reached|rate[ _-]?limit|\b429\b|hit your limit"
+    r"|limit will reset|resets at|out of extra usage",
+    re.IGNORECASE,
+)
+_RESET_EPOCH = re.compile(r"\|(\d{10})\b")
+
+
+def _usage_limited(done: subprocess.CompletedProcess) -> tuple[bool, float | None]:
+    """`(limited, reset epoch or None)` for one finished session."""
+    hay = (done.stdout or "") + "\n" + (done.stderr or "")
+    if not _USAGE_LIMIT.search(hay):
+        return False, None
+    stamp = _RESET_EPOCH.search(hay)
+    return True, (float(stamp.group(1)) if stamp else None)
+
 
 def _spawn_headless(prompt: str, bounds: Bounds) -> str:
     """Run one headless session and return whatever it printed.
@@ -2500,6 +2907,17 @@ def _spawn_headless(prompt: str, bounds: Bounds) -> str:
     # RESOLVE THE EXECUTABLE. On Windows the entry point is a `.CMD` shim and
     # `subprocess` will not launch a bare `claude`. Measured here: the first
     # live spawn raised FileNotFoundError, which is section 2's whole story.
+    # A USAGE LIMIT BACKS OFF. Inside a recorded backoff nothing is spawned and
+    # no other route is tried; the cycle ends and the next fire looks again.
+    if backoff_active(DEFAULT_BACKOFF, time.time()):
+        raise UsageBackoff(USAGE_BACKOFF_REASON)
+
+    # THE ROUTE, and fail closed. Nothing below runs unless the headless proxy
+    # is configured and accepting connections; there is no direct route.
+    route = _headless_gate()
+    if not route.ok or route.env is None:
+        raise HeadlessRefused(route.reason)
+
     exe = shutil.which(SPAWN_COMMAND[0])
     if exe is None:
         raise SpawnFailed("the session command was not found on PATH")
@@ -2514,6 +2932,7 @@ def _spawn_headless(prompt: str, bounds: Bounds) -> str:
             cwd=str(REPO_ROOT),
             check=False,
             creationflags=_NO_WINDOW,
+            env=route.env,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         # RAISED, NEVER RETURNED AS EMPTY, and that distinction is the point.
@@ -2527,6 +2946,9 @@ def _spawn_headless(prompt: str, bounds: Bounds) -> str:
         # a negative that is a statement about the instrument rather than the
         # world. The class of `exc` is used, never its text.
         raise SpawnFailed(exc.__class__.__name__) from None
+    limited, reset_at = _usage_limited(done)
+    if limited:
+        raise UsageLimited(reset_at)
     if done.returncode != 0 and not done.stdout:
         raise SpawnFailed(f"the session exited {done.returncode} with no output")
     return done.stdout or ""
