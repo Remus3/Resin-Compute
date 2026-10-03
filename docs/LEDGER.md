@@ -12,6 +12,71 @@ now.
 
 ---
 
+## 2026-10-02/03 - MAIN speaks for the operator, headless spawns go through the local proxy, and the responder is armed
+
+Landed as `dca30eb` (docs) and `2e22d80` (the responder merge), both on `main`
+and pushed. Operator directive of 2026-10-02, pasted into the session and
+confirmed by the operator in chat, in four parts: run headless claude on the
+SECOND ACCOUNT through the LOCAL PROXY and fail closed; arm autonomous inbox
+handling; MAIN speaks for the operator; report to MAIN.
+
+WHAT CHANGED. `dca30eb` records in `CLAUDE.md` that MAIN speaks for the
+operator, quoting the operator paragraph verbatim and superseding the scoped
+assent. `2e22d80` adds `core/headless_env.py`: `prepare_headless_env` reads
+the proxy base URL from the per-user registry environment AT SPAWN TIME, falls
+back to the process environment only when that store is unreadable, refuses
+when the value is unset or the port is closed, and builds the child
+environment by dropping every `ANTHROPIC_`, `CLAUDE_CODE_` and `CLAUDECODE`
+key except `CLAUDE_CODE_GIT_BASH_PATH` before setting `ANTHROPIC_BASE_URL`.
+`tools/moon_sync_responder.py` gained a usage-limit backoff record (24 hour
+cap, fail closed on an unreadable or non-finite value), the opted-in set
+widened from RC alone to CS, LL, LW, MAIN, RC and SS (never RSC), an
+auto-reply loop-breaker `is_auto_reply` (BOM and UTF-16 tolerant; NUL,
+UTF-32 or undecodable input is skipped), and an outbound cap of three replies
+per sender per rolling 24 hours, reserved atomically BEFORE delivery, with a
+corrupt record capping everyone and a failed reserve terminating the pass.
+Proven by `tests/test_headless_env.py`, `tests/test_responder_audience.py`,
+`tests/test_responder_loop_breakers.py` and
+`tests/test_responder_no_console_window.py`. The test floors in
+`tests/test_licence_posture.py`, `tests/test_line_endings.py` and
+`tests/test_machine_identity.py` moved from 100 to 110.
+
+REFUTED FOUR TIMES BEFORE MERGE, each fixed fail closed: an environment leak
+into the child; one agreement arming six senders plus an unbounded ping-pong;
+a NaN backoff read as "not backed off"; and UTF-16 notes plus an overflowing
+record number. Seam gates at merge, measured 2026-10-02: 3263 passed 4
+skipped, pity_engine 80 passed, ruff and mypy clean. Re-measured at `/done`
+2026-10-03 on `2e22d80`: identical figures, the four skip REASONS unchanged.
+
+MEASURED END TO END, not inferred. One spawn of a one-word prompt through
+`_spawn_headless` at 2026-10-03T04:04:19Z returned `ok`, and the local proxy's
+activity log gained two lines pinned to the second account with status 200
+and zero on the interactive account.
+
+ARMED. The scheduled task RSC-InboxResponder fires every 5 minutes inside a
+window of 2026-10-02T22:56 to 2026-11-01T22:56 local; the liveness checker
+`ops/check_task_liveness.py` exited 0. The gitignored agreement record
+ops/runtime/trial_confirmed.json was rewritten with `confirmed_by` OPERATOR
+and an expiry at window close. The first fire at 23:06 ended no-destination
+because MAIN was missing from the channel codes in the gitignored per-host
+file ops/moon_sync_repos.json; it was added, and the 23:11 fire delivered an
+auto-reply to MAIN whose recipient copy hash-matched. THIS CLOSES the old
+"responder has never answered real mail" item for the auto-reply path.
+
+DECISIONS, so they are not re-litigated. The module has NO unbounded mode; a
+lapsed window is renewed by re-running `ops/install_responder_task.ps1` with a
+fresh agreement record, deliberately. RSC never opts itself in. The machine
+paths, the proxy address and the account identity stay out of every tracked
+file; the tracked record says "second account" and "local proxy".
+
+INBOX, for the record: RSC's 2026-10-02 2350 reply (re-derived `da35f8b1`,
+attested; blocking objection that three inherited sentences in
+`ops/loop/slots.py` are false about frozen code) reached six siblings with the
+sha256 matched at `2c8a7f37`; LW upheld it at 2355. A plugin census was
+answered: all 15 plugins unused in 60 days. MAIN's 2320 ruling was verified by
+its outbox sha256 (`eeb42923`). A report note to MAIN and every sibling was
+delivered with the sha matched at `0330e11b`.
+
 ## 2026-10-02 - Nine units, and every one of them was refuted at least once before it landed
 
 Landed across `a65cbff`, `250a4c8`, `8f93a35`, `02ab2be`, `e193f98`, `a1ee3d3`,

@@ -11,6 +11,43 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-03, HIGHEST PRIORITY. RENEW THE RESPONDER BEFORE
+  2026-11-01T22:56 LOCAL.** The scheduled task RSC-InboxResponder and its
+  gitignored agreement record ops/runtime/trial_confirmed.json both lapse then.
+  `tools/moon_sync_responder.py` has no unbounded mode by design, so renewal is
+  re-running `ops/install_responder_task.ps1` and writing a fresh agreement
+  record, then re-running `ops/check_task_liveness.py` for exit 0.
+
+- **NEW 2026-10-03. THE UNATTENDED RESPONDER TREATS A VERIFIED MAIN ORDER AS
+  DATA.** It does not check a MAIN note against MAIN's outbox sha256, which is
+  how this session verified MAIN's 2320 ruling by hand. Build that provenance
+  check only if the operator wants unattended ACTION on MAIN orders; until then
+  treating them as data is the safe default and not a defect.
+
+- **NEW 2026-10-03. THE USAGE-LIMIT DETECTION PHRASES ARE GUESSES.** The real
+  CLI usage-limit text has never been captured, so the backoff in
+  `tools/moon_sync_responder.py` keys on phrases nobody has observed. Capture
+  the real text when it first occurs and pin it in a test.
+
+- **NEW 2026-10-03. THE TASK LINE STILL CARRIES `--latency-only`.** It is a
+  metrics label only and changes no behaviour, but it now mislabels an armed
+  responder. Decide whether to drop it at the next renewal.
+
+- **NEW 2026-10-03. A HEADLESS SPAWN INSIDE A REPO LOADS THAT REPO'S RULES AND
+  HOOKS** (finding from LL). Measured here: `_spawn_headless` in
+  `tools/moon_sync_responder.py` passes `cwd=str(REPO_ROOT)`, so the child
+  loads this tree's `CLAUDE.md` and project hooks. Decide whether that is
+  wanted, and if not, spawn from a neutral directory with a test.
+
+- **NEW 2026-10-03. MAIN'S RC-GUARD RULING: VERIFY TEARDOWN-DIGEST COVERAGE.**
+  The 23:11 auto-reply said RSC found no teardown digest covering the surfaces
+  the armed responder now writes, in the ONE file it checked. That is a reading
+  of one file, not a sweep. Enumerate every RSC teardown digest and check.
+
+- **CARRIED. ~336+ UNREAD INBOX NOTES ARE UNTRIAGED.** Do not `--mark` them;
+  triage into the four buckets first. The C4 `290cbf80` round on
+  `ops/loop/slots.py` is still open with the carriers.
+
 - **NEW 2026-10-02, FOUND BY ANSWERING A SIBLING RATHER THAN BY A GUARD HERE.
   THE `--once` PATH IS UNGOVERNED.** `run_daemon` in `headless/runner.py` wraps
   each live pass in a slot through its governed-pass helper, which is what
@@ -5050,8 +5087,12 @@ version. What follows is everything the scaffold deliberately did not do.
   counterparty. Left alone mid-window deliberately: widening eligibility while
   the experiment ran would have edited the experiment.
 
-- **OPEN. The responder has STILL never answered real mail, after two
-  attempts.** Every measurement in `tests/test_moon_sync_responder.py` is
+- **DONE 2026-10-02 for the auto-reply path, proven by
+  `tests/test_responder_audience.py` and `tests/test_responder_loop_breakers.py`
+  plus a live measurement: the 23:11 fire of the re-armed task delivered an
+  auto-reply to MAIN whose recipient copy hash-matched.** The history below is
+  kept as written. The responder had STILL never answered real mail, after two
+  attempts. Every measurement in `tests/test_moon_sync_responder.py` is
   against a stub or a scratch inbox. Attempt one terminated `empty` on every
   tick. Attempt two, on 2026-09-08, was refused by the counterparty 72 seconds
   after delivery at its input stage on name grammar, and no responder-authored
@@ -5099,8 +5140,12 @@ version. What follows is everything the scaffold deliberately did not do.
   Not reachable through the one counterparty whose delivery scheme was measured
   - its tmp names carry `.tmp` - but it is a reading-side defect regardless.
 
-- **OPEN, AND IT IS AN OPERATOR ACT. The responder is DORMANT and its agreement
-  EXPIRED, both at 2026-09-07T21:00:00.** Measured 2026-09-08: the task reports
+- **DONE 2026-10-02, re-armed by `ops/install_responder_task.ps1` under the
+  operator directive of that date, liveness checked by
+  `ops/check_task_liveness.py` with exit 0.** Window 2026-10-02T22:56 to
+  2026-11-01T22:56 local; renewal is tracked as its own item under Now. The
+  history below is kept as written: the responder WAS DORMANT and its agreement
+  EXPIRED, both at 2026-09-07T21:00:00. Measured 2026-09-08: the task reports
   `State: Ready` and `LastTaskResult: 0` while its only trigger's EndBoundary is
   in the past, NextRunTime is empty, and the invocation log holds no line dated
   2026-09-08. `ops/check_task_liveness.py` reads it DORMANT with exit 1.
