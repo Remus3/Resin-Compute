@@ -86,6 +86,7 @@ ordering rather than the wording.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import logging
@@ -223,6 +224,9 @@ TERMINATIONS = (
     # ANOTHER RESPONDER PROCESS HELD THE RUN LOCK, so this fire started no
     # session rather than racing it for the run record.
     "run-locked",
+    # THE OPERATOR'S HALT SENTINEL IS PRESENT (`halt_sentinel`), so this fire
+    # did nothing at all. Checked in `run_once` before the cycle body.
+    "halted",
 )
 
 #: Set on the delivered path when the reply LANDED and the answered record did
@@ -3314,14 +3318,94 @@ def run_once(
     started = time.time() if now is None else now
     log_invocation(source, None, "start", now=started)
     try:
-        result = _run_once(inbox, roots, bounds, spawn, started, grammar, source)
+        if _halt_requested():
+            print("responder: HALTED - the operator's HALT sentinel is present")
+            result = _halted_result(grammar)
+        else:
+            result = _run_once(inbox, roots, bounds, spawn, started, grammar, source)
     except BaseException:
         # A responder that tracebacks out of a scheduled task surfaces nothing
         # at all. The log says so before the exception continues on its way.
         log_invocation(source, None, "crashed")
+        _write_tick_status(None)
         raise
     log_invocation(source, result.get("note"), result["termination"])
+    _write_tick_status(result)
     return result
+
+
+#: The operator's HALT sentinel, by the name `headless/runner.py` uses for its
+#: own lane (`HALT_SENTINEL_NAME`), in the same runtime directory.
+HALT_SENTINEL_NAME = "HALT"
+
+
+def halt_sentinel() -> Path:
+    """Where the HALT file lives: beside the responder's own run record.
+
+    DERIVED FROM `DEFAULT_RUNS` rather than bound to a module constant, so an
+    arm that redirects the records also redirects the sentinel and a live
+    HALT file on the host can never decide a test.
+    """
+    return DEFAULT_RUNS.parent / HALT_SENTINEL_NAME
+
+
+def _halt_requested() -> bool:
+    """True when the sentinel is present. FAILS CLOSED: unreadable means halted."""
+    try:
+        return halt_sentinel().exists()
+    except OSError:
+        return True
+
+
+def _halted_result(grammar: str) -> dict:
+    return {
+        "delivered": False, "reasons": ["the operator's HALT sentinel is present"],
+        "note": None, "actions": [], "termination": "halted", "grammar": grammar,
+        "held": False, "bounced": False,
+    }
+
+
+#: termination -> (status state, task). MAIN 0915 schema 1 states and its
+#: basic task names. ONE NAME IS NOT IN THAT LIST: "MAIN Reply Limit", for a
+#: tick that answered nothing because MAIN is at its per-sender reply cap
+#: (ruled distinct from the budget limit, MAIN 0955 s2.5). Recorded as a
+#: deliberate addition rather than folded into "Turn Limit Reached", which
+#: would send an operator to the wrong cap.
+_TICK_STATES: dict[str, tuple[str, str]] = {
+    "halted": ("halted", "Halted"),
+    "usage-limited": ("backoff", "Backing Off"),
+    "usage-backoff": ("backoff", "Backing Off"),
+    "run-budget": ("limit", "Turn Limit Reached"),
+    "run-locked": ("idle", "Idle"),
+    "headless-refused": ("refused", "Idle"),
+}
+MAIN_REPLY_LIMIT_TASK = "MAIN Reply Limit"
+
+
+def _write_tick_status(result: dict | None) -> None:
+    """The lane status, on EVERY tick (MAIN 0915: at least once per tick).
+
+    Written through the kit's own `write_status`, which is atomic, to the
+    kit's root - see `_kit_root` for why an arm can never reach the live file.
+    A write failure is logged fail-closed and never ends the tick.
+    """
+    termination = (result or {}).get("termination", "crashed")
+    state, task = _TICK_STATES.get(termination, ("idle", "Idle"))
+    if (
+        state == "idle"
+        and (result or {}).get("note") is None
+        and MAIN_CODE in senders_at_cap(DEFAULT_OUTBOUND, time.time())
+    ):
+        state, task = "limit", MAIN_REPLY_LIMIT_TASK
+    root = _kit_root()
+    try:
+        kit.write_status(
+            root, SELF_CODE, state, task, time.time(),
+            kit.RunBudget(root / kit.BUDGET_REL),
+            next_tick=time.time() + RESPONDER_TICK_SECONDS,
+        )
+    except (OSError, ValueError) as exc:
+        _log_fail_closed(None, f"kit-status-{exc.__class__.__name__}")
 
 
 def _run_once(
@@ -3485,7 +3569,9 @@ def _run_once(
     prompt = build_prompt(note, bounds, provenance, verified_body(note, verdicts), facts)
     # GATE:spawn-failure
     try:
-        draft = (spawn or _spawn_headless)(prompt, bounds)
+        # The real spawn is told the NOTE'S NAME so the kit's `pick_effort`
+        # sees its class (MAIN 0912); an injected `spawn` keeps its shape.
+        draft = (spawn or functools.partial(_spawn_headless, note_name=note.name))(prompt, bounds)
     except UsageLimited as exc:
         # BACK OFF, NEVER REROUTE. The next fire inside the backoff spawns
         # nothing; no other route is tried. Nothing is held - there is no draft.
@@ -3757,6 +3843,34 @@ RESPONDER_BRIEF: Path = REPO_ROOT / "tools" / "responder_brief.md"
 #: runtime records the root conftest fences, and this is the kit's root.
 KIT_ROOT: Path = REPO_ROOT
 
+#: `DEFAULT_RUNS` as this module bound it at import, so `_kit_root` can tell a
+#: redirected module from a live one. Not a `DEFAULT_` name on purpose.
+_IMPORTED_RUNS: Path = DEFAULT_RUNS
+
+
+def _kit_root() -> Path:
+    """The kit's root for budget, usage and status. SAFE BY DEFAULT.
+
+    `KIT_ROOT` when an arm set it explicitly. Otherwise, when the `DEFAULT_`
+    records have been redirected away from where this module bound them -
+    every responder fixture does that - the kit's files follow them under that
+    tmp directory. Only an unredirected, production module writes the repo's
+    own `ops/loop/control/`. Every tick now writes the status file, so without
+    this rule every armed arm in the suite would have written the live one.
+    """
+    if KIT_ROOT != REPO_ROOT:
+        return KIT_ROOT
+    if DEFAULT_RUNS != _IMPORTED_RUNS:
+        return DEFAULT_RUNS.parent / "kit_root"
+    # A REDIRECTED RUNTIME COUNTS TOO. Measured: a child interpreter loaded
+    # with `RESINCOMPUTE_RUNTIME_DIR` set has unredirected `DEFAULT_` names
+    # from its own point of view, and wrote the repo's live status file during
+    # the suite. RECORDED RESIDUAL: a production host that sets that variable
+    # would publish its status under the runtime dir, not the fleet path.
+    if RUNTIME_DIR != REPO_ROOT / "ops" / "runtime":
+        return RUNTIME_DIR / "kit_root"
+    return KIT_ROOT
+
 #: The scheduled task fires every five minutes (`ops/ResinCompute-Responder.xml`,
 #: Interval PT5M), so the idle status names the next tick that far ahead.
 RESPONDER_TICK_SECONDS = 300.0
@@ -3858,8 +3972,8 @@ def _write_idle() -> None:
     """Between runs the lane widget reads Idle, with the next tick named."""
     try:
         kit.write_status(
-            KIT_ROOT, SELF_CODE, "idle", "Idle", None,
-            kit.RunBudget(KIT_ROOT / kit.BUDGET_REL),
+            _kit_root(), SELF_CODE, "idle", "Idle", None,
+            kit.RunBudget(_kit_root() / kit.BUDGET_REL),
             next_tick=time.time() + RESPONDER_TICK_SECONDS,
         )
     except OSError as exc:
@@ -3949,7 +4063,7 @@ def _session_result(done: subprocess.CompletedProcess) -> str:
     return result
 
 
-def _spawn_headless(prompt: str, bounds: Bounds) -> str:
+def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
     """Run one headless session through the FLEET KIT and return its draft.
 
     ARMING IS A SEPARATE ACT FROM BUILDING and this function existing does not
@@ -3997,7 +4111,7 @@ def _spawn_headless(prompt: str, bounds: Bounds) -> str:
     # arises BETWEEN these checks and `kit.spawn` - the proxy dying, or another
     # process taking the last kit run - still costs one responder run. That
     # race needs a kit change to close and errs on the side of spawning less.
-    kit_budget = kit.RunBudget(KIT_ROOT / kit.BUDGET_REL)
+    kit_budget = kit.RunBudget(_kit_root() / kit.BUDGET_REL)
     if not kit_budget.can_start():
         raise RunBudgetSpent(
             f"the fleet kit's run budget is exhausted ({kit_budget.used()}/{kit_budget.cap})"
@@ -4015,10 +4129,10 @@ def _spawn_headless(prompt: str, bounds: Bounds) -> str:
     finished: list[subprocess.CompletedProcess] = []
     try:
         kit.spawn(
-            KIT_ROOT,
+            _kit_root(),
             SELF_CODE,
             full_prompt,
-            note="",
+            note=note_name,
             writes_code=False,
             bare=SPAWN_BARE,
             rules_file=RESPONDER_BRIEF,
@@ -4037,6 +4151,18 @@ def _spawn_headless(prompt: str, bounds: Bounds) -> str:
     except (OSError, subprocess.SubprocessError) as exc:
         # The class of `exc` is used, never its text.
         raise SpawnFailed(exc.__class__.__name__) from None
+    except (AttributeError, TypeError) as exc:
+        # MEASURED (round 7): a JSON ARRAY, STRING or NUMBER on the child's
+        # stdout raises AttributeError INSIDE THE KIT - its `usage_line` calls
+        # `.get` on whatever `json.loads` returned - after the run was counted
+        # and before the usage line is written. A kit defect, reported for v4
+        # and not patched here; this side catches it as a spawn failure.
+        raw = finished[-1].stdout if finished else ""
+        log.warning(
+            "fleet kit raised %s on a non-object session print: %s",
+            exc.__class__.__name__, (raw or "").strip()[:MAX_LOGGED_SESSION_ERROR],
+        )
+        raise SpawnFailed("the session printed JSON that is not an object") from None
     finally:
         _write_idle()
     if not finished:
