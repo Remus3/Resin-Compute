@@ -160,7 +160,11 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
         1,
         "suite_argv() builds [sys.executable, -m, pytest, ...] in that file.",
     ),
-    "tools/moon_sync_responder.py": (1, "shutil.which of the session command, not a Python."),
+    "tools/moon_sync_responder.py": (
+        1,
+        "the run= wrapper handed to the fleet kit: argv[0] is the claude "
+        "executable the kit resolved through shutil.which, not a Python.",
+    ),
     "tools/precommit_gate.py": (
         2,
         "The ruff candidate ladder, and DELIBERATE. This gate runs on channels "

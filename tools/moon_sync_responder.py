@@ -91,6 +91,7 @@ import json
 import math
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -105,6 +106,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from core import headless_env  # noqa: E402
 from core.atomic_io import atomic_write_json, atomic_write_text, read_json  # noqa: E402
+from ops.fleet_kit import fleet_headless as kit  # noqa: E402
 
 # THE ONE CWD the headless child runs in, and the one `workspace_trust` checks.
 # Both sites read THIS name so they cannot drift: a trust check that certifies
@@ -112,8 +114,9 @@ from core.atomic_io import atomic_write_json, atomic_write_text, read_json  # no
 # the trust gate exists to prevent (see `workspace_trust`).
 # THE REPO IS KEPT AS THE CWD ON PURPOSE (adjudicated 2026-10-03). The child's
 # allowed tools - Read, Grep, git log, pytest - resolve against it, and an
-# untrusted or foreign workspace silently drops their permissions. ACCEPTED
-# COST: the child therefore loads this repo's CLAUDE.md and its project hooks.
+# untrusted or foreign workspace silently drops their permissions. Since the
+# FLEET-KIT v3 route the child runs `--bare`, so it no longer loads this repo's
+# CLAUDE.md or its hooks; it reads `RESPONDER_BRIEF` instead.
 # `tests/test_responder_spawn_cwd.py` proves both sites receive this value.
 SPAWN_CWD: Path = REPO_ROOT
 
@@ -648,8 +651,9 @@ class SpawnFailed(RuntimeError):
 class HeadlessRefused(SpawnFailed):
     """The headless route refused BEFORE anything was spawned.
 
-    Its text is one of `core.headless_env`'s fixed `REFUSE_*` reasons and never
-    carries the configured URL, so it is safe to record.
+    Its text is the fleet kit's `Refused` reason - a fixed phrase plus at most
+    an exception CLASS name - and never carries the configured URL, so it is
+    safe to record. `tests/test_headless_env.py` pins that it does not.
     """
 
 
@@ -1180,6 +1184,15 @@ def pending(
             continue
         code = sender_of(child.name)
         if code is None or code == SELF_CODE or code not in opted_in:
+            continue
+        # THE FLEET KIT'S NOTE RULE, by NAME ONLY (head=""). RULED, slice B:
+        # the kit's head test damps any body containing TERMINAL (known kit gap
+        # 3), which would eat a MAIN order that merely DISCUSSES the rule. The
+        # body stays with this tree's narrower `is_terminal_note` below. A note
+        # it skips is not recorded anywhere: this filter re-skips it every
+        # cycle, and writing it to the answered record would claim a reply
+        # that was never sent.
+        if kit.should_skip(child.name, SELF_CODE, "") is not None:
             continue
         if child.name in answered:
             continue
@@ -3591,29 +3604,21 @@ def _reply_name(note: Path) -> str:
 # inert on POSIX rather than omitted, and nothing here needs a platform branch.
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-#: The headless session command. `{}` is not interpolated - the prompt is passed
-#: on stdin, never on the command line, because a note is untrusted text and a
-#: command line is a place where untrusted text becomes arguments.
+#: THE PERMISSION FLOOR, appended to the fleet kit's argv through `extra=`.
+#: The kit's `build_argv` carries no `--permission-mode` (known kit gap 2), and
+#: measured live 2026-10-03 user-scope settings carry defaultMode
+#: bypassPermissions, so `--allowed-tools` alone is NOT a floor. `dontAsk`
+#: refuses anything not pre-allowed instead of prompting or bypassing;
+#: `--strict-mcp-config` with no `--mcp-config` loads no MCP server (the kit
+#: adds it only off `--bare`, so it is pinned here for both shapes); `--tools`
+#: limits the built-in set the child can see to these four.
 #:
-#: THE SESSION IS GRANTED NO WRITE TOOLS, AND THAT IS THE POINT. Under
-#: disposition (i) the responder's whole job is A1 measurement and A2 running its
-#: own suite, then reporting. The draft comes back on STDOUT and this module does
-#: every write. So the spawned session needs read and measurement authority and
-#: nothing else, and giving it less is not a restriction on the trial - it is the
-#: trial's actual shape. `--dangerously-skip-permissions` is deliberately absent.
-SPAWN_COMMAND: tuple[str, ...] = (
-    "claude",
-    "-p",
+#: THE SESSION IS GRANTED NO WRITE TOOLS, AND THAT IS THE POINT. The draft comes
+#: back on STDOUT and this module does every write. `--dangerously-skip-
+#: permissions` is deliberately absent.
+SPAWN_FLOOR: tuple[str, ...] = (
     "--allowed-tools",
     "Read,Grep,Glob,Bash(python -m pytest:*),Bash(git log:*),Bash(git status:*)",
-    # THE PERMISSION FLOOR, pinned on the argv rather than inherited. Measured
-    # live 2026-10-03: user-scope settings carry defaultMode bypassPermissions
-    # and dangerouslySkipPermissions true, and the child could SEE write-capable
-    # tools and MCP servers - it refrained by its own choice, and the harness
-    # was never shown to deny Bash. `dontAsk` refuses anything not pre-allowed
-    # instead of prompting or bypassing; `--strict-mcp-config` with no
-    # `--mcp-config` loads no MCP server; `--tools` limits the built-in set the
-    # child can see to these four. All four flags are in `claude --help`.
     "--permission-mode",
     "dontAsk",
     "--strict-mcp-config",
@@ -3621,11 +3626,37 @@ SPAWN_COMMAND: tuple[str, ...] = (
     "Read,Grep,Glob,Bash",
 )
 
-#: THE HEADLESS ROUTE. Operator directive 2026-10-02: every unattended `claude`
-#: spawn goes through `core.headless_env`, which reads the proxy URL live and
-#: fails closed. A module attribute so an arm can substitute it; production
-#: never does.
-_headless_gate = headless_env.prepare_headless_env
+#: `--bare` (RULED, slice B of FLEET-KIT v3): no floor of this responder lives
+#: in a hook - the floors are the argv above and the gates in this module, all
+#: of which `--bare` leaves in force - so the child skips hooks, plugins and
+#: CLAUDE.md discovery, and reads this short brief instead.
+SPAWN_BARE = True
+RESPONDER_BRIEF: Path = REPO_ROOT / "tools" / "responder_brief.md"
+
+#: Where the kit keeps its budget, usage log and lane status
+#: (`ops/loop/control/`, gitignored). The repo root in production; an arm
+#: redirects it under tmp. Deliberately NOT a `DEFAULT_` name: those are the
+#: runtime records the root conftest fences, and this is the kit's root.
+KIT_ROOT: Path = REPO_ROOT
+
+#: The scheduled task fires every five minutes (`ops/ResinCompute-Responder.xml`,
+#: Interval PT5M), so the idle status names the next tick that far ahead.
+RESPONDER_TICK_SECONDS = 300.0
+
+#: THE KIT'S OWN INJECTION POINTS, as module attributes so an arm can substitute
+#: them. Production never does. An arm injects a URL through the kit's
+#: `base_url(registry=..., environ=...)` and a socket through `connect`; the
+#: kit's `check_url` and `probe` always run.
+_kit_url_source: Callable[[], str | None] = kit.base_url
+_kit_connect: Callable[..., Any] = socket.create_connection
+
+
+def _claude_exe() -> str:
+    """The kit's resolution of `claude`, through `shutil.which` read at call time."""
+    import shutil
+
+    return str(kit.claude_exe(which=shutil.which))
+
 
 #: A usage-limit refusal, as the CLI or the proxy words it. Searched ANYWHERE
 #: in stdout and stderr, whatever the exit code and length - ruled 2026-10-02.
@@ -3655,83 +3686,148 @@ def _usage_limited(done: subprocess.CompletedProcess) -> tuple[bool, float | Non
     return True, (float(stamp.group(1)) if stamp else None)
 
 
+def _child_env(env: dict[str, str]) -> dict[str, str]:
+    """The kit's child env, hardened by this tree's wider prefix strip.
+
+    The kit strips the auth keys, the provider switches and the base-URL
+    overrides by name; `core.headless_env` also strips every `ANTHROPIC_`,
+    `CLAUDE_CODE_` and `CLAUDECODE` key, which keeps a parent session's own
+    plumbing (`CLAUDECODE`, an OAuth token) out of the child. The two keys the
+    kit SET survive: the proxy URL, and the `--bare` placeholder key.
+    """
+    keep = [headless_env.ENV_CHILD_BASE_URL]
+    if env.get("ANTHROPIC_API_KEY") == kit.PLACEHOLDER_KEY:
+        keep.append("ANTHROPIC_API_KEY")
+    return headless_env.harden_child_env(env, keep=tuple(keep))
+
+
+def _stdin_run(sink: list[subprocess.CompletedProcess]) -> Callable[..., Any]:
+    """The `run=` the kit is handed: THE PROMPT GOES ON STDIN, never on argv.
+
+    RULED (slice B): the kit's `build_argv` puts the prompt at `argv[2]`, after
+    `-p`. A note is untrusted text and a command line is where untrusted text
+    becomes arguments, and Windows caps a command line at 32767 characters
+    (known kit gap 5). So the prompt is lifted out of argv and written to the
+    child's stdin, which closes both. A kit whose argv no longer leads with
+    `-p` and the prompt is refused rather than guessed at.
+    """
+
+    def run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
+        if len(argv) < 3 or argv[1] != "-p":
+            raise SpawnFailed("the fleet kit argv no longer leads with -p and the prompt")
+        done = subprocess.run(
+            [argv[0], "-p", *argv[3:]],
+            input=argv[2],
+            capture_output=True,
+            text=True,
+            timeout=kwargs.get("timeout"),
+            cwd=str(SPAWN_CWD),
+            check=False,
+            creationflags=_NO_WINDOW,
+            env=_child_env(dict(kwargs.get("env") or {})),
+        )
+        sink.append(done)
+        return done
+
+    return run
+
+
+def _write_idle() -> None:
+    """Between runs the lane widget reads Idle, with the next tick named."""
+    try:
+        kit.write_status(
+            KIT_ROOT, SELF_CODE, "idle", "Idle", None,
+            kit.RunBudget(KIT_ROOT / kit.BUDGET_REL),
+            next_tick=time.time() + RESPONDER_TICK_SECONDS,
+        )
+    except OSError as exc:
+        _log_fail_closed(None, f"kit-status-{exc.__class__.__name__}")
+
+
 def _spawn_headless(prompt: str, bounds: Bounds) -> str:
-    """Run one headless session and return whatever it printed.
+    """Run one headless session through the FLEET KIT and return its draft.
 
     ARMING IS A SEPARATE ACT FROM BUILDING and this function existing does not
     arm anything: `run_once` reaches it only when `bounds.armed` is True, which
     `Bounds()` never is by default.
 
-    Three properties, each chosen against a specific failure:
+    ONE PATH, THE KIT'S. `fleet_headless.spawn` reads the proxy URL live, fails
+    closed, enforces its own runs-per-window budget, picks the model and the
+    lean flags, and writes the usage line and the lane status. Around it this
+    function keeps what the kit does not do:
 
-    - THE PROMPT GOES ON STDIN, never on the command line. It contains a note
-      written by another agent, and a command line is where untrusted text turns
-      into arguments.
-    - THE TIMEOUT IS ENFORCED HERE, from the agreed bounds. A session that hangs
-      must end the cycle, not the trial; a scheduled task with no ceiling is a
-      process nobody notices is still running.
-    - A FAILURE RETURNS EMPTY RATHER THAN RAISING PAST THE GATE. An empty draft
-      is refused by `validate_draft` and recorded as `exhausted`, so the failure
-      path leads into the gate rather than around it.
-    - NO CONSOLE WINDOW IS ALLOCATED. See `_NO_WINDOW` above for the rule, the
-      measured control and the limit of what that control confirms.
+    - THE PROMPT GOES ON STDIN (`_stdin_run`), never on the command line.
+    - THE PERMISSION FLOOR goes on through `extra=` (`SPAWN_FLOOR`).
+    - THE RESPONDER'S OWN RUN BUDGET is reserved too, under its OS lock. KEPT
+      DELIBERATELY: the kit's `RunBudget` reads a corrupt record as empty and
+      overwrites it, and takes no lock, so concurrent processes can exceed its
+      cap. `tests/test_responder_uniform_budget.py` pins fail-closed-on-corrupt,
+      never-overwrite and a cap that real contending processes cannot pass.
+    - THE TIMEOUT comes from the agreed bounds.
+    - NO CONSOLE WINDOW (`_NO_WINDOW`), and a usage-limit backoff.
+
+    A FAILURE RAISES, never returns empty: an empty draft would be recorded as
+    `exhausted`, the label meaning the bound worked, which would publish a
+    confirmation produced by a broken spawn.
     """
-    import shutil
-
-    # RESOLVE THE EXECUTABLE. On Windows the entry point is a `.CMD` shim and
-    # `subprocess` will not launch a bare `claude`. Measured here: the first
-    # live spawn raised FileNotFoundError, which is section 2's whole story.
-    # A USAGE LIMIT BACKS OFF. Inside a recorded backoff nothing is spawned and
-    # no other route is tried; the cycle ends and the next fire looks again.
     if backoff_active(DEFAULT_BACKOFF, time.time()):
         raise UsageBackoff(USAGE_BACKOFF_REASON)
 
-    # THE ROUTE, and fail closed. Nothing below runs unless the headless proxy
-    # is configured and accepting connections; there is no direct route.
-    route = _headless_gate()
-    if not route.ok or route.env is None:
-        raise HeadlessRefused(route.reason)
+    # THE ROUTE, checked BEFORE any budget is spent, with the kit's own
+    # functions; the kit checks again inside `spawn`.
+    try:
+        host, port = kit.check_url(_kit_url_source())
+        kit.probe(host, port, connect=_kit_connect)
+    except kit.Refused as exc:
+        raise HeadlessRefused(str(exc)) from None
+    try:
+        exe = _claude_exe()
+    except kit.Refused:
+        raise SpawnFailed("the session command was not found on PATH") from None
 
-    exe = shutil.which(SPAWN_COMMAND[0])
-    if exe is None:
-        raise SpawnFailed("the session command was not found on PATH")
-
-    # THE RUNS-PER-DAY BUDGET, reserved LAST, immediately before the session
-    # starts, so a refused route or a missing executable spends no run.
+    # THE RESPONDER'S RUNS-PER-DAY BUDGET, reserved LAST before the session,
+    # so a refused route or a missing executable spends no run.
     reserved, why_not = reserve_run(DEFAULT_RUNS, time.time())
     if not reserved:
         raise (RunLockBusy if why_not == RUN_LOCK_REASON else RunBudgetSpent)(why_not)
 
+    finished: list[subprocess.CompletedProcess] = []
     try:
-        done = subprocess.run(
-            [exe, *SPAWN_COMMAND[1:]],
-            input=prompt,
-            capture_output=True,
-            text=True,
+        line = kit.spawn(
+            KIT_ROOT,
+            SELF_CODE,
+            prompt,
+            note="",
+            writes_code=False,
+            bare=SPAWN_BARE,
+            rules_file=RESPONDER_BRIEF,
             timeout=bounds.spawn_timeout_seconds,
-            cwd=str(SPAWN_CWD),
-            check=False,
-            creationflags=_NO_WINDOW,
-            env=route.env,
+            extra=SPAWN_FLOOR,
+            run=_stdin_run(finished),
+            url_source=_kit_url_source,
+            connect=_kit_connect,
+            exe_source=lambda: exe,
         )
+    except kit.Refused as exc:
+        why = str(exc)
+        raise (RunBudgetSpent if "budget" in why else HeadlessRefused)(why) from None
+    except SpawnFailed:
+        raise
     except (OSError, subprocess.SubprocessError) as exc:
-        # RAISED, NEVER RETURNED AS EMPTY, and that distinction is the point.
-        # The first version of this returned "" on failure. An empty draft is
-        # refused by the gate and recorded as `exhausted` - which under
-        # disposition (i) is the label meaning "the bound worked, as both
-        # parties predicted". So a spawn that never ran would have been recorded
-        # as the reassuring result, every cycle, and the trial would have
-        # published a confirmation of its own bound produced by a broken
-        # subprocess call. That is the exact failure this channel keeps naming:
-        # a negative that is a statement about the instrument rather than the
-        # world. The class of `exc` is used, never its text.
+        # The class of `exc` is used, never its text.
         raise SpawnFailed(exc.__class__.__name__) from None
+    finally:
+        _write_idle()
+    if not finished:
+        raise SpawnFailed("the fleet kit returned without running the session")
+    done = finished[-1]
     limited, reset_at = _usage_limited(done)
     if limited:
         raise UsageLimited(reset_at)
-    if done.returncode != 0 and not done.stdout:
-        raise SpawnFailed(f"the session exited {done.returncode} with no output")
-    return done.stdout or ""
+    draft = line.get("result")
+    if not isinstance(draft, str) or not draft:
+        raise SpawnFailed(f"the session exited {done.returncode} with no result")
+    return draft
 
 
 def _spawn_unwired(prompt: str, bounds: Bounds) -> str:

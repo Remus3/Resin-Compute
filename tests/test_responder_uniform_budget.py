@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from core import headless_env as he
+from tests.test_headless_env import kit_route
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "tools" / "moon_sync_responder.py"
@@ -65,15 +65,18 @@ def test_the_hop_budget_default_is_the_named_constant(rsp):
 
 def test_the_retracted_0845_knobs_are_absent(rsp):
     """MAIN 0855 retracted turns-per-run and spawns-per-tick: nothing added."""
-    assert "--max-turns" not in rsp.SPAWN_COMMAND, rsp.SPAWN_COMMAND
+    assert "--max-turns" not in rsp.SPAWN_FLOOR, rsp.SPAWN_FLOOR
     assert not hasattr(rsp, "MAX_TURNS_PER_RUN")
     assert not hasattr(rsp, "SPAWNS_PER_TICK")
 
 
 def test_the_spawn_argv_pins_the_permission_floor(rsp):
     """Measured live: user-scope settings run bypassPermissions, and the child
-    saw write-capable tools and MCP servers. The argv must pin the floor."""
-    argv = list(rsp.SPAWN_COMMAND)
+    saw write-capable tools and MCP servers. The argv must pin the floor. The
+    fleet kit's argv carries no --permission-mode (kit gap 2), so the floor is
+    the `extra=` tuple; `tests/test_headless_env.py` grades the argv the
+    kit actually built from it."""
+    argv = list(rsp.SPAWN_FLOOR)
 
     def value_of(flag: str) -> str:
         assert argv.count(flag) == 1, (flag, argv)
@@ -237,6 +240,7 @@ def fake_repo(tmp_path) -> Path:
     (fake / "ops").mkdir()
     for name in ("__init__.py", "health.py"):
         shutil.copyfile(ROOT / "ops" / name, fake / "ops" / name)
+    shutil.copytree(ROOT / "ops" / "fleet_kit", fake / "ops" / "fleet_kit", ignore=ignore)
     (fake / "tools").mkdir()
     shutil.copyfile(MODULE, fake / "tools" / MODULE.name)
     return fake
@@ -361,15 +365,14 @@ class _Run:
 
     def __call__(self, *args, **kwargs):
         self.calls += 1
-        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="draft", stderr="")
+        return subprocess.CompletedProcess(
+            args=args[0], returncode=0, stdout=json.dumps({"result": "draft"}), stderr=""
+        )
 
 
 @pytest.fixture()
-def routed(rsp, monkeypatch):
-    import shutil
-
-    monkeypatch.setattr(shutil, "which", lambda _n: str(ROOT / "fake-claude-shim.cmd"))
-    monkeypatch.setattr(rsp, "_headless_gate", lambda: he.Decision(True, {"PATH": "x"}, ""))
+def routed(rsp, monkeypatch, tmp_path):
+    kit_route(rsp, monkeypatch, tmp_path)
     run = _Run()
     monkeypatch.setattr(subprocess, "run", run)
     return run
@@ -469,7 +472,10 @@ def test_a_body_declaring_terminal_is_never_queued(rsp, tmp_path, body):
             "answered: n/a - a reply IS requested\n",
         ),
         ("2026-10-03-0830-from-MAIN-reply-with-the-sha256.md", "Reply with the sha256.\n"),
-        ("2026-10-03-0900-from-RC-terminals-and-replies.md", "the terminal line of a fire\n"),
+        # The BODY discusses a terminal line and must survive. The NAME avoids
+        # the substring: the fleet kit's name rule damps `terminals` too, a
+        # recorded over-damp pinned in `tests/test_headless_env.py`.
+        ("2026-10-03-0900-from-RC-fire-lines-and-replies.md", "the terminal line of a fire\n"),
     ],
 )
 def test_legitimate_neighbours_survive_the_terminal_rule(rsp, tmp_path, name, body):
