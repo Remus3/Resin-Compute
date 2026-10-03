@@ -109,11 +109,34 @@ version. What follows is everything the scaffold deliberately did not do.
 
 - **NEW 2026-10-03 (evening). KNOWN GAPS RECORDED, NOT FIXED.** An explicit
   `--cleanup=whitespace` or `verbatim` on an editor commit hides `#` lines
-  from the commit-msg gate (`scripts/precommit_msg_check.py`); an abandoned
-  runner job can leave an orphan `.tmp` beside an untorn target
-  (`headless/runner.py`); a forged scheduledtask log label during a real
+  from the commit-msg gate (`scripts/precommit_msg_check.py`); a forged
+  scheduledtask log label during a real
   fire is still excused by the drift check (`conftest.py`); the child
   reported only Read, not Grep/Glob, cause unconfirmed.
+
+- **DONE 2026-10-03 (evening). AN ABANDONED RUNNER JOB'S ORPHAN `.tmp` IS
+  SWEPT.** Cause, measured in a child interpreter: `_die_holding_slot` ends the
+  process with `os._exit`, which skips `core/atomic_io.atomic_write_text`'s
+  `finally`, so a job caught between temp write and rename leaves
+  `.<target>.<pid>.<8hex>.tmp` beside an untorn target (a `taskkill /F` does the
+  same). Every exception path was already clean; `core/atomic_io.py` is
+  unchanged. Fix in `headless/runner.py`: `sweep_orphan_temps` runs on each LIVE
+  pass after the HALT and abandoned-job gates and before the hold, over the
+  runtime and data dirs, one level deep, and unlinks only a regular file whose
+  name parses as an `atomic_io` temp, whose pid is not ours and not alive
+  (`slots.pid_alive`), and whose age is at least `ORPHAN_TEMP_MIN_AGE_SECONDS`.
+  Dry runs and halted passes delete nothing. After an adversary REFUTED the
+  first cut: a pid outside 1..2**32-1 never parses (`slots.pid_alive` raises
+  ctypes.ArgumentError past 32 bits), one bad entry is logged and skipped,
+  the pass-level call can never fail a pass or end the daemon, and a runtime
+  or data dir resolving outside the repo root is skipped (halt clause (a)).
+  Arms in
+  `tests/test_headless_runner_orphan_temps.py`, neighbours-survive arm included.
+  NOT SWEPT, fixed-name temps of other writers, bounded at one per target:
+  `ops/health.py` fallback `health.json.tmp`, `ingest/enka_client.py`
+  `<uid>.json.tmp` (no `finally` there). REVERSE IF: `atomic_io` gains a
+  cross-process in-flight registry, or a writer starts holding a temp open
+  for longer than the age floor.
 
 - **DONE 2026-10-03 (evening), SUPERSEDED BY THE KIT. MAIN 0912: CUT THE
   RESPONDER'S PER-SPAWN OVERHEAD.** The spawn now runs through

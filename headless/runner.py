@@ -39,6 +39,7 @@ import argparse
 import contextlib
 import logging
 import os
+import re
 import signal
 import sys
 import threading
@@ -48,6 +49,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from stat import S_ISREG as stat_is_regular
 from typing import Any
 
 from headless import jobs as jobs_mod
@@ -137,6 +139,21 @@ JOB_DEADLINE_SECONDS = 900
 #: After a job overruns and its `cancel` event is set, how long the pass waits
 #: for it to return before abandoning it.
 JOB_CANCEL_GRACE_SECONDS = 5
+
+#: A temp left by `core/atomic_io` is swept only once it is at least this old.
+#: The pid check below is what protects a concurrent writer; this floor guards
+#: the window in which a dead writer's pid is reused by an unrelated process.
+#: It outlasts any one job of this runner by a wide margin, and a
+#: test pins that relation.
+ORPHAN_TEMP_MIN_AGE_SECONDS = 3600
+
+#: The exact name `core/atomic_io._temp_path` gives a temp:
+#: `.<target name>.<pid>.<uuid4().hex[:8]>.tmp`. Coupled by test to the
+#: module's own output, never copied from its source, so a rename there turns
+#: the sweep's arm red instead of silently sweeping nothing.
+#: The largest pid a writer can carry - a Windows pid is a 32-bit DWORD.
+_MAX_PID = 0xFFFFFFFF
+_ORPHAN_TEMP_RE = re.compile(r"\A\.(?P<target>.+)\.(?P<pid>[0-9]+)\.[0-9a-f]{8}\.tmp\Z")
 
 
 # ---------------------------------------------------------------------------
@@ -639,6 +656,167 @@ def _halt_requested(runtime_dir: str | None, cycle: int) -> bool:
     return present
 
 
+def parse_orphan_temp_name(name: str) -> tuple[str, int] | None:
+    """`(target name, writer pid)` for a `core/atomic_io` temp name, else None.
+
+    Only the exact shape that module produces parses. A fixed-name temp of
+    another writer - `health.json.tmp` from the `ops/health.py` fallback, or
+    `<uid>.json.tmp` from the Enka cache - never does, so it is never swept.
+    """
+    match = _ORPHAN_TEMP_RE.match(name)
+    if match is None:
+        return None
+    pid = int(match.group("pid"))
+    # A pid this module could have written is a positive 32-bit value
+    # (`os.getpid()`; a Windows pid is a DWORD). Anything else is not ours,
+    # and `slots.pid_alive` raises ctypes.ArgumentError for it on Windows.
+    if not 0 < pid <= _MAX_PID:
+        return None
+    return match.group("target"), pid
+
+
+def _sweep_one(entry: Path, clock: float, floor: float, own_pid: int) -> bool:
+    """Remove `entry` if it is a provable orphan. True only when it was removed.
+
+    May raise; `sweep_orphan_temps` catches per entry, so one bad entry never
+    stops the rest of the sweep.
+    """
+    parsed = parse_orphan_temp_name(entry.name)
+    if parsed is None:
+        return False
+    _target, pid = parsed
+    try:
+        info = entry.lstat()
+    except OSError:
+        return False
+    if not stat_is_regular(info.st_mode):
+        return False
+    if clock - info.st_mtime < floor:
+        return False
+    if pid == own_pid or slots_mod.pid_alive(pid):
+        return False
+    try:
+        entry.unlink()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        log.warning("could not remove orphaned temp file %s", entry.name)
+        log.debug("orphan temp unlink failed", exc_info=True)
+        return False
+    return True
+
+
+def sweep_orphan_temps(
+    directories: Sequence[str | os.PathLike[str]],
+    now: float | None = None,
+    min_age: float | None = None,
+) -> list[Path]:
+    """Remove `core/atomic_io` temps whose writer is provably gone. Never raises.
+
+    WHY. A job abandoned by `_die_holding_slot` dies under `os._exit`, and so
+    does a runner killed outright; neither runs `atomic_write_text`'s
+    `finally`, so a job caught between the temp write and the rename leaves the
+    temp behind. The target is untorn - only the rename publishes - but the
+    temps accumulate, one per abandonment, and nothing else removes them.
+
+    A temp is removed ONLY when every one of these holds, so a write in flight
+    in any process is never touched:
+
+      1. its name parses as an `atomic_io` temp (`parse_orphan_temp_name`);
+      2. it is a regular file - `lstat`, so a link is not followed;
+      3. its pid is not this process and is not alive. `slots.pid_alive` is
+         the reaper's own predicate and treats an unqueryable pid as alive;
+      4. it is at least `min_age` seconds old (default
+         `ORPHAN_TEMP_MIN_AGE_SECONDS`), so a pid reused between the probe and
+         the unlink cannot belong to a fresh writer either.
+
+    Each directory is scanned one level deep only. A missing directory, an
+    unreadable entry, an unlink the OS refuses (a file still open on Windows),
+    or any other error on one entry is skipped and logged, and the sweep moves
+    on to the next entry.
+
+    This function sweeps whatever it is given. The repo-root restriction of
+    CLAUDE.md halt clause (a) is applied by its pass-level caller,
+    `_runner_write_dirs`, so a test can still aim it at a tmp directory.
+    A plain unlink, not the Recycle Bin: a half-written temp is replaceable by
+    definition - its target holds the last good document.
+    """
+    # Wall clock, because `st_mtime` is wall clock. Read through `datetime`,
+    # as `_utc_now_iso` does, never through this module's `time` binding: that
+    # binding is reserved for the monotonic pass deadline and a test forbids
+    # `time.time` on it.
+    clock = datetime.now(UTC).timestamp() if now is None else float(now)
+    floor = float(ORPHAN_TEMP_MIN_AGE_SECONDS if min_age is None else min_age)
+    own_pid = os.getpid()
+    removed: list[Path] = []
+    for directory in directories:
+        base = Path(directory)
+        try:
+            entries = sorted(base.iterdir())
+        except FileNotFoundError:
+            continue
+        except OSError:
+            log.debug("orphan temp sweep could not list %s", base, exc_info=True)
+            continue
+        for entry in entries:
+            try:
+                if _sweep_one(entry, clock, floor, own_pid):
+                    removed.append(entry)
+            except Exception:  # noqa: BLE001 - one bad entry never stops the sweep
+                log.warning("orphan temp sweep skipped %s after an error", entry.name)
+                log.debug("orphan temp sweep entry failed", exc_info=True)
+    if removed:
+        log.info(
+            "removed %d orphaned temp file(s) left by a dead writer: %s",
+            len(removed),
+            ", ".join(path.name for path in removed),
+        )
+    return removed
+
+
+def _runner_write_dirs(runtime_dir: str | None) -> list[Path]:
+    """The directories a runner-path atomic write lands in.
+
+    The runtime directory (health file, abandonment record) and the data
+    directory (`persist_state`'s snapshot). A config that cannot be loaded
+    drops the data directory from the sweep rather than failing the pass.
+    """
+    dirs = [health_mod.runtime_dir(Path(runtime_dir) if runtime_dir else None)]
+    try:
+        from core.config import load_config
+
+        dirs.append(Path(load_config().data_dir))
+    except Exception:  # noqa: BLE001 - a sweep must never fail the pass
+        log.debug("orphan temp sweep could not resolve the data dir", exc_info=True)
+    inside = []
+    for directory in dirs:
+        if _inside_repo_root(directory):
+            inside.append(directory)
+        else:
+            # CLAUDE.md halt clause (a): no delete outside the repo root.
+            # RESINCOMPUTE_RUNTIME_DIR and RC_DATA_DIR can point anywhere, so
+            # such a root is left alone - logged, never swept.
+            log.info(
+                "orphan temp sweep skipped a directory outside the repo root (%s)",
+                directory.name,
+            )
+    return inside
+
+
+def _inside_repo_root(path: Path) -> bool:
+    """True when `path` resolves inside this repo's root. Never raises.
+
+    Resolved, so `..` segments and links cannot carry a sweep out of the tree.
+    A path that cannot be resolved counts as OUTSIDE.
+    """
+    try:
+        root = Path(health_mod.REPO_ROOT).resolve()
+        return Path(path).resolve().is_relative_to(root)
+    except Exception:  # noqa: BLE001 - unknown means outside
+        log.debug("could not resolve %s against the repo root", path, exc_info=True)
+        return False
+
+
 def _die_holding_slot(outcome: PassResult, runtime_dir: str | None, cycle: int) -> None:
     """End the PROCESS, slot still held, because a job of this pass is abandoned.
 
@@ -654,8 +832,9 @@ def _die_holding_slot(outcome: PassResult, runtime_dir: str | None, cycle: int) 
     RESIDUAL, accepted: the abandoned thread dies wherever it is, so a temp
     file it was writing through `core/atomic_io.py` can be left behind. The
     target itself is never torn - a temp only becomes the target by an atomic
-    `replace` - and nothing in this tree sweeps orphaned temps; their names
-    carry pid and a random suffix, so they never collide with a later write.
+    `replace` - and their names carry pid and a random suffix, so they never
+    collide with a later write. The next LIVE pass removes them through
+    `sweep_orphan_temps` once their pid is dead and they are old enough.
     """
     names = abandoned_jobs()
     log.critical(
@@ -759,6 +938,17 @@ def _run_governed_pass(
             ", ".join(still_running),
         )
         return None
+
+    # After the halt and abandoned-job gates, so a halted or blocked cycle
+    # deletes nothing, and BEFORE the hold, because cleanup is not executor
+    # work and must not occupy a shared lane.
+    # Cleanup never fails a pass, and so never ends a daemon: anything it
+    # raises is logged and the pass goes on.
+    try:
+        sweep_orphan_temps(_runner_write_dirs(runtime_dir))
+    except Exception:  # noqa: BLE001 - the sweep is best effort
+        log.warning("cycle %d: the orphan temp sweep failed; the pass goes on", cycle)
+        log.debug("orphan temp sweep failed", exc_info=True)
 
     try:
         with slots_mod.hold(
