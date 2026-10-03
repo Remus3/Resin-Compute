@@ -1369,3 +1369,58 @@ def test_the_data_sweep_still_grades_an_ordinary_sibling_directory():
             f"offenders: {offenders}"
         )
         assert "malformed data row" in named[0], named[0]
+
+
+# ---------------------------------------------------------------------------
+# A BUNDLE IS A DIRECTORY, and hashing the directory itself raises.
+#
+# A fleet-kit bundle reaches `moon_sync_inbox/` as a DIRECTORY of files, and
+# its provenance is PER FILE at the same relative path. Handing the directory
+# itself to `open(..., "rb")` raises `PermissionError` on Windows and
+# `IsADirectoryError` on POSIX - measured in `tools/moon_sync_responder.py`.
+# This module does not read the inbox, but `verify_source` is the one in-tree
+# caller of `sha256_file`, so a locator that names a bundle directory must
+# degrade to `ABSENT` rather than surface a raw error, and per-file locators
+# inside the bundle must still `MATCH`. The first arm is the non-vacuity arm:
+# it proves the fixture's directory really is the hazard on this host.
+# ---------------------------------------------------------------------------
+
+_BUNDLE = "2026-10-03-1016-from-XX-FLEET-KIT-v3"
+_BUNDLE_FILES = {
+    "MANIFEST.json": b'{"version": 3}\n',
+    "fleet_headless.py": b"print('kit')\n",
+    "sub/README.md": b"# kit\n",
+}
+
+
+def _bundle_root(tmp_path: Path) -> Path:
+    root = tmp_path / "inbox"
+    for rel, data in _BUNDLE_FILES.items():
+        target = root / _BUNDLE / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    return root
+
+
+def test_hashing_a_bundle_directory_itself_raises(tmp_path):
+    """NON-VACUITY: the arms below face a directory that really does raise."""
+    bundle = _bundle_root(tmp_path) / _BUNDLE
+    assert bundle.is_dir()
+    with pytest.raises(OSError):
+        sha256_file(bundle)
+
+
+def test_a_locator_naming_a_bundle_directory_degrades_to_absent(tmp_path):
+    source = _source(SourceKind.FILE, _BUNDLE, sha256="0" * 64)
+    check = verify_source(source, _bundle_root(tmp_path))
+    assert check.verdict is DigestVerdict.ABSENT, check
+    assert "PermissionError" not in check.detail
+
+
+def test_per_file_locators_inside_a_bundle_match(tmp_path):
+    root = _bundle_root(tmp_path)
+    for rel, data in _BUNDLE_FILES.items():
+        source = _source(
+            SourceKind.FILE, f"{_BUNDLE}/{rel}", sha256=hashlib.sha256(data).hexdigest()
+        )
+        assert verify_source(source, root).verdict is DigestVerdict.MATCH, rel
