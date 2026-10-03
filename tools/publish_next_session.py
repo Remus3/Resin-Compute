@@ -335,7 +335,17 @@ class VendorToken(NamedTuple):
 #: `git show HEAD:tests/test_no_secret_literals.py` - hex for Riot, alphanumeric
 #: plus hyphen for Slack, alphanumeric plus underscore and hyphen for the rest -
 #: and are not re-derived from memory or from a web search.
+#:
+#: THE TWO ANTHROPIC FAMILIES HAVE ROWS OF THEIR OWN, added 2026-10-03. Before
+#: that an admin key was refused only because it also begins `sk-ant-` and
+#: `sk-`: with those two generic rows removed, it matched no row at all. The
+#: family rows sit ahead of `sk-ant-` so the sweep's alternation names the
+#: family. ASSUMPTION, accepted by the merger: `sk-ant-admin01-` is the Admin
+#: API key family as stated in the dispatch, not verified against Anthropic's
+#: docs; `sk-ant-api03-` is the spelling this tree's own fixtures already plant.
 VENDOR_TOKENS = (
+    VendorToken("sk-ant-admin01-", r"[A-Za-z0-9_\-]"),
+    VendorToken("sk-ant-api03-", r"[A-Za-z0-9_\-]"),
     VendorToken("sk-ant-", r"[A-Za-z0-9_\-]"),
     VendorToken("sk-", r"[A-Za-z0-9_\-]"),
     VendorToken("ghp_", r"[A-Za-z0-9_\-]"),
