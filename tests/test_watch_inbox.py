@@ -3933,3 +3933,99 @@ def test_withdrawn_does_not_derive_a_mass_retraction_from_an_unreadable_inbox(
         "A withdrawal is the one inbox event with no artifact left on disk, so a "
         "fabricated one can never be checked against anything"
     )
+
+
+# ---------------------------------------------------------------------------
+# A FLEET-KIT BUNDLE IS A DIRECTORY, and hashing the directory itself raises.
+#
+# A bundle reaches the inbox as a directory of files, and its provenance is PER
+# FILE at the same relative path. `open(<dir>, "rb")` raises `PermissionError`
+# on Windows and `IsADirectoryError` on POSIX - measured in
+# `tools/moon_sync_responder.py`, fixed there by another slice. This watcher
+# already keys a directory as a `drop` and digests every file at its relative
+# path; these arms PIN that, on a tmp inbox, never the real one.
+#
+# NON-VACUITY, measured on a scratch copy 2026-10-03: a mutant that hashes the
+# drop with `_file_digest(child)` instead of `_drop_manifest(child)` yields
+# `files=0` and digest `unreadable:PermissionError`, which the per-file arm
+# below refuses on both counts. The first arm proves the fixture's directory
+# really is the hazard on the host running the suite.
+# ---------------------------------------------------------------------------
+
+_BUNDLE = "2026-10-03-1016-from-XX-FLEET-KIT-v3"
+_BUNDLE_FILES = {
+    "MANIFEST.json": b'{"version": 3}\n',
+    "fleet_headless.py": b"print('kit')\n",
+    "sub/README.md": b"# kit\n",
+}
+_BUNDLE_NOTE = "2026-10-03-1000-from-XX-note.md"
+
+
+def _bundle_inbox(tmp_path: Path) -> Path:
+    inbox = tmp_path / "bundle_inbox"
+    inbox.mkdir()
+    (inbox / _BUNDLE_NOTE).write_bytes(b"a plain note\n")
+    for rel, data in _BUNDLE_FILES.items():
+        target = inbox / _BUNDLE / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    return inbox
+
+
+def test_a_bundle_directory_hashed_naively_raises(tmp_path):
+    """NON-VACUITY: the fixture's directory entry really is the hazard."""
+    bundle = _bundle_inbox(tmp_path) / _BUNDLE
+    assert bundle.is_dir()
+    with pytest.raises(OSError):
+        bundle.read_bytes()
+
+
+def test_a_bundle_is_keyed_per_file_at_its_relative_paths(watch, tmp_path):
+    import hashlib
+
+    entries = {e.key: e for e in watch._entries(_bundle_inbox(tmp_path))}
+    assert len(entries) == 2, sorted(entries)
+
+    drop = entries[_BUNDLE + "/"]
+    assert drop.kind == "drop"
+    assert drop.files == len(_BUNDLE_FILES)
+    assert drop.anomalies == ()
+    lines = sorted(
+        f"{rel}\0{hashlib.sha256(data).hexdigest()}" for rel, data in _BUNDLE_FILES.items()
+    )
+    assert drop.digest == hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+    # The legitimate neighbour survived: the note beside it is still a note.
+    note = entries[_BUNDLE_NOTE]
+    assert note.kind == "note"
+    assert note.digest == hashlib.sha256(b"a plain note\n").hexdigest()
+
+
+def test_editing_one_file_in_a_bundle_resurfaces_the_bundle(watch, tmp_path):
+    inbox = _bundle_inbox(tmp_path)
+    state = tmp_path / "bundle_seen.json"
+    assert watch.mark_seen(inbox, state) is True
+    assert watch.survey(inbox, state) == (2, [])
+
+    (inbox / _BUNDLE / "sub" / "README.md").write_bytes(b"# kit, edited\n")
+    examined, unseen = watch.survey(inbox, state)
+    assert examined == 2
+    assert [e.key for e in unseen] == [_BUNDLE + "/"]
+
+
+def test_the_report_names_a_bundle_without_a_raw_error(watch, tmp_path, capsys):
+    rc = watch.main(
+        [
+            "--dir",
+            str(_bundle_inbox(tmp_path)),
+            "--state",
+            str(tmp_path / "bundle_seen.json"),
+            "--reported",
+            str(tmp_path / "bundle_reported.json"),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert _BUNDLE in out
+    assert "PermissionError" not in out
+    assert "Traceback" not in out
