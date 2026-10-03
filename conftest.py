@@ -624,6 +624,356 @@ def _report_unattributed_fence_hits(session: pytest.Session) -> None:
     session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
+# ---------------------------------------------------------------------------
+# LIVE RESPONDER RUNTIME GUARD.
+#
+# MEASURED 2026-10-03 in the MAIN checkout: a suite run wrote the LIVE runtime.
+# `ops/runtime/responder_runs.json` gained six rows the scheduled responder never
+# reserved - and every one of them counts against the real daily run cap - the
+# lock file beside it was created, and `responder_invocations.log` gained 103
+# `fail-closed:run-lock-busy` lines. Two routes, both re-measured in a worktree:
+#
+#   IN PROCESS - a fixture that loads the responder without redirecting its
+#   `DEFAULT_*` records and then drives `_spawn_headless`, which reserves a run
+#   against the module-level `DEFAULT_RUNS`.
+#   CHILD PROCESS - an interpreter launched with `sys.executable` loads the
+#   module afresh, so no fixture's redirect reaches it, and with
+#   `RESINCOMPUTE_RUNTIME_DIR` unset it resolves `<repo root>/ops/runtime`.
+#
+# Hence two halves, chosen for what each route allows:
+#
+# 1. THE FENCE (in process; PREVENTS). An audit hook refuses every WRITE event on
+#    a responder record in the live runtime before it happens, exactly as the
+#    slot fence above refuses the machine-wide bucket, and with the same
+#    per-test attribution and the same BaseException so no `except Exception`
+#    in the responder can swallow it. Reads pass. It needs NO timing tolerance:
+#    an audit hook sees only this interpreter, so the live scheduled task -
+#    another process, writing the same files every five minutes - can never
+#    trip it. That is why it is the primary half and not the stat check.
+# 2. THE DRIFT CHECK (any process; DETECTS). A child is beyond any hook of ours,
+#    so each test snapshots the size and mtime of every live responder record
+#    and fails if one changed during it. The live task DOES write these, so a
+#    change is excused only when the test overlapped a SCHEDULED FIRE, read back
+#    from the invocation log itself: a `scheduledtask` `start` line opens a fire
+#    and that source's next line closes it, an unclosed start for at most five
+#    minutes. No other source opens one - a leaking child writes its own `cli`
+#    lines, and those must not excuse it. The blind spots are stated, not
+#    hidden: a child that leaks DURING a scheduled fire is excused, and so is
+#    one that forges the `scheduledtask` label. The armed task's working
+#    directory is the MAIN checkout, so in a worktree the log normally holds no
+#    such line and nothing is excused - but that is a property of how the task
+#    is armed today, not of the check, and the check does not rely on it.
+#
+# SCOPE IS TREE-WIDE, deliberately. The measured row-writer was not in the file
+# first suspected, which is the argument against fencing a named file list.
+#
+# THE LIVE DIRECTORY is resolved once, from `ops.health.runtime_dir()` as this
+# session starts - the env override if the operator exported one, else
+# `<repo root>/ops/runtime` - and the repo default is fenced as well. A test that
+# monkeypatches the variable to `tmp_path` therefore points AWAY from the fence.
+try:
+    from ops.health import runtime_dir as _runtime_dir  # noqa: E402
+except ImportError:
+    _runtime_dir = None  # type: ignore[assignment]
+
+
+class LiveRuntimeFenceError(BaseException):
+    """A test tried to write a live responder record. Never caught by Exception."""
+
+
+def _norm(path: Any) -> str:
+    text = os.fsdecode(os.fspath(path))
+    if not os.path.isabs(text):
+        text = os.path.join(os.getcwd(), text)
+    return os.path.normcase(os.path.normpath(text))
+
+
+def _live_runtime_dirs() -> tuple[str, ...]:
+    if _runtime_dir is None:
+        return ()
+    found = {_norm(_runtime_dir()), _norm(Path(__file__).parent / "ops" / "runtime")}
+    return tuple(sorted(found))
+
+
+_LIVE_RUNTIME_DIRS = _live_runtime_dirs()
+
+#: A responder record's name, after an atomic temp file's leading dot is
+#: stripped. `trial_confirmed.json` is the agreement record, also a responder
+#: `DEFAULT_` under the runtime; the arm in `tests/test_responder_uniform_budget.py`
+#: derives the full `DEFAULT_` set from the module and fails if one escapes this.
+_RESPONDER_RECORD_PREFIXES = ("responder", "trial_confirmed")
+
+
+def _live_extra_paths() -> tuple[str, ...]:
+    """The responder's `DEFAULT_` paths OUTSIDE the runtime dir, fenced whole.
+
+    This repo's own inbox, the roots map and the machine-level trust config.
+    Sibling inboxes - where a delivery lands - are external and not fenced.
+    """
+    if _runtime_dir is None:
+        return ()
+    root = Path(__file__).parent
+    found = {_norm(root / "moon_sync_inbox"), _norm(root / "ops" / "moon_sync_repos.json")}
+    try:
+        found.add(_norm(Path.home() / ".claude.json"))
+    except (OSError, RuntimeError):
+        pass
+    return tuple(sorted(found))
+
+
+_LIVE_EXTRA_PATHS = _live_extra_paths()
+
+
+def _is_live_responder_record(path: Any) -> bool:
+    """True for a responder record, its lock or temp sibling, the staging tree,
+    or one of the out-of-runtime `DEFAULT_` paths in `_LIVE_EXTRA_PATHS`."""
+    if isinstance(path, int):
+        return False
+    try:
+        text = _norm(path)
+    except Exception:  # noqa: BLE001 - an unreadable path is not a record
+        return False
+    for extra in _LIVE_EXTRA_PATHS:
+        if text == extra or text.startswith(extra + os.sep):
+            return True
+    for live in _LIVE_RUNTIME_DIRS:
+        if not text.startswith(live + os.sep):
+            continue
+        first = text[len(live) + 1:].split(os.sep, 1)[0]
+        if first.lstrip(".").startswith(_RESPONDER_RECORD_PREFIXES):
+            return True
+    return False
+
+
+_WRITE_OPEN_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_TRUNC
+
+#: Write-side audit events, each mapped to the argument positions holding a path.
+_RUNTIME_WRITE_EVENTS: dict[str, tuple[int, ...]] = {
+    "os.rename": (0, 1),
+    "os.remove": (0,),
+    "os.rmdir": (0,),
+    "os.mkdir": (0,),
+    "os.link": (0, 1),
+    "os.symlink": (0, 1),
+    "os.chmod": (0,),
+    "os.utime": (0,),
+    "os.truncate": (0,),
+    "shutil.rmtree": (0,),
+    "shutil.copyfile": (1,),
+    "shutil.move": (0, 1),
+}
+
+_RUNTIME_FENCE_HITS: list[dict[str, Any]] = []
+
+
+def _is_write_open(args: tuple[Any, ...]) -> bool:
+    mode = args[1] if len(args) > 1 else None
+    flags = args[2] if len(args) > 2 else None
+    if isinstance(flags, int) and flags & _WRITE_OPEN_FLAGS:
+        return True
+    return isinstance(mode, str) and any(c in mode for c in "wax+")
+
+
+def _live_runtime_fence(event: str, args: tuple[Any, ...]) -> None:
+    if event == "open":
+        if not args or not _is_write_open(args):
+            return
+        positions: tuple[int, ...] = (0,)
+    else:
+        found = _RUNTIME_WRITE_EVENTS.get(event)
+        if found is None:
+            return
+        positions = found
+    for index in positions:
+        if index < len(args) and _is_live_responder_record(args[index]):
+            message = (
+                f"{event} on {args[index]!r} writes a LIVE responder record. Redirect "
+                "every DEFAULT_ path of the responder under tmp_path, and give any "
+                "child interpreter RESINCOMPUTE_RUNTIME_DIR explicitly."
+            )
+            _RUNTIME_FENCE_HITS.append(
+                {
+                    "message": message,
+                    "thread": threading.current_thread().name,
+                    "thread_ident": threading.get_ident(),
+                    "attributed_to": None,
+                    "acknowledged": False,
+                }
+            )
+            raise LiveRuntimeFenceError(message)
+
+
+if _LIVE_RUNTIME_DIRS:
+    sys.addaudithook(_live_runtime_fence)
+
+
+class RuntimeFenceLedger:
+    """The runtime-fence hits since the current test began; see SlotFenceLedger."""
+
+    def __init__(self, start: int) -> None:
+        self._start = start
+
+    def hits(self) -> list[dict[str, Any]]:
+        return _RUNTIME_FENCE_HITS[self._start:]
+
+    def acknowledge(self, expected: int) -> int:
+        if threading.current_thread() is not threading.main_thread():
+            pytest.fail("only the main thread may acknowledge runtime-fence hits", pytrace=False)
+        me = threading.get_ident()
+        mine = [hit for hit in self.hits() if hit["thread_ident"] == me]
+        if len(mine) != expected:
+            pytest.fail(
+                f"acknowledge expected {expected} runtime-fence hit(s) from this thread "
+                f"during this test, but {len(mine)} landed",
+                pytrace=False,
+            )
+        for hit in mine:
+            hit["acknowledged"] = True
+        return len(mine)
+
+
+#: Seconds of slack around a live fire: log stamps are truncated to the second.
+_FIRE_GRACE_SECONDS = 2.0
+#: A `start` with no closing line - a fire still running, or one that crashed -
+#: is held open at most this long, so a crashed fire cannot excuse for long.
+#: Five minutes is the task's own cadence: the next fire opens its own window.
+_FIRE_OPEN_CAP_SECONDS = 300.0
+_FIRE_STAMP_FORMAT = "%Y-%m-%dT%H:%M:%S"
+#: The ONLY source that may open an excuse window: the armed scheduled task's
+#: label, `SOURCE_SCHEDULED_TASK` in `tools/moon_sync_responder.py`. REFUTED
+#: 2026-10-03: when every source but `failclosed` could open one, a leaking
+#: child that ran a full cycle wrote its OWN `cli start` and closing line into
+#: the live log and excused its own writes. A test child can still FORGE this
+#: label by setting the source variable; that residual is stated, not hidden.
+_LIVE_FIRE_SOURCES = ("scheduledtask",)
+
+
+def _live_fire_windows(log_text: str, now: float) -> list[tuple[float, float]]:
+    """Each scheduled fire's [start, end] in epoch seconds, from the invocation log."""
+    import time as _time
+
+    windows: list[tuple[float, float]] = []
+    open_at: dict[str, float] = {}
+    for line in log_text.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 4 or parts[1] not in _LIVE_FIRE_SOURCES:
+            continue
+        try:
+            stamp = _time.mktime(_time.strptime(parts[0], _FIRE_STAMP_FORMAT))
+        except (ValueError, OverflowError):
+            continue
+        source, outcome = parts[1], parts[3]
+        if source in open_at:
+            windows.append((open_at.pop(source), stamp))
+        if outcome == "start":
+            open_at[source] = stamp
+    for start in open_at.values():
+        windows.append((start, min(now, start + _FIRE_OPEN_CAP_SECONDS)))
+    return sorted(windows)
+
+
+def _runtime_drift(
+    before: dict[str, tuple[int, int]],
+    after: dict[str, tuple[int, int]],
+    t0: float,
+    t1: float,
+    log_text: str,
+    now: float,
+) -> str | None:
+    """A finding when a live record changed during [t0, t1] outside every live fire."""
+    changed = sorted(n for n in set(before) | set(after) if before.get(n) != after.get(n))
+    if not changed:
+        return None
+    pad = _FIRE_GRACE_SECONDS + 1.0
+    for start, end in _live_fire_windows(log_text, now):
+        if start - pad <= t1 and t0 <= end + pad:
+            return None
+    detail = ", ".join(f"{n}: {before.get(n)} -> {after.get(n)}" for n in changed)
+    return (
+        "a LIVE responder record changed during this test and no live fire was "
+        f"running to explain it - (size, mtime_ns) {detail}. A child interpreter "
+        "needs RESINCOMPUTE_RUNTIME_DIR set explicitly."
+    )
+
+
+def _live_runtime_snapshot() -> dict[str, tuple[int, int]]:
+    """(size, mtime_ns) of every responder record directly in each live dir."""
+    snap: dict[str, tuple[int, int]] = {}
+    for live in _LIVE_RUNTIME_DIRS:
+        try:
+            entries = list(os.scandir(live))
+        except OSError:
+            continue
+        for entry in entries:
+            if not entry.name.lstrip(".").startswith(_RESPONDER_RECORD_PREFIXES):
+                continue
+            try:
+                st = entry.stat()
+            except OSError:
+                continue
+            snap[os.path.join(live, entry.name)] = (st.st_size, st.st_mtime_ns)
+    return snap
+
+
+def _live_invocation_log_text() -> str:
+    for live in _LIVE_RUNTIME_DIRS:
+        try:
+            return Path(live, "responder_invocations.log").read_text(
+                encoding="ascii", errors="replace"
+            )
+        except OSError:
+            continue
+    return ""
+
+
+@pytest.fixture(autouse=True)
+def _live_runtime_guard(request: pytest.FixtureRequest) -> Generator[RuntimeFenceLedger, None, None]:
+    """Fail the test that wrote, or whose child wrote, a live responder record."""
+    import time as _time
+
+    ledger = RuntimeFenceLedger(len(_RUNTIME_FENCE_HITS))
+    before = _live_runtime_snapshot()
+    t0 = _time.time()
+    yield ledger
+    t1 = _time.time()
+    landed = ledger.hits()
+    for hit in landed:
+        hit["attributed_to"] = request.node.nodeid
+    loud = [hit for hit in landed if not hit["acknowledged"]]
+    if loud:
+        detail = "\n".join(f"  [{hit['thread']}] {hit['message']}" for hit in loud)
+        pytest.fail(
+            f"{len(loud)} live-runtime fence hit(s) landed during this test:\n{detail}",
+            pytrace=False,
+        )
+    after = _live_runtime_snapshot()
+    if after != before:
+        finding = _runtime_drift(before, after, t0, t1, _live_invocation_log_text(), _time.time())
+        if finding is not None:
+            pytest.fail(finding, pytrace=False)
+
+
+@pytest.fixture()
+def runtime_fence_ledger(_live_runtime_guard: RuntimeFenceLedger) -> RuntimeFenceLedger:
+    """The current test's runtime-fence ledger, for arms that trip it on purpose."""
+    return _live_runtime_guard
+
+
+def _report_unattributed_runtime_hits(session: pytest.Session) -> None:
+    stray = [hit for hit in _RUNTIME_FENCE_HITS if hit["attributed_to"] is None]
+    if not stray:
+        return
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    for line in [f"{len(stray)} live-runtime fence hit(s) never attributed to a test:"] + [
+        f"  [{hit['thread']}] {hit['message']}" for hit in stray
+    ]:
+        if reporter is not None:
+            reporter.write_line(line, red=True)
+        else:
+            print(line, file=sys.stderr)
+    session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Remove the redirected log directory this conftest created.
 
@@ -633,10 +983,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     to unlink a file that is still open, and `ignore_errors` keeps a failed
     cleanup from turning a green run red.
 
-    It first fails the run for any slot-bucket fence hit never attributed to a
-    test - see the fence block above.
+    It first fails the run for any slot-bucket fence hit, or live-runtime fence
+    hit, never attributed to a test - see the two fence blocks above.
     """
     _report_unattributed_fence_hits(session)
+    _report_unattributed_runtime_hits(session)
     if _log_redirect_dir is None:
         return
     logging.shutdown()

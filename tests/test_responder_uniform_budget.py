@@ -216,23 +216,97 @@ print(json.dumps([[ok, why] for ok, why in out]))
 """
 
 
-def test_real_processes_contending_never_exceed_the_cap(rsp, tmp_path):
-    """Several interpreters reserve against one record at once."""
+@pytest.fixture()
+def fake_repo(tmp_path) -> Path:
+    """A throwaway repo root holding a byte copy of the responder and its imports.
+
+    A child interpreter cannot see the `rsp` fixture's redirects: it loads the
+    module afresh, and every `DEFAULT_*` record then resolves from
+    `RESINCOMPUTE_RUNTIME_DIR` or, unset, from `<repo root>/ops/runtime`.
+    Measured 2026-10-03: launched from the MAIN checkout with the variable unset,
+    the contention arm below appended 103 `fail-closed:run-lock-busy` lines to
+    the LIVE invocation log. Children therefore load THIS copy, so even a child
+    that loses its environment lands in `tmp_path` and never in the real tree.
+    """
+    import shutil
+
+    fake = tmp_path / "fakerepo"
+    ignore = shutil.ignore_patterns("__pycache__", "*.pyc")
+    shutil.copytree(ROOT / "core", fake / "core", ignore=ignore)
+    (fake / "ops").mkdir()
+    for name in ("__init__.py", "health.py"):
+        shutil.copyfile(ROOT / "ops" / name, fake / "ops" / name)
+    (fake / "tools").mkdir()
+    shutil.copyfile(MODULE, fake / "tools" / MODULE.name)
+    return fake
+
+
+def _contend(fake: Path, runs: Path, now: float, tries: int, cwd: Path) -> subprocess.Popen:
+    """One contender interpreter against `runs`, loading the fake repo's copy.
+
+    The child's runtime is pinned EXPLICITLY to `cwd / "child-runtime"`: set,
+    never inherited, so an operator's exported value cannot steer it either.
+    """
+    import os
     import sys
 
+    env = dict(os.environ)
+    env[_runtime_env_name()] = str(cwd / "child-runtime")
+    return subprocess.Popen(
+        [sys.executable, "-c", _CONTENDER, str(fake / "tools" / MODULE.name), str(runs), str(now), str(tries)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=str(cwd),
+        env=env,
+    )
+
+
+def _runtime_env_name() -> str:
+    """The variable's name, read from its one definition and never spelled here."""
+    from ops.health import ENV_RUNTIME_DIR
+
+    return ENV_RUNTIME_DIR
+
+
+def _responder_records(runtime: Path) -> list[str]:
+    if not runtime.is_dir():
+        return []
+    return sorted(p.name for p in runtime.iterdir() if p.name.lstrip(".").startswith("responder"))
+
+
+def test_a_contender_child_writes_only_its_redirected_runtime(rsp, tmp_path, fake_repo):
+    """THE LEAK ARM. A child that fails closed logs, and the log must land in tmp.
+
+    The parent holds the run lock, so the child's one reservation is refused
+    with `run-lock-busy` and `_log_fail_closed` writes a line - deterministic,
+    unlike the contention arm, where a busy refusal depends on scheduling.
+    """
+    _seed(rsp, [])
+    runtime = tmp_path / "child-runtime"
+    handle = _hold(rsp)
+    try:
+        proc = _contend(fake_repo, rsp.DEFAULT_RUNS, 1_000_000.0, 1, tmp_path)
+        out, err = proc.communicate(timeout=120)
+    finally:
+        rsp._release_run_lock(handle)
+
+    assert proc.returncode == 0, err
+    assert json.loads(out.strip().splitlines()[-1]) == [[False, rsp.RUN_LOCK_REASON]], out
+    leaked = _responder_records(fake_repo / "ops" / "runtime")
+    assert leaked == [], f"the child wrote the repo's default runtime: {leaked}"
+    log = runtime / rsp.DEFAULT_INVOCATIONS.name
+    assert "fail-closed:run-lock-busy" in log.read_text(encoding="ascii"), (
+        "non-vacuity: the child never logged, so the arm proved nothing about where"
+    )
+
+
+def test_real_processes_contending_never_exceed_the_cap(rsp, tmp_path, fake_repo):
+    """Several interpreters reserve against one record at once."""
     now = 1_000_000.0
     room = 5
     _seed(rsp, [now - 10.0] * (rsp.MAX_RUNS_PER_DAY - room))
-    procs = [
-        subprocess.Popen(
-            [sys.executable, "-c", _CONTENDER, str(MODULE), str(rsp.DEFAULT_RUNS), str(now), "40"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=str(tmp_path),
-        )
-        for _ in range(4)
-    ]
+    procs = [_contend(fake_repo, rsp.DEFAULT_RUNS, now, 40, tmp_path) for _ in range(4)]
     results = []
     for proc in procs:
         out, err = proc.communicate(timeout=120)
@@ -245,6 +319,7 @@ def test_real_processes_contending_never_exceed_the_cap(rsp, tmp_path):
     assert 1 <= oks <= room, (oks, whys)
     assert len(rows) == rsp.MAX_RUNS_PER_DAY - room + oks <= rsp.MAX_RUNS_PER_DAY, (len(rows), oks)
     assert whys <= {rsp.RUN_BUDGET_REASON, rsp.RUN_LOCK_REASON}, whys
+    assert _responder_records(fake_repo / "ops" / "runtime") == [], "a contender wrote the default runtime"
 
 
 def test_a_busy_lock_ends_the_spawn_with_its_own_outcome(rsp, routed):
@@ -402,3 +477,195 @@ def test_legitimate_neighbours_survive_the_terminal_rule(rsp, tmp_path, name, bo
     kept = _note(inbox, name, body)
 
     assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
+
+
+# ---------------------------------------------------------------------------
+# The live-runtime guard in the root conftest. Two halves, because a leak has
+# two routes: an in-process write (an audit-hook FENCE refuses it before it
+# lands) and a child process, which no hook of ours can see (a per-test
+# size-and-mtime DRIFT check catches it after the fact).
+# ---------------------------------------------------------------------------
+
+
+def _root_conftest():
+    import conftest
+
+    return conftest
+
+
+def _write_flags() -> int:
+    import os
+
+    return os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+
+
+def _live(name: str) -> Path:
+    from ops.health import runtime_dir
+
+    return runtime_dir() / name
+
+
+def test_the_fence_refuses_an_in_process_write_to_a_live_record(runtime_fence_ledger):
+    """Non-vacuity: a SYNTHETIC audit event, so a broken fence pollutes nothing."""
+    import sys
+
+    target = _live("responder_runs.json")
+    with pytest.raises(_root_conftest().LiveRuntimeFenceError):
+        sys.audit("open", str(target), "w", _write_flags())
+
+    assert runtime_fence_ledger.acknowledge(1) == 1
+
+
+@pytest.mark.parametrize(
+    ("event", "args"),
+    [
+        ("os.rename", ("{tmp}/x", "{live}/responder_invocations.log", -1, -1)),
+        ("os.remove", ("{live}/responder_runs.json.lock", -1)),
+        ("open", ("{live}/.responder_runs.json.123.abcd1234.tmp", "w", 0)),
+        ("open", ("{live}/responder/held/n.md", None, 0x100)),
+    ],
+)
+def test_the_fence_covers_every_write_route(runtime_fence_ledger, tmp_path, event, args):
+    import sys
+
+    live = _live("x").parent
+    real = tuple(a.format(tmp=tmp_path, live=live) if isinstance(a, str) else a for a in args)
+    with pytest.raises(_root_conftest().LiveRuntimeFenceError):
+        sys.audit(event, *real)
+
+    assert runtime_fence_ledger.acknowledge(1) == 1
+
+
+@pytest.mark.parametrize(
+    "where",
+    ["read-live-record", "write-tmp-namesake", "write-live-health", "write-live-sibling-name"],
+)
+def test_legitimate_neighbours_pass_the_fence(runtime_fence_ledger, tmp_path, where):
+    """The other direction: a fence that refused these would break honest arms."""
+    import os
+    import sys
+
+    path, flags = {
+        "read-live-record": (_live("responder_runs.json"), os.O_RDONLY),
+        "write-tmp-namesake": (tmp_path / "responder_runs.json", _write_flags()),
+        "write-live-health": (_live("health.json"), _write_flags()),
+        "write-live-sibling-name": (_live("not_responder_runs.json"), _write_flags()),
+    }[where]
+
+    sys.audit("open", str(path), None, flags)
+
+    assert runtime_fence_ledger.hits() == []
+
+
+def test_the_fence_covers_every_runtime_default_of_the_responder(monkeypatch):
+    """Completeness, derived and not listed: a fresh, UNREDIRECTED load."""
+    from ops.health import ENV_RUNTIME_DIR, runtime_dir
+
+    monkeypatch.delenv(ENV_RUNTIME_DIR, raising=False)
+    spec = importlib.util.spec_from_file_location("moon_sync_responder_fenced", MODULE)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    live = runtime_dir()
+    defaults = {
+        n: getattr(module, n)
+        for n in dir(module)
+        if n.startswith("DEFAULT_") and isinstance(getattr(module, n), Path)
+    }
+    under = {n for n, p in defaults.items() if live in p.parents}
+
+    assert {"DEFAULT_RUNS", "DEFAULT_INVOCATIONS"} <= under, sorted(under)
+    assert set(defaults) - under, "non-vacuity: every default sits in the runtime dir"
+    fenced = _root_conftest()._is_live_responder_record
+    unfenced = [n for n, p in defaults.items() if not fenced(p)]
+    assert unfenced == [], unfenced
+    assert fenced(module.run_lock_path(module.DEFAULT_RUNS))
+    assert fenced(module.DEFAULT_INBOX / "2026-10-03-0900-from-RC-q.md")
+
+
+def test_the_only_excusing_source_is_the_tasks_own_label(rsp):
+    """Pinned to the module's constant, so a relabelled task cannot go unexcused
+    silently - nor an extra label slip into the excuse set."""
+    assert _root_conftest()._LIVE_FIRE_SOURCES == (rsp.SOURCE_SCHEDULED_TASK,)
+
+
+_FIRE_LOG = (
+    "2026-10-03T09:20:21\tfailclosed\t-\tfail-closed:run-lock-busy\n"
+    "2026-10-03T09:21:01\tscheduledtask\t-\tstart\n"
+    "2026-10-03T09:21:28\tscheduledtask\tn.md\tdelivered\n"
+    "2026-10-03T09:26:01\tscheduledtask\t-\tstart\n"
+)
+
+
+def _at(stamp: str) -> float:
+    import time
+
+    return time.mktime(time.strptime(stamp, "%Y-%m-%dT%H:%M:%S"))
+
+
+def test_fire_windows_come_only_from_live_start_lines():
+    now = _at("2026-10-03T09:26:30")
+    windows = _root_conftest()._live_fire_windows(_FIRE_LOG, now)
+
+    assert windows == [
+        (_at("2026-10-03T09:21:01"), _at("2026-10-03T09:21:28")),
+        (_at("2026-10-03T09:26:01"), now),
+    ], windows
+
+
+@pytest.mark.parametrize(
+    ("t0", "t1", "excused"),
+    [
+        ("2026-10-03T09:20:20", "2026-10-03T09:20:22", False),  # the measured leak
+        ("2026-10-03T09:21:02", "2026-10-03T09:21:04", True),  # a live reserve
+        ("2026-10-03T09:23:39", "2026-10-03T09:24:00", False),  # between fires
+        ("2026-10-03T09:26:10", "2026-10-03T09:26:11", True),  # a fire still open
+    ],
+)
+def test_drift_is_excused_only_inside_a_live_fire(t0, t1, excused):
+    before = {"responder_runs.json": (10, 1)}
+    after = {"responder_runs.json": (20, 2)}
+    now = _at("2026-10-03T09:26:30")
+
+    verdict = _root_conftest()._runtime_drift(before, after, _at(t0), _at(t1), _FIRE_LOG, now)
+
+    assert (verdict is None) is excused, verdict
+
+
+@pytest.mark.parametrize("source", ["cli", "run_once", "cliprobe", "suite"])
+def test_a_leaking_child_cannot_excuse_itself_with_its_own_start_line(source):
+    """REFUTED 2026-10-03 by the adversary: a child running a full cycle against
+    the live runtime writes its OWN `start` line and closing line, and any
+    source but `scheduledtask` used to open an excuse window around itself."""
+    log = (
+        f"2026-10-03T10:00:00\t{source}\t-\tstart\n"
+        f"2026-10-03T10:00:01\t{source}\t-\tempty\n"
+    )
+    t0, t1, now = _at("2026-10-03T09:59:59"), _at("2026-10-03T10:00:02"), _at("2026-10-03T10:00:03")
+    conf = _root_conftest()
+
+    assert conf._live_fire_windows(log, now) == []
+    assert conf._runtime_drift({}, {"responder_invocations.log": (90, 1)}, t0, t1, log, now) is not None
+
+
+def test_an_unclosed_scheduled_start_excuses_at_most_five_minutes():
+    log = "2026-10-03T10:00:00\tscheduledtask\t-\tstart\n"
+    start = _at("2026-10-03T10:00:00")
+    conf = _root_conftest()
+
+    assert conf._live_fire_windows(log, start + 3600) == [(start, start + 300.0)]
+    late = conf._runtime_drift({}, {"responder_runs.json": (1, 1)}, start + 600, start + 601, log, start + 3600)
+    assert late is not None, "a crashed fire excused a change ten minutes later"
+
+
+def test_no_drift_is_never_a_finding():
+    snap = {"responder_runs.json": (10, 1)}
+    assert _root_conftest()._runtime_drift(snap, dict(snap), 0.0, 1.0, "", 2.0) is None
+
+
+def test_a_created_record_is_drift():
+    """The lock file was CREATED by the measured leak; absence-to-presence counts."""
+    verdict = _root_conftest()._runtime_drift(
+        {}, {"responder_runs.json.lock": (0, 5)}, 0.0, 1.0, "", 2.0
+    )
+    assert verdict is not None and "responder_runs.json.lock" in verdict

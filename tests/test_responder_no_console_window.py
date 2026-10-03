@@ -114,17 +114,28 @@ class _Captured:
 
 
 @pytest.fixture()
-def rsp():
-    """The responder, loaded under its own module name.
+def rsp(tmp_path):
+    """The responder, loaded under its own module name, every `DEFAULT_` redirected.
 
     RE-DEFINED rather than imported from a sibling test module, matching
     `tests/test_responder_delivery_gates.py` - two files sharing one loaded module
     share one set of monkeypatches too, and this file patches `subprocess.run`.
 
-    No `DEFAULT_` redirection is needed: every arm intercepts the spawn before it
-    runs and none reaches a write path.
+    EVERY `DEFAULT_*` PATH IS REDIRECTED, DISCOVERED RATHER THAN LISTED, exactly
+    as `tests/test_moon_sync_responder.py` does. This fixture used to say no
+    redirection was needed because every arm intercepts the spawn. That was
+    false: `_spawn_headless` RESERVES A RUN against `DEFAULT_RUNS` before it
+    spawns. Measured 2026-10-03 in the MAIN checkout: each suite run wrote three
+    rows into the LIVE `ops/runtime/responder_runs.json`, every one counted
+    against the real daily cap, and created the lock file beside it. The root
+    conftest's live-runtime fence now refuses that write.
     """
-    return _load("responder_no_console_window_under_test", MODULE)
+    module = _load("responder_no_console_window_under_test", MODULE)
+    for name in [n for n in dir(module) if n.startswith("DEFAULT_")]:
+        value = getattr(module, name)
+        if isinstance(value, Path):
+            setattr(module, name, tmp_path / "isolated" / name.lower() / value.name)
+    return module
 
 
 @pytest.fixture()
@@ -141,8 +152,8 @@ def spawned(rsp, monkeypatch):
     # THE HEADLESS ROUTE AND THE USAGE BACKOFF ARE STUBBED, so this arm grades
     # the spawn's kwargs and not the host. Unstubbed, the gate reads the live
     # user environment store and probes the live proxy: green on a host where
-    # both exist, red on CI where neither does. The backoff read would reach the
-    # live runtime record, which this fixture does not redirect.
+    # both exist, red on CI where neither does. The backoff record is redirected
+    # by `rsp`; the stub keeps the arm off the backoff path altogether.
     from core import headless_env
 
     monkeypatch.setattr(
