@@ -123,3 +123,6 @@ MERGE_TODO.md
 # checkout path. The tracked tree carries codenames precisely so that nothing
 # tracked carries this mapping. Per-host by definition.
 ops/moon_sync_repos.json
+
+# FLEET-KIT v3 runtime: status, budget, usage, progress (MAIN 0955 s2.5, 1014 s2)
+ops/loop/control/
