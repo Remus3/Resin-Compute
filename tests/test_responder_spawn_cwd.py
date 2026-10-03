@@ -124,7 +124,10 @@ def test_the_subprocess_spawn_is_handed_spawn_cwd(rsp, sentinel, monkeypatch, tm
     def run(*args, **kwargs):
         calls.append(kwargs)
         return subprocess.CompletedProcess(
-            args=args[0], returncode=0, stdout=json.dumps({"result": "ok"}), stderr=""
+            args=args[0], returncode=0, stderr="",
+            stdout=json.dumps(
+                {"type": "result", "subtype": "success", "is_error": False, "result": "ok"}
+            ),
         )
 
     monkeypatch.setattr(subprocess, "run", run)
