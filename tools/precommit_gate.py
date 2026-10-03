@@ -662,8 +662,10 @@ def _check_staged(command: str) -> int:
             "your only lint gate.\n"
         )
     if pyfiles and ruff is not None:
+        # --force-exclude: an explicit file list otherwise bypasses ruff.toml
+        # excludes, which CI's `ruff check .` honours (vendored FLEET-KIT).
         proc = subprocess.run(
-            [*ruff, "check", "--output-format=json", *pyfiles],
+            [*ruff, "check", "--force-exclude", "--output-format=json", *pyfiles],
             cwd=root,
             capture_output=True,
             text=True,

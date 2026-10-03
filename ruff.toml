@@ -19,6 +19,11 @@
 target-version = "py311"
 line-length = 120
 
+# ops/fleet_kit/ holds MAIN's FLEET-KIT bytes, vendored and sha256-pinned by
+# its own MANIFEST.json and conformance(). A local lint fix there would break
+# the pin, so the directory is out of ruff's scope; defects go to MAIN.
+extend-exclude = ["ops/fleet_kit"]
+
 [lint]
 select = [
     "E",    # pycodestyle errors

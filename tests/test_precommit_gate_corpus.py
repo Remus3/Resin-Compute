@@ -474,3 +474,43 @@ def test_the_non_commit_lane_says_it_scanned_nothing():
         f"the non-commit lane reported a STAGED subject it never read: "
         f"{out.stdout!r}"
     )
+
+
+def _stage(root: pathlib.Path, rel: str, body: bytes) -> None:
+    target = root / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(body)
+    subprocess.run(
+        ["git", "add", rel], cwd=str(root), capture_output=True, timeout=60,
+    )
+
+
+def test_the_ruff_half_honours_the_config_exclude_like_ci_does(
+    tmp_path, gate, capsys,
+):
+    """A path ruff.toml excludes is out of scope for the gate as for CI.
+
+    CI runs `ruff check .`, which drops `extend-exclude` paths. The gate hands
+    ruff an EXPLICIT file list, and ruff lints an explicitly named file even
+    when the config excludes it unless `--force-exclude` is passed. Measured
+    2026-10-03: MAIN's byte-pinned FLEET-KIT under ops/fleet_kit/ was blocked
+    at commit for findings CI would never report, and the only local fix was
+    an edit that breaks the kit's sha256 pin. The control file proves the
+    ruff half still fires on a path the config does not exclude.
+    """
+    if gate._resolve_ruff() is None:
+        pytest.skip("no working ruff - the ruff half cannot be exercised")
+    _init_repo(tmp_path)
+    (tmp_path / "ruff.toml").write_bytes(b'extend-exclude = ["vendored"]\n')
+    _stage(tmp_path, "vendored/kit.py", b"import os\n")
+    rc = gate._check_staged(f'git -C "{tmp_path}" commit -m x')
+    err = capsys.readouterr().err
+    assert "vendored/kit.py" not in err, f"an excluded path was linted: {err!r}"
+    assert rc == 0, f"an excluded path blocked the commit: {err!r}"
+
+    _stage(tmp_path, "owned/mod.py", b"import os\n")
+    rc = gate._check_staged(f'git -C "{tmp_path}" commit -m x')
+    err = capsys.readouterr().err
+    assert rc == 1 and "owned/mod.py" in err and "F401" in err, (
+        f"the ruff half no longer fires on a non-excluded path: rc={rc} {err!r}"
+    )
