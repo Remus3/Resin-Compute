@@ -14,8 +14,9 @@ already stale, and a sibling tree's second copy was twelve days behind its
 the explicit authorization for this one write outside the repo root.
 
 This module NEVER accepts prompt text as an argument. It reads the source file
-or it refuses, so the block `/done` prints, the tracked file and whatever the
-shortcut opens are the same bytes by construction.
+or it refuses, so the tracked file and whatever the shortcut opens are the same
+bytes by construction. `/done` never prints the hand-off into chat (FLEET-COMMON
+rule 5 in `CLAUDE.md`); the shortcut is how the operator reads it.
 
 WHY A `.lnk` AND NOT A FILESYSTEM LINK, measured on this host from an ordinary
 Python process rather than assumed. `os.symlink` to a file SUCCEEDS only where

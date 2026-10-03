@@ -114,9 +114,12 @@ Everything below is this tree's own. The common block above is not repeated here
 - **Hooks are the authoritative gate and a fresh clone has NONE.** First action
   in a fresh clone: `python scripts/install_hooks.py`. Prove a hook fires only
   end-to-end: stage a banned glyph, attempt a real commit, assert HEAD unchanged.
-- **Commit messages:** `git commit -F <file in the session scratchpad>`, never a
-  shared tmp path, never a double-quoted here-string or a piped string. Under Git
-  Bash a `/tmp` redirect lands in the Git install directory, not the `C:` root.
+- **Commit messages:** `git commit -F <file in the session scratchpad>` (ASCII
+  only) or a single-quoted here-string; never a shared tmp path, never a
+  double-quoted here-string or a piped string. Under Git Bash a `/tmp` redirect
+  lands in the Git install directory, not the `C:` root. No gate exists for the
+  shared-path collision and probably none can - do not go looking for a guard
+  that catches it; discipline is the whole control.
 - **State assumptions explicitly before coding.**
 - **Live-state-first.** Derive state from the current response only; no
   hardcoding, no stale cache treated as truth.
@@ -160,7 +163,8 @@ python -m mypy
   `.py`; `mypy` traverses only the `files=` roots in `mypy.ini` - `core/`,
   `engines/`, `ingest/`, `agents/pity_engine/`, `tools/`. Never cite its Success
   as evidence about `headless/`, `ops/`, `surface/`, `scripts/`, `tests/` or
-  `conftest.py`. `tests/test_mypy_scope.py` reds if a root leaves the list.
+  `conftest.py`. `tests/test_mypy_scope.py` reds if a root leaves the list or if
+  mypy's own file count drifts from the arithmetic.
 - **The contract targets Python 3.11; this host's `python` is 3.14.** CI runs
   3.11. Every local suite figure is a 3.14 figure - say so. The pin is not relaxed.
 - **Never measure the suite with a virtualenv on `PATH`.** A SKIP-count delta is
@@ -174,6 +178,8 @@ python -m mypy
 - Feature work and bug fixes: failing characterization or regression test first,
   implement, then both suites before committing.
 - Verify against ground truth before asserting done, fixed, broken or missing.
+  Re-probe the live source: run the code, read the file, hit the endpoint. Never
+  trust a stale doc, an assumption, or another agent's unverified output.
   Before using any API, field or file shape, confirm it exists and cite where.
   Report the exact result observed, with counts. No "should work".
 - Never trust a subagent's claim about test counts, green CI or file existence
@@ -230,7 +236,8 @@ answer) is exempt, read narrowly. This adds to common rule SUB-AGENT FIRST:
   job is to REFUTE them, defaulting to refuted when uncertain.
 - **Agreement between two agents is not evidence.** If two agree, test their
   shared input. Refuters get DISTINCT LENSES - correctness, licence,
-  does-it-reproduce, resource lifetime, scope-and-siblings.
+  does-it-reproduce, resource lifetime, scope-and-siblings - never N identical
+  skeptics.
 - Independence is a prompt-level property, not a vendor-level one. Do not add a
   second vendor for "independent review".
 - Roster: `.claude/agents/`. Protocol: `.claude/commands/orchestrated-run.md`.
@@ -244,6 +251,9 @@ not ask per cycle. Its one obligation is to HALT AND PING at the boundary below.
 The candidates (ARM, BYTE) and the adjudicator's MIXED verdict are recorded in
 `ROADMAP.md` under the entry for this adjudicated call - find it by heading, not
 line number - and in `docs/claude-md-history.md`.
+- Candidate ARM covers none of the outbound REFUTED note's lettered seams (a)
+  through (g). That count is of that note's headings only; re-derive the count
+  from the headings before citing it, and say which population you counted.
 
 - **THE RULING**, and this is the text a loop must actually encode. Halt and ping
   before: (a) any write, delete, unlink or named-kernel-object acquisition whose
@@ -258,7 +268,9 @@ line number - and in `docs/claude-md-history.md`.
 - **Why:** `ops/loop/slots.py:39` puts `DEFAULT_ROOT` in a machine-wide bucket
   under `C:\ProgramData`, and since `1a6d8da` `run_daemon` in
   `headless/runner.py` holds a slot for each LIVE pass. A dry run takes no slot;
-  a `SlotTimeout` is a failed pass, never permission to run unslotted. `reap()`
+  a `SlotTimeout` is a failed pass, never permission to run unslotted. Do not
+  invent a Claude-executor loop merely to justify the vendored governor - that
+  was honoured: `run_daemon` already existed. `reap()`
   can reclaim a lock a sibling owns. `ops/loop/winmutex.py:37-38` are `Global\`
   mutexes. Both files are pinned by SHA256 in the `SHARED_SHA256` dict in
   `tests/test_loop_concurrency.py`, so "hardening" either one desynchronises every
@@ -308,7 +320,9 @@ on 2026-10-02. Recorded by codename only, quoted verbatim:
 
 - Keep each response under 500 output tokens.
 - **CAVEMAN ULTRA is the default chat dialect** (operator 2026-09-06): maximum
-  terseness, plain 7-bit ASCII, no preamble. Declared by the `SessionStart` hook
+  terseness, plain 7-bit ASCII. Drop articles and filler, short clauses, no
+  hedging, no preamble, no narrating a tool call. Target 80-90 percent character
+  reduction against ordinary prose. Declared by the `SessionStart` hook
   `tools/caveman_default.py` with `tools/caveman.md` as the skill body; its
   `_BANNER` string must stay byte-identical across the fleet.
 - **Terseness is for CHAT ONLY.** Paths, commands, code, identifiers and every
@@ -330,13 +344,15 @@ on 2026-10-02. Recorded by codename only, quoted verbatim:
 - **SILENCE IS NOT AGREEMENT.** Answer a charter, proposal or correction, or file
   a position saying why not.
 - Reading is not acknowledging. `python scripts/watch_inbox.py` reports; `--mark`
-  acknowledges, as a separate deliberate act after triage.
+  acknowledges, as a separate deliberate act after triage. Never mark a batch
+  that was listed but not triaged - an inflated watermark is worse than none.
 - The whole inbox is gitignored and nothing in it is tracked. Guards derive
   their corpus from `git ls-files`: the glyph gate at
   `tools/precommit_gate.py:414`, the sibling-name sweep at
   `tests/test_no_sibling_names.py:126`, the docs pointer guard at
   `tests/test_docs_consistency.py:177`. A claim that must be guarded has to live
-  in a TRACKED file.
+  in a TRACKED file. Do not write the universal "no guard reads it" - that is a
+  claim about guards nobody enumerated.
 
 ## Session workflow
 
