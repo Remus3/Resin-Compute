@@ -19,8 +19,11 @@ measured table. Every unknown fails closed, with one exception.
 KNOWN GAP: an explicit `--cleanup=whitespace` or `--cleanup=verbatim` on an
 EDITOR commit. Git does not pass the flag to the hook, so this module assumes
 the editor default (strip) and skips a `#` first line that will in fact land
-as the subject. The glyph half in `tools/precommit_gate.py` is unaffected,
-because it scans every line. The same gap is recorded beside
+as the subject. The glyph half in `tools/precommit_gate.py` SHARES this
+predicate, so it shares the gap: there a glyph on a `#` line also lands
+unscanned. It cannot scan every line instead, because git's own editor
+template carries non-ASCII branch names, author names and paths that git
+strips after the hook. The same gap is recorded beside
 `KNOWN_MESSAGE_SURVIVORS` in `tools/gate_mutation_runner.py`.
 
 Bypass with `--no-verify` if absolutely necessary; please do not make a habit

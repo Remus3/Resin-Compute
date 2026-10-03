@@ -353,12 +353,12 @@ def _check_message_file(path: str) -> int:
             "commit-message glyph half did NOT run on this commit.\n"
         )
         return 0
-    # EVERY line, `#` included: `commit -F`/`-m` keep `#` lines (cleanup=
-    # whitespace, measured 2026-10-03). Never predict git's cleanup - a glyph
-    # in a comment costs nothing to remove, and git's own template is ASCII.
-    # The subject half's fail-closed rule is in scripts/precommit_msg_check.py.
+    # Skip `#` lines ONLY when git provably strips them: see _hash_lines_are_stripped.
+    skip_hash = _hash_lines_are_stripped()
     violations: list[str] = []
     for i, ln in enumerate(text.splitlines(), start=1):
+        if skip_hash and ln.startswith("#"):
+            continue
         hits = _glyph_hits(ln)
         if hits:
             violations.append(f"  <commit message>:{i}  banned glyph: {', '.join(hits)}")
@@ -739,6 +739,40 @@ def _refuse(problem: str) -> int:
         + _USAGE
     )
     return 1
+
+
+def _hash_lines_are_stripped() -> bool:
+    """Will git strip `#` lines from THIS commit? The SUBJECT half's predicate.
+
+    One predicate for both message halves, so they can never disagree about
+    which lines land. It lives in `scripts/precommit_msg_check.py` and is
+    loaded by path, because both files ship as hook dependencies side by side.
+
+    `-F`, `-m` and `--no-edit` KEEP `#` lines (cleanup=whitespace, measured
+    2026-10-03), so there a glyph on a `#` line lands and is refused. The
+    editor flow strips them AFTER commit-msg runs, and git's own template is
+    NOT ASCII: it carries branch names, author names and paths - an adversary
+    measured five false blocks at 8436e68 when every `#` line was scanned.
+
+    Fails CLOSED: if the predicate cannot be loaded, every line is scanned and
+    the reason is written to stderr.
+    """
+    import importlib.util
+
+    path = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "precommit_msg_check.py"
+    try:
+        spec = importlib.util.spec_from_file_location("_rsc_precommit_msg_check", path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"no loader for {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return bool(module.hash_lines_are_stripped())
+    except Exception as exc:  # noqa: BLE001 - any failure must fail closed
+        sys.stderr.write(
+            f"precommit_gate WARNING: could not load the cleanup predicate from "
+            f"{path} ({type(exc).__name__}: {exc}) - scanning `#` lines too.\n"
+        )
+        return False
 
 
 def main(argv: list[str] | None = None) -> int:

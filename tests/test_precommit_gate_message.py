@@ -146,27 +146,78 @@ def test_non_vacuity_main_accepts_the_same_file_when_git_will_strip(tmp_path, mo
 
 
 # ---------------------------------------------------------------------------
-# The glyph half scans EVERY line, comments included
+# The glyph half skips `#` lines ONLY when the shared predicate says git strips
+# them. The predicate is pinned per arm, so these do not depend on the env.
 # ---------------------------------------------------------------------------
 
+E_ACUTE = chr(0x00E9)
+HASH_GLYPH_LINES = ["# note " + EM_DASH + " kept by -F", "#" + EM_DASH, "# On branch caf" + E_ACUTE]
+HASH_IDS = ["hash", "bare-hash", "template-branch"]
 
-@pytest.mark.parametrize(
-    "line",
-    ["# note " + EM_DASH + " kept by -F", "  # indented " + EM_DASH, "#" + EM_DASH],
-    ids=["hash", "indented-hash", "bare-hash"],
-)
-def test_the_glyph_half_refuses_a_glyph_on_a_hash_line(tmp_path, capsys, line):
+
+def _msg(tmp_path, line):
     f = tmp_path / "msg"
     f.write_bytes(("docs: clean\n\n" + line + "\n").encode("utf-8"))
-    assert precommit_gate._check_message_file(str(f)) == 1
+    return str(f)
+
+
+@pytest.mark.parametrize("line", HASH_GLYPH_LINES, ids=HASH_IDS)
+def test_the_glyph_half_refuses_a_hash_line_glyph_when_git_keeps_it(
+    tmp_path, capsys, monkeypatch, line
+):
+    monkeypatch.setattr(precommit_gate, "_hash_lines_are_stripped", lambda: False)
+    assert precommit_gate._check_message_file(_msg(tmp_path, line)) == 1
     assert "precommit_gate BLOCKED" in capsys.readouterr().err
 
 
-def test_non_vacuity_the_glyph_half_passes_ascii_hash_lines(tmp_path):
-    """The legitimate neighbour survives: git's own ASCII template comments."""
-    f = tmp_path / "msg"
-    f.write_bytes(
-        b"docs: clean\n\n# Please enter the commit message for your changes. Lines starting\n"
-        b"# with '#' will be ignored, and an empty message aborts the commit.\n"
-    )
-    assert precommit_gate._check_message_file(str(f)) == 0
+@pytest.mark.parametrize("line", HASH_GLYPH_LINES, ids=HASH_IDS)
+def test_the_glyph_half_skips_a_hash_line_when_git_strips_it(tmp_path, monkeypatch, line):
+    monkeypatch.setattr(precommit_gate, "_hash_lines_are_stripped", lambda: True)
+    assert precommit_gate._check_message_file(_msg(tmp_path, line)) == 0
+
+
+def test_an_indented_hash_is_not_a_comment_and_is_always_scanned(tmp_path, monkeypatch):
+    """Git's comment test is a line STARTING with the comment char."""
+    monkeypatch.setattr(precommit_gate, "_hash_lines_are_stripped", lambda: True)
+    assert precommit_gate._check_message_file(_msg(tmp_path, "  # indented " + EM_DASH)) == 1
+
+
+def test_non_vacuity_a_body_glyph_is_refused_even_when_git_strips_hash_lines(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(precommit_gate, "_hash_lines_are_stripped", lambda: True)
+    assert precommit_gate._check_message_file(_msg(tmp_path, "body " + EM_DASH)) == 1
+
+
+def test_the_glyph_half_loads_the_subject_halfs_predicate(monkeypatch):
+    """One predicate, loaded from the subject half's own file: both fail-closed
+    rows of its table read False through the glyph half too."""
+    monkeypatch.setenv("GIT_INDEX_FILE", ".git/index")
+    monkeypatch.setenv("GIT_EDITOR", ":")
+    assert precommit_gate._hash_lines_are_stripped() is False
+    monkeypatch.delenv("GIT_INDEX_FILE")
+    monkeypatch.setenv("GIT_EDITOR", "vi")
+    assert precommit_gate._hash_lines_are_stripped() is False
+
+
+def test_an_unloadable_predicate_fails_closed(monkeypatch, capsys):
+    import importlib.util
+
+    def _boom(*args, **kwargs):
+        raise ImportError("planted")
+
+    monkeypatch.setattr(importlib.util, "spec_from_file_location", _boom)
+    assert precommit_gate._hash_lines_are_stripped() is False
+    assert "scanning `#` lines too" in capsys.readouterr().err
+
+
+def test_non_vacuity_the_glyph_half_passes_ascii_hash_lines(tmp_path, monkeypatch):
+    """The legitimate neighbour survives: ASCII comments, kept or stripped."""
+    for stripped in (False, True):
+        monkeypatch.setattr(precommit_gate, "_hash_lines_are_stripped", lambda s=stripped: s)
+        f = tmp_path / "msg"
+        f.write_bytes(
+            b"docs: clean\n\n# Please enter the commit message for your changes. Lines starting\n"
+            b"# with '#' will be ignored, and an empty message aborts the commit.\n"
+        )
+        assert precommit_gate._check_message_file(str(f)) == 0
