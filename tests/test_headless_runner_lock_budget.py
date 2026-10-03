@@ -14,20 +14,30 @@ The runner bounds each term:
   - wait:  every slot wait is clamped to `MAX_SLOT_WAIT_SECONDS`, including a
            daemon started with an enormous `--interval`;
   - run:   `run_pass` stops STARTING jobs once `PASS_DEADLINE_SECONDS` has
-           elapsed, and records the rest as SKIP;
+           elapsed, and records the rest as SKIP; the last job started
+           before that is itself bounded by `JOB_DEADLINE_SECONDS` plus
+           `JOB_CANCEL_GRACE_SECONDS`;
   - drain: `slots.RELEASE_ATTEMPTS * slots.RELEASE_BACKOFF`.
 
 Every figure is read from a module attribute - no literal here - so a change
 to either side of the inequality re-runs the arithmetic.
 
-KNOWN RESIDUAL, stated rather than hidden: one job that never returns is still
-unbounded, because the deadline is checked between jobs. A hard cap needs a
-subprocess. No arm here claims otherwise.
+THE PER-JOB DEADLINE. Each job runs on a worker thread and the pass waits
+for it at most `JOB_DEADLINE_SECONDS`. A job still running then is recorded
+FAIL, its context's `cancel` event is set, the pass waits a short grace for it
+to notice, and the pass ends - so the slot is released on time. A Python thread
+cannot be killed, so a job that ignores `cancel` keeps running as an ABANDONED
+daemon thread. That is stated rather than hidden, and it is bounded in its
+effects: no further job in that pass starts, and no further LIVE pass takes a
+slot while any abandoned job is still alive, so abandoned work never overlaps
+new slotted work. The arms in section 4 measure each of those.
 """
 from __future__ import annotations
 
 import ast
 import contextlib
+import threading
+import time
 import types
 from pathlib import Path
 
@@ -125,7 +135,12 @@ def test_the_guard_above_would_notice_a_missing_slot_root() -> None:
 def _worst_lock_age() -> float:
     wait = max(runner_mod.ONCE_SLOT_TIMEOUT_SECONDS, runner_mod.MAX_SLOT_WAIT_SECONDS)
     drain = slots_mod.RELEASE_ATTEMPTS * slots_mod.RELEASE_BACKOFF
-    return wait + runner_mod.PASS_DEADLINE_SECONDS + drain
+    run = (
+        runner_mod.PASS_DEADLINE_SECONDS
+        + runner_mod.JOB_DEADLINE_SECONDS
+        + runner_mod.JOB_CANCEL_GRACE_SECONDS
+    )
+    return wait + run + drain
 
 
 def test_worst_case_lock_age_is_below_the_stale_threshold() -> None:
@@ -150,6 +165,16 @@ def test_once_timeout_does_not_exceed_the_wait_cap() -> None:
 def test_budget_constants_are_positive() -> None:
     assert runner_mod.MAX_SLOT_WAIT_SECONDS > 0
     assert runner_mod.PASS_DEADLINE_SECONDS > 0
+    assert runner_mod.JOB_DEADLINE_SECONDS > 0
+    assert runner_mod.JOB_CANCEL_GRACE_SECONDS > 0
+
+
+def test_the_budget_detector_fires_on_an_over_budget_job_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-vacuity for the per-job term: it is actually inside the sum."""
+    monkeypatch.setattr(runner_mod, "JOB_DEADLINE_SECONDS", slots_mod.DEFAULT_STALE_AFTER)
+    assert not _worst_lock_age() < slots_mod.DEFAULT_STALE_AFTER
 
 
 # ---------------------------------------------------------------------------
@@ -322,3 +347,243 @@ def test_deadline_skipped_live_once_still_exits_ok(
     )
     assert code == runner_mod.EXIT_OK
     assert ran == [JOB_A]
+
+
+# ---------------------------------------------------------------------------
+# 4. The per-job deadline
+# ---------------------------------------------------------------------------
+#
+# Each fake job blocks on a `threading.Event` the TEST owns, with its own
+# ceiling, so a red arm can never leave a thread running past the test: the
+# `release` fixture sets every event and joins every worker on teardown.
+
+HUNG = "budget_hung"
+AFTER = "budget_after"
+SMALL_DEADLINE = 0.2
+SMALL_GRACE = 0.2
+#: A ceiling on how long any fake job may block, well past the deadline.
+FAKE_CEILING = 10.0
+
+
+@pytest.fixture()
+def small_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(runner_mod, "JOB_DEADLINE_SECONDS", SMALL_DEADLINE)
+    monkeypatch.setattr(runner_mod, "JOB_CANCEL_GRACE_SECONDS", SMALL_GRACE)
+
+
+@pytest.fixture()
+def release():
+    """Events the fake jobs block on, and the worker threads they ran on."""
+    events: list[threading.Event] = []
+    workers: list[threading.Thread] = []
+    yield events, workers
+    for event in events:
+        event.set()
+    for worker in workers:
+        worker.join(FAKE_CEILING)
+    assert runner_mod.abandoned_jobs() == [], "a fake job outlived its test"
+
+
+def _register_hung(
+    release, *, cooperative: bool, late: list[str] | None = None
+) -> threading.Event:
+    events, workers = release
+    gate = threading.Event()
+    events.append(gate)
+
+    def _hung(context: jobs_mod.JobContext) -> jobs_mod.JobResult:
+        workers.append(threading.current_thread())
+        if cooperative:
+            context.cancel.wait(FAKE_CEILING)
+        else:
+            gate.wait(FAKE_CEILING)
+        if late is not None:
+            late.append("returned")
+        return jobs_mod.passed(HUNG, "a late success that must never be recorded")
+
+    _register(HUNG, _hung)
+    return gate
+
+
+def _register_after(ran: list[str]) -> None:
+    def _after(context: jobs_mod.JobContext) -> jobs_mod.JobResult:
+        ran.append(AFTER)
+        return jobs_mod.passed(AFTER, "ok")
+
+    _register(AFTER, _after, depends_on=(HUNG,))
+
+
+def test_a_hung_job_is_failed_within_its_deadline(
+    clean_registry, small_deadline, release, runtime: Path
+) -> None:
+    gate = _register_hung(release, cooperative=False)
+    start = time.monotonic()
+    outcome = runner_mod.run_pass(dry_run=True, job_names=[HUNG], runtime_dir=str(runtime))
+    elapsed = time.monotonic() - start
+
+    assert elapsed < SMALL_DEADLINE + SMALL_GRACE + 2.0, "the pass waited on the hung job"
+    (result,) = outcome.results
+    assert result.status == jobs_mod.STATUS_FAIL, "a hung job is never a success"
+    assert "deadline" in result.message
+    assert "Traceback" not in result.message
+    assert not outcome.ok
+    gate.set()
+
+
+def test_a_hung_job_stops_the_rest_of_the_pass(
+    clean_registry, small_deadline, release, runtime: Path
+) -> None:
+    """The hung job may still be mutating the shared context, so nothing after it runs."""
+    gate = _register_hung(release, cooperative=False)
+    ran: list[str] = []
+    _register_after(ran)
+    outcome = runner_mod.run_pass(
+        dry_run=True, job_names=[HUNG, AFTER], runtime_dir=str(runtime)
+    )
+    by_name = {r.name: r for r in outcome.results}
+    assert ran == []
+    assert by_name[HUNG].status == jobs_mod.STATUS_FAIL
+    assert by_name[AFTER].status == jobs_mod.STATUS_SKIP
+    assert "Traceback" not in by_name[AFTER].message
+    gate.set()
+
+
+def test_a_late_return_is_never_recorded(
+    clean_registry, small_deadline, release, runtime: Path
+) -> None:
+    late: list[str] = []
+    gate = _register_hung(release, cooperative=False, late=late)
+    outcome = runner_mod.run_pass(dry_run=True, job_names=[HUNG], runtime_dir=str(runtime))
+    gate.set()
+    for worker in release[1]:
+        worker.join(FAKE_CEILING)
+    assert late == ["returned"], "fixture: the job did come back, late"
+    assert [r.status for r in outcome.results] == [jobs_mod.STATUS_FAIL]
+
+
+def test_a_cooperative_job_is_cancelled_and_leaks_no_thread(
+    clean_registry, small_deadline, release, runtime: Path
+) -> None:
+    _register_hung(release, cooperative=True)
+    outcome = runner_mod.run_pass(dry_run=True, job_names=[HUNG], runtime_dir=str(runtime))
+    assert [r.status for r in outcome.results] == [jobs_mod.STATUS_FAIL]
+    (worker,) = release[1]
+    assert not worker.is_alive(), "the cancel event did not reach the job"
+    assert runner_mod.abandoned_jobs() == []
+
+
+def test_an_uncooperative_job_is_tracked_until_it_ends(
+    clean_registry, small_deadline, release, runtime: Path
+) -> None:
+    """A thread cannot be killed; it is a DAEMON thread and it is tracked."""
+    gate = _register_hung(release, cooperative=False)
+    runner_mod.run_pass(dry_run=True, job_names=[HUNG], runtime_dir=str(runtime))
+    (worker,) = release[1]
+    assert worker.is_alive()
+    assert worker.daemon, "an abandoned job must never block interpreter exit"
+    assert runner_mod.abandoned_jobs() == [HUNG]
+    gate.set()
+    worker.join(FAKE_CEILING)
+    assert runner_mod.abandoned_jobs() == []
+
+
+def test_a_fast_job_is_unaffected_by_the_deadline(
+    clean_registry, small_deadline, release, runtime: Path
+) -> None:
+    """Neighbour: a job inside its deadline passes and leaves nothing behind."""
+    _register(JOB_A, _probe)
+    outcome = runner_mod.run_pass(dry_run=True, job_names=[JOB_A], runtime_dir=str(runtime))
+    assert [r.status for r in outcome.results] == [jobs_mod.STATUS_PASS]
+    assert outcome.ok
+    assert runner_mod.abandoned_jobs() == []
+
+
+def test_a_job_that_raises_on_its_worker_is_still_failed(
+    clean_registry, small_deadline, release, runtime: Path
+) -> None:
+    def _boom(context: jobs_mod.JobContext) -> jobs_mod.JobResult:
+        raise RuntimeError("raw upstream text that must not surface")
+
+    _register(JOB_A, _boom)
+    outcome = runner_mod.run_pass(dry_run=True, job_names=[JOB_A], runtime_dir=str(runtime))
+    (result,) = outcome.results
+    assert result.status == jobs_mod.STATUS_FAIL
+    assert "raw upstream" not in result.message
+
+
+def _slot_locks(root: Path) -> list[str]:
+    return sorted(p.name for p in root.glob("*.lock"))
+
+
+def test_live_once_with_a_hung_job_fails_and_releases_its_slot(
+    clean_registry, small_deadline, release, slot_root: Path, runtime: Path
+) -> None:
+    """A REAL hold under a tmp slot root: the lock is gone when the pass returns."""
+    gate = _register_hung(release, cooperative=False)
+    code = runner_mod.run_once(
+        uid=None,
+        dry_run=False,
+        job_names=[HUNG],
+        runtime_dir=str(runtime),
+        slot_root=slot_root,
+        slot_timeout=1,
+    )
+    assert code == runner_mod.EXIT_JOB_FAILED, "a hung job is never reported as success"
+    assert release[1][0].is_alive(), "fixture: the job is still hung"
+    assert _slot_locks(slot_root) == [], "the slot was not released"
+    gate.set()
+
+
+def test_no_live_pass_takes_a_slot_while_a_job_is_abandoned(
+    clean_registry, small_deadline, release, fake_hold, slot_root: Path, runtime: Path
+) -> None:
+    gate = _register_hung(release, cooperative=False)
+    _register(JOB_A, _probe)
+    first = runner_mod.run_once(
+        uid=None,
+        dry_run=False,
+        job_names=[HUNG],
+        runtime_dir=str(runtime),
+        slot_root=slot_root,
+        slot_timeout=1,
+    )
+    assert first == runner_mod.EXIT_JOB_FAILED
+    assert len(fake_hold) == 1
+
+    blocked = runner_mod.run_once(
+        uid=None,
+        dry_run=False,
+        job_names=[JOB_A],
+        runtime_dir=str(runtime),
+        slot_root=slot_root,
+        slot_timeout=1,
+    )
+    assert blocked == runner_mod.EXIT_JOB_FAILED
+    assert len(fake_hold) == 1, "a slot was taken while abandoned work was still running"
+
+    gate.set()
+    release[1][0].join(FAKE_CEILING)
+    resumed = runner_mod.run_once(
+        uid=None,
+        dry_run=False,
+        job_names=[JOB_A],
+        runtime_dir=str(runtime),
+        slot_root=slot_root,
+        slot_timeout=1,
+    )
+    assert resumed == runner_mod.EXIT_OK, "neighbour: the lane resumes once the job ends"
+    assert len(fake_hold) == 2
+
+
+def test_the_job_deadline_is_read_at_call_time() -> None:
+    """The fixtures above patch the module attribute; a bound copy would ignore them."""
+    source = Path(runner_mod.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    defaults = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.arguments)
+        for default in [*node.defaults, *node.kw_defaults]
+        if isinstance(default, ast.Name) and default.id == "JOB_DEADLINE_SECONDS"
+    ]
+    assert defaults == [], "JOB_DEADLINE_SECONDS bound as a default argument"
