@@ -49,10 +49,21 @@ ENV_HEADLESS_BASE_URL = "CLAUDE_HEADLESS_BASE_URL"
 #: user-wide, never machine-wide, never in this process.
 ENV_CHILD_BASE_URL = "ANTHROPIC_BASE_URL"
 
-#: Removed from the CHILD's environment, never from this process. Each one
-#: either authenticates directly or switches the provider, and any of them
-#: inherited by the child outranks or bypasses the proxy - a billing bypass.
-#: A later addition is one line here.
+#: THE CHILD ENV IS STRIPPED BY PREFIX, ruled 2026-10-02. Every key starting
+#: with one of these is removed from the CHILD's environment (never from this
+#: process), case-insensitively on Windows where environment keys are, so an
+#: auth token, a provider switch or a parent session's own plumbing (such as
+#: `CLAUDECODE` or a messaging socket) cannot reach the child under a name
+#: nobody listed. `ANTHROPIC_BASE_URL` is then set fresh.
+CHILD_ENV_STRIP_PREFIXES: tuple[str, ...] = ("ANTHROPIC_", "CLAUDE_CODE_", "CLAUDECODE")
+
+#: Exempt from the prefix strip. `claude` on Windows needs to find Git Bash.
+CHILD_ENV_KEEP: tuple[str, ...] = ("CLAUDE_CODE_GIT_BASH_PATH",)
+
+#: The NAMED floor of the strip, kept as documentation and as a test target:
+#: each one either authenticates directly or switches the provider, so any of
+#: them inherited by the child would bypass the proxy - a billing bypass. Every
+#: name here is covered by `CHILD_ENV_STRIP_PREFIXES`; the arms prove it.
 CHILD_ENV_STRIPPED: tuple[str, ...] = (
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",
@@ -171,6 +182,14 @@ def probe(
     return True
 
 
+def _stripped(key: str) -> bool:
+    """Whether `key` is removed from the child env. See `CHILD_ENV_STRIP_PREFIXES`."""
+    norm = key.upper() if os.name == "nt" else key
+    if norm in CHILD_ENV_KEEP:
+        return False
+    return norm.startswith(CHILD_ENV_STRIP_PREFIXES)
+
+
 def _refuse(reason: str) -> Decision:
     log.warning("headless route: %s", reason)
     return Decision(False, None, reason)
@@ -198,7 +217,7 @@ def prepare_headless_env(
     child = {
         k: v
         for k, v in (os.environ if environ is None else environ).items()
-        if k not in CHILD_ENV_STRIPPED
+        if not _stripped(k)
     }
     child[ENV_CHILD_BASE_URL] = url
     return Decision(True, child, "")

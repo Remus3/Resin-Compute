@@ -119,7 +119,7 @@ def test_the_happy_path_sets_the_child_var_and_leaves_the_parent_alone(listener)
     copied = all(
         decision.env.get(k) == v
         for k, v in parent.items()
-        if k != he.ENV_CHILD_BASE_URL and k not in he.CHILD_ENV_STRIPPED
+        if not he._stripped(k)
     )
     assert copied, "the child env is not a copy of the parent"
     unchanged = dict(os.environ) == parent
@@ -166,10 +166,43 @@ def test_auth_and_routing_vars_never_reach_the_child(listener, monkeypatch):
     assert kept, "the parent lost a variable the child was stripped of"
 
 
+def test_r6_every_anthropic_and_claude_code_key_is_dropped_by_prefix(listener):
+    parent = {
+        "PATH": "p",
+        "CLAUDE_CODE_MESSAGING_SOCKET": "s",
+        "CLAUDECODE": "1",
+        "CLAUDE_CODE_ENTRYPOINT": "cli",
+        "ANTHROPIC_MODEL": "m",
+        "ANTHROPIC_BASE_URL": "http://parent.invalid:1",
+        "CLAUDE_CODE_GIT_BASH_PATH": "bash.exe",
+        "CLAUDE_HEADLESS_BASE_URL": "kept-not-a-prefix",
+    }
+    decision = he.prepare_headless_env(read_store=_store(listener), environ=parent)
+    assert decision.ok is True, decision.reason
+    got = sorted(decision.env)
+    assert got == sorted(
+        ["PATH", "CLAUDE_CODE_GIT_BASH_PATH", "CLAUDE_HEADLESS_BASE_URL", "ANTHROPIC_BASE_URL"]
+    ), got
+    assert decision.env["ANTHROPIC_BASE_URL"] == listener
+    assert decision.env["CLAUDE_CODE_GIT_BASH_PATH"] == "bash.exe"
+    assert parent["CLAUDECODE"] == "1", "the parent mapping was mutated"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows environment keys are case-insensitive")
+def test_r6_the_prefix_match_is_case_insensitive_on_windows(listener):
+    parent = {"anthropic_api_key": "k", "Claude_Code_Oauth_Token": "t", "PATH": "p"}
+    decision = he.prepare_headless_env(read_store=_store(listener), environ=parent)
+    assert sorted(decision.env) == ["ANTHROPIC_BASE_URL", "PATH"], sorted(decision.env)
+
+
 def test_the_strip_list_is_one_named_tuple():
     assert set(STRIPPED) <= set(he.CHILD_ENV_STRIPPED)
     assert isinstance(he.CHILD_ENV_STRIPPED, tuple)
     assert he.ENV_CHILD_BASE_URL not in he.CHILD_ENV_STRIPPED
+    uncovered = [n for n in he.CHILD_ENV_STRIPPED if not he._stripped(n)]
+    assert uncovered == [], f"named but not covered by the prefix strip: {uncovered}"
+    # Non-vacuity: an unrelated key survives the same predicate.
+    assert not he._stripped("PATH")
 
 
 def test_the_user_store_wins_over_the_process_env(listener, closed_url):
@@ -371,9 +404,11 @@ def test_a_usage_limit_on_stderr_is_detected(rsp, monkeypatch, which):
         rsp._spawn_headless("a prompt", rsp.Bounds())
 
 
-def test_an_ordinary_draft_mentioning_limits_is_not_a_usage_limit(rsp, monkeypatch, which):
-    """Survival guard: a successful tagged draft that discusses limits is a draft."""
-    text = rsp.RESPONDER_TAG + "\nThe hop budget is a rate limit of sorts.\n" + "x" * 400
+def test_a_draft_without_any_limit_phrase_is_a_draft(rsp, monkeypatch, which):
+    """Survival guard. RULED 2026-10-02: a limit phrase ANYWHERE backs off, even
+    in a real draft, because a false positive only backs off. So the neighbour
+    that must survive is a draft carrying no limit phrase at all."""
+    text = rsp.RESPONDER_TAG + "\nThe hop budget held at eight.\n" + "x" * 400
     run = _Run(stdout=text, returncode=0)
     monkeypatch.setattr(subprocess, "run", run)
     monkeypatch.setattr(rsp, "_headless_gate", _routing)

@@ -274,3 +274,142 @@ def test_two_responders_answering_each_other_terminate(tmp_path, monkeypatch):
         rb = b.run_once(inbox=inbox_b, roots={"RSC": root_a}, bounds=b.Bounds(armed=True), spawn=_drafter(b))
         deliveries += int(ra["delivered"]) + int(rb["delivered"])
     assert deliveries == 1, f"the exchange did not terminate after one reply: {deliveries}"
+
+
+# ---------------------------------------------------------------------------
+# Second refutation (6f11963). Every one of these FAILS CLOSED.
+# ---------------------------------------------------------------------------
+
+BOM = chr(0xFEFF)
+RC_TAG_LINE = "[RC-RESPONDER] This note was written by an unattended responder."
+
+
+def test_r1_a_bom_before_a_sibling_tag_is_still_an_auto_reply(rsp, tmp_path):
+    """Tag ONLY, no declaration sentence, so the tag matcher alone must fire."""
+    body = BOM + "[RC-RESPONDER]\nmeasured: nothing further.\n"
+    assert rsp.is_auto_reply("n.md", RC_TAG_LINE)
+    assert rsp.is_auto_reply("2026-10-02-1000-from-RC-question.md", body)
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "2026-10-02-1000-from-RC-question.md").write_bytes(body.encode("utf-8"))
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
+
+
+def test_r1_read_text_strips_a_leading_bom(rsp, tmp_path):
+    path = tmp_path / "n.md"
+    path.write_bytes((BOM + "hello\n").encode("utf-8"))
+    assert rsp._read_text(path) == "hello\n"
+
+
+def test_r2_an_empty_or_unreadable_note_is_skipped(rsp, tmp_path):
+    assert rsp.is_auto_reply("2026-10-02-1000-from-SS-question.md", "")
+    assert rsp.is_auto_reply("2026-10-02-1000-from-SS-question.md", " \n\t\n")
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-02-1000-from-SS-question.md", "")
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
+
+
+def _outbound_corrupt(rsp):
+    rsp.DEFAULT_OUTBOUND.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_OUTBOUND.write_bytes(b"{not json")
+
+
+def test_r3_a_corrupt_outbound_record_caps_every_sender(rsp):
+    _outbound_corrupt(rsp)
+    assert rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, time.time()) >= set(rsp.OPTED_IN)
+
+
+def test_r3_a_malformed_row_is_a_corrupt_record(rsp):
+    rsp.DEFAULT_OUTBOUND.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_OUTBOUND.write_bytes(b'{"version": 1, "replies": [{"to": 5}]}')
+    assert rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, time.time()) >= set(rsp.OPTED_IN)
+
+
+def test_r3_a_missing_outbound_record_is_zero_rows(rsp):
+    assert not rsp.DEFAULT_OUTBOUND.exists()
+    assert rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, time.time()) == set()
+
+
+def test_r3_a_corrupt_record_sends_nothing(rsp, tmp_path, monkeypatch):
+    _agree(rsp)
+    _trust(rsp, monkeypatch)
+    _outbound_corrupt(rsp)
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-02-1000-from-SS-question.md")
+    (tmp_path / "ss" / "moon_sync_inbox").mkdir(parents=True)
+    result = _armed(rsp, inbox, {"SS": tmp_path / "ss"})
+    assert result["delivered"] is False, result
+    assert list((tmp_path / "ss" / "moon_sync_inbox").iterdir()) == []
+
+
+def test_r3_a_failed_reserve_sends_nothing(rsp, tmp_path, monkeypatch):
+    _agree(rsp)
+    _trust(rsp, monkeypatch)
+    monkeypatch.setattr(rsp, "record_outbound", lambda *a, **k: False)
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-02-1000-from-SS-question.md")
+    (tmp_path / "ss" / "moon_sync_inbox").mkdir(parents=True)
+    result = _armed(rsp, inbox, {"SS": tmp_path / "ss"})
+    assert result["delivered"] is False, result
+    assert list((tmp_path / "ss" / "moon_sync_inbox").iterdir()) == []
+    log = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii")
+    assert "fail-closed" in log, log
+
+
+def test_r3_the_row_is_reserved_before_the_delivery(rsp, tmp_path, monkeypatch):
+    _agree(rsp)
+    _trust(rsp, monkeypatch)
+    reserved_at_delivery = []
+    real_deliver = rsp.deliver
+
+    def deliver(*a, **k):
+        reserved_at_delivery.append(rsp.DEFAULT_OUTBOUND.exists())
+        return real_deliver(*a, **k)
+
+    monkeypatch.setattr(rsp, "deliver", deliver)
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-02-1000-from-SS-question.md")
+    (tmp_path / "ss" / "moon_sync_inbox").mkdir(parents=True)
+    result = _armed(rsp, inbox, {"SS": tmp_path / "ss"})
+    assert result["delivered"] is True, result
+    assert reserved_at_delivery and reserved_at_delivery[0] is True, "delivered before reserving"
+
+
+def test_r4_a_corrupt_backoff_record_is_an_active_backoff(rsp):
+    rsp.DEFAULT_BACKOFF.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_BACKOFF.write_bytes(b"garbage")
+    assert rsp.backoff_active(rsp.DEFAULT_BACKOFF, time.time()) is True
+    rsp.DEFAULT_BACKOFF.write_bytes(b'{"until": "soon"}')
+    assert rsp.backoff_active(rsp.DEFAULT_BACKOFF, time.time()) is True
+
+
+def test_r4_a_missing_or_expired_backoff_record_is_inactive(rsp):
+    assert rsp.backoff_active(rsp.DEFAULT_BACKOFF, time.time()) is False
+    rsp.DEFAULT_BACKOFF.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_BACKOFF.write_bytes(b'{"until": 1.0}')
+    assert rsp.backoff_active(rsp.DEFAULT_BACKOFF, time.time()) is False
+
+
+def test_r4_a_failed_backoff_write_still_ends_as_usage_backoff(rsp, tmp_path, monkeypatch):
+    _agree(rsp)
+    _trust(rsp, monkeypatch)
+    monkeypatch.setattr(rsp, "record_backoff", lambda *a, **k: False)
+
+    def limited(prompt, bounds):
+        raise rsp.UsageLimited(None)
+
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-02-1000-from-SS-question.md")
+    result = rsp.run_once(
+        inbox=inbox, roots={"SS": tmp_path / "ss"}, bounds=rsp.Bounds(armed=True), spawn=limited
+    )
+    assert result["termination"] == "usage-backoff", result
+    log = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii")
+    assert "fail-closed" in log, log
+
+
+def test_r5_a_limit_phrase_on_a_clean_long_exit_still_backs_off(rsp, routed, monkeypatch):
+    text = rsp.RESPONDER_TAG + "\n" + "x" * 2000 + "\nYou've hit your limit\n"
+    monkeypatch.setattr(subprocess, "run", _Run(text, returncode=0))
+    with pytest.raises(rsp.UsageLimited):
+        rsp._spawn_headless("a prompt", rsp.Bounds())

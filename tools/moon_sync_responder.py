@@ -87,6 +87,7 @@ ordering rather than the wording.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -729,6 +730,9 @@ _DECLARED_AUTOMATED = re.compile(
 #: The reply filename convention `_reply_name` writes.
 _AUTO_REPLY_NAME = "-auto-reply-to-"
 
+#: U+FEFF, spelled by code point so this file stays 7-bit.
+_BOM = chr(0xFEFF)
+
 
 def is_auto_reply(name: str, text: str) -> bool:
     """Whether a note is itself a responder's auto-reply, from ANY tree.
@@ -738,7 +742,16 @@ def is_auto_reply(name: str, text: str) -> bool:
     counts only what lands in THIS inbox. Matched on four signals, any one
     sufficient: this tree's own tag, any tree's tag shape, a body declaring an
     unattended or headless responder wrote it, or the auto-reply filename.
+
+    FAILS CLOSED, ruled 2026-10-02. A leading byte-order mark is stripped first,
+    because a BOM in front of a sibling's tag hid it from the line-anchored
+    match. An EMPTY body reads as an auto-reply too: `_read_text` degrades an
+    unreadable note to empty, and a note this module cannot read is never one
+    it should answer.
     """
+    text = text.lstrip(_BOM)
+    if not text.strip():
+        return True
     return (
         _AUTO_REPLY_NAME in name
         or RESPONDER_TAG in text
@@ -755,7 +768,7 @@ def _read_text(path: Path) -> str:
     unbounded chain.
     """
     try:
-        return path.read_bytes().decode("utf-8", "replace")
+        return path.read_bytes().decode("utf-8", "replace").lstrip(_BOM)
     except OSError:
         return ""
 
@@ -2151,55 +2164,127 @@ def bounce_name(note: Path, stamp: float) -> str:
     return f"{when}-from-{SELF_CODE}-bounce-{stem}{BOUNCE_SUFFIX}"
 
 
+#: The caller label a fail-closed line carries in the invocation log.
+FAIL_CLOSED_SOURCE = "failclosed"
+OUTBOUND_UNRESERVED_REASON = (
+    "the outbound record could not be reserved, so nothing was delivered (fail closed)"
+)
+
+_MISSING = object()
+
+
+def _load_record(path: Path) -> Any:
+    """A JSON record, `_MISSING` when absent, None when present and unreadable.
+
+    `read_json` cannot tell absent from corrupt - both return the default - and
+    the two records below need exactly that distinction: absent is the healthy
+    first-run state, corrupt must FAIL CLOSED.
+    """
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return _MISSING
+    except OSError:
+        return None
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def _log_fail_closed(note: str | None, what: str) -> None:
+    """Say so where an unattended run can be read back: the invocation log."""
+    print(f"responder: FAIL CLOSED - {what}")
+    log_invocation(FAIL_CLOSED_SOURCE, note, f"fail-closed:{what}")
+
+
 def backoff_active(path: Path, now: float) -> bool:
     """Whether a recorded usage-limit backoff is still in force at `now`.
 
-    An unreadable or malformed record reads as NO backoff: this is a rate
-    limiter, not the billing gate. The billing gate is the headless route,
-    which fails closed on its own.
+    FAILS CLOSED, ruled 2026-10-02: a record that is present but unreadable,
+    malformed, or whose `until` is not a number reads as an ACTIVE backoff.
+    Only an absent record means no backoff.
     """
-    doc = read_json(path, {})
+    doc = _load_record(path)
+    if doc is _MISSING:
+        return False
     until = doc.get("until") if isinstance(doc, dict) else None
-    return isinstance(until, (int, float)) and now < float(until)
+    if not isinstance(until, (int, float)) or isinstance(until, bool):
+        _log_fail_closed(None, "backoff-record-unreadable")
+        return True
+    return now < float(until)
 
 
-def _outbound_rows(path: Path, now: float) -> list[dict]:
-    """Delivered-reply rows still inside the rolling window. Unreadable is empty."""
-    doc = read_json(path, {})
+def _outbound_rows(path: Path, now: float) -> list[dict] | None:
+    """Rows inside the rolling window; [] when absent; None when CORRUPT.
+
+    Corrupt means present but unreadable, not a document, or any row
+    malformed. The caller treats None as every sender at the cap.
+    """
+    doc = _load_record(path)
+    if doc is _MISSING:
+        return []
     rows = doc.get("replies") if isinstance(doc, dict) else None
     if not isinstance(rows, list):
-        return []
-    floor = now - OUTBOUND_WINDOW_SECONDS
-    return [
+        return None
+    good = [
         r for r in rows
         if isinstance(r, dict)
         and isinstance(r.get("to"), str)
         and isinstance(r.get("at"), (int, float))
-        and floor < float(r["at"]) <= now + OUTBOUND_WINDOW_SECONDS
     ]
+    if len(good) != len(rows):
+        return None
+    floor = now - OUTBOUND_WINDOW_SECONDS
+    return [r for r in good if floor < float(r["at"]) <= now + OUTBOUND_WINDOW_SECONDS]
 
 
 def senders_at_cap(path: Path, now: float) -> set[str]:
-    """Senders already sent `MAX_REPLIES_PER_SENDER` replies in the rolling day."""
+    """Senders already sent `MAX_REPLIES_PER_SENDER` replies in the rolling day.
+
+    A CORRUPT record caps EVERY participant, and says so: a cap that cannot be
+    counted is not a cap, so nobody is answered until the record is repaired.
+    """
+    rows = _outbound_rows(path, now)
+    if rows is None:
+        _log_fail_closed(None, "outbound-record-unreadable")
+        return set(OPTED_IN)
     counts: dict[str, int] = {}
-    for row in _outbound_rows(path, now):
+    for row in rows:
         counts[row["to"]] = counts.get(row["to"], 0) + 1
     return {code for code, n in counts.items() if n >= MAX_REPLIES_PER_SENDER}
 
 
 def record_outbound(path: Path, to: str, now: float, delivered: bool) -> bool:
-    """Count one DELIVERED reply to `to`. An undelivered one is not counted.
+    """RESERVE one reply to `to` in the durable record. True only if it landed.
 
-    Called unconditionally on the reply path with `delivered` passed in, so the
-    decision lives here rather than in a new branch inside `_run_once`. Rows
-    older than the window are pruned on every write, so the record is bounded.
+    Called BEFORE the delivery, so the row exists before any byte leaves this
+    repo; a reply whose row could not be written is not sent. `delivered=False`
+    records nothing. A corrupt record is never overwritten here - that would
+    erase the very count the cap reads - so it refuses and stays capped.
     """
     if not delivered:
         return False
-    if not _ensure_parent(path):
+    rows = _outbound_rows(path, now)
+    if rows is None or not _ensure_parent(path):
         return False
-    rows = [*_outbound_rows(path, now), {"to": to, "at": now}]
-    return atomic_write_json(path, {"version": 1, "replies": rows})
+    return atomic_write_json(path, {"version": 1, "replies": [*rows, {"to": to, "at": now}]})
+
+
+def _reserve_targets(
+    path: Path, note: Path, dests: list[Path], inbox: Path, now: float
+) -> tuple[list[Path], list[Path], list[str]]:
+    """(sibling inboxes, own-copy inboxes, reasons) for one reply.
+
+    Reserves the outbound row first. When it cannot be written, both target
+    lists are EMPTY, so `deliver` writes nothing and the cycle reports the
+    reply undelivered with the reason. Kept out of `_run_once` so the cycle
+    gains no branch.
+    """
+    if record_outbound(path, sender_of(note.name) or "", now, True):
+        return [d / "moon_sync_inbox" for d in dests], [inbox], []
+    _log_fail_closed(note.name, "outbound-unreserved")
+    return [], [], [OUTBOUND_UNRESERVED_REASON]
 
 
 def record_backoff(path: Path, reset_at: float | None, now: float) -> bool:
@@ -2210,6 +2295,21 @@ def record_backoff(path: Path, reset_at: float | None, now: float) -> bool:
     if not _ensure_parent(path):
         return False
     return atomic_write_json(path, {"until": until, "recorded": now})
+
+
+def _usage_limited_termination(
+    path: Path, reset_at: float | None, now: float, note: str | None
+) -> str:
+    """Record the backoff; the cycle's termination either way.
+
+    FAILS CLOSED, ruled 2026-10-02: when the backoff cannot be written the
+    pass ends as `usage-backoff` anyway and a fail-closed line is logged, so a
+    broken record can never read as permission to try again.
+    """
+    if record_backoff(path, reset_at, now):
+        return "usage-limited"
+    _log_fail_closed(note, "backoff-unrecorded")
+    return "usage-backoff"
 
 
 def _hold(
@@ -2442,9 +2542,10 @@ def _run_once(
         # BACK OFF, NEVER REROUTE. The next fire inside the backoff spawns
         # nothing; no other route is tried. Nothing is held - there is no draft.
         print(f"responder: {USAGE_LIMITED_REASON}")
-        record_backoff(DEFAULT_BACKOFF, exc.reset_at, started)
         result["reasons"] = [USAGE_LIMITED_REASON]
-        result["termination"] = "usage-limited"
+        result["termination"] = _usage_limited_termination(
+            DEFAULT_BACKOFF, exc.reset_at, started, note.name
+        )
         return result
     except UsageBackoff:
         print(f"responder: {USAGE_BACKOFF_REASON}")
@@ -2577,20 +2678,22 @@ def _run_once(
         if repeat and already_bounced and not result["held"] and not result["bounced"]:
             return result
     else:
-        written = deliver(
-            draft, reply_name, [d / "moon_sync_inbox" for d in dests], source=source
+        # RESERVED BEFORE DELIVERED, FAIL CLOSED. The outbound row is written
+        # first; if it cannot be, both target lists come back empty, nothing is
+        # written anywhere, and the reason rides on the result.
+        targets, own_copy, reserve_reasons = _reserve_targets(
+            DEFAULT_OUTBOUND, note, dests, inbox, started
         )
+        result["reasons"] = reserve_reasons
+        written = deliver(draft, reply_name, targets, source=source)
         # Our own copy, so a cold session sees both halves of the conversation.
-        deliver(draft, reply_name, [inbox], source=source)
+        deliver(draft, reply_name, own_copy, source=source)
         # THE `bool(written)` TERM IS THE GUARD, not decoration: `all([])` is
         # vacuously True, so without it a delivery to zero destinations would
         # report itself delivered.
         # GATE:delivery-write-all
         result["delivered"] = all(ok for ok, _ in written) and bool(written)
         result["actions"] = ["A5"]
-        # COUNTED AGAINST THE OUTBOUND CAP. Unconditional call, the delivered
-        # flag decides inside, so this adds no branch to the cycle.
-        record_outbound(DEFAULT_OUTBOUND, sender_of(note.name) or "", started, result["delivered"])
         result["termination"] = "delivered"
 
         # THE RETURN VALUE IS OBSERVED, AND IT WAS A BARE STATEMENT HERE. A False
@@ -2675,9 +2778,10 @@ SPAWN_COMMAND: tuple[str, ...] = (
 #: never does.
 _headless_gate = headless_env.prepare_headless_env
 
-#: A usage-limit refusal, as the CLI or the proxy words it. Consulted on a
-#: non-zero exit, or on a SHORT untagged stdout, so a real draft that merely
-#: discusses limits is not mistaken for one.
+#: A usage-limit refusal, as the CLI or the proxy words it. Searched ANYWHERE
+#: in stdout and stderr, whatever the exit code and length - ruled 2026-10-02.
+#: A real draft that merely mentions a limit is a false positive, and a false
+#: positive only backs off, which is the safe side.
 #:
 #: THE REAL CLI AND PROXY TEXT WAS NOT CAPTURED. These phrases are the wording
 #: the refutation of c695ad1 enumerated, plus the legacy `usage limit reached|`
@@ -2691,15 +2795,11 @@ _USAGE_LIMIT = re.compile(
     re.IGNORECASE,
 )
 _RESET_EPOCH = re.compile(r"\|(\d{10})\b")
-_SHORT_REFUSAL_CHARS = 300
 
 
 def _usage_limited(done: subprocess.CompletedProcess) -> tuple[bool, float | None]:
     """`(limited, reset epoch or None)` for one finished session."""
-    out = done.stdout or ""
-    err = done.stderr or ""
-    short_untagged = len(out.strip()) <= _SHORT_REFUSAL_CHARS and RESPONDER_TAG not in out
-    hay = out + "\n" + err if done.returncode != 0 or short_untagged else err
+    hay = (done.stdout or "") + "\n" + (done.stderr or "")
     if not _USAGE_LIMIT.search(hay):
         return False, None
     stamp = _RESET_EPOCH.search(hay)
