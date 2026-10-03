@@ -1,6 +1,7 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-03, gates measured at commit 14b1ee5 on main. Everything below
-is a READING taken that day, not a promise about now. Re-measure before citing.
+Stamped 2026-10-03 (evening), gates measured at commit 22a5472 on main; the
+exec-bit CI fix and this paperwork landed after it. Everything below is a
+READING taken that day, not a promise about now. Re-measure before citing.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -12,6 +13,8 @@ BOOTSTRAP - READ IN THIS ORDER
 Before planning any character build: docs/GOAL_SPEC_SEED_TEAM.md.
 Before adding any data source: docs/LICENSE_NOTES.md.
 Before re-litigating a past choice: docs/adr/README.md.
+CLAUDE.md was condensed this session; its pre-condense text is verbatim in
+docs/claude-md-history.md.
 
 DO NOT RE-DERIVE GACHA CONSTANTS from memory or from a web search. They are
 verified and recorded in docs/SPEC_SCAFFOLD.md section 3, with corrections in
@@ -30,130 +33,112 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python -m pytest agents/pity_engine
   cd shell && node --test
   python -m headless.runner --once --dry-run
+  python -m mypy
   python tools/publish_next_session.py
-A chained gate run reports only its last command, and a skipped command has no
-status of its own. Never pytest . from the root. NEVER pass a command-line -q -
-pytest.ini already carries one and a second makes -qq, which prints no summary
-line at all. mypy is ADVISORY and traverses only mypy.ini's files= roots, so it
-says NOTHING about headless/, ops/, surface/, scripts/ or tests/.
+Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
+import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
+must print 4 [].
+Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
+and traverses only mypy.ini's files= roots. A concurrent session deletes the
+shared pytest temp dir: pass a private --basetemp whose PARENT EXISTS.
 
-STATE OBSERVED 2026-10-03 AT 14b1ee5 (pre-push run)
-  tests 3479 passed 4 skipped; pity_engine 80. CI ci GREEN at 14b1ee5
-  (CI was RED 9061eb4..7551604 - see 2d108ee). Earlier seam readings the same
-  day: node 52, licence 47, docs 42, qa 17 passed 2 skipped 3 noted, mypy 40
-  source files. A real push at 9f49813 read 3348 passed 4 skipped - the old
-  pre-push-only extra skip is gone.
-
-WHAT LANDED 2026-10-03, SECOND HALF
-  bcbabc7  pytest.ini empty_parameter_set_mark = fail_at_collect;
-           tests/test_empty_parametrize_policy.py (3.11.9 + pytest 9.1.1).
-  a875e48  Anthropic admin and api03 key families named in VENDOR_TOKENS.
-  9f49813  git-install oracle grades the hook-shaped git-core PATH.
-  be03565  durable HALT sentinel in the runtime dir (os.stat fails closed,
-           never deleted), MAX_SLOT_WAIT_SECONDS 300, monotonic
-           PASS_DEADLINE_SECONDS 3600, zero-hit worker ack arm.
-  3d62942  C4 290cbf80 in ops/loop/slots.py under the sha256-verified MAIN
-           0815 ruling; pin moved, winmutex untouched; note 0826 delivered
-           6/6 hash-matched; RSC's C4 row CLOSED.
-  1829b9d  responder: MAIN provenance (MATCH/MISMATCH/UNVERIFIABLE/
-           NOT-ADDRESSED, one [RSC-PROVENANCE] line), MAX_RUNS_PER_DAY 120
-           under an OS lock, harness-enforced tool floor on SPAWN_COMMAND.
-           It then answered MAIN 0815 and 0830 unattended.
-  9061eb4  two tests wrote the live runtime; conftest fence + drift check;
-           run record backfilled 8 -> 2 real rows.
-  2d108ee  fence resolves paths through dir_fd (Linux rmtree) and uses
-           os.O_CREAT; this is what turned CI green again.
-  14b1ee5  empty-parametrize probe child confined with --confcutdir.
+STATE OBSERVED 2026-10-03 AT 22a5472 (the /done gate run)
+  tests 3816 passed 4 skipped; pity_engine 80; node 52 pass 0 fail;
+  licence 52; docs 42; qa 17 passed 2 skipped 3 noted; ruff clean; mypy 40
+  source files clean; dry run rc 0; kit v4 conformance [].
+  CI ci was RED from 65c1622 to 22a5472 (Linux-only, see TRAPS); the exec-bit
+  fix commit after 22a5472 is the one that must read green. CHECK IT FIRST:
+  gh run list --branch main --limit 3.
+  Live status file read back 2026-10-03T14:31: state limit, task Turn Limit
+  Reached, runs 3 of 3 (MAIN reply cap), cap_frees_at 23:11 local.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
-  1. MAIN 0912 overhead cut, the remainder: --setting-sources project,local;
-     --bare with a new responder brief file in tools and an API-key placeholder env var
-     in core/headless_env.py; --effort by note class; --model sonnet;
-     --output-format json usage logging; --no-session-persistence. A planner
-     spec exists (variant B safe: no floor lives in hooks). Done = landed plus
-     ONE live before/after measurement.
-  2. MAIN 0915: responder writes an inbox status JSON (schema 1) in a new loop
-     control directory under ops. Not yet gitignored - ignore it in the same
-     commit that first writes it.
-  3. MAIN FLEET-KIT: v1 (0955) and v2 (1014) are SUPERSEDED by v3 (1016),
-     order note plus a 3-file payload directory in the inbox. Unread.
-     MAIN 1029 says a kit bundle is a DIRECTORY - hash each file inside. Condense CLAUDE.md, route headless spawns through the kit.
-     Verify sha256 against MAIN's outbox; read the payload bytes.
-  4. Responder residuals: ASCII lookalike provenance tokens pass (the real
-     verdict stays on line 2); a byte-identical re-drop of an unanswered MAIN
-     note gets a fresh mtime (bounded 3/day); the conftest fence misses 8.3
-     short paths; the drift check excuses leaks during a real scheduled fire.
-  5. Flaky test_a_spawned_responder_writes_where_the_environment_points_and_
-     nowhere_else snapshots the user-scope Claude config - now fenced, re-check it.
-  6. RENEW THE RESPONDER BEFORE 2026-11-01T22:56 LOCAL - unchanged. Re-run
+  1. OPERATOR ORDER: FIRST ACTION. FINISH FLEET-KIT v4 WRAP-UP, INCLUDING
+     THE /120 USAGE COUNTER AND ITS RESET. The responder reserves runs in its
+     own OS-locked ledger (MAX_RUNS_PER_DAY 120, ops/runtime) while the kit
+     keeps a separate RunBudget under ops/loop/control - two counters. The
+     status file reports whichever cap binds. Settle: what [n/120] shows on
+     the widget when the RUN budget binds; when and how the count resets
+     (rolling 24 h window, cap_frees_at); whether to unify onto the kit's
+     RunBudget now that v4 locks and fails closed (blocked today by two
+     pinned properties: the v4 lock file outlives a dead holder by up to
+     120 s, and its stale cleanup unlinks the lock); and any reset the
+     operator flagged. Residual: when the kit's own budget binds,
+     cap_frees_at comes from the responder ledger.
+  2. Send MAIN the kit v5 gap list (reported, never patched): should_skip
+     damps a QUOTED marker line in non-ORDER classes (RSC bypasses it for
+     MAIN notes); spawn exposes no is_error/subtype (RSC keeps a run=
+     wrapper); RunBudget lock lifetime as above; ops/fleet_kit/fleet_headless.py halt_file
+     check uses exists(), so a dangling HALT link reads as go.
+  3. Responder provenance uses its own outbox hash, not v4 verify_main
+     (committed blob). Decide and record.
+  4. Known gaps recorded, not fixed: explicit --cleanup=whitespace/verbatim
+     on an editor commit hides # lines from the commit-msg gate; an
+     abandoned runner job can leave an orphan .tmp; a forged scheduledtask
+     log label during a real fire is still excused; the live child reported
+     only Read, not Grep/Glob; dontAsk was never exercised live.
+  5. RENEW THE RESPONDER BEFORE 2026-11-01T22:56 LOCAL - unchanged. Re-run
      ops/install_responder_task.ps1, fresh gitignored agreement record, then
      ops/check_task_liveness.py must exit 0.
-  7. Untriaged notes since 0915, incl. SS 1015/1105/0935/1000 and LL 0958.
-  Also open: arm-A live-holder test (unblocked by C4); stale 71fa2a68/9627
-  carrier comments in tests/test_loop_concurrency.py; hung job unbounded and
-  dangling HALT symlink reads as go; gate_mutation_runner cannot mutate
-  messages.
-  DO NOT REDO: the --once slot, the spawn cwd decision, the teardown sweep,
-  the C4 landing, the responder provenance/budget/floor, the test-leak fence.
+  6. Inbox: triage anything after MAIN 1325 / SS 1348. SS 1348 (v4 adopted)
+     is unread by this tree.
+  DO NOT REDO: v3/v4 vendoring and provenance (reversed only by a new MAIN
+  FLEET-KIT-vN note); the CLAUDE.md condense (reversed only by a MAIN kit
+  change); Bash removed from the responder child floor (reversed only by a
+  live probe proving a Bash floor cannot write); the MAIN skip bypass
+  (reversed only if kit v5 stops damping quoted markers); the --once slot,
+  the spawn cwd, the C4 landing, the test-leak fence.
 
 TRAPS MEASURED - none are hypothetical
-  AN AUDIT-HOOK FENCE GREEN ON WINDOWS CAN BE RED ON LINUX. Linux rmtree
-  emits path events relative to a dir_fd that Windows never emits, and an
-  O_* literal like 0x100 means different flags per platform. Read CI after
-  every fence change; a local green proves nothing about Linux.
+  A HOOK COPIED WITH shutil.copyfile HAS NO EXEC BIT ON LINUX. git then
+  IGNORES the hook with only a hint on stderr, every gate reads as passing,
+  and Windows - which has no exec bit - stays green. update-index --chmod=+x
+  fixes only the index. Read CI after every hook or gate change.
 
-  USER-SCOPE SETTINGS DEFAULT TO bypassPermissions HERE. A headless child's
-  --allowed-tools is NOT a floor without --permission-mode dontAsk. Measure a
-  floor live; never infer it from the flags.
+  AN AUDIT-HOOK FENCE GREEN ON WINDOWS CAN BE RED ON LINUX. Read CI.
 
-  WORKTREES ARE CREATED FROM origin/main. Push before dispatching a slice that
-  needs unpushed commits, and check main is an ancestor before it writes.
+  git commit -F AND -m KEEP # LINES. A gate that skips # lines as comments
+  lets a banned glyph or a # subject into history. In the editor flow git
+  strips them AFTER commit-msg runs, and git's own template lines can carry
+  non-ASCII branch, author and path names - so do not scan those.
+
+  A STATUS TASK NAME OUTSIDE THE MAIN 0915 SET RENDERS AS [?] ON THE
+  OPERATOR'S WIDGET, and a limit with a null cap_frees_at reads [?] too.
+
+  USER-SCOPE SETTINGS DEFAULT TO bypassPermissions HERE. The responder's
+  real floor is the --tools filter, not --permission-mode. Measure live.
+
+  WORKTREES ARE CREATED FROM origin/main. Push before dispatching a slice
+  that needs unpushed commits; or have the builder merge the local branch.
 
   A TEST THAT SPAWNS A CHILD WITHOUT RESINCOMPUTE_RUNTIME_DIR writes the live
   runtime and spends the real 120-per-day run budget.
 
   NEVER RESUME A BUILDER WHILE AN ADVERSARY IS STILL ATTACKING THE SAME TREE.
-  A freeze broke mid-verdict this session.
 
   A WORKTREE'S PATH LOCATION CHANGES WHICH TESTS SKIP. Compare skip REASONS.
 
-  PYTHON THREAD IDENTS ARE REUSED - about 3424 cycles here - so a per-thread
-  ledger is only sound on the main thread.
+  A SUBAGENT THAT SPAWNS ITS OWN CHILDREN NEVER HEARS THEIR RESULTS.
 
-  A SUBAGENT THAT SPAWNS ITS OWN CHILDREN NEVER HEARS THEIR RESULTS; they route
-  to the main thread. Relay or flatten.
+  A LENGTH CHECK IS NOT AN IDENTITY CHECK. Compare sha256.
 
-  A SHAPE MATCHER CANNOT PROVE A TEST NEVER REACHES A PATH. Use a behavioural
-  fence.
+  AN OUTBOUND NOTE IN YOUR OWN OUTBOX IS NOT DELIVERY. Hash the recipient's
+  copy.
 
-  A MISSING CHANNEL CODE LOOKS LIKE AN IDLE INBOX. Read the first fire's
-  terminal state, do not assume it.
+  write_text EMITS CRLF ON WINDOWS. Write bytes or newline=''.
 
-  A LENGTH CHECK IS NOT AN IDENTITY CHECK. Compare sha256, and build the
-  superseded artifact first as a control.
-
-  AN OUTBOUND NOTE IN YOUR OWN OUTBOX IS NOT DELIVERY. Only the recipient's
-  copy, hashed, proves it.
-
-  write_text EMITS CRLF ON WINDOWS. Write bytes or normalise, and check with a
-  byte count; .gitattributes hides it from the diff.
-
-  A QUOTED HEREDOC breaks on backslashes and apostrophes. Use the Write tool.
-
-  THE SESSION SCRATCHPAD IS NOT SESSION-PRIVATE. Use unique names and verify
-  reverts with git diff.
-
-  AN ASSERT RENDERS ITS OPERAND, including environment values, into a
-  published CI artifact. Hoist membership tests to a named boolean.
+  THE SESSION SCRATCHPAD IS NOT SESSION-PRIVATE. Use unique names.
 
   NEVER write the account identity, the proxy address, its port or any machine
   path into a tracked file. Say "second account" and "local proxy".
 
 STANDING DIRECTIVES - NOT UP FOR RE-ASKING
-  MAIN speaks for the operator on decisions. Nothing waits for operator
-  approval: adjudicate, act, report done, and report to MAIN. Commit and push
-  everything. Subagent-first, always. The producer NEVER grades its own work.
-  Agreement between two agents is not evidence. The cross-repo inbox is
-  reviewed, triaged into four buckets, ingested, implemented and ANSWERED every
-  session, and ALWAYS DELIVERED with the recipient copy hashed. Silence reads
-  as DISSENT. CAVEMAN ULTRA in chat, byte-exact everywhere else.
+  FLEET-COMMON (embedded in CLAUDE.md) governs: sub-agent first, quiet chat,
+  status from background work, /done prints one line only. MAIN speaks for
+  the operator on decisions when its note matches MAIN's outbox by sha256.
+  Nothing waits for operator approval: adjudicate, act, report done, report
+  to MAIN. Commit and push everything. The producer NEVER grades its own
+  work. Agreement between two agents is not evidence. The cross-repo inbox is
+  reviewed, triaged into four buckets, ingested, implemented and ANSWERED
+  every session, ALWAYS DELIVERED with the recipient copy hashed. Silence
+  reads as DISSENT. CAVEMAN ULTRA in chat, byte-exact everywhere else.

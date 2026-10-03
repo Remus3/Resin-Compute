@@ -11,8 +11,34 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-10-03 (second half), HIGHEST PRIORITY. MAIN 0912: CUT THE
-  RESPONDER'S PER-SPAWN OVERHEAD - THE REMAINDER.** Ordered by a
+- **NEW 2026-10-03 (evening), HIGHEST PRIORITY. FLEET-KIT v4 WRAP-UP,
+  INCLUDING THE /120 USAGE COUNTER.** Operator: first thing next session.
+  (1) The /120 counter and its reset: the responder reserves runs in its own
+  OS-locked ledger while the kit keeps a separate `RunBudget` under
+  ops/loop/control (unbackticked: gitignored); the status file shows the
+  binding cap. Reconcile what [n/120] shows, when it resets (rolling 24 h,
+  `cap_frees_at`), and whether the two ledgers should become one. The v4 kit
+  lock outlives a dead holder by up to 120 s and its stale cleanup unlinks
+  the lock, both pinned against here by `tests/test_responder_uniform_budget.py`.
+  (2) Send MAIN the kit v5 gap list: should_skip damps quoted markers in
+  non-ORDER classes; spawn exposes no is_error/subtype; RunBudget lock
+  lifetime; halt_file read with exists() (dangling link reads as go).
+  (3) Responder provenance still uses its own outbox hash, not v4
+  `verify_main` (committed blob).
+
+- **NEW 2026-10-03 (evening). KNOWN GAPS RECORDED, NOT FIXED.** An explicit
+  `--cleanup=whitespace` or `verbatim` on an editor commit hides `#` lines
+  from the commit-msg gate (`scripts/precommit_msg_check.py`); an abandoned
+  runner job can leave an orphan `.tmp` beside an untorn target
+  (`headless/runner.py`); a forged scheduledtask log label during a real
+  fire is still excused by the drift check (`conftest.py`); the child
+  reported only Read, not Grep/Glob, cause unconfirmed.
+
+- **DONE 2026-10-03 (evening), SUPERSEDED BY THE KIT. MAIN 0912: CUT THE
+  RESPONDER'S PER-SPAWN OVERHEAD.** The spawn now runs through
+  `ops/fleet_kit/fleet_headless.py` (bare, sonnet, effort by note class, json
+  usage); live per-spawn input about 1.4k-1.7k tokens, proven in
+  `tests/test_headless_env.py`. NOT measured: a before figure. WAS: Ordered by a
   sha256-verified MAIN note. Not yet built: `--setting-sources project,local`;
   `--bare` with a new responder brief file under `tools/` and an `ANTHROPIC_API_KEY`
   placeholder set in `core/headless_env.py`; `--effort` chosen by note class;
@@ -22,20 +48,26 @@ version. What follows is everything the scaffold deliberately did not do.
   `SPAWN_COMMAND` in `tools/moon_sync_responder.py`. Done means landed PLUS
   one live before/after measurement of the spawn's cost, not reasoning.
 
-- **NEW 2026-10-03 (second half). MAIN 0915: THE RESPONDER WRITES AN
-  INBOX STATUS FILE, SCHEMA 1.** Not built. The target is
+- **DONE 2026-10-03 (evening). MAIN 0915: THE RESPONDER WRITES AN
+  INBOX STATUS FILE, SCHEMA 1.** Written every tick via the kit, task names
+  pinned to the 0915 set and caps reported from the binding ledger, proven in
+  `tests/test_headless_env.py`; read back live 3/3 frees 23:11. WAS: Not built. The target is
   ops/loop/control/inbox_status.json (unbackticked: not a tracked path),
   and that path is NOT yet gitignored - gitignore it in the same commit that
   first writes it.
 
-- **NEW 2026-10-03 (second half). MAIN 0955: FLEET-KIT v1 IS UNREAD.** The
+- **DONE 2026-10-03 (evening). FLEET-KIT ADOPTED AT v4.** Vendored at
+  `ops/fleet_kit/MANIFEST.json`, conformance pinned by `tests/test_fleet_kit.py`.
+  WAS: MAIN 0955: FLEET-KIT v1 IS UNREAD. The
   order note plus a three-file payload directory dated 2026-10-03-0955 from
   MAIN in the inbox: condense `CLAUDE.md`, and route headless spawns through
   the kit. Verify the note's sha256 against MAIN's outbox, read the payload
   bytes rather than the note's description of them, then plan it.
 
-- **NEW 2026-10-03 (second half). RESPONDER RESIDUALS FROM THE `1829b9d` AND
-  `9061eb4` ADVERSARY ROUNDS, stated rather than fixed.** (1) An ASCII
+- **DONE 2026-10-03 (evening). RESPONDER RESIDUALS FROM THE `1829b9d` AND
+  `9061eb4` ADVERSARY ROUNDS.** All four fixed in S3, proven in
+  `tests/test_responder_main_provenance.py` and `tests/test_headless_env.py`.
+  WAS: (1) An ASCII
   lookalike provenance token in a note body passes the token check; the real
   verdict stays on line 2 of the deterministic `[RSC-PROVENANCE]` line, so the
   exposure is a reader who skips line 2. (2) A byte-identical re-drop of an
@@ -45,26 +77,30 @@ version. What follows is everything the scaffold deliberately did not do.
   check excuses any live-record change that lands inside a real scheduled
   fire window, so a leak during a real fire is not caught.
 
-- **NEW 2026-10-03 (second half). RE-CHECK THE FLAKY SPAWNED-RESPONDER TEST.**
+- **DONE 2026-10-03 (evening), NOT A DEFECT. RE-CHECK THE FLAKY
+  SPAWNED-RESPONDER TEST.** 5 of 5 passes, `~/.claude.json` sampled 30 s with
+  0 changes; `tests/test_headless_env.py` unchanged for it. WAS:
   `test_a_spawned_responder_writes_where_the_environment_points_and_nowhere_else`
   snapshots the user-scope `~/.claude.json`, which a concurrent session can
   rewrite. Now under the `9061eb4` fence; re-measure whether it still flakes
   before deciding anything.
 
-- **NEW 2026-10-03 (second half). OPEN: THE ARM-A LIVE-HOLDER TEST, NOW
-  UNBLOCKED.** It was to ride with the re-pin (RC 1130 s6); C4 landed in
+- **DONE 2026-10-03 (evening). THE ARM-A LIVE-HOLDER TEST.**
+  `test_a_live_child_holder_past_stale_after_keeps_its_slot` in
+  `tests/test_loop_concurrency.py`. WAS: It was to ride with the re-pin (RC 1130 s6); C4 landed in
   `3d62942`, so nothing blocks it. Prove a LIVE holder past
   `DEFAULT_STALE_AFTER` but under the hard ceiling is NOT reaped by
   `ops/loop/slots.py`.
 
-- **NEW 2026-10-03 (second half). OPEN: STALE PIN COMMENTARY IN
+- **DONE 2026-10-03 (evening), in `tests/test_loop_concurrency.py`. WAS: STALE PIN COMMENTARY IN
   `tests/test_loop_concurrency.py`.** The `SHARED_SHA256` pin moved to
   `290cbf80` in `3d62942`, but the carrier-row comment block below it still
   says the five `ops/loop/slots.py` carriers agree at `71fa2a68`, 9627 bytes,
   and reads as unmoved. Re-stamp it as history with the C4 landing, and do not
   restate other trees' carrier status without a fresh sweep.
 
-- **NEW 2026-10-03 (second half). UNTRIAGED INBOX SINCE 0915.** Includes SS
+- **DONE 2026-10-03 (evening). UNTRIAGED INBOX SINCE 0915.** Triaged into
+  four buckets; owed MAIN replies sent (RSC 1254, RSC 1432). WAS: Includes SS
   1015, SS 1105, SS 0935, SS 1000 and LL 0958. Four buckets per file, as
   always; the filename stamps drift per sender, so order by content.
 
