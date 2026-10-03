@@ -20,9 +20,12 @@ target-version = "py311"
 line-length = 120
 
 # ops/fleet_kit/ holds MAIN's FLEET-KIT bytes, vendored and sha256-pinned by
-# its own MANIFEST.json and conformance(). A local lint fix there would break
-# the pin, so the directory is out of ruff's scope; defects go to MAIN.
-extend-exclude = ["ops/fleet_kit"]
+# its own MANIFEST.json and conformance(). It is NOT excluded. Kit v3 was
+# (6 findings: UP031 x4, B904, UP004) and a local lint fix would have broken
+# the pin. Kit v4 was MEASURED clean under this config on 2026-10-03 with
+# `ruff check --no-force-exclude ops/fleet_kit/fleet_headless.py`, so the
+# exclusion was dropped. If a later kit version is not clean, do not patch
+# the bytes: restore `extend-exclude = ["ops/fleet_kit"]` and report to MAIN.
 
 [lint]
 select = [
