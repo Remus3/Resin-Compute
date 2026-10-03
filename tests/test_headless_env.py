@@ -1004,7 +1004,7 @@ def test_a_spent_budget_tick_reads_turn_limit_reached(rsp, tmp_path, trusted):
     assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
 
 
-def test_a_main_reply_limit_tick_is_its_own_state(rsp, tmp_path, trusted):
+def test_a_main_reply_limit_tick_is_a_limit_with_an_allowed_task_name(rsp, tmp_path, trusted):
     from tests.test_moon_sync_responder import _agree
 
     _agree(rsp)
@@ -1018,9 +1018,29 @@ def test_a_main_reply_limit_tick_is_its_own_state(rsp, tmp_path, trusted):
     result = rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
     assert result["note"] is None, result
     status = _status(rsp)
-    assert status["state"] == "limit" and status["task"] == "MAIN Reply Limit", status
-    # Distinct from the budget limit, and from an ordinary empty tick.
-    assert status["task"] != "Turn Limit Reached"
+    # MAIN 0915 allows only its basic task names, and the widget renders any
+    # other name as [?] (operator report, 2026-10-03). Which cap binds is the
+    # state plus cap_frees_at, never a private task name.
+    assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
+
+
+#: MAIN 0915 section 1, verbatim: the minimum set plus the stream refinements.
+MAIN_0915_TASK_NAMES = frozenset({
+    "Idle", "Checking Inbox", "Waiting for Slot", "Running Session",
+    "Delivering Notes", "Committing", "Backing Off", "Halted",
+    "Turn Limit Reached", "Running a Command", "Editing Files", "Reading",
+    "Appending Ledger",
+})
+
+
+def test_every_status_task_name_is_in_the_main_0915_set(rsp):
+    """A name outside the set shows as [?] on the operator's widget."""
+    names = {task for _state, task in rsp._TICK_STATES.values()}
+    names |= {rsp.MAIN_REPLY_LIMIT_TASK, "Idle"}
+    outside = sorted(names - MAIN_0915_TASK_NAMES)
+    too_long = sorted(n for n in names if len(n) > 24)
+    assert not outside, f"task names outside MAIN 0915: {outside}"
+    assert not too_long, f"task names over 24 chars: {too_long}"
 
 
 def test_a_refused_route_tick_reads_refused(rsp, tmp_path, monkeypatch, trusted):
