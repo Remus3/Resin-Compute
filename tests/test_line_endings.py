@@ -165,7 +165,13 @@ class _Enumeration(typing.NamedTuple):
 # time a module is added, so any slice that adds one walks toward this bound
 # again; the remedy each time is to RAISE this literal after re-measuring both
 # ends, never to lower it and never to weaken the arm that caught it.
-_MIN_TRACKED_FILES = 100
+# RAISED 100 -> 110 ON 2026-10-02, SAME TRIGGER. Adding
+# tests/test_headless_env.py took `tests/` to exactly 100 tracked paths, so the
+# widest partial answer equalled the floor and the clearance arm fired.
+# Re-measured with `git ls-files | wc -l` (254) and
+# `git ls-files | cut -d/ -f1 | sort | uniq -c` (tests/ 100): the legal interval
+# is 100 < value <= 127 (half the corpus); 110 leaves ten modules of headroom.
+_MIN_TRACKED_FILES = 110
 
 # THE FLOOR ALONE CANNOT SEE A PARTIAL ENUMERATION. A `git ls-files` narrowed by
 # a pathspec, a sparse checkout, or a cwd that landed in a subdirectory can
