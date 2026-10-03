@@ -61,41 +61,116 @@ def _broken_config(key: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+# Git's editor template, typed here as LITERALS and not imported from the
+# module, so a mutated constant there cannot move this side with it. Measured
+# 2026-10-03 on git 2.53.0.windows.3; the end-to-end arms in
+# `tests/test_hook_gate.py` prove git still writes these bytes.
+STRIP_HINT = (
+    "# Please enter the commit message for your changes. Lines starting\n"
+    "# with '#' will be ignored, and an empty message aborts the commit.\n"
+)
+KEEP_HINT = (
+    "# Please enter the commit message for your changes. Lines starting\n"
+    "# with '#' will be kept; you may remove them yourself if you want to.\n"
+    "# An empty message aborts the commit.\n"
+)
+STATUS = "#\n# On branch main\n# Changes to be committed:\n#\tmodified:   a\n#\n"
+STRIP_TEMPLATE = "\n" + STRIP_HINT + STATUS
+KEEP_TEMPLATE = "\n" + KEEP_HINT + STATUS
+SCISSORS_TEMPLATE = (
+    "\n# ------------------------ >8 ------------------------\n"
+    "# Do not modify or remove the line above.\n"
+    "# Everything below it will be ignored.\n" + STATUS
+)
+MERGE_TEMPLATE = (
+    "Merge branch 'side'\n"
+    "# Please enter a commit message to explain why this merge is necessary,\n"
+    "# especially if it merges an updated upstream into a topic branch.\n"
+    "#\n"
+    "# Lines starting with '#' will be ignored, and an empty message aborts\n"
+    "# the commit.\n"
+)
+AUTHORED = "feat: real\n# a line of mine\n"
+
+
 @pytest.mark.parametrize(
-    ("env", "config", "stripped"),
+    ("env", "config", "message", "stripped"),
     [
         # -F / -m: git exports GIT_EDITOR=: and the default cleanup keeps `#`.
-        (IN_HOOK_NO_EDITOR, {}, False),
-        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "default"}, False),
-        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "whitespace"}, False),
-        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "verbatim"}, False),
-        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "scissors"}, False),
-        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "strip"}, True),
-        # Editor: the default cleanup is strip.
-        (IN_HOOK_EDITOR, {}, True),
-        (IN_HOOK_EDITOR_UNSET, {}, True),
-        (IN_HOOK_EDITOR, {"commit.cleanup": "default"}, True),
-        # Scissors keeps `#` lines above its marker, measured in editor mode.
-        (IN_HOOK_EDITOR, {"commit.cleanup": "scissors"}, False),
-        (IN_HOOK_EDITOR, {"commit.cleanup": "strip"}, True),
-        (IN_HOOK_EDITOR, {"commit.cleanup": "whitespace"}, False),
-        (IN_HOOK_EDITOR, {"commit.cleanup": "verbatim"}, False),
+        # No template is written, so config alone decides.
+        (IN_HOOK_NO_EDITOR, {}, AUTHORED, False),
+        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "default"}, AUTHORED, False),
+        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "whitespace"}, AUTHORED, False),
+        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "verbatim"}, AUTHORED, False),
+        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "scissors"}, AUTHORED, False),
+        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "strip"}, AUTHORED, True),
         # Case-insensitive, as git parses it.
-        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "STRIP"}, True),
+        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "STRIP"}, AUTHORED, True),
         # Unknown mode: fail closed.
-        (IN_HOOK_EDITOR, {"commit.cleanup": "frobnicate"}, False),
+        (IN_HOOK_NO_EDITOR, {"commit.cleanup": "frobnicate"}, AUTHORED, False),
+        # A pasted strip sentence is not trusted without an editor.
+        (IN_HOOK_NO_EDITOR, {}, AUTHORED + STRIP_TEMPLATE, False),
+        # Editor: git's template carries the EFFECTIVE mode, flag applied.
+        (IN_HOOK_EDITOR, {}, AUTHORED + STRIP_TEMPLATE, True),
+        (IN_HOOK_EDITOR_UNSET, {}, AUTHORED + STRIP_TEMPLATE, True),
+        (IN_HOOK_EDITOR, {"commit.cleanup": "default"}, AUTHORED + STRIP_TEMPLATE, True),
+        # --cleanup=strip on the command line over a keeping config.
+        (IN_HOOK_EDITOR, {"commit.cleanup": "whitespace"}, AUTHORED + STRIP_TEMPLATE, True),
+        # --cleanup=whitespace|verbatim on the command line: THE GAP this closes.
+        (IN_HOOK_EDITOR, {}, AUTHORED + KEEP_TEMPLATE, False),
+        (IN_HOOK_EDITOR, {"commit.cleanup": "strip"}, AUTHORED + KEEP_TEMPLATE, False),
+        # An amend can carry an old landed strip sentence; the keep one wins.
+        (IN_HOOK_EDITOR, {}, AUTHORED + STRIP_HINT + KEEP_TEMPLATE, False),
+        # Scissors keeps `#` lines above its marker, measured in editor mode.
+        (IN_HOOK_EDITOR, {}, AUTHORED + SCISSORS_TEMPLATE, False),
+        # --no-status writes no template at all: unknown, fail closed.
+        (IN_HOOK_EDITOR, {}, AUTHORED, False),
+        # git merge --edit says "ignored" even under verbatim: not a signal.
+        (IN_HOOK_EDITOR, {}, MERGE_TEMPLATE, False),
+        # Half a sentence is not the sentence.
+        (IN_HOOK_EDITOR, {}, AUTHORED + STRIP_HINT.splitlines()[0] + "\n" + STATUS, False),
+        (IN_HOOK_EDITOR, {}, AUTHORED + STRIP_HINT.splitlines()[1] + "\n" + STATUS, False),
+        # CRLF from an editor on Windows is still the sentence.
+        (IN_HOOK_EDITOR, {}, (AUTHORED + STRIP_TEMPLATE).replace("\n", "\r\n"), True),
+        # No message reachable at all: fail closed.
+        (IN_HOOK_EDITOR, {}, None, False),
         # A comment character other than `#` means `#` is ordinary content.
-        (IN_HOOK_EDITOR, {"core.commentChar": ";"}, False),
-        (IN_HOOK_EDITOR, {"core.commentChar": "auto"}, False),
-        (IN_HOOK_EDITOR, {"core.commentString": "//"}, False),
-        (IN_HOOK_EDITOR, {"core.commentChar": "#"}, True),
+        (IN_HOOK_EDITOR, {"core.commentChar": ";"}, AUTHORED + STRIP_TEMPLATE, False),
+        (IN_HOOK_EDITOR, {"core.commentChar": "auto"}, AUTHORED + STRIP_TEMPLATE, False),
+        (IN_HOOK_EDITOR, {"core.commentString": "//"}, AUTHORED + STRIP_TEMPLATE, False),
+        (IN_HOOK_EDITOR, {"core.commentChar": "#"}, AUTHORED + STRIP_TEMPLATE, True),
         # Not inside a git commit hook at all: nothing is known, fail closed.
-        ({}, {}, False),
-        ({"GIT_EDITOR": "vi"}, {"commit.cleanup": "strip"}, False),
+        ({}, {}, AUTHORED + STRIP_TEMPLATE, False),
+        ({"GIT_EDITOR": "vi"}, {"commit.cleanup": "strip"}, AUTHORED + STRIP_TEMPLATE, False),
     ],
 )
-def test_the_cleanup_decision_table(env, config, stripped):
-    assert msg_check.hash_lines_are_stripped(env, _config(config)) is stripped
+def test_the_cleanup_decision_table(env, config, message, stripped):
+    assert msg_check.hash_lines_are_stripped(env, _config(config), message) is stripped
+
+
+def test_the_message_is_read_from_the_path_the_hook_exports(tmp_path):
+    """The glyph half calls the predicate with no message; the hook exports
+    the path git handed it, and that file is what is read."""
+    f = tmp_path / "COMMIT_EDITMSG"
+    f.write_bytes((AUTHORED + STRIP_TEMPLATE).encode("ascii"))
+    env = dict(IN_HOOK_EDITOR, RESIN_COMMIT_MSG_FILE=str(f))
+    assert msg_check.hash_lines_are_stripped(env, _config({})) is True
+    f.write_bytes((AUTHORED + KEEP_TEMPLATE).encode("ascii"))
+    assert msg_check.hash_lines_are_stripped(env, _config({})) is False
+
+
+def test_a_missing_exported_path_fails_closed(tmp_path):
+    env = dict(IN_HOOK_EDITOR, RESIN_COMMIT_MSG_FILE=str(tmp_path / "absent"))
+    assert msg_check.hash_lines_are_stripped(env, _config({})) is False
+
+
+def test_the_hook_exports_the_message_path_before_both_scripts():
+    """Without the export the glyph half sees no template and fails closed on
+    every editor commit - the five false blocks of 8436e68 come back."""
+    hook = (REPO_ROOT / ".githooks" / "commit-msg").read_text(encoding="utf-8")
+    export_at = hook.find("export RESIN_COMMIT_MSG_FILE")
+    assert 'RESIN_COMMIT_MSG_FILE="$1"' in hook and export_at != -1
+    assert export_at < hook.index("precommit_gate.py") < hook.index("precommit_msg_check.py")
 
 
 def test_an_unreadable_config_fails_closed():
@@ -142,7 +217,7 @@ def test_non_vacuity_main_accepts_the_same_file_when_git_will_strip(tmp_path, mo
     monkeypatch.setenv("GIT_EDITOR", "vi")
     monkeypatch.setattr(msg_check, "_git_config_get", _config({}))
     f = tmp_path / "msg"
-    f.write_bytes(b"# not conventional\nfeat: real\n")
+    f.write_bytes(b"# not conventional\nfeat: real\n" + STRIP_TEMPLATE.encode("ascii"))
     monkeypatch.setattr(sys, "argv", ["precommit_msg_check.py", str(f)])
     assert msg_check.main() == 0
 
