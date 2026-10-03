@@ -576,6 +576,12 @@ copyright line; ADR-006 records why. You may use, study, modify and redistribute
 this, including commercially, but any derivative you distribute must carry the
 same licence and its source must be available. It cannot be taken closed-source.
 
+One vendored directory carries its own grant: `ops/fleet_kit/` is the
+operator's FLEET-KIT under Apache-2.0, with its own `LICENSE` and `NOTICE`
+retained unedited beside it. Apache-2.0 code may be combined into a
+GPL-3.0-or-later work, so the combined work still ships under `LICENSE`;
+`docs/LICENSE_NOTES.md` records the details.
+
 That is an OUTBOUND licence covering this project's own code only. It grants
 nothing over Genshin Impact's data, names, statistics or assets, which belong to
 HoYoverse. For the INBOUND question - what this project may consume - see
