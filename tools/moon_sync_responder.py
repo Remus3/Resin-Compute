@@ -1766,6 +1766,97 @@ def _listed_exactly(directory: Path, name: str) -> tuple[bool, str | None]:
         return False, type(exc).__name__
 
 
+#: A bundle holding more files than this is not a kit bundle; refuse to walk it.
+MAX_BUNDLE_FILES = 512
+
+
+def _bundle_listing(base: Path) -> tuple[dict[str, Path] | None, str | None]:
+    """Every regular file under `base`, keyed by its `/`-joined relative path.
+
+    Names come from the directory LISTING, so the case is exact. A link, a
+    special file, an unreadable directory or more than `MAX_BUNDLE_FILES`
+    files answers None: the bundle is then unverifiable, never partly trusted.
+    """
+    out: dict[str, Path] = {}
+    stack: list[tuple[Path, str]] = [(base, "")]
+    try:
+        while stack:
+            here, prefix = stack.pop()
+            with os.scandir(here) as entries:
+                for entry in entries:
+                    rel = prefix + entry.name
+                    if entry.is_symlink():
+                        return None, "the bundle holds a link"
+                    if entry.is_dir(follow_symlinks=False):
+                        stack.append((Path(entry.path), rel + "/"))
+                    elif entry.is_file(follow_symlinks=False):
+                        out[rel] = Path(entry.path)
+                        if len(out) > MAX_BUNDLE_FILES:
+                            return None, "the bundle holds too many files"
+                    else:
+                        return None, "the bundle holds a special file"
+    except (OSError, ValueError) as exc:
+        return None, type(exc).__name__
+    return out, None
+
+
+def _bundle_digest(digests: dict[str, str]) -> str:
+    """One digest over `relpath NUL sha256 LF` lines, sorted by relpath."""
+    lines = "".join(f"{rel}\0{digests[rel]}\n" for rel in sorted(digests))
+    return hashlib.sha256(lines.encode("utf-8", "surrogateescape")).hexdigest()
+
+
+def bundle_provenance(bundle: Path, outbox_dir: Path) -> Provenance:
+    """Verify a DIRECTORY note per file against `outbox_dir / bundle.name`.
+
+    MATCH only when both sides list exactly the same relative paths and every
+    file is byte-identical. The quoted digests are over the sorted per-file
+    digests. A bundle carries no `body`: it is never handed to a session, and
+    `pending` never queues a directory, so a verified bundle is still not a
+    note to answer.
+    """
+    twin = outbox_dir / bundle.name
+    listed, list_err = _listed_exactly(outbox_dir, bundle.name)
+    try:
+        twin_is_dir = listed and twin.is_dir()
+    except OSError as exc:
+        twin_is_dir, list_err = False, type(exc).__name__
+    if not twin_is_dir:
+        return Provenance(
+            PROVENANCE_UNVERIFIABLE, None, None,
+            "MAIN's outbox holds no bundle of this name", list_err,
+        )
+    theirs, their_err = _bundle_listing(twin)
+    ours, our_err = _bundle_listing(bundle)
+    if theirs is None or ours is None:
+        return Provenance(
+            PROVENANCE_UNVERIFIABLE, None, None,
+            "a bundle could not be listed file by file", their_err or our_err,
+        )
+    if not theirs or not ours:
+        return Provenance(PROVENANCE_UNVERIFIABLE, None, None, "the bundle is empty")
+    their_sha: dict[str, str] = {}
+    our_sha: dict[str, str] = {}
+    same = set(theirs) == set(ours)
+    for rel in sorted(set(theirs) | set(ours)):
+        for side, sink in ((theirs, their_sha), (ours, our_sha)):
+            if rel not in side:
+                continue
+            data, why, err = _bytes_of(side[rel])
+            if data is None:
+                return Provenance(
+                    PROVENANCE_UNVERIFIABLE, None, None,
+                    f"a bundle file could not be hashed - {why}", err,
+                )
+            sink[rel] = hashlib.sha256(data).hexdigest()
+        if their_sha.get(rel) != our_sha.get(rel):
+            same = False
+    out_d, in_d = _bundle_digest(their_sha), _bundle_digest(our_sha)
+    if not same or out_d != in_d:
+        return Provenance(PROVENANCE_MISMATCH, out_d, in_d, "")
+    return Provenance(PROVENANCE_MATCH, out_d, in_d, "")
+
+
 def main_provenance(note: Path, roots: dict[str, Path]) -> Provenance:
     """Verify `note` against MAIN's outbox copy of the same filename. FAILS CLOSED.
 
@@ -1794,6 +1885,15 @@ def main_provenance(note: Path, roots: dict[str, Path]) -> Provenance:
             "this host has no local row naming MAIN's tree",
         )
     outbox_dir = (root / INBOX_DIRNAME).parent / OUTBOX_DIRNAME
+    # A KIT BUNDLE IS A DIRECTORY (MAIN 1029). Opening a directory raises
+    # PermissionError on Windows, so a bundle is verified PER FILE and never
+    # by reading the directory itself.
+    try:
+        is_bundle = note.is_dir()
+    except OSError:
+        is_bundle = False
+    if is_bundle:
+        return bundle_provenance(note, outbox_dir)
     listed, list_err = _listed_exactly(outbox_dir, note.name)
     if not listed:
         return Provenance(
