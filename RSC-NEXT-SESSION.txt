@@ -63,7 +63,7 @@ WHAT LANDED 2026-10-03, SECOND HALF
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
   1. MAIN 0912 overhead cut, the remainder: --setting-sources project,local;
-     --bare with a new responder brief file in tools and an ANTHROPIC_API_KEY placeholder
+     --bare with a new responder brief file in tools and an API-key placeholder env var
      in core/headless_env.py; --effort by note class; --model sonnet;
      --output-format json usage logging; --no-session-persistence. A planner
      spec exists (variant B safe: no floor lives in hooks). Done = landed plus
