@@ -33,23 +33,96 @@ version. What follows is everything the scaffold deliberately did not do.
   metrics label only and changes no behaviour, but it now mislabels an armed
   responder. Decide whether to drop it at the next renewal.
 
-- **NEW 2026-10-03. A HEADLESS SPAWN INSIDE A REPO LOADS THAT REPO'S RULES AND
-  HOOKS** (finding from LL). Measured here: `_spawn_headless` in
-  `tools/moon_sync_responder.py` passes `cwd=str(REPO_ROOT)`, so the child
-  loads this tree's `CLAUDE.md` and project hooks. Decide whether that is
-  wanted, and if not, spawn from a neutral directory with a test.
+- **DECIDED 2026-10-03 - KEEP THE REPO CWD, landed as `662ee0a`. A HEADLESS
+  SPAWN INSIDE A REPO LOADS THAT REPO'S RULES AND HOOKS** (finding from LL).
+  The child is meant to load this tree's `CLAUDE.md` and hooks, and
+  `workspace_trust` must vouch for the same directory the spawn runs in. One
+  constant, `SPAWN_CWD` in `tools/moon_sync_responder.py`, now feeds both;
+  proven by `tests/test_responder_spawn_cwd.py`, where an adversary reverted
+  each site separately and both arms went red.
 
-- **NEW 2026-10-03. MAIN'S RC-GUARD RULING: VERIFY TEARDOWN-DIGEST COVERAGE.**
-  The 23:11 auto-reply said RSC found no teardown digest covering the surfaces
-  the armed responder now writes, in the ONE file it checked. That is a reading
-  of one file, not a sweep. Enumerate every RSC teardown digest and check.
+- **DONE AS AN AUDIT 2026-10-03. MAIN'S RC-GUARD RULING (MAIN 2320): VERIFY
+  TEARDOWN-DIGEST COVERAGE.** Reading of 2026-10-03: ZERO of the 13 responder
+  write targets is covered by any before/after digest guard; an AST walk and a
+  grep agree. That is deliberate - `conftest.py` rejects live-directory
+  snapshots because daemons write those directories concurrently. Protection
+  is PREVENTION instead: the `rsp` fixture redirects the `DEFAULT_*` paths and
+  subprocesses get `RESINCOMPUTE_RUNTIME_DIR`. The highest-stakes uncovered
+  target is a delivery into a sibling inbox OUTSIDE this repo.
 
-- **CARRIED. ~336+ UNREAD INBOX NOTES ARE UNTRIAGED.** Do not `--mark` them;
-  triage into the four buckets first. The C4 `290cbf80` round on
-  `ops/loop/slots.py` is still open with the carriers.
+- **TRIAGED 2026-10-03, NOT MARKED. THE UNREAD INBOX.** About 420 files in
+  five batches, every file in one of the four buckets; per-file verdicts live
+  in the session scratchpad and are NOT tracked. Batch readings: B1 143
+  (ingested 39, equivalent 5, not-applicable 56, open 9, sent 34 - 100 of the
+  143 read by opening plus prior triage records, not a full body read); B2 91
+  (54/3/27/7); B3 95 (28/16/47/4); B4 81 (21/8/35/17 rows, about 12 items);
+  plus 7 late. All nine MAIN notes dated 10-02/03 were sha256-verified against
+  MAIN's outbox. `--mark` was NOT run. The applicable-and-not-done items are
+  the NEW 2026-10-03 rows immediately below.
 
-- **NEW 2026-10-02, FOUND BY ANSWERING A SIBLING RATHER THAN BY A GUARD HERE.
-  THE `--once` PATH IS UNGOVERNED.** `run_daemon` in `headless/runner.py` wraps
+- **PARKED 2026-10-03 BEHIND HALT CLAUSE (b) - DEADLINE 2026-10-09. C4
+  `290cbf80` LANDED ON LW.** LW 0700 says C4 landed there and asks RSC to copy
+  it by 2026-10-09. That diff touches `ops/loop/slots.py` (RSC still at
+  `71fa2a68`, 9627 bytes) and the `SHARED_SHA256` dict in
+  `tests/test_loop_concurrency.py`, so clause (b) halts it. MAIN 2320
+  (verified) explicitly does NOT rule it. Cleared only by the operator or a
+  sha256-verified MAIN note. RSC told LW: no objection to the text, not
+  attested from RSC disk.
+
+- **NEW 2026-10-03. C4 LANDING CHECKLIST.** When C4 lands here, the row
+  "`ops/loop/slots.py` SHORT-CIRCUITS ON AGE" becomes false and must be
+  rewritten in the same commit (SS 2300). The stale freeze line naming
+  `da35f8b1` was annotated this session (LW 2355).
+
+- **NEW 2026-10-03. PROMISED ROWS NEVER WRITTEN, now recorded.** (1) A
+  keep/prune policy for the first-run capture store, and a position on the
+  screen-control directory (RSC 09-19 1625). (2) The "DESTROYS the repo field"
+  sentence was made CONDITIONAL this session (RSC 09-20 1900) - done, see the
+  `release` row. (3) SS's `origin/HEAD` lane-gate trap is a PRECONDITION for
+  any lane gate: a gate keyed on `origin/HEAD` is wrong where that ref is
+  unset or stale (RSC 09-20 1905). (4) Format-producer versus reader sweep,
+  "check 2" (MAIN 0835 / RSC 1030). (5) An all-objects history census
+  including a full-history secret scan (LW 1800 item 6, SS 09-27 1400).
+
+- **NEW 2026-10-03. THE LOCK LIFETIME IS UNBOUNDED BELOW THE STALE WINDOW.**
+  Nothing caps slot wait plus run plus drain below `DEFAULT_STALE_AFTER`, so a
+  live holder can outlive it (SS 0000). Siblings: LL's age-only surplus reaper
+  hazard (LL 2136); an arm-A live-holder test to ride with the re-pin (RC 1130
+  s6); and no halt sentinel is consulted before `hold()` (RC 1330 s3).
+
+- **NEW 2026-10-03. THE RESPONDER BANNER AND THE `docs/CHANNEL.md` HEADING
+  GRAMMAR DISAGREE, and no check enforces note grammar** (SS 2301).
+
+- **NEW 2026-10-03. `docs/CHANNEL.md` SAYS A SENDER KEEPS NO COPY IN ITS OWN
+  INBOX, YET THE ARMED RESPONDER WRITES ONE.** Its deliver path writes this
+  repo's own copy into `moon_sync_inbox/`. Unresolved: one of the two is wrong.
+
+- **NEW 2026-10-03, ATTENDED SESSION ONLY. REDACTION DECISION ON RSC'S COPY OF
+  SS 2241,** plus a `git log -S` sweep for the same bytes in history (SS 2340).
+
+- **NEW 2026-10-03. THE SECRET SCANNER CATCHES THE ANTHROPIC ADMIN-KEY FAMILY
+  ONLY INCIDENTALLY,** through the shared `sk-ant-` prefix rather than a rule
+  of its own (CS 1820 item 2).
+
+- **NEW 2026-10-03. TWO TEST-INSTRUMENT GAPS FROM THE CHANNEL.**
+  `gate_mutation_runner` cannot mutate failure MESSAGES (RSC 0830, conceded);
+  and `empty_parameter_set_mark` is not set to `fail_at_collect`, so an empty
+  parametrize skips instead of failing (LL 0930).
+
+- **NEW 2026-10-03. S1 ACK TEST-STRENGTH GAP.** Verifier mutant A: removing
+  refusal recording in `SlotFenceLedger.acknowledge` in `conftest.py` does not
+  turn `test_acknowledging_from_a_worker_thread_fails` red. Fix: a sibling arm
+  where a ZERO-hit worker thread calls `acknowledge(0)`.
+
+- **DONE 2026-10-03 in `6f7a629`. THE `--once` PATH IS UNGOVERNED - CLOSED.**
+  A live `--once` pass now holds a machine-wide slot: `run_once` in
+  `headless/runner.py` routes through `_run_governed_pass`; a dry run takes
+  none; a `SlotTimeout` is `EXIT_JOB_FAILED`. Proven by
+  `tests/test_headless_runner_slots.py`, and the suite is fenced by an audit
+  hook in `conftest.py` on `ops.loop.slots.DEFAULT_ROOT`. NOT fenced: child
+  processes, alias spellings, sqlite3/ctypes, xdist. History of the open row
+  follows. FOUND BY ANSWERING A SIBLING RATHER THAN BY A GUARD HERE.
+  THE `--once` PATH WAS UNGOVERNED. `run_daemon` in `headless/runner.py` wraps
   each live pass in a slot through its governed-pass helper, which is what
   makes this repository a real acquirer against the machine-wide bucket. The
   `--once` path calls `run_pass` DIRECTLY and takes no slot. So the claim this
@@ -69,8 +142,10 @@ version. What follows is everything the scaffold deliberately did not do.
   re-issued three times in one day - `9531bfe9`, then `799cdeed`, then
   `7f84ec96` - and each re-issue VOIDED this tree's prior acceptance, because
   an acceptance of bytes that no longer exist is worse than no position once a
-  round tallies it. The current freeze is at `da35f8b1` and 2.0 has four
-  holders. RSC attested `7f84ec96` from its own disk and prefers the 2.0
+  round tallies it. The freeze line that used to read "current freeze at
+  `da35f8b1`" is STALE (LW 2355) and is retained here only as history: LW
+  0700 (2026-10-03) reports C4 `290cbf80` LANDED on LW, and that landing is
+  parked here behind halt clause (b) - see the C4 row above. RSC attested `7f84ec96` from its own disk and prefers the 2.0
   variant. THE REUSABLE MEASUREMENT, which outlives the round: a posted patch
   recipe UNDERDETERMINED its own bytes, and two separate wrong readings each
   produced the RIGHT BYTE COUNT and the RIGHT LINE COUNT with a WRONG DIGEST.
@@ -2518,8 +2593,13 @@ version. What follows is everything the scaffold deliberately did not do.
 - **FLAGGED FOR THE OPERATOR 2026-09-13, AND DELIBERATELY NOT A FIX.** `release`
   in `ops/loop/slots.py` does `_read`, which degrades to an empty dict, then
   update, then an IN-PLACE write-back. That is the aggravated splice form of the
-  same root cause as the row above, and it DESTROYS the `repo` field that `reap`
-  logs - so a neutralised orphan is reaped with its owner unnamed. NO CHANGE IS
+  same root cause as the row above, and it CAN DESTROY the `repo` field that
+  `reap` logs - CONDITIONALLY, made conditional 2026-10-03 per the promise in
+  the RSC 09-20 1900 note: only on the neutralise path, reached when every
+  unlink attempt in `release` fails, AND only when `_read` then degrades to an
+  empty dict on an unreadable or torn lock. A successful unlink, or a readable
+  lock on the neutralise path, keeps the field. In that conjunction a
+  neutralised orphan is reaped with its owner unnamed. NO CHANGE IS
   PROPOSED AND NONE SHOULD BE MADE WITHOUT THE OPERATOR: halt ruling clause (b)
   names that file, and `tests/test_loop_concurrency.py` pins it by sha256 as
   byte-identical across the FIVE PIN CARRIERS OF `ops/loop/slots.py` - CS, LW,
