@@ -2111,15 +2111,46 @@ def test_the_declared_hook_says_unmeasured_over_a_really_denied_inbox(tmp_path):
 # An assertion must not render the whole environment when it fails.
 # ---------------------------------------------------------------------------
 
-#: Expressions whose `repr` is the entire process environment. `os.environ` is
-#: the spelling this tree had; the copies are the obvious ways to reintroduce
-#: it while passing a text sweep that only looks for the bare name.
-_WHOLE_ENVIRONMENT_SOURCES: tuple[str, ...] = (
-    "os.environ",
-    "os.environ.copy()",
-    "dict(os.environ)",
-    "environ",
-)
+#: Attribute and bare names whose value is the process environment mapping:
+#: `os.environ`, an aliased `_os.environ`, and `from os import environ`.
+_ENVIRONMENT_MAPPING_NAMES: frozenset[str] = frozenset({"environ", "environb"})
+
+#: Callables that return one environment value: `os.getenv(key)` and
+#: `from os import getenv`.
+_ENVIRONMENT_GETTER_NAMES: frozenset[str] = frozenset({"getenv", "getenvb"})
+
+
+def _is_environment_reference(node: ast.AST) -> bool:
+    """True if `node` itself names the environment or reads a value from it."""
+    if isinstance(node, ast.Attribute) and node.attr in _ENVIRONMENT_MAPPING_NAMES:
+        return True
+    if isinstance(node, ast.Name) and node.id in _ENVIRONMENT_MAPPING_NAMES:
+        return True
+    if isinstance(node, ast.Call):
+        func = node.func
+        if isinstance(func, ast.Attribute) and func.attr in _ENVIRONMENT_GETTER_NAMES:
+            return True
+        if isinstance(func, ast.Name) and func.id in _ENVIRONMENT_GETTER_NAMES:
+            return True
+    return False
+
+
+def _membership_containers(expression: ast.expr) -> set[int]:
+    """`id()` of every node that is the CONTAINER of an `in` / `not in` test.
+
+    `key in os.environ` evaluates to a bool, so inside an assertion MESSAGE -
+    which pytest renders with `str()` and never rewrites - it prints `True` or
+    `False` and nothing of the mapping. Only the container position is exempt;
+    the same reference anywhere else in the message renders values.
+    """
+    exempt: set[int] = set()
+    for node in ast.walk(expression):
+        if not isinstance(node, ast.Compare):
+            continue
+        for op, comparator in zip(node.ops, node.comparators):
+            if isinstance(op, (ast.In, ast.NotIn)):
+                exempt.add(id(comparator))
+    return exempt
 
 
 def _asserts_rendering_the_whole_environment(source: str) -> tuple[int, list[str]]:
@@ -2129,12 +2160,45 @@ def _asserts_rendering_the_whole_environment(source: str) -> tuple[int, list[str
     offender list from a checker that examined nothing is a clean bill of
     health that means nothing.
 
-    WHAT THIS INSTRUMENT CAN SEE. It parses the module with `ast` and inspects
-    the OPERANDS of the comparison a failing `assert` would render - the left
-    side and every comparator of a `Compare`, through a leading `not`, and
-    through the arms of an `and`/`or`. Because it is an AST walk and not a text
+    The name is historical: the instrument now flags an assert that renders
+    ANY environment value, not only the whole mapping, because a single value
+    is the half a secret lives in.
+
+    WHAT THIS INSTRUMENT CAN SEE. It parses the module with `ast` and walks
+    the WHOLE TEST EXPRESSION of every `assert`, flagging any reference to the
+    environment anywhere in it: `<anything>.environ`, a bare `environ`, or a
+    `getenv(...)` call. Any reference at all, because pytest's assertion
+    rewriting explains every sub-expression it evaluated, so the reference
+    surfaces in a `where ... = os.environ` line even when it is buried inside
+    a call such as `set(os.environ)` or `os.environ.get(key)`. It also walks
+    the assertion MESSAGE, which pytest renders with `str()` unrewritten, and
+    there it exempts exactly one position: the container of an `in` / `not in`
+    test, which evaluates to a bool. Because it is an AST walk and not a text
     sweep, it sees these shapes when they are split across lines, which is how
     the original defect was written.
+
+    MEASURED, NOT ASSUMED, 2026-10-03 under pytest 9.0.3 on Python 3.14, by a
+    throwaway module of forced-red asserts with a planted variable. At default
+    verbosity pytest truncates long reprs; under `-vv` it does not:
+
+        os.environ.get(key) is None        value + whole mapping in where-lines
+        not os.environ.get(key)            value + whole mapping in where-lines
+        os.environ[key] == expected        the value (a subscript is opaque to
+                                           the rewriter, so no where-line)
+        key in os.environ.keys()           whole mapping, rendered four times
+        ... .items() / .values()           whole mapping, rendered four times
+        key not in set(os.environ)         every key name, then the whole
+                                           mapping in the where-line
+        os.getenv(key) is None             the value
+        assert ok, os.environ[key]         the value, as the message
+        assert ok, f'{key in os.environ}'  `True` - nothing leaked
+        hoisted bool, then assert it       `assert not True` - nothing leaked
+
+    The first two and the subscript were listed here as LEGITIMATE neighbours
+    until that measurement, and `set(os.environ)` was listed as a safe "keys
+    view"; all four leak. The safe form is the hoist: evaluate the test into a
+    named bool outside the assert, assert the bool, and name the KEY - never
+    the value - in the message.
 
     WHAT THIS INSTRUMENT CANNOT SEE, stated rather than implied, because an AST
     walk in this tree was once blind to caller-side guards and the absence read
@@ -2163,24 +2227,19 @@ def _asserts_rendering_the_whole_environment(source: str) -> tuple[int, list[str
             continue
         examined += 1
 
-        pending: list[ast.expr] = [node.test]
-        operands: list[ast.expr] = []
-        while pending:
-            current = pending.pop()
-            if isinstance(current, ast.UnaryOp) and isinstance(current.op, ast.Not):
-                pending.append(current.operand)
-            elif isinstance(current, ast.BoolOp):
-                pending.extend(current.values)
-            elif isinstance(current, ast.Compare):
-                operands.append(current.left)
-                operands.extend(current.comparators)
-
-        for operand in operands:
-            if ast.unparse(operand) in _WHOLE_ENVIRONMENT_SOURCES:
-                offenders.append(
-                    f"line {node.lineno}: {ast.unparse(node.test)[:90]}"
-                )
-                break
+        in_test = any(_is_environment_reference(n) for n in ast.walk(node.test))
+        in_message = False
+        if node.msg is not None:
+            exempt = _membership_containers(node.msg)
+            in_message = any(
+                _is_environment_reference(n) and id(n) not in exempt
+                for n in ast.walk(node.msg)
+            )
+        if in_test or in_message:
+            where = "test" if in_test else "message"
+            offenders.append(
+                f"line {node.lineno} ({where}): {ast.unparse(node.test)[:90]}"
+            )
 
     return examined, offenders
 
@@ -2263,10 +2322,10 @@ def test_no_test_module_asserts_against_the_whole_environment() -> None:
         f"{len(modules)} modules, which is too few to be the real corpus"
     )
     assert offenders == [], (
-        "these assertions render the WHOLE process environment when they fail, "
-        "and on CI that output is a published artifact. Hoist the membership "
-        "test into a bool and assert on the bool, keeping the key in the "
-        f"message: {offenders}"
+        "these assertions render process environment values - one value or "
+        "the whole mapping - when they fail, and on CI that output is a "
+        "published artifact. Hoist the test into a named bool and assert on "
+        f"the bool, naming the key and never the value in the message: {offenders}"
     )
 
 
@@ -2292,6 +2351,23 @@ def test_the_environment_render_detector_actually_fires() -> None:
             "), 'the AST sees this and a line-oriented text sweep does not'\n"
         ),
         "inside an and": "assert other and key not in os.environ\n",
+        # The forms below were once listed as safe or never looked at. Each was
+        # forced red under pytest and rendered an environment value; the
+        # docstring of `_asserts_rendering_the_whole_environment` records what
+        # each one printed.
+        "a get with a default": "assert os.environ.get(key) is None\n",
+        "the truthiness of a get": "assert not os.environ.get(key)\n",
+        "a single value": "assert os.environ[key] == expected\n",
+        "a keys view": "assert key in os.environ.keys()\n",
+        "an items view": "assert (key, value) in os.environ.items()\n",
+        "a values view": "assert value in os.environ.values()\n",
+        "a set of the keys": "assert key not in set(os.environ)\n",
+        "a getenv call": "assert os.getenv(key) is None\n",
+        "an aliased module": "assert key not in _os.environ\n",
+        "a subscript in the message": "assert ok, os.environ[key]\n",
+        "a get in the message": "assert ok, os.environ.get(key)\n",
+        "the whole mapping in the message": "assert ok, f'{dict(os.environ)}'\n",
+        "a getenv in the message": "assert ok, f'{os.getenv(key)}'\n",
     }
     for label, source in planted.items():
         examined, offenders = _asserts_rendering_the_whole_environment(source)
@@ -2306,10 +2382,16 @@ def test_the_environment_render_detector_actually_fires() -> None:
             "runtime_dir_is_set = key in os.environ\n"
             "assert not runtime_dir_is_set, 'the key is named in the message'\n"
         ),
-        "a get with a default": "assert os.environ.get(key) is None\n",
-        "a single value": "assert os.environ[key] == expected\n",
+        "a hoisted get": (
+            "value_is_unset = os.environ.get(key) is None\n"
+            "assert value_is_unset, f'{key} is set'\n"
+        ),
         "an unrelated mapping": "assert key not in some_small_fixture\n",
-        "a keys view": "assert key not in set(os.environ)\n",
+        "a membership bool in the message": (
+            "assert ok, f'{key} set: {key in os.environ}'\n"
+        ),
+        "a message naming only the key": "assert ok, f'{key} is set'\n",
+        "a lookalike attribute": "assert config.environment == 'prod'\n",
     }
     for label, source in survivors.items():
         examined, offenders = _asserts_rendering_the_whole_environment(source)
