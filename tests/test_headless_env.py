@@ -888,3 +888,170 @@ def test_validate_draft_carries_the_credential_scan(rsp):
     assert all(token not in r for r in reasons), "a reason echoed the secret"
     clean = rsp.validate_draft(rsp.RESPONDER_TAG + "\nthe suite is green\n", rsp.Bounds())
     assert clean == [], clean
+
+
+# ---------------------------------------------------------------------------
+# Round 5-7: the status file on every tick, effort from the note, and a JSON
+# array or string on stdout.
+# ---------------------------------------------------------------------------
+
+
+def _status(rsp) -> dict:
+    root = rsp._kit_root()
+    return json.loads((root / kit.STATUS_REL).read_text(encoding="ascii"))
+
+
+def _live_status_bytes(rsp):
+    live = rsp.REPO_ROOT / kit.STATUS_REL
+    try:
+        return live.stat().st_mtime_ns, live.read_bytes()
+    except OSError:
+        return None
+
+
+def test_the_tick_status_root_follows_the_redirected_records(rsp, tmp_path):
+    """Safe by default: an arm that redirects the `DEFAULT_` records but never
+    touches `KIT_ROOT` still cannot write the live status file."""
+    root = rsp._kit_root()
+    assert tmp_path in root.parents, root
+    # Non-vacuity: a fresh, unredirected load points at the repo root.
+    spec = importlib.util.spec_from_file_location("rsp_status_root_live", RESPONDER_PATH)
+    live = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(live)
+    assert live._kit_root() == live.REPO_ROOT
+
+
+def test_a_child_with_a_redirected_runtime_never_writes_the_live_status(tmp_path, monkeypatch):
+    """MEASURED: the first version wrote the worktree's live status file during
+    the suite, from a child interpreter that loaded the responder fresh with
+    `RESINCOMPUTE_RUNTIME_DIR` pointed at tmp - its `DEFAULT_` records were
+    "unredirected" from its own point of view. A redirected RUNTIME counts too."""
+    from ops.health import ENV_RUNTIME_DIR
+
+    monkeypatch.setenv(ENV_RUNTIME_DIR, str(tmp_path / "child-runtime"))
+    spec = importlib.util.spec_from_file_location("rsp_status_root_child", RESPONDER_PATH)
+    child = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(child)
+    assert tmp_path in child._kit_root().parents, child._kit_root()
+
+
+def test_an_empty_tick_writes_idle_with_next_tick(rsp, tmp_path):
+    before = _live_status_bytes(rsp)
+    result = rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
+    assert result["termination"] in ("empty", "disarmed"), result
+    status = _status(rsp)
+    assert status["state"] == "idle" and status["task"] == "Idle", status
+    assert status["next_tick"] is not None
+    assert status["code"] == rsp.SELF_CODE and status["schema"] == 1
+    assert _live_status_bytes(rsp) == before, "a tick wrote the LIVE status file"
+
+
+def test_a_halt_sentinel_halts_the_tick_and_says_so(rsp, tmp_path, trusted):
+    calls = []
+
+    def spawn(prompt, bounds):  # pragma: no cover - reaching this is the failure
+        calls.append(1)
+        return rsp.RESPONDER_TAG + "\nx\n"
+
+    sentinel = rsp.halt_sentinel()
+    assert tmp_path in sentinel.parents, sentinel
+    sentinel.parent.mkdir(parents=True, exist_ok=True)
+    sentinel.write_text("halt\n")
+    result = _armed_cycle(rsp, tmp_path, spawn=spawn)
+    assert result["termination"] == "halted", result
+    assert calls == []
+    status = _status(rsp)
+    assert status["state"] == "halted" and status["task"] == "Halted", status
+    assert "halted" in rsp.TERMINATIONS
+
+
+def test_a_backoff_tick_reads_backing_off(rsp, tmp_path, trusted):
+    rsp.DEFAULT_BACKOFF.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_BACKOFF.write_text(json.dumps({"until": time.time() + 3600}))
+    result = _armed_cycle(rsp, tmp_path)
+    assert result["termination"] == "usage-backoff", result
+    status = _status(rsp)
+    assert status["state"] == "backoff" and status["task"] == "Backing Off", status
+
+
+def test_a_spent_budget_tick_reads_turn_limit_reached(rsp, tmp_path, trusted):
+    def spawn(prompt, bounds):
+        raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
+
+    _armed_cycle(rsp, tmp_path, spawn=spawn)
+    status = _status(rsp)
+    assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
+
+
+def test_a_main_reply_limit_tick_is_its_own_state(rsp, tmp_path, trusted):
+    from tests.test_moon_sync_responder import _agree
+
+    _agree(rsp)
+    now = time.time()
+    rsp.DEFAULT_OUTBOUND.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_OUTBOUND.write_text(json.dumps(
+        {"version": 1, "replies": [{"to": "MAIN", "at": now - 60}] * rsp.MAX_REPLIES_PER_SENDER}
+    ))
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-03-1700-from-MAIN-ORDER-x.md", "TO RSC. do it\n")
+    result = rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
+    assert result["note"] is None, result
+    status = _status(rsp)
+    assert status["state"] == "limit" and status["task"] == "MAIN Reply Limit", status
+    # Distinct from the budget limit, and from an ordinary empty tick.
+    assert status["task"] != "Turn Limit Reached"
+
+
+def test_a_refused_route_tick_reads_refused(rsp, tmp_path, monkeypatch, trusted):
+    monkeypatch.setattr(subprocess, "run", Run())
+    kit_route(rsp, monkeypatch, tmp_path, accept=False)
+    _armed_cycle(rsp, tmp_path)
+    assert _status(rsp)["state"] == "refused"
+
+
+def test_the_note_name_reaches_the_kits_effort_pick(rsp, tmp_path, monkeypatch, trusted):
+    """MAIN 0912: effort comes from the note class. An ACK note is `low`."""
+    run = Run(rsp.RESPONDER_TAG + "\nreceived\n")
+    monkeypatch.setattr(subprocess, "run", run)
+    kit_route(rsp, monkeypatch, tmp_path)
+    inbox = tmp_path / "inbox"
+    name = "2026-10-03-1701-from-RC-ACK-received.md"
+    _note(inbox, name)
+    assert kit.pick_effort(name) == "low", "non-vacuity: the kit classes this note low"
+    _armed_cycle(rsp, tmp_path)
+    argv = run.args
+    assert argv[argv.index("--effort") + 1] == "low", argv
+    usage = (rsp._kit_root() / kit.USAGE_REL).read_text(encoding="ascii").splitlines()
+    assert json.loads(usage[-1])["note"] == name
+
+
+def test_a_question_note_keeps_medium_effort(rsp, routed, monkeypatch):
+    run = Run()
+    monkeypatch.setattr(subprocess, "run", run)
+    rsp._spawn_headless("p", rsp.Bounds(), "2026-10-03-1702-from-RC-question.md")
+    assert run.args[run.args.index("--effort") + 1] == "medium"
+
+
+@pytest.mark.parametrize("raw", ['["a", "b"]', '"just a string"', "42"], ids=["array", "string", "number"])
+def test_a_non_object_json_print_is_a_spawn_failure(rsp, routed, monkeypatch, raw):
+    monkeypatch.setattr(subprocess, "run", Run(raw=raw))
+    with pytest.raises(rsp.SpawnFailed):
+        rsp._spawn_headless("p", rsp.Bounds())
+
+
+@pytest.mark.parametrize("raw", ['["a", "b"]', '"just a string"'], ids=["array", "string"])
+def test_measured_the_kit_itself_raises_on_a_non_object_print(tmp_path, raw):
+    """MEASUREMENT for the kit v4 report, not a property of this tree: the
+    kit's `usage_line` calls `.get` on whatever `json.loads` returned, so a
+    non-empty JSON array or string raises AttributeError out of `spawn` after
+    the run was counted. If a kit version fixes it, this arm goes red and the
+    note to MAIN can be dropped."""
+
+    def run(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 0, stdout=raw, stderr="")
+
+    with pytest.raises(AttributeError):
+        kit.spawn(
+            tmp_path, "RSC", "p", run=run,
+            url_source=lambda: STUB_URL, connect=Dialer(), exe_source=lambda: "claude",
+        )
