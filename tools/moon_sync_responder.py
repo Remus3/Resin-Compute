@@ -3617,26 +3617,27 @@ def _halted_result(grammar: str) -> dict:
     }
 
 
-#: termination -> (status state, task). MAIN 0915 schema 1 states and its
-#: basic task names. ONE NAME IS NOT IN THAT LIST: "MAIN Reply Limit", for a
-#: tick that answered nothing because MAIN is at its per-sender reply cap
-#: (ruled distinct from the budget limit, MAIN 0955 s2.5). Recorded as a
-#: deliberate addition rather than folded into "Turn Limit Reached", which
-#: would send an operator to the wrong cap.
+#: termination -> (status state, task). MAIN 0915 schema 1 states and ONLY its
+#: task names: a name outside the set shows as [?] on the operator's widget
+#: (ruled 2026-10-03). EVERY limit - the run budget, the MAIN reply cap and the
+#: hop budget - reads "Turn Limit Reached"; WHICH cap binds lives only in
+#: `cap_frees_at` (`_status_budget`) and the log, never in the task name.
 _TICK_STATES: dict[str, tuple[str, str]] = {
     "halted": ("halted", "Halted"),
     "usage-limited": ("backoff", "Backing Off"),
     "usage-backoff": ("backoff", "Backing Off"),
     "run-budget": ("limit", "Turn Limit Reached"),
     "run-locked": ("idle", "Idle"),
-    "headless-refused": ("refused", "Idle"),
+    "headless-refused": ("refused", "Backing Off"),
     # MAIN 1325: the hop budget binding is a LIMIT, and it has no free time.
-    "budget": ("limit", "Hop Limit (no expiry)"),
+    "budget": ("limit", "Turn Limit Reached"),
 }
-MAIN_REPLY_LIMIT_TASK = "MAIN Reply Limit"
-#: The hop budget counts responder-TAGGED notes in the inbox (`hops_used`);
-#: nothing ages out, so its `cap_frees_at` is null and the task text says so.
-HOP_LIMIT_TASK = _TICK_STATES["budget"][1]
+MAIN_REPLY_LIMIT_TASK = "Turn Limit Reached"
+
+#: Which cap binds, for `_status_budget`. The hop budget counts responder-
+#: TAGGED notes in the inbox (`hops_used`) and nothing ages out of it, so its
+#: `cap_frees_at` is null; the reason is the invocation log's `budget` line.
+CAP_RUNS, CAP_MAIN_REPLIES, CAP_HOPS = "runs", "main-replies", "hops"
 
 
 class _StatusBudget:
@@ -3662,8 +3663,8 @@ class _StatusBudget:
         return self._frees
 
 
-def _status_budget(task: str, now: float) -> _StatusBudget:
-    """The responder's run count, and when the cap binding this `task` frees.
+def _status_budget(cap: str, now: float) -> _StatusBudget:
+    """The responder's run count, and when the BINDING `cap` frees.
 
     MAIN reply cap: the OLDEST counted reply to MAIN ages out of
     `OUTBOUND_WINDOW_SECONDS`. Hop budget: never - None. Otherwise (the run
@@ -3674,9 +3675,9 @@ def _status_budget(task: str, now: float) -> _StatusBudget:
     runs = _run_rows(DEFAULT_RUNS, now)
     used = MAX_RUNS_PER_DAY if runs is None else len(runs)
     frees: float | None = min(runs) + RUNS_WINDOW_SECONDS if runs else None
-    if task == HOP_LIMIT_TASK:
+    if cap == CAP_HOPS:
         frees = None
-    elif task == MAIN_REPLY_LIMIT_TASK:
+    elif cap == CAP_MAIN_REPLIES:
         rows = _outbound_rows(DEFAULT_OUTBOUND, now) or []
         mine = [float(r["at"]) for r in rows if r["to"] == MAIN_CODE]
         frees = min(mine) + OUTBOUND_WINDOW_SECONDS if mine else None
@@ -3692,17 +3693,18 @@ def _write_tick_status(result: dict | None) -> None:
     """
     termination = (result or {}).get("termination", "crashed")
     state, task = _TICK_STATES.get(termination, ("idle", "Idle"))
+    cap = CAP_HOPS if termination == "budget" else CAP_RUNS
     if (
         state == "idle"
         and (result or {}).get("note") is None
         and MAIN_CODE in senders_at_cap(DEFAULT_OUTBOUND, time.time())
     ):
-        state, task = "limit", MAIN_REPLY_LIMIT_TASK
+        state, task, cap = "limit", MAIN_REPLY_LIMIT_TASK, CAP_MAIN_REPLIES
     root = _kit_root()
     try:
         kit.write_status(
             root, SELF_CODE, state, task, time.time(),
-            _status_budget(task, time.time()),
+            _status_budget(cap, time.time()),
             next_tick=time.time() + RESPONDER_TICK_SECONDS,
         )
     except (OSError, ValueError) as exc:
@@ -4286,7 +4288,7 @@ def _write_idle() -> None:
     try:
         kit.write_status(
             _kit_root(), SELF_CODE, "idle", "Idle", None,
-            _status_budget("Idle", time.time()),
+            _status_budget(CAP_RUNS, time.time()),
             next_tick=time.time() + RESPONDER_TICK_SECONDS,
         )
     except OSError as exc:
