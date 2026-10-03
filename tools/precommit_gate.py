@@ -353,12 +353,12 @@ def _check_message_file(path: str) -> int:
             "commit-message glyph half did NOT run on this commit.\n"
         )
         return 0
-    # Drop git's own template comments. They are stripped before the commit is
-    # created, so a glyph inside one is not a glyph in the message.
+    # EVERY line, `#` included: `commit -F`/`-m` keep `#` lines (cleanup=
+    # whitespace, measured 2026-10-03). Never predict git's cleanup - a glyph
+    # in a comment costs nothing to remove, and git's own template is ASCII.
+    # The subject half's fail-closed rule is in scripts/precommit_msg_check.py.
     violations: list[str] = []
     for i, ln in enumerate(text.splitlines(), start=1):
-        if ln.lstrip().startswith("#"):
-            continue
         hits = _glyph_hits(ln)
         if hits:
             violations.append(f"  <commit message>:{i}  banned glyph: {', '.join(hits)}")
