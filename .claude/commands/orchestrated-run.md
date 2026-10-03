@@ -26,6 +26,13 @@ and a main thread blocked on a sweep is a session they cannot interrupt.
 Background the long work, and never fabricate or predict a pending agent's
 result - if the operator asks before it lands, say it is still running.
 
+**Chat carries no inline checklists, step lists or task-list dumps** (FLEET-COMMON
+item 3). At-a-glance status comes from the background work itself and from the
+progress files below, not from a list re-printed in chat. When the operator asks
+for status, answer in exactly this shape, one short line each:
+done / left / +added / -retracted - what finished, what remains, what was added
+since the last answer, and what was dropped.
+
 ## The shape, and what was deliberately not ported
 
 This is Sibling-A's dispatch protocol and Sibling-C's lane mechanism
@@ -121,8 +128,11 @@ simply not happened yet.
   dataclass field, a route, a port constant. `core/types.py` is the shared
   contract and is a merge surface, not a scratchpad - a slice that changes it
   publishes a seam that every other slice consumes, so it runs alone or first.
-- **PRINT the union of all write-lists, and ASSERT that no path appears twice.**
-  Print it in chat so the operator sees the same list you checked. Then check
+- **WRITE the union of all write-lists, and ASSERT that no path appears twice.**
+  The union goes to a scratch file, and it is also recorded in full in the
+  canonical block below, which is where the operator reads it. Chat gets ONE
+  line - the path count and the overlap result - not the list itself, because a
+  re-printed path list is the task-list dump FLEET-COMMON item 3 forbids. Check
   it mechanically rather than by eye - a twelve-path union is exactly the size
   at which reading is unreliable:
 
@@ -195,14 +205,29 @@ match a sentence.
   local config and is not cloned. Related trap: `core.hooksPath` is SHARED git
   config, so inside a linked worktree it holds the MAIN checkout's absolute
   path. Never treat a hook's PRESENCE as proof it fires.
+- **Every dispatch prompt names the progress file** (FLEET-COMMON item 12), for
+  every agent on the roster and not only builders: any work expected to take
+  over 5 minutes writes `ops/loop/control/progress/<task>.json` after EACH
+  step, shaped `{"task", "pct", "step", "eta_s", "status", "updated"}` with
+  `"status"` one of running|done|failed, through `core/atomic_io.py`. The
+  directory is gitignored, and the adjudicated ruling is that this file is NOT
+  a repo edit, so read-only agents write it too. The path is relative to the
+  agent's own working tree, so poll both `ops/loop/control/progress/` and
+  `.claude/worktrees/*/ops/loop/control/progress/`. Read the file to check on a
+  running agent - never stop, restart or edit a running agent to look at it. A
+  file that stops updating for 2x its own ETA step is a failure to investigate.
+  `researcher` has no Bash and no Write, so the dispatcher writes its file
+  (`running` at dispatch, `done` or `failed` when the report lands) and keeps
+  each researcher dispatch under 5 minutes.
 - Each builder receives its slice goal, its EXACT write-list, its seams
-  consumed and published, and its acceptance criterion. Nothing else. **The
+  consumed and published, its acceptance criterion, and its progress-file
+  path. Nothing else. **The
   merger holds the plan and the seams, not the implementations** - that is what
   keeps its context small enough to hold the whole merge.
 
 ### The builder slice contract
 
-Every builder dispatch carries these four, verbatim, because subagent context
+Every builder dispatch carries these five, verbatim, because subagent context
 does NOT inherit the main thread's:
 
 1. **Restate the write-list before touching anything.** A builder that cannot
@@ -218,6 +243,9 @@ does NOT inherit the main thread's:
    the implementation, then both suites - `python -m pytest tests` and
    `python -m pytest agents/pity_engine`, separately, never `pytest .` from the
    root per `pytest.ini`.
+5. **Write the named progress file after each step**, ending on `done` or
+   `failed`. A builder with no progress file is a builder the main thread can
+   only check on by interrupting.
 
 Relay what matters from each agent's report. The operator does not see it.
 

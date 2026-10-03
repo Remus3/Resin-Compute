@@ -315,3 +315,9 @@ AUDIT: BLOCKED - <n> MUST-FIX open
 - Above the verdict, report each phase with what you observed, every finding
   with its measurement, and anything you could NOT measure - labelled
   unmeasured, never rounded up to clean.
+- That per-phase report goes to the CONTROLLER that dispatched the audit, not
+  into the operator's chat. The main thread relays the verdict line and any
+  MUST-FIX that needs a ruling, one line each, and never re-prints the phases as
+  an inline checklist (FLEET-COMMON item 3). An audit expected to take over 5
+  minutes writes its progress file after each phase, per
+  `.claude/agents/ui-auditor.md`.
