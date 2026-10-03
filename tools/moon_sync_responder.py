@@ -114,9 +114,12 @@ from ops.health import ENV_RUNTIME_DIR, runtime_dir  # noqa: E402, F401
 #: This repo's code in the `from-<CODE>-` convention.
 SELF_CODE = "RSC"
 
-#: Opted in for the PAIRWISE trial. One edge, not four. Sibling-A's section 5:
-#: five repos is twenty edges before anything is known to work.
-OPTED_IN: tuple[str, ...] = ("RC",)
+#: Every channel participant, by codename. Widened from the pairwise RC-only
+#: trial by the operator's 2026-10-02 directive to read and answer this tree's
+#: whole channel inbox. Never `SELF_CODE`: `pending` also drops it, so a
+#: self-reply loop is impossible twice over. Hop budget, window and every other
+#: halt are unchanged - this widens the audience and lifts no bound.
+OPTED_IN: tuple[str, ...] = ("CS", "LL", "LW", "MAIN", "RC", "SS")
 
 #: M5. Every responder-authored note carries this on its own line, so the
 #: transcript separates cleanly from human traffic after the trial and so the
