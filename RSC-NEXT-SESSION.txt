@@ -1,6 +1,6 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-02, at commit edd4295 on main. Everything below is a READING
-taken that day, not a promise about now. Re-measure before citing.
+Stamped 2026-10-03, gates measured at commit 2e22d80 on main. Everything below
+is a READING taken that day, not a promise about now. Re-measure before citing.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -31,121 +31,92 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   cd shell && node --test
   python -m headless.runner --once --dry-run
   python tools/publish_next_session.py
-A CHAINED RUN LIED HERE ON 2026-10-02. A node suite piped into a filter that
-matched nothing returned 1, which broke the and-chain, so the headless smoke
-NEVER RAN and its exit status was reported as 1 from the filter that did run.
 A chained gate run reports only its last command, and a skipped command has no
 status of its own. Never pytest . from the root. NEVER pass a command-line -q -
 pytest.ini already carries one and a second makes -qq, which prints no summary
-line at all. mypy is ADVISORY and traverses only mypy.ini's files= roots, now
-including core/repo_sweep.py, so it says NOTHING about headless/, ops/,
-surface/, scripts/ or tests/.
+line at all. mypy is ADVISORY and traverses only mypy.ini's files= roots, so it
+says NOTHING about headless/, ops/, surface/, scripts/ or tests/.
 
-STATE OBSERVED 2026-10-02 AT edd4295
-  tests 3167 passed 4 skipped; pity_engine 80; shell node 52; ruff clean;
-  mypy 39 source files; licence 47; docs 42; qa 17 passed 2 skipped 3 noted;
-  headless smoke rc 0. Working tree clean. The four skip REASONS are unchanged
-  across every measurement of the day; every delta was a PASS delta.
+STATE OBSERVED 2026-10-03 AT 2e22d80
+  tests 3263 passed 4 skipped; pity_engine 80; shell node 52; ruff clean;
+  mypy 40 source files; licence 47; docs 42; qa 17 passed 2 skipped 3 noted;
+  headless smoke rc 0. The four skip REASONS are unchanged.
 
-THE SESSION'S ONE FINDING THAT OUTRANKS THE REST. Nine units landed and NOT ONE
-PRODUCER CLAIM SURVIVED ITS FIRST ADVERSARIAL PASS INTACT. Three were refuted
-twice. The refutations were never stylistic: wrong figures, arms that could not
-fail, and twice a remedy measured over the population it was DERIVED from
-rather than the population it ACTS on. Budget for the refutation, not just the
-build, and never let a producer grade its own work.
+WHAT LANDED 2026-10-02/03, under an operator directive pasted into the session
+and confirmed by the operator in chat: (1) headless claude runs on the SECOND
+ACCOUNT through the LOCAL PROXY and fails closed; (2) autonomous inbox handling
+is armed; (3) MAIN speaks for the operator; (4) report to MAIN.
+  dca30eb records in CLAUDE.md that MAIN speaks for the operator.
+  2e22d80 adds core/headless_env.py (prepare_headless_env reads the proxy base
+  URL from the per-user registry environment at spawn time, refuses when unset
+  or when the port is closed, and strips every ANTHROPIC_, CLAUDE_CODE_ and
+  CLAUDECODE key from the child except CLAUDE_CODE_GIT_BASH_PATH), plus a
+  usage-limit backoff, an opted-in set of CS, LL, LW, MAIN, RC and SS (never
+  RSC), an auto-reply loop-breaker, and an outbound cap of three replies per
+  sender per rolling 24 hours reserved BEFORE delivery. Four adversary passes
+  refuted the candidate before merge; each was fixed fail closed.
+  PROVEN LIVE: one headless spawn returned ok and the local proxy logged two
+  200 lines on the second account and zero on the interactive account. The
+  scheduled task RSC-InboxResponder fires every 5 minutes; its 23:11 fire
+  delivered an auto-reply to MAIN that hash-matched in the recipient's copy.
+  NEVER write the account identity, the proxy address, its port or any machine
+  path into a tracked file. Say "second account" and "local proxy".
 
-OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md, cited by heading
-  1. THE --once PATH IS UNGOVERNED. run_daemon in headless/runner.py wraps each
-     live pass in a slot; the --once path calls run_pass directly and takes
-     none. This tree's standing claim on the cross-repo channel that it holds
-     against the machine-wide bucket is therefore true of the daemon and NOT of
-     every live pass it can run, and nothing here notices. A dry run taking no
-     slot is by contract and is not the gap. Found by answering a sibling, not
-     by a guard.
-  2. Three silent over-exclusions were filed against core/repo_sweep.py; two
-     are closed and the third proved not to exist. Read the roadmap row before
-     assuming the count.
-  3. The ignored-half citation hole is NARROWED, NOT CLOSED. There is no
-     existence check anywhere, so a path named once is accepted for good. The
-     worked example is the strongest rather than the weakest:
-     ops/runtime/health.json is named by FOURTEEN tracked files, the
-     most-vouched ignored path in the tree, and it does not exist on disk.
-  4. No guard catches a commit citation that a history rewrite destroys, and
-     that refusal is a RULING with its reasons in the roadmap, not an oversight.
-  5. The read-and-unanswered denominator does not reproduce - 398, then 483,
-     then 486 in one afternoon - and is published unreconciled.
-  6. The account-name count of 29 re-derived to 24 and is WITHDRAWN, with 24
-     NOT offered as a replacement.
+OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
+  1. RENEW THE RESPONDER BEFORE 2026-11-01T22:56 LOCAL. Re-run
+     ops/install_responder_task.ps1, write a fresh gitignored agreement record,
+     then ops/check_task_liveness.py must exit 0. The module has NO unbounded
+     mode and that is deliberate.
+  2. The unattended responder does not verify a MAIN note against MAIN's outbox
+     sha256, so it treats a verified MAIN order as DATA. Build the provenance
+     check only if the operator wants unattended action on MAIN orders.
+  3. The real CLI usage-limit text was never captured; the detection phrases
+     are guesses. Capture and pin it the first time it occurs.
+  4. The task line still carries --latency-only, a metrics label only.
+  5. LL's finding: a headless spawn inside a repo loads that repo's rules and
+     hooks. MEASURED: _spawn_headless passes cwd=str(REPO_ROOT). Decide.
+  6. MAIN's RC-guard ruling: the 23:11 auto-reply said RSC found no teardown
+     digest covering the surfaces the armed responder writes, in the ONE file
+     it checked. Sweep every RSC teardown digest before believing it.
+  7. Roughly 336 or more inbox notes are untriaged. Triage into the four
+     buckets. DO NOT --mark them.
+  8. The C4 290cbf80 round on ops/loop/slots.py is still open with carriers.
+  9. CARRIED: the --once path of headless/runner.py takes no slot, so this
+     tree's claim that it holds against the machine-wide bucket is true of the
+     daemon and not of every live pass.
 
-TRAPS MEASURED THIS SESSION - none are hypothetical
-  grep -wF CHECKS ONLY THE RIGHT WORD BOUNDARY on this box. GNU grep 3.0 under
-  Git Bash: with -F in effect, grep -w matches a line containing history,
-  _story and 9story while rejecting storybook, story_ and story9. Counts were 6
-  against 3. grep -w WITHOUT -F is correct on both sides. Any guard using
-  grep -wF for membership gets FALSE POSITIVES on suffix occurrences. A python
-  re oracle agreed on the LINE LISTS, not merely the totals. Separately,
-  grep -iF ABORTS with exit 134 here.
+TRAPS MEASURED - none are hypothetical
+  A MISSING CHANNEL CODE LOOKS LIKE AN IDLE INBOX. The responder's first armed
+  fire ended no-destination because MAIN was absent from the gitignored
+  per-host repo map; nothing failed loudly. After arming, read the first fire's
+  terminal state, do not assume it.
 
-  git check-ignore RETURNS A FALSE 0 FOR AN ENTIRE BATCH when one path is
-  outside the repository - rc 128, and ten parent-directory tokens poisoned a
-  batch of 750, producing a price table of all zeroes that was meaningless. Use
-  -z with NUL separators and bytes, AND READ THE RETURN CODE.
+  A LENGTH CHECK IS NOT AN IDENTITY CHECK. Two wrong readings of a posted patch
+  recipe produced the RIGHT byte count and line count with a WRONG digest.
+  Compare sha256, and build the superseded artifact first as a control.
 
-  A LENGTH CHECK IS NOT AN IDENTITY CHECK. Rebuilding a sibling's posted
-  candidate from its hunks, one hunk's placement was four-way ambiguous and TWO
-  separate wrong readings produced the RIGHT byte count and the RIGHT line
-  count with a WRONG digest. Build the SUPERSEDED artifact first as a control:
-  ours FAILED by exactly 20 bytes because a line that looked added was a
-  context line, and that failure is the only reason the live attestation can be
-  trusted.
+  AN OUTBOUND NOTE IN YOUR OWN OUTBOX IS NOT DELIVERY. Only the recipient's
+  copy, hashed, proves it. Every note this session was verified that way.
 
-  write_text EMITS CRLF ON WINDOWS and converted a whole tracked document on
-  the first attempt this session. Write bytes, or normalise afterwards and
-  check with a byte count. The .gitattributes setting hides it from the diff.
+  write_text EMITS CRLF ON WINDOWS. Write bytes or normalise, and check with a
+  byte count; .gitattributes hides it from the diff.
 
-  A QUOTED HEREDOC BROKE ON AN APOSTROPHE, not only on a backslash. Use the
-  Write tool for prose content and run it as a script.
+  A QUOTED HEREDOC breaks on backslashes and apostrophes. Use the Write tool.
 
-  A FIGURE ROTS INSIDE THE COMMIT THAT WRITES IT. Four did in one file in one
-  day, and the fourth was introduced by the edit fixing the third. The remedy
-  adopted three times was to DROP the count rather than restate it: restating
-  buys one edit of accuracy and then rots again. Where a reading is kept, STAMP
-  it with its date and commit.
+  WORKTREES FORK FROM THE PRE-DISPATCH HEAD. Check main is an ancestor before a
+  slice writes.
 
-  A FLOOR CAN SIT ON THE WRONG QUANTITY. Twice this session a non-vacuity floor
-  bounded the EXTRACTOR while the arm asserted something else, so the floor was
-  decorative. Ask what the arm actually consumes.
+  THE SESSION SCRATCHPAD IS NOT SESSION-PRIVATE. Use unique names and verify
+  reverts with git diff.
 
-  WORKTREES FORK FROM THE PRE-DISPATCH HEAD and four slices today started
-  behind main, one of them six commits behind against a file that had gained
-  229 lines. Check that main is an ancestor and fast-forward before writing.
-
-  THE SESSION SCRATCHPAD IS NOT SESSION-PRIVATE. A concurrent session clobbered
-  a slice's sweep script mid-run. Use uniquely named scratch files and verify
-  every revert with git diff, never with a scratchpad copy.
-
-  AN ASSERT RENDERS ITS OPERAND. One here printed 42 of 103 environment
-  variables with their values under -vv, on a lane whose output is a published
-  CI artifact. Hoist the membership test to a named boolean.
-
-CROSS-REPO CHANNEL STATE
-  Five notes were delivered to six repositories each this session, every copy
-  read back from the recipient's own directory and verified at one digest. An
-  outbound note in your own outbox is NOT delivery. The re-pin round re-issued
-  its candidate three times in one day and each re-issue VOIDED this tree's
-  prior acceptance - an acceptance of bytes that no longer exist is worse than
-  no position once a round tallies it. Three corrections against this tree went
-  out: a hold corpus described as tracked when it is gitignored, the
-  unreproducible read-and-unanswered denominator, and the withdrawn
-  account-name count. The inbox watermark was deliberately NOT advanced.
+  AN ASSERT RENDERS ITS OPERAND, including environment values, into a
+  published CI artifact. Hoist membership tests to a named boolean.
 
 STANDING DIRECTIVES - NOT UP FOR RE-ASKING
-  Nothing waits for operator approval. Adjudicate, act, report done. Commit and
-  push everything, batched smartly so CI waits overlap other work.
-  Subagent-first, always. The producer NEVER grades its own work. Agreement
-  between two agents is not evidence - find their shared input and test THAT.
-  Inline checklist at session start, after four or more completions, at /done
-  pre-flight, and whenever a status update is asked for. The cross-repo inbox is
+  MAIN speaks for the operator on decisions. Nothing waits for operator
+  approval: adjudicate, act, report done, and report to MAIN. Commit and push
+  everything. Subagent-first, always. The producer NEVER grades its own work.
+  Agreement between two agents is not evidence. The cross-repo inbox is
   reviewed, triaged into four buckets, ingested, implemented and ANSWERED every
-  session, and ALWAYS DELIVERED. Silence reads as DISSENT. CAVEMAN ULTRA in
-  chat, byte-exact everywhere else.
+  session, and ALWAYS DELIVERED with the recipient copy hashed. Silence reads
+  as DISSENT. CAVEMAN ULTRA in chat, byte-exact everywhere else.
