@@ -139,7 +139,7 @@ def rsp(tmp_path):
 
 
 @pytest.fixture()
-def spawned(rsp, monkeypatch):
+def spawned(rsp, monkeypatch, tmp_path):
     """Run `_spawn_headless` with the real spawn intercepted, return the record.
 
     `shutil.which` is stubbed because the arm must hold where the `claude` shim is
@@ -147,22 +147,21 @@ def spawned(rsp, monkeypatch):
     reaching `subprocess.run` when it resolves to None. A test that passes only
     where the shim happens to be installed is a statement about the installation.
     """
-    import shutil
+    import json
+
+    from tests.test_headless_env import kit_route
 
     # THE HEADLESS ROUTE AND THE USAGE BACKOFF ARE STUBBED, so this arm grades
-    # the spawn's kwargs and not the host. Unstubbed, the gate reads the live
-    # user environment store and probes the live proxy: green on a host where
-    # both exist, red on CI where neither does. The backoff record is redirected
-    # by `rsp`; the stub keeps the arm off the backoff path altogether.
-    from core import headless_env
-
-    monkeypatch.setattr(
-        rsp, "_headless_gate", lambda: headless_env.Decision(True, {"PATH": "x"}, "")
-    )
+    # the spawn's kwargs and not the host. Unstubbed, the fleet kit reads the
+    # live user environment store and probes the live proxy: green on a host
+    # where both exist, red on CI where neither does. `kit_route` injects a
+    # loopback URL and a dial through the kit's own parameters, stubs
+    # `shutil.which`, and puts the kit's root under tmp. The backoff record is
+    # redirected by `rsp`; the stub keeps the arm off the backoff path.
+    kit_route(rsp, monkeypatch, tmp_path)
     monkeypatch.setattr(rsp, "backoff_active", lambda *_a, **_k: False)
 
-    record = _Captured()
-    monkeypatch.setattr(shutil, "which", lambda _name: str(ROOT / "fake-claude-shim.cmd"))
+    record = _Captured(json.dumps({"result": "ok"}))
     monkeypatch.setattr(subprocess, "run", record)
 
     out = rsp._spawn_headless("a prompt", rsp.Bounds())
