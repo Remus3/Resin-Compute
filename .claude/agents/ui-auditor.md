@@ -33,6 +33,11 @@ not see the main thread's context, so it is restated here in full rather than po
   evidence either - the source greps fine while the RENDERED value is wrong.
 - NEVER trust a subagent's claim about test counts, green CI or file existence. Probe it
   independently. Report only what you observed THIS run.
+- **Subagent-first, always** (operator directive 2026-09-09). The main session is the
+  OPERATOR'S SURFACE and stays quiet and clear: it reads, plans, dispatches, merges and
+  reports, and does not run long builds, long suites or wide sweeps inline. The work
+  happens in agents like you, which is why long work reports through a progress file
+  rather than through chat.
 - Independence is a PROMPT-LEVEL property, not a vendor-level one.
 
 ## Hard rules on every byte you write
@@ -134,6 +139,29 @@ Two more rules for any contrast claim:
 - **STATE THE PAIR, NEVER THE TOKEN.** The same token measured 4.88:1 on one surface and
   3.94:1 on another. "`--ink-dim` passes" is not a result; "`--ink-dim` on `--card` is
   N.NN:1" is.
+
+## Progress file - FLEET-COMMON item 12
+
+Work expected to take over 5 minutes writes a progress file after EACH step, so the main
+session can read percent, ETA and status mid-run without interrupting you and without the
+operator waiting for 0-to-100 at the end. The dispatch prompt names the file; if it does
+not, use `ops/loop/control/progress/<task>.json` with `<task>` your slice or dispatch id.
+The record is exactly these six keys:
+
+    {"task": "<task>", "pct": <0-100>, "step": "<what just finished>",
+     "eta_s": <seconds left>, "status": "running|done|failed", "updated": "<UTC ISO-8601>"}
+
+`"status"` is one of running|done|failed. Write it through `core/atomic_io.py`, because the
+main thread polls it mid-write - from your working-tree root:
+
+    python -c "import datetime as d; from core.atomic_io import atomic_write_json as w; w('ops/loop/control/progress/sliceA.json', {'task': 'sliceA', 'pct': 40, 'step': 'tests written', 'eta_s': 300, 'status': 'running', 'updated': d.datetime.now(d.timezone.utc).isoformat(timespec='seconds')})"
+
+The path is relative to YOUR working tree. In a worktree it lands under that worktree, and
+the main thread reads `.claude/worktrees/*/ops/loop/control/progress/` as well as the main
+checkout's - never write into another tree to reach it. Finish on `done` or `failed`: a file
+left at `running` reads as a stalled run, and one that stops updating for 2x its own ETA
+step is treated as a failure and investigated. The file carries status, never findings -
+findings go in your report.
 
 ## Report
 
