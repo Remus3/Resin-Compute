@@ -106,6 +106,17 @@ if str(REPO_ROOT) not in sys.path:
 from core import headless_env  # noqa: E402
 from core.atomic_io import atomic_write_json, atomic_write_text, read_json  # noqa: E402
 
+# THE ONE CWD the headless child runs in, and the one `workspace_trust` checks.
+# Both sites read THIS name so they cannot drift: a trust check that certifies
+# one directory while the session runs in another is the silent permission drop
+# the trust gate exists to prevent (see `workspace_trust`).
+# THE REPO IS KEPT AS THE CWD ON PURPOSE (adjudicated 2026-10-03). The child's
+# allowed tools - Read, Grep, git log, pytest - resolve against it, and an
+# untrusted or foreign workspace silently drops their permissions. ACCEPTED
+# COST: the child therefore loads this repo's CLAUDE.md and its project hooks.
+# `tests/test_responder_spawn_cwd.py` proves both sites receive this value.
+SPAWN_CWD: Path = REPO_ROOT
+
 # `ENV_RUNTIME_DIR` IS RE-EXPORTED ON PURPOSE and is not dead. It is this
 # module's statement of which variable isolates a CHILD of this script, and a
 # caller that spelled the literal itself would go stale silently the day the
@@ -2594,7 +2605,7 @@ def _run_once(
         result["termination"] = "disarmed"
         return result
 
-    trusted, why = workspace_trust(REPO_ROOT)
+    trusted, why = workspace_trust(SPAWN_CWD)
     # GATE:workspace-trust
     if not trusted:
         # LOUD, not degraded. A session spawned into an untrusted workspace
@@ -2929,7 +2940,7 @@ def _spawn_headless(prompt: str, bounds: Bounds) -> str:
             capture_output=True,
             text=True,
             timeout=bounds.spawn_timeout_seconds,
-            cwd=str(REPO_ROOT),
+            cwd=str(SPAWN_CWD),
             check=False,
             creationflags=_NO_WINDOW,
             env=route.env,
