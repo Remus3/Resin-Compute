@@ -117,7 +117,9 @@ def test_the_happy_path_sets_the_child_var_and_leaves_the_parent_alone(listener)
     assert decision.env[he.ENV_CHILD_BASE_URL] == listener
     # The child is a COPY of the parent plus the one key.
     copied = all(
-        decision.env.get(k) == v for k, v in parent.items() if k != he.ENV_CHILD_BASE_URL
+        decision.env.get(k) == v
+        for k, v in parent.items()
+        if k != he.ENV_CHILD_BASE_URL and k not in he.CHILD_ENV_STRIPPED
     )
     assert copied, "the child env is not a copy of the parent"
     unchanged = dict(os.environ) == parent
@@ -134,6 +136,40 @@ def test_the_parent_keeps_a_different_base_url_untouched(listener, monkeypatch):
     assert decision.env[he.ENV_CHILD_BASE_URL] == listener
     kept = os.environ.get(he.ENV_CHILD_BASE_URL) == "http://parent.invalid:1"
     assert kept, "the parent's own ANTHROPIC_BASE_URL was overwritten"
+
+
+STRIPPED = (
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY",
+    "ANTHROPIC_BEDROCK_BASE_URL",
+    "ANTHROPIC_VERTEX_BASE_URL",
+    "ANTHROPIC_VERTEX_PROJECT_ID",
+)
+
+
+def test_auth_and_routing_vars_never_reach_the_child(listener, monkeypatch):
+    """A billing bypass: an inherited key or provider switch outranks the proxy."""
+    for name in STRIPPED:
+        monkeypatch.setenv(name, "inherited-" + name.lower())
+    parent = dict(os.environ)
+    decision = he.prepare_headless_env(read_store=_store(listener))
+    assert decision.ok is True, decision.reason
+    leaked = sorted(n for n in STRIPPED if n in decision.env)
+    assert leaked == [], f"inherited into the child: {leaked}"
+    unchanged = dict(os.environ) == parent
+    assert unchanged, "stripping the child mutated the parent environment"
+    kept = all(os.environ.get(n) == "inherited-" + n.lower() for n in STRIPPED)
+    assert kept, "the parent lost a variable the child was stripped of"
+
+
+def test_the_strip_list_is_one_named_tuple():
+    assert set(STRIPPED) <= set(he.CHILD_ENV_STRIPPED)
+    assert isinstance(he.CHILD_ENV_STRIPPED, tuple)
+    assert he.ENV_CHILD_BASE_URL not in he.CHILD_ENV_STRIPPED
 
 
 def test_the_user_store_wins_over_the_process_env(listener, closed_url):

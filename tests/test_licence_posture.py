@@ -165,9 +165,10 @@ class _Enumeration(typing.NamedTuple):
 # RAISED 100 -> 110 ON 2026-10-02, SAME TRIGGER. Adding
 # tests/test_headless_env.py took `tests/` to exactly 100 tracked paths, so the
 # widest partial answer equalled the floor and the clearance arm fired.
-# Re-measured with `git ls-files | wc -l` (254) and
-# `git ls-files | cut -d/ -f1 | sort | uniq -c` (tests/ 100): the legal interval
-# is 100 < value <= 127 (half the corpus); 110 leaves ten modules of headroom.
+# Measured 254 tracked / tests/ 100 when raised; RE-MEASURED 256 / 102 at the
+# commit adding tests/test_responder_loop_breakers.py, with `git ls-files | wc -l`
+# and `git ls-files | cut -d/ -f1 | sort | uniq -c`. Legal interval now
+# 102 < value <= 128 (half the corpus); 110 leaves eight modules of headroom.
 _MIN_TRACKED_PATHS = 110
 
 # THE FLOOR ALONE CANNOT SEE A PARTIAL ENUMERATION. A `git ls-files` narrowed by
