@@ -408,6 +408,88 @@ def test_r4_a_failed_backoff_write_still_ends_as_usage_backoff(rsp, tmp_path, mo
     assert "fail-closed" in log, log
 
 
+@pytest.mark.parametrize("bad", [b"NaN", b"Infinity", b"-Infinity", b"true", b"false"])
+def test_n1_a_non_finite_or_bool_until_is_an_active_backoff(rsp, bad):
+    rsp.DEFAULT_BACKOFF.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_BACKOFF.write_bytes(b'{"until": ' + bad + b"}")
+    assert rsp.backoff_active(rsp.DEFAULT_BACKOFF, time.time()) is True
+    log = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii")
+    assert "fail-closed" in log, log
+
+
+@pytest.mark.parametrize("bad", [b"NaN", b"Infinity", b"-Infinity", b"true", b'"1"'])
+def test_n2_a_non_finite_or_bool_row_corrupts_the_whole_record(rsp, bad):
+    now = time.time()
+    good = json.dumps({"to": "SS", "at": now}).encode("ascii")
+    doc = b'{"version": 1, "replies": [' + good + b', {"to": "LW", "at": ' + bad + b"}]}"
+    rsp.DEFAULT_OUTBOUND.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_OUTBOUND.write_bytes(doc)
+    assert rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, now) >= set(rsp.OPTED_IN)
+    assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, "SS", now, True) is False
+    assert rsp.DEFAULT_OUTBOUND.read_bytes() == doc, "a corrupt record was rewritten"
+
+
+@pytest.mark.parametrize("encoding, bom", [("utf-16-le", b"\xff\xfe"), ("utf-16-be", b"\xfe\xff")])
+def test_n3_a_utf16_reply_is_still_an_auto_reply(rsp, tmp_path, encoding, bom):
+    body = "[RC-RESPONDER]\nmeasured: nothing further.\n"
+    path = tmp_path / "2026-10-02-1000-from-RC-question.md"
+    path.write_bytes(bom + body.encode(encoding))
+    assert rsp._read_text(path) == body
+    assert rsp.is_auto_reply(path.name, rsp._read_text(path))
+
+
+def test_n3_a_utf8_bom_is_decoded(rsp, tmp_path):
+    path = tmp_path / "n.md"
+    path.write_bytes(b"\xef\xbb\xbf" + b"[RC-RESPONDER]\n")
+    assert rsp._read_text(path) == "[RC-RESPONDER]\n"
+
+
+def test_n3_undecodable_bytes_read_as_unreadable_and_are_skipped(rsp, tmp_path):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    path = inbox / "2026-10-02-1000-from-SS-question.md"
+    path.write_bytes(b"please \xff\xfe\xfd answer\n")
+    assert rsp._read_text(path) == ""
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
+
+
+def test_n4_the_reservation_rechecks_the_cap_before_writing(rsp):
+    """A second pass that read the cap BEFORE the first reserved must not exceed it."""
+    now = time.time()
+    for _ in range(rsp.MAX_REPLIES_PER_SENDER):
+        assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, "SS", now, True)
+    before = rsp.DEFAULT_OUTBOUND.read_bytes()
+    assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, "SS", now, True) is False
+    assert rsp.DEFAULT_OUTBOUND.read_bytes() == before
+    # Non-vacuity: another sender still reserves.
+    assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, "LW", now, True) is True
+
+
+def test_n5_a_failed_reservation_terminates_as_reserve_failed(rsp, tmp_path, monkeypatch):
+    _agree(rsp)
+    _trust(rsp, monkeypatch)
+    monkeypatch.setattr(rsp, "record_outbound", lambda *a, **k: False)
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-02-1000-from-SS-question.md")
+    (tmp_path / "ss" / "moon_sync_inbox").mkdir(parents=True)
+    result = _armed(rsp, inbox, {"SS": tmp_path / "ss"})
+    assert result["termination"] == "reserve-failed", result
+    assert "reserve-failed" in rsp.TERMINATIONS
+    assert "2026-10-02-1000-from-SS-question.md" in rsp._answered(rsp.DEFAULT_ANSWERED)
+    log = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii")
+    assert "note-dropped" in log, log
+
+
+def test_n5_a_good_reservation_still_terminates_as_delivered(rsp, tmp_path, monkeypatch):
+    """Survival guard for the termination helper."""
+    _agree(rsp)
+    _trust(rsp, monkeypatch)
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-02-1000-from-SS-question.md")
+    (tmp_path / "ss" / "moon_sync_inbox").mkdir(parents=True)
+    assert _armed(rsp, inbox, {"SS": tmp_path / "ss"})["termination"] == "delivered"
+
+
 def test_r5_a_limit_phrase_on_a_clean_long_exit_still_backs_off(rsp, routed, monkeypatch):
     text = rsp.RESPONDER_TAG + "\n" + "x" * 2000 + "\nYou've hit your limit\n"
     monkeypatch.setattr(subprocess, "run", _Run(text, returncode=0))

@@ -88,6 +88,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -194,6 +195,9 @@ TERMINATIONS = (
     "usage-limited",
     # A RECORDED BACKOFF IS STILL IN FORCE, so this fire spawned nothing.
     "usage-backoff",
+    # THE OUTBOUND ROW COULD NOT BE RESERVED, so nothing was delivered and the
+    # note was recorded answered - dropped on purpose, the safe side.
+    "reserve-failed",
 )
 
 #: Set on the delivered path when the reply LANDED and the answered record did
@@ -766,11 +770,37 @@ def _read_text(path: Path) -> str:
     Empty is the safe direction here: an unreadable note is not answered and is
     not counted as a hop, so the failure is a missed reply rather than an
     unbounded chain.
+
+    THE ENCODING IS TAKEN FROM THE BOM, ruled 2026-10-02: FF FE is UTF-16-LE,
+    FE FF is UTF-16-BE, EF BB BF is UTF-8 with a mark; no mark is strict UTF-8.
+    A UTF-16 sibling reply decoded as UTF-8 hid its tag behind NUL bytes.
+    Bytes that do not decode under the chosen codec read as UNREADABLE, which
+    `is_auto_reply` treats as never-answer - it was `replace` before, which
+    answered a note it had not actually read.
     """
     try:
-        return path.read_bytes().decode("utf-8", "replace").lstrip(_BOM)
+        raw = path.read_bytes()
     except OSError:
         return ""
+    for mark, codec in _BOM_CODECS:
+        if raw.startswith(mark):
+            raw, encoding = raw[len(mark):], codec
+            break
+    else:
+        encoding = "utf-8"
+    try:
+        return raw.decode(encoding).lstrip(_BOM)
+    except UnicodeDecodeError:
+        return ""
+
+
+#: Byte-order marks and the codec each one names. UTF-8's mark is listed even
+#: though it never collides with the UTF-16 pair, so all three are explicit.
+_BOM_CODECS: tuple[tuple[bytes, str], ...] = (
+    (b"\xef\xbb\xbf", "utf-8"),
+    (b"\xff\xfe", "utf-16-le"),
+    (b"\xfe\xff", "utf-16-be"),
+)
 
 
 #: Prefix for the transient directory-writability probe, and the SELECTOR the
@@ -2209,10 +2239,20 @@ def backoff_active(path: Path, now: float) -> bool:
     if doc is _MISSING:
         return False
     until = doc.get("until") if isinstance(doc, dict) else None
-    if not isinstance(until, (int, float)) or isinstance(until, bool):
+    if not _finite_number(until):
         _log_fail_closed(None, "backoff-record-unreadable")
         return True
-    return now < float(until)
+    # `_finite_number` already proved this; the isinstance restates it for mypy.
+    return isinstance(until, (int, float)) and now < float(until)
+
+
+def _finite_number(value: Any) -> bool:
+    """A real, finite int or float. bool, NaN and +/-Infinity are not."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
 
 
 def _outbound_rows(path: Path, now: float) -> list[dict] | None:
@@ -2231,7 +2271,7 @@ def _outbound_rows(path: Path, now: float) -> list[dict] | None:
         r for r in rows
         if isinstance(r, dict)
         and isinstance(r.get("to"), str)
-        and isinstance(r.get("at"), (int, float))
+        and _finite_number(r.get("at"))
     ]
     if len(good) != len(rows):
         return None
@@ -2265,8 +2305,15 @@ def record_outbound(path: Path, to: str, now: float, delivered: bool) -> bool:
     """
     if not delivered:
         return False
+    # RE-READ AND RE-CHECK IMMEDIATELY BEFORE THE WRITE. The cap that filtered
+    # the queue was read at the top of the cycle; a pass that overlapped this
+    # one may have reserved since. Narrows the window to this read-then-write;
+    # it is not a cross-process lock - the scheduled task's
+    # MultipleInstancesPolicy IgnoreNew is what keeps passes from overlapping.
     rows = _outbound_rows(path, now)
     if rows is None or not _ensure_parent(path):
+        return False
+    if sum(1 for r in rows if r["to"] == to) >= MAX_REPLIES_PER_SENDER:
         return False
     return atomic_write_json(path, {"version": 1, "replies": [*rows, {"to": to, "at": now}]})
 
@@ -2283,8 +2330,18 @@ def _reserve_targets(
     """
     if record_outbound(path, sender_of(note.name) or "", now, True):
         return [d / "moon_sync_inbox" for d in dests], [inbox], []
-    _log_fail_closed(note.name, "outbound-unreserved")
+    _log_fail_closed(note.name, "outbound-unreserved-note-dropped")
     return [], [], [OUTBOUND_UNRESERVED_REASON]
+
+
+def _reply_termination(reserve_reasons: list[str]) -> str:
+    """`reserve-failed` when the reservation refused, `delivered` otherwise.
+
+    A helper so `_run_once` gains no branch. The note is still recorded as
+    answered on `reserve-failed` - dropped, the safe side - and the drop is in
+    the invocation log twice: the fail-closed line and this termination.
+    """
+    return "reserve-failed" if reserve_reasons else "delivered"
 
 
 def record_backoff(path: Path, reset_at: float | None, now: float) -> bool:
@@ -2694,7 +2751,7 @@ def _run_once(
         # GATE:delivery-write-all
         result["delivered"] = all(ok for ok, _ in written) and bool(written)
         result["actions"] = ["A5"]
-        result["termination"] = "delivered"
+        result["termination"] = _reply_termination(reserve_reasons)
 
         # THE RETURN VALUE IS OBSERVED, AND IT WAS A BARE STATEMENT HERE. A False
         # reached neither `result`, nor `record_cycle`'s reasons column, nor the
