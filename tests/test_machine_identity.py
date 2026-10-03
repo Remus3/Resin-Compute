@@ -262,7 +262,11 @@ class _Enumeration(typing.NamedTuple):
 # commit adding tests/test_responder_loop_breakers.py, with `git ls-files | wc -l`
 # and `git ls-files | cut -d/ -f1 | sort | uniq -c`. Legal interval now
 # 102 < value <= 128 (half the corpus); 110 leaves eight modules of headroom.
-_MIN_TRACKED_PATHS = 110
+# RAISED 110 -> 120 ON 2026-10-03, SAME TRIGGER. Adding tests/test_fleet_kit.py
+# took `tests/` to exactly 110 of 268 tracked paths, measured with the same two
+# commands. Legal interval now 110 < value <= 134; 120 leaves ten modules of
+# headroom.
+_MIN_TRACKED_PATHS = 120
 
 # THE FLOOR ALONE CANNOT SEE A PARTIAL ENUMERATION. A `git ls-files` narrowed by
 # a pathspec, a sparse checkout, or a cwd that landed in a subdirectory can

@@ -1,294 +1,162 @@
 ---
-description: End-of-session ritual - gates, commit, push, CI, ledger, roadmap, and the next-session hand-off printed inline as the last thing in the message.
+description: End-of-session ritual - gates, commit, push, CI, ledger, roadmap, and the RSC-NEXT-SESSION.txt hand-off rewritten with every unworked item carried forward. Chat output is one line.
 argument-hint: [optional one-line session topic]
 ---
 
 # /done - end-of-session ritual
 
-Run EVERY section, in order. Report the result you OBSERVE for each one, with
-counts. Do not skip a section because it "looks clean", and never carry forward
-a count from earlier in the session or from a subagent - per CLAUDE.md a filed
-count is a hypothesis, not a fact. Session topic, if given: $ARGUMENTS
+Run EVERY section, in order, quietly. Session topic, if given: $ARGUMENTS
 
-## The shape, and what was deliberately not ported
+**THE ONLY CHAT OUTPUT OF /done IS ONE LINE** (FLEET-COMMON rule 5 in
+`CLAUDE.md`):
 
-This is Sibling-C's ritual adapted to this tree, not transcribed from it.
-Three things were dropped on purpose, and each should stay dropped:
+```
+Done ritual complete, safe to clear
+```
 
-- **No four-phase CI overlap.** Sibling-C pushes early so ~15 minutes of
-  paperwork can run against a ~27-minute suite. This tree's suites finish in
-  seconds, so the overlap optimises a cost that does not exist here and would
-  only add ordering rules to get wrong.
-- **No `WAKEUP_NOTES.md`.** Sibling-C and Sibling-B keep a rolling session log
-  plus an archive. Here `RSC-NEXT-SESSION.txt` is the hand-off,
-  `docs/LEDGER.md` is the closed-work history and `ROADMAP.md` is the open-work
-  list. Three files already cover it; a fourth would just be a fourth place to
-  go stale.
-- **No drift guard script.** `tests/test_docs_consistency.py` is this tree's
-  equivalent and it already runs in both CI workflows and in section 1.
-
-What IS carried across, because it is the part that earns its keep: the gate
-runs before the commit, the paperwork is not optional, and the session ends by
-handing the next one a running start.
+or, if a section stopped the ritual, one line naming the failure that stopped
+it. Nothing else reaches chat: no banner, no gate table, no checklist, no
+session review, no hand-off text, no next-session prompt. Every measured result
+goes into the files below - `docs/LEDGER.md`, `ROADMAP.md` and
+`RSC-NEXT-SESSION.txt` - never into chat. Never carry forward a count from
+earlier in the session or from a subagent; record only what you observed in
+this ritual.
 
 ## 0. What this session touched
 
-- `git status -s` and `git log --oneline -5`. Name the files YOU authored.
-- Check nothing unexpected is staged: no `.env`, no runtime state, no game data.
-  Per ADR-002 and `docs/LICENSE_NOTES.md` this tree vendors no game data, and
-  `data/fixtures/` is hand-authored only, nothing vendored. A real cost table or banner list appearing
-  in `data/` is a stop-and-ask, not a commit.
-- **Hooks are the authoritative gate and a fresh clone has NONE.** Confirm with
-  `git config core.hooksPath` - it must print `.githooks`. If it prints nothing,
-  run `python scripts/install_hooks.py` before going further. Never treat a
-  hook's presence as proof it fires.
+- `git status -s` and `git log --oneline -5`. Know the files YOU authored.
+- Nothing unexpected staged: no `.env`, no runtime state, no game data. Per
+  ADR-002 and `docs/LICENSE_NOTES.md` this tree vendors no game data, and
+  `data/fixtures/` is hand-authored only. A real cost table or banner list in
+  `data/` stops the ritual - report it as the failure line.
+- `git config core.hooksPath` must print `.githooks`. If it prints nothing, run
+  `python scripts/install_hooks.py` first.
 
 ## 1. The gate - all of it, before any commit
 
-The three QA gates lead because each one found a real defect on its first run.
-They are cheap. Run them first.
+Never pass `-q` on the command line; `pytest.ini` already carries it.
 
 ```
-python -m pytest tests/test_licence_posture.py -q
-python -m pytest tests/test_docs_consistency.py -q
+python -m pytest tests/test_licence_posture.py
+python -m pytest tests/test_docs_consistency.py
 python scripts/qa_companion.py
-```
-
-Then the standard gates. Run the two Python suites SEPARATELY - never
-`pytest .` from the root, per `pytest.ini`:
-
-```
 python -m ruff check .
 python -m pytest tests
 python -m pytest agents/pity_engine
 cd shell && node --test
 python -m headless.runner --once --dry-run
+python -m mypy
 ```
 
-- **`python -m mypy` is ADVISORY here, not a gate.** `.github/workflows/ci.yml`
-  carries `continue-on-error: true` on it, and `docs/SPEC_SCAFFOLD.md` section 7
-  defines slice acceptance as py_compile + ruff + the slice's own pytest + no
-  banned glyph, with mypy deliberately absent. Run it, report what you see, and
-  do not block the commit on it. If it is red for the known environmental
-  reason - mypy following `_pytest` into a numpy stub that uses PEP 695 syntax
-  invalid under the pinned `python_version = 3.11` - say so and move on.
-- GREEN: proceed. RED: fix and re-run. A pre-existing failure unrelated to this
-  session's work gets named ABOVE the banner and the green-verified authored
-  files still commit; never commit over a regression you introduced.
-- A skipped suite is not a passing suite. Say what was skipped and why.
+- Two Python suites SEPARATELY - never `pytest .` from the root.
+- `python -m mypy` is ADVISORY: `.github/workflows/ci.yml` runs it with
+  `continue-on-error: true` and `docs/SPEC_SCAFFOLD.md` section 7 leaves it out
+  of slice acceptance. Record its result; do not block on it.
+- RED that this session introduced: fix and re-run; never commit over it. A
+  pre-existing failure unrelated to this session is recorded in the ledger and
+  the hand-off, and the green-verified authored files still commit.
+- A skipped suite is not a passing suite. Record what was skipped and why.
 
 ## 2. Commit
 
-Versioning is cheap and lost work is not, so the default is: green gate means
-commit. Do not leave authored work uncommitted because it feels small.
+Green gate means commit. Do not leave authored work uncommitted.
 
 - Stage deliberately, file by file. Never `git add -A`.
-- **NEVER add a `Co-Authored-By: Claude` trailer, or any other trailer.**
-  `.githooks/commit-msg` strips it per operator policy, so adding one is a
-  silent no-op rather than a choice. A harness whose own standing instructions
-  inject that trailer by habit does not change this: the repo policy wins and
-  the hook absorbs it either way. Do not spend a line of the message on it, and
-  do not file its absence from an earlier commit as a defect - that absence is
-  the policy working.
-- 7-bit ASCII, imperative subject. No em-dashes, no en-dashes, no smart quotes.
-- **For a message with special characters use `git commit -F <tmpfile>` or a
-  SINGLE-quoted here-string.** Never a double-quoted here-string and never a
-  piped string.
+- **NEVER add a `Co-Authored-By: Claude` trailer** or any other trailer.
+  `.githooks/commit-msg` strips it per operator policy; never file its absence
+  as a defect.
+- 7-bit ASCII, imperative subject. Use `git commit -F <file in the session
+  scratchpad>`; never a double-quoted here-string or a piped string.
 - If a hook rejects the commit, fix it and make a NEW commit. Never `--amend`,
   never `--no-verify`.
 
 ## 3. Push
 
-`git push origin main`. The pre-push hook runs ruff plus both suites before
-anything leaves the machine, so a push is slower than a commit and that is the
-design. Read the output: a push that printed an error is not a push.
+`git push origin main`. The pre-push hook runs ruff plus both suites. A push
+that printed an error is not a push - that is the failure line.
 
-`RESIN_SKIP_PREPUSH=1` exists for a docs-only push. Using it means CI is your
-only gate - say so in the banner if you use it.
+`RESIN_SKIP_PREPUSH=1` exists for a docs-only push; using it makes CI the only
+gate, and the ledger entry says so.
 
-## 4. CI - know which workflow you actually triggered
+## 4. CI - know which workflow you triggered
 
-This tree has TWO workflows and they are complementary. Getting this wrong
-means watching a run that was never going to start:
+- `.github/workflows/ci.yml` carries `paths-ignore: ['**/*.md']`, so a
+  docs-only push fires no `ci` run. That is not a failure.
+- `.github/workflows/docs-guards.yml` fires on exactly what `ci.yml` declines.
 
-- `.github/workflows/ci.yml` carries `paths-ignore: ['**/*.md']`. **A docs-only
-  push fires no `ci` run at all.** That is not a failure and it is not
-  something to fix with a `workflow_dispatch`.
-- `.github/workflows/docs-guards.yml` fires on exactly what `ci.yml` declines,
-  and runs the ASCII scan plus the guards that read tracked `.md`.
-
-So: `gh run list --branch main --limit 3`, identify the run your push actually
-triggered, and report it as green, red or pending. Do not dispatch a second run
-of something the push already started. If it is still running, say so - do not
-predict the result.
+`gh run list --branch main --limit 3`, identify the run your push triggered, and
+record it as green, red or pending in the ledger entry. Do not dispatch a second
+run of something the push already started, and do not predict a running result.
 
 ## 5. Append to `docs/LEDGER.md`
 
-Newest first, at the TOP of the body, in the existing entry format. One entry
-per landed unit of work.
-
-- What changed, and what was MEASURED rather than intended.
-- The verification pointer: the file and the test name that prove it.
-- Any decision made, stated with its reasoning, so it is not re-litigated.
-- A count may appear only stamped with the date it was measured, as a
-  historical reading rather than a claim about now.
-- **Never put a per-item entry in `CLAUDE.md`.** That file is loaded every turn.
+Newest first, at the TOP of the body, in the existing entry format. One entry per
+landed unit of work: what changed and what was MEASURED, the verification
+pointer (file and test name), any decision with its reasoning. A count appears
+only stamped with its measurement date. Never put a per-item entry in
+`CLAUDE.md` - that file is loaded every turn.
 
 ## 6. Update `ROADMAP.md`
 
-- Flip anything that shipped, and cite the path that proves it. Note that
-  `tests/test_docs_consistency.py` fails if a line marked DONE names a path that
-  does not exist, so a premature tick is caught rather than believed.
-- Add new items for what this session opened up.
-- Do not touch items nobody worked on.
+Flip what shipped and cite the path that proves it
+(`tests/test_docs_consistency.py` fails a DONE line naming a missing path). Add
+items this session opened. Do not touch items nobody worked on.
 
-## 7. Rewrite `RSC-NEXT-SESSION.txt` - the RAW hand-off, no wrapper
+## 7. Rewrite `RSC-NEXT-SESSION.txt` - CARRY FORWARD EVERY ITEM NOT ACTED ON
 
-This file is the SOURCE OF TRUTH for the hand-off. Sections 9 and 11 both read
-from it, so it is written once here and never retyped afterwards.
+This tracked repo-root file is the ONLY continuity. The next session reads it
+first. Rewrite it, then commit it with the rest of the paperwork.
 
-The fenced block must be self-contained - the next session boots cold and has
-only what the operator pastes into it:
-
-- The bootstrap reading order, and the standing warning not to re-derive gacha
-  constants from memory or a web search.
-- The gates, in the order section 1 runs them.
-- The state you observed THIS session, stamped with the date and commit, and
-  labelled as a reading rather than a promise.
-- The traps that have actually bitten in this tree. Every entry measured, none
-  hypothetical.
-- Open work, highest priority first, and anything that must NOT be redone.
-
-**THE FILE IS THE HAND-OFF, RAW - NO MARKDOWN WRAPPER AND NO FENCE.** Changed
-2026-09-19 on operator ruling. It used to be `NEXT_SESSION_PROMPT.md`, a
-markdown page wrapping the hand-off in one fenced block. It is now
-`RSC-NEXT-SESSION.txt`, the bare text and nothing else, which is what the
-sibling trees keep and what the Desktop shortcut opens in Notepad - a wrapper
-and a pair of fences are noise in that window. Write the hand-off straight into
-the file; do not add a heading, a preamble or a fence.
-
-Mechanical constraints, enforced by `tools/publish_next_session.py`:
-
-- **7-bit ASCII, and at least 2000 bytes.** A truncated hand-off reads as
-  current, which is worse than a stale one. These now cover the WHOLE file
-  rather than one block of it.
-- **A fenced source is still accepted and still unwrapped**, so the tool stays
-  usable across the fleet while the other trees migrate. MORE than one fenced
-  block is still refused, because that file is ambiguous about which block is
-  the hand-off.
-- **THE FILE IS TRACKED AND THE REPOSITORY IS PUBLIC.** It is swept by
+- **Read the CURRENT file first.** Every item in it that this session did not
+  act on is CARRIED FORWARD, verbatim or tighter. An item is never dropped
+  because the session worked on something else. An item leaves the file only
+  when it was done (and the ledger says so) or explicitly retracted (and the
+  file says why).
+- Contents: the bootstrap reading order and the standing warning not to
+  re-derive gacha constants; the gates in section 1 order; the state observed
+  THIS session, stamped with date and commit, labelled as a reading; traps that
+  have actually bitten here; open work highest priority first; what must NOT be
+  redone, each entry stating what would reverse it.
+- A recorded act names what was READ BACK after it, never what was run.
+- **Raw text, no markdown wrapper, no fence.** 7-bit ASCII, at least 2000 bytes,
+  enforced by `tools/publish_next_session.py`.
+- **The file is tracked and the repository is public.** It is swept by
   `tests/test_machine_identity.py`, `tests/test_no_sibling_names.py` and
-  `tests/test_task_state_claims.py`. MEASURED 2026-09-19: a first draft of this
-  hand-off named a sibling repo's absolute path and the account short-name, and
-  all three guards fired. Do not write a real account, a sibling project name,
-  or a sibling's absolute path into it - use the channel codes.
+  `tests/test_task_state_claims.py`. No real account, sibling project name or
+  sibling absolute path - use the channel codes.
 
 ## 8. Memory
 
-Check `~/.claude/projects/C--Resin-Compute/memory/` for
-anything written this session, and confirm `MEMORY.md` indexes it. A memory
-file with no index line is invisible to the next session.
+Check `~/.claude/projects/C--Resin-Compute/memory/` for anything written this
+session and confirm `MEMORY.md` indexes it.
 
-## 9. Publish the Desktop shortcut - BEFORE the banner, not after
+## 9. Converge the Desktop shortcut
 
 ```
 python tools/publish_next_session.py
 ```
 
-**THE BARE RUN IS WHAT THIS SECTION RUNS, AS OF 2026-09-20 AT `8433eba`.** This
-section used to run `--check` only, and the restriction existed for exactly one
-reason: the publisher wrote a DETACHED Desktop COPY of the hand-off, so a bare
-run recreated the stale artifact operator ruling 2 removed. THE MODULE NO LONGER
-WRITES A COPY. It CONVERGES `RSC-NEXT-SESSION.lnk` onto the tracked repo-root
-`RSC-NEXT-SESSION.txt` - the shape the sibling trees already use - reusing the
-idempotent converge table imported from `scripts/make_shortcut.py`: absent
-create, present-and-correct change nothing, present-and-different rewrite. The
-reason for the restriction is gone, so the restriction is gone with it.
+It converges `RSC-NEXT-SESSION.lnk` onto the tracked `RSC-NEXT-SESSION.txt` - a
+pointer, never a second copy (operator ruling 2026-09-19; the one sanctioned
+write outside the repo root). Run it from the canonical checkout: from a linked
+worktree `main()` refuses by exit code, which is correct and not a ritual
+failure. `--check` reports drift and writes nothing. Any other refusal is the
+failure line - fix `RSC-NEXT-SESSION.txt` and re-run. Never hand-write anything
+onto the Desktop.
 
-Operator ruling 2026-09-19 still governs WHAT is on the Desktop: a pointer and
-never a second copy of the hand-off text. That ruling is an explicit
-authorization for that ONE write outside the repo root and for nothing else.
+## 10. The one line
 
-- **RUN IT FROM THE CANONICAL CHECKOUT, NEVER FROM A LINKED WORKTREE.** `main()`
-  refuses HARD from a worktree, by exit code, because `REPO` resolves from the
-  module's own location and a worktree run would aim the operator's shortcut at
-  a file that disappears when the worktree is cleaned up. That refusal is the
-  correct outcome, not a failure of the ritual - re-run from the canonical
-  checkout.
-- A converged run prints `"action"` and a false `"detached_copy"`. `"unchanged"`
-  is the ordinary result once the shortcut already resolves, and it means the
-  pointer was verified rather than that nothing was checked.
-- `--check` still exists, still writes nothing, and is the right call when you
-  want the drift report without the write.
-- There is now only ONE copy of the hand-off text anywhere: the tracked
-  `RSC-NEXT-SESSION.txt` in the repo root. The inline block in section 11 is
-  read out of that same file, so the printed block and the file cannot
-  disagree - not because a guard compares them, but because there is nothing
-  left to disagree with.
-- The Desktop is shared with five sibling projects that own the `CS-`, `LL-`,
-  `LW-`, `RC-` and `RM-` prefixes - those five basenames are observed on disk
-  and are deliberately not codenamed, because a guard that compares against
-  invented filenames is vacuous. `RSC-` is unconfusable with any of them.
-- If the publish refuses, that is a failure of the ritual - fix
-  `RSC-NEXT-SESSION.txt` and re-run. Never hand-write anything onto the Desktop.
-  The one refusal that is NOT a ritual failure is the linked-worktree refusal
-  above, which is the module declining to publish a pointer at bytes no guard
-  read.
-
-## 10. Banner
-
-Everything you want the operator to read goes HERE, above the block:
-
-```
-==================================================================
-  /done complete
-==================================================================
-  - commits this session : <count> (pushed: <range>)
-  - three QA gates       : licence <r> / docs <r> / companion <r>
-  - ruff                 : <result>
-  - pytest tests         : <observed counts>
-  - pytest pity_engine   : <observed counts>
-  - shell node --test    : <observed counts>
-  - headless smoke       : exit <code>
-  - mypy (advisory)      : <result>
-  - CI                   : ci | docs-guards | none - <status>
-  - ledger / roadmap     : <updated | skipped>
-  - desktop backup       : RSC-NEXT-SESSION.txt, <N> bytes
-==================================================================
-```
-
-Anything that failed is surfaced ABOVE the banner, not folded into it.
-
-## 11. Print the hand-off inline - THE LAST THING IN THE MESSAGE
-
-Print the fenced block from `RSC-NEXT-SESSION.txt` verbatim, in chat, in one
-fence. This is the continuity mechanism, not a courtesy: rediscovery - redoing
-closed work, re-pitching a settled decision, acting on a stale doc - is the
-dominant failure mode, and this block is the defence against it.
-
-- **Inline, in full, every time.** Writing it to `RSC-NEXT-SESSION.txt` in
-  section 7 does NOT satisfy this, and neither does summarising it or pointing
-  at the file. The operator pastes out of the chat.
-- **No language tag on the fence.** A `bash` tag puts a Run button on it.
-- **Emphasise with CAPS, not asterisks.** Nothing renders inside a fence, so
-  `**` reaches the operator as two literal asterisks.
-- **Nothing follows the closing fence. Nothing.** No "what was done this
-  session" review, no summary, no sign-off, no offer to continue. Operator
-  instruction, 2026-09-06: the block is selected by hand, and trailing prose is
-  text they have to select around. Everything you wanted to say went in the
-  banner at section 10.
-- This applies whether `/done` was invoked explicitly or the ritual was merely
-  inferred from the operator wrapping up.
+Print exactly `Done ritual complete, safe to clear`, or the one line naming the
+failure that stopped the ritual. Nothing before it, nothing after it. Never
+print the hand-off or a next-session prompt into chat; the operator opens
+`RSC-NEXT-SESSION.txt` and types only "continue", "/done" or "/clear".
 
 ## Safety rails
 
 - NEVER force-push, NEVER `--amend`, NEVER `--no-verify`.
-- NEVER commit secrets, credentials, or anything under `data/` that came from a
-  licensed source. When in doubt, stop and ask.
-- Under Git Bash write `taskkill //F //PID <pid>`. A lone `/F` is rewritten to
-  `F:/` by MSYS path conversion, and it fails SILENTLY when redirected.
-- A heredoc plus a non-raw Python string mangles backslashes. It has already
-  put a BEL byte into `docs/LEDGER.md` once, and it silently no-opped a
-  string replacement during the session that wrote this file. Use the
-  Write/Edit tools for content with backslashes.
-- `/clear` is a harness built-in. Print the block and let the operator type it.
+- NEVER commit secrets, credentials, or anything under `data/` from a licensed
+  source.
+- Under Git Bash write `taskkill //F //PID <pid>`; a lone `/F` becomes `F:/`.
+- A heredoc plus a non-raw Python string mangles backslashes; use the Write/Edit
+  tools for content with backslashes.
+- `/clear` is a harness built-in; the operator types it.

@@ -83,6 +83,12 @@ RUNTIME_ARTIFACTS = {
     # Written by ops/supervisor.py and headless/runner.py on the first pass.
     # Gitignored, and absent until something has actually run.
     "ops/runtime/health.json",
+    # Named by the FLEET-COMMON block that CLAUDE.md embeds byte-for-byte from
+    # ops/fleet_kit/FLEET-COMMON.md, so the text cannot be reworded here. It is
+    # the live status file ops/fleet_kit/fleet_headless.py writes on every
+    # headless spawn; ops/loop/control/ is gitignored, so it exists only once a
+    # run has happened.
+    "ops/loop/control/inbox_status.json",
 }
 
 
@@ -634,7 +640,7 @@ def test_the_corpus_builder_arm_can_fail():
 # LIMITS OF THE BARE CITATION RULE - READ THIS BEFORE TRUSTING THE ARMS BELOW.
 #
 # This belongs in the module docstring and is not there for a mechanical
-# reason: CLAUDE.md cites `tests/test_docs_consistency.py:171` by LINE NUMBER,
+# reason: CLAUDE.md cites `tests/test_docs_consistency.py:177` by LINE NUMBER,
 # `test_the_corpus_builder_citations_land_on_an_ls_files_line` resolves that
 # citation, and adding a single line anywhere above the `git ls-files` call
 # moves it and reds the suite. Measured while writing this section - a 9-line
