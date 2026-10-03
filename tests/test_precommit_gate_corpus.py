@@ -476,15 +476,6 @@ def test_the_non_commit_lane_says_it_scanned_nothing():
     )
 
 
-def _stage(root: pathlib.Path, rel: str, body: bytes) -> None:
-    target = root / rel
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(body)
-    subprocess.run(
-        ["git", "add", rel], cwd=str(root), capture_output=True, timeout=60,
-    )
-
-
 def test_the_ruff_half_honours_the_config_exclude_like_ci_does(
     tmp_path, gate, capsys,
 ):
@@ -502,12 +493,14 @@ def test_the_ruff_half_honours_the_config_exclude_like_ci_does(
         pytest.skip("no working ruff - the ruff half cannot be exercised")
     _init_repo(tmp_path)
     (tmp_path / "ruff.toml").write_bytes(b'extend-exclude = ["vendored"]\n')
+    (tmp_path / "vendored").mkdir()
     _stage(tmp_path, "vendored/kit.py", b"import os\n")
     rc = gate._check_staged(f'git -C "{tmp_path}" commit -m x')
     err = capsys.readouterr().err
     assert "vendored/kit.py" not in err, f"an excluded path was linted: {err!r}"
     assert rc == 0, f"an excluded path blocked the commit: {err!r}"
 
+    (tmp_path / "owned").mkdir()
     _stage(tmp_path, "owned/mod.py", b"import os\n")
     rc = gate._check_staged(f'git -C "{tmp_path}" commit -m x')
     err = capsys.readouterr().err

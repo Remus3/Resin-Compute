@@ -648,6 +648,14 @@ _SITES: tuple[Site, ...] = (
             "::test_the_subject_report_counts_the_fixture_and_not_a_constant",
             "tests/test_precommit_gate_corpus.py"
             "::test_the_subject_is_stated_on_a_blocking_exit_too",
+            # SECOND WIDENING, 2026-10-03, and the signal above was weighed
+            # rather than skipped. The ruff-exclude arm builds its repo through
+            # the same `_init_repo`, so it reaches `require_git_repository()`
+            # for real; it is a new member of the derived population and not a
+            # loosened row. A THIRD addition is where this tuple should become
+            # a derivation instead of a list.
+            "tests/test_precommit_gate_corpus.py"
+            "::test_the_ruff_half_honours_the_config_exclude_like_ci_does",
         ),
         gate="require_git_repository",
     ),
