@@ -27,8 +27,22 @@ version. What follows is everything the scaffold deliberately did not do.
   `_iso` raises OverflowError on an Infinity or epoch-ms stamp while
   `_status_quietly` suppresses only OSError, so such a stamp under the cap
   escapes `kit.spawn` after its start is counted.
-  (3) Responder provenance still uses its own outbox hash, not v4
-  `verify_main` (committed blob).
+  (3) DONE 2026-10-03, see `docs/adr/ADR-011-main-provenance.md`:
+  adjudicated - the responder keeps its direct outbox byte hash; kit
+  `verify_main` is adoption-only. No code change.
+
+- **NEW 2026-10-03. AN UNVERIFIABLE MAIN NOTE IS RECORDED ANSWERED AND NEVER
+  RE-CHECKED.** `tools/moon_sync_responder.py` near line 4207
+  (`_remember_answered`): a note delivered before MAIN writes its outbox copy
+  reads UNVERIFIABLE, is recorded answered, and is lost. Decide a bounded
+  retry. ADR-011 fixes the shape if one is adopted: hold pending, re-check up
+  to 3 ticks, then answer as UNVERIFIABLE data logged "MAIN not committed".
+
+- **NEW 2026-10-03. TEST THE ROOTS-MAP COMMON-MODE RISK.** Both MAIN
+  provenance checks (`main_provenance` and kit `verify_main`) locate MAIN
+  through the same row of the gitignored roots map, so a wrong row passes
+  both and their agreement proves nothing about the map. Neither tests the
+  map. Add a check that the MAIN row resolves to MAIN's real tree (ADR-011).
 
 - **DECIDED 2026-10-03. THE /120 COUNTER: TWO LEDGERS STAY, THE BINDING ONE
   REPORTS.** Status schema 1 is unchanged - no new field pair. Its

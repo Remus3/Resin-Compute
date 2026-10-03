@@ -18,3 +18,4 @@ argument is not had twice.
 | [ADR-008](ADR-008-fan-content-posture.md) | Fan-content posture rests on zero vendored assets, not on a permission | Accepted |
 | [ADR-009](ADR-009-per-file-licence-headers.md) | No per-file licence headers and no SPDX identifiers | Accepted |
 | [ADR-010](ADR-010-write-tracer-coverage.md) | A tracked write tracer that publishes its own blind spots | Accepted |
+| [ADR-011](ADR-011-main-provenance.md) | Responder MAIN provenance is a direct outbox byte hash; kit verify_main is adoption-only | Accepted |
