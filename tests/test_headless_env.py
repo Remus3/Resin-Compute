@@ -1087,9 +1087,59 @@ def test_a_main_reply_limit_tick_is_its_own_state(rsp, tmp_path, trusted):
     result = rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
     assert result["note"] is None, result
     status = _status(rsp)
-    assert status["state"] == "limit" and status["task"] == "MAIN Reply Limit", status
-    # Distinct from the budget limit, and from an ordinary empty tick.
-    assert status["task"] != "Turn Limit Reached"
+    # Ruled 2026-10-03: every limit reads the 0915 name; the cap that binds is
+    # told apart by `cap_frees_at`, never by the task.
+    assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
+    assert status["cap_frees_at"] is not None, "the MAIN cap's free time is missing"
+
+
+MAIN_0915_TASK_NAMES = frozenset({
+    "Idle", "Checking Inbox", "Waiting for Slot", "Running Session",
+    "Delivering Notes", "Committing", "Backing Off", "Halted",
+    "Turn Limit Reached", "Running a Command", "Editing Files", "Reading",
+    "Appending Ledger",
+})
+
+
+def test_every_status_task_name_is_in_the_main_0915_set(rsp):
+    """A name outside the set shows as [?] on the operator's widget."""
+    names = {task for _state, task in rsp._TICK_STATES.values()}
+    names |= {rsp.MAIN_REPLY_LIMIT_TASK, "Idle"}
+    outside = sorted(names - MAIN_0915_TASK_NAMES)
+    too_long = sorted(n for n in names if len(n) > 24)
+    assert not outside, f"task names outside MAIN 0915: {outside}"
+    assert not too_long, f"task names over 24 chars: {too_long}"
+
+
+def test_every_write_status_call_passes_a_tabled_task(rsp):
+    """AST sweep: every `kit.write_status` call site passes either a 0915 literal
+    or the local `task`, whose every assignment reads the table or the constant."""
+    import ast
+
+    tree = ast.parse(Path(rsp.__file__).read_text(encoding="ascii"))
+    calls = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "write_status"
+    ]
+    assert len(calls) >= 2, "non-vacuity: the sweep found no status writes"
+    for call in calls:
+        arg = call.args[3]
+        if isinstance(arg, ast.Constant):
+            assert arg.value in MAIN_0915_TASK_NAMES, arg.value
+        else:
+            assert isinstance(arg, ast.Name) and arg.id == "task", ast.dump(arg)
+    func = next(
+        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_write_tick_status"
+    )
+    sources = [
+        ast.unparse(node.value) for node in ast.walk(func)
+        if isinstance(node, ast.Assign)
+        and any("task" in ast.unparse(t).split(", ") for t in node.targets)
+    ]
+    assert sources, "non-vacuity: no assignment to task"
+    for text in sources:
+        assert "_TICK_STATES" in text or "MAIN_REPLY_LIMIT_TASK" in text, text
 
 
 # MAIN 1325 FIX: the status file must name WHEN a binding cap frees, and count
@@ -1122,7 +1172,7 @@ def test_a_main_reply_limit_tick_names_when_the_oldest_reply_ages_out(rsp, tmp_p
     rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
     status = _status(rsp)
 
-    assert status["state"] == "limit" and status["task"] == "MAIN Reply Limit", status
+    assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
     assert status["cap_frees_at"] == kit._iso(oldest + rsp.OUTBOUND_WINDOW_SECONDS), status
     assert status["runs_in_window"] == 2, "the responder's own reserved runs were not counted"
     assert status["runs_cap"] == rsp.MAX_RUNS_PER_DAY
@@ -1160,7 +1210,9 @@ def test_a_hop_budget_tick_reports_no_free_time_and_says_why(rsp, tmp_path, trus
     assert result["termination"] == "budget", result
     assert status["state"] == "limit", status
     assert status["cap_frees_at"] is None, "a hop budget that never ages out was given a time"
-    assert status["task"] == rsp.HOP_LIMIT_TASK and "no expiry" in status["task"], status
+    assert status["task"] == "Turn Limit Reached", status
+    log = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines()
+    assert log[-1].endswith("\tbudget"), "the hop-limit reason is not in the log"
 
 
 def test_an_idle_tick_counts_the_responders_own_runs(rsp, tmp_path):
