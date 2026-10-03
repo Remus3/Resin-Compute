@@ -1068,12 +1068,15 @@ def test_a_spent_budget_tick_reads_turn_limit_reached(rsp, tmp_path, trusted):
     def spawn(prompt, bounds):
         raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
 
+    # A real spent budget has rows to age out; with none, "limit" would ship
+    # a null cap_frees_at, which the widget owner ruled out.
+    _seed_runs(rsp, [time.time() - 60])
     _armed_cycle(rsp, tmp_path, spawn=spawn)
     status = _status(rsp)
     assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
 
 
-def test_a_main_reply_limit_tick_is_its_own_state(rsp, tmp_path, trusted):
+def test_a_main_reply_limit_tick_is_a_limit_with_an_allowed_task_name(rsp, tmp_path, trusted):
     from tests.test_moon_sync_responder import _agree
 
     _agree(rsp)
@@ -1087,12 +1090,14 @@ def test_a_main_reply_limit_tick_is_its_own_state(rsp, tmp_path, trusted):
     result = rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
     assert result["note"] is None, result
     status = _status(rsp)
-    # Ruled 2026-10-03: every limit reads the 0915 name; the cap that binds is
-    # told apart by `cap_frees_at`, never by the task.
+    # MAIN 0915 allows only its basic task names, and the widget renders any
+    # other name as [?] (operator report, 2026-10-03). Which cap binds is the
+    # state plus cap_frees_at, never a private task name.
     assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
     assert status["cap_frees_at"] is not None, "the MAIN cap's free time is missing"
 
 
+#: MAIN 0915 section 1, verbatim: the minimum set plus the stream refinements.
 MAIN_0915_TASK_NAMES = frozenset({
     "Idle", "Checking Inbox", "Waiting for Slot", "Running Session",
     "Delivering Notes", "Committing", "Backing Off", "Halted",
@@ -1174,9 +1179,10 @@ def test_a_main_reply_limit_tick_names_when_the_oldest_reply_ages_out(rsp, tmp_p
 
     assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
     assert status["cap_frees_at"] == kit._iso(oldest + rsp.OUTBOUND_WINDOW_SECONDS), status
-    assert status["runs_in_window"] == 2, "the responder's own reserved runs were not counted"
-    assert status["runs_cap"] == rsp.MAX_RUNS_PER_DAY
-    assert status["window_s"] == rsp.RUNS_WINDOW_SECONDS
+    # The BINDING cap's own ledger: replies to MAIN in its window, not runs.
+    assert status["runs_in_window"] == 3, status
+    assert status["runs_cap"] == rsp.MAX_REPLIES_PER_SENDER
+    assert status["window_s"] == rsp.OUTBOUND_WINDOW_SECONDS
 
 
 def test_a_run_budget_tick_names_when_the_oldest_run_ages_out(rsp, tmp_path, trusted):
@@ -1194,8 +1200,10 @@ def test_a_run_budget_tick_names_when_the_oldest_run_ages_out(rsp, tmp_path, tru
     assert status["runs_in_window"] == 2 and status["runs_cap"] == rsp.MAX_RUNS_PER_DAY
 
 
-def test_a_hop_budget_tick_reports_no_free_time_and_says_why(rsp, tmp_path, trusted):
-    """The hop budget counts tagged notes in the inbox and never ages out."""
+def test_a_hop_budget_tick_reads_idle_not_limit(rsp, tmp_path, trusted):
+    """The hop budget never ages out, so it is NOT a limit: "limit" may never
+    ship with a null cap_frees_at. It reads Idle with next_tick, and the
+    invocation log's `budget` line records why."""
     from tests.test_moon_sync_responder import _agree
 
     _agree(rsp)
@@ -1208,11 +1216,68 @@ def test_a_hop_budget_tick_reports_no_free_time_and_says_why(rsp, tmp_path, trus
     status = _status(rsp)
 
     assert result["termination"] == "budget", result
-    assert status["state"] == "limit", status
-    assert status["cap_frees_at"] is None, "a hop budget that never ages out was given a time"
-    assert status["task"] == "Turn Limit Reached", status
+    assert status["state"] == "idle" and status["task"] == "Idle", status
+    assert status["next_tick"] is not None, status
     log = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines()
     assert log[-1].endswith("\tbudget"), "the hop-limit reason is not in the log"
+
+
+def _budget_spent_spawn(rsp):
+    """A session stand-in that reports the run budget spent."""
+
+    def spawn(prompt, bounds):
+        raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
+
+    return spawn
+
+
+def _limit_path_main(rsp, tmp_path):
+    from tests.test_moon_sync_responder import _agree
+
+    _agree(rsp)
+    now = time.time()
+    _seed_main_cap(rsp, [now - 10 * (i + 1) for i in range(rsp.MAX_REPLIES_PER_SENDER)])
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-03-1700-from-MAIN-ORDER-x.md", "TO RSC. do it\n")
+    rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
+    return rsp.MAX_REPLIES_PER_SENDER, rsp.MAX_REPLIES_PER_SENDER, rsp.OUTBOUND_WINDOW_SECONDS
+
+
+def _limit_path_runs(rsp, tmp_path):
+    now = time.time()
+    _seed_runs(rsp, [now - 10 * (i + 1) for i in range(rsp.MAX_RUNS_PER_DAY)])
+    _armed_cycle(rsp, tmp_path, spawn=_budget_spent_spawn(rsp))
+    return rsp.MAX_RUNS_PER_DAY, rsp.MAX_RUNS_PER_DAY, rsp.RUNS_WINDOW_SECONDS
+
+
+@pytest.mark.parametrize("path", [_limit_path_main, _limit_path_runs], ids=["main-replies", "run-budget"])
+def test_every_limit_path_names_a_free_time_from_its_own_ledger(rsp, tmp_path, trusted, path):
+    """INVARIANT (widget owner, 2026-10-03): state "limit" never ships with a
+    null cap_frees_at, and its counts come from the binding cap's ledger."""
+    used, cap, window = path(rsp, tmp_path)
+    status = _status(rsp)
+    assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
+    assert status["cap_frees_at"] is not None, status
+    assert (status["runs_in_window"], status["runs_cap"], status["window_s"]) == (used, cap, window)
+
+
+@pytest.mark.parametrize("record", ["DEFAULT_RUNS", "DEFAULT_OUTBOUND"])
+def test_a_limit_with_no_computable_free_time_never_reads_limit(rsp, tmp_path, trusted, record):
+    """Non-vacuity for the invariant: a corrupt ledger counts as the cap and has
+    no free time, so the tick reads Backing Off rather than a timeless limit."""
+    target = getattr(rsp, record)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("{not json")
+    if record == "DEFAULT_OUTBOUND":
+        from tests.test_moon_sync_responder import _agree
+
+        _agree(rsp)
+        rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds(armed=True))
+    else:
+        _armed_cycle(rsp, tmp_path, spawn=_budget_spent_spawn(rsp))
+    status = _status(rsp)
+    assert status["state"] != "limit" or status["cap_frees_at"] is not None, status
+    assert status["state"] == "backoff" and status["task"] == "Backing Off", status
 
 
 def test_an_idle_tick_counts_the_responders_own_runs(rsp, tmp_path):

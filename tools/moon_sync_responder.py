@@ -3618,10 +3618,19 @@ def _halted_result(grammar: str) -> dict:
 
 
 #: termination -> (status state, task). MAIN 0915 schema 1 states and ONLY its
-#: task names: a name outside the set shows as [?] on the operator's widget
-#: (ruled 2026-10-03). EVERY limit - the run budget, the MAIN reply cap and the
-#: hop budget - reads "Turn Limit Reached"; WHICH cap binds lives only in
-#: `cap_frees_at` (`_status_budget`) and the log, never in the task name.
+#: basic task names: the operator's widget renders any other name as [?]
+#: (operator report, 2026-10-03). Every binding cap - run budget or MAIN's
+#: per-sender reply cap - is state "limit" with task "Turn Limit Reached";
+#: which cap binds is told by cap_frees_at and the log, never by a private
+#: task name. A refused route retries next tick, so it reads "Backing Off".
+#:
+#: THE HOP BUDGET IS DELIBERATELY ABSENT, so its `budget` termination reads
+#: "idle" / "Idle" with `next_tick` (widget owner's ruling, 2026-10-03). State
+#: "limit" must never ship with `cap_frees_at` null, and the hop budget never
+#: ages out: it counts responder-tagged notes in the inbox (`hops_used`). It is
+#: a loop breaker rather than a quota, and a MATCH-verified MAIN note bypasses
+#: it (`bypass_queue`), so the lane is not stopped by it. The invocation log's
+#: `budget` line is where it is recorded.
 _TICK_STATES: dict[str, tuple[str, str]] = {
     "halted": ("halted", "Halted"),
     "usage-limited": ("backoff", "Backing Off"),
@@ -3629,31 +3638,26 @@ _TICK_STATES: dict[str, tuple[str, str]] = {
     "run-budget": ("limit", "Turn Limit Reached"),
     "run-locked": ("idle", "Idle"),
     "headless-refused": ("refused", "Backing Off"),
-    # MAIN 1325: the hop budget binding is a LIMIT, and it has no free time.
-    "budget": ("limit", "Turn Limit Reached"),
 }
 MAIN_REPLY_LIMIT_TASK = "Turn Limit Reached"
 
-#: Which cap binds, for `_status_budget`. The hop budget counts responder-
-#: TAGGED notes in the inbox (`hops_used`) and nothing ages out of it, so its
-#: `cap_frees_at` is null; the reason is the invocation log's `budget` line.
-CAP_RUNS, CAP_MAIN_REPLIES, CAP_HOPS = "runs", "main-replies", "hops"
+#: Which ledger the status counts from, for `_status_budget`.
+CAP_RUNS, CAP_MAIN_REPLIES = "runs", "main-replies"
 
 
 class _StatusBudget:
     """What `kit.write_status` reads from its `budget` argument, from THIS
-    responder's own records (MAIN 1325 FIX).
+    responder's own ledgers (MAIN 1325 FIX).
 
-    `used()` and `cap` are the runs reserved in `DEFAULT_RUNS` against
-    `MAX_RUNS_PER_DAY` - the kit's own budget record is not where this tree
-    reserves runs. `frees_at()` is the epoch the BINDING cap frees, or None
-    when that cap never ages out. Duck-typed to the kit's `RunBudget`, so the
-    kit is called with its own parameters and is not edited.
+    `used()`, `cap` and `window` come from the BINDING cap's own ledger: the
+    runs in `DEFAULT_RUNS` against `MAX_RUNS_PER_DAY`, or the replies to MAIN
+    in `DEFAULT_OUTBOUND` against `MAX_REPLIES_PER_SENDER`. `frees_at()` is the
+    epoch the oldest counted row ages out. Duck-typed to the kit's
+    `RunBudget`, so the kit is called with its own parameters and not edited.
     """
 
-    def __init__(self, used: int, frees: float | None) -> None:
-        self.cap = MAX_RUNS_PER_DAY
-        self.window = RUNS_WINDOW_SECONDS
+    def __init__(self, used: int, cap: int, window: float, frees: float | None) -> None:
+        self.cap, self.window = cap, window
         self._used, self._frees = used, frees
 
     def used(self) -> int:
@@ -3664,24 +3668,23 @@ class _StatusBudget:
 
 
 def _status_budget(cap: str, now: float) -> _StatusBudget:
-    """The responder's run count, and when the BINDING `cap` frees.
+    """The binding ledger's count, cap, window, and when its oldest row ages out.
 
-    MAIN reply cap: the OLDEST counted reply to MAIN ages out of
-    `OUTBOUND_WINDOW_SECONDS`. Hop budget: never - None. Otherwise (the run
-    budget, or nothing binding) the oldest reserved run ages out of
-    `RUNS_WINDOW_SECONDS`, the kit's own `frees_at` meaning. A corrupt run
-    record counts as the cap and names no time, as the kit does.
+    A corrupt ledger counts as the cap and names no time, as the kit does;
+    `_write_tick_status` then refuses to call that a limit.
     """
-    runs = _run_rows(DEFAULT_RUNS, now)
-    used = MAX_RUNS_PER_DAY if runs is None else len(runs)
-    frees: float | None = min(runs) + RUNS_WINDOW_SECONDS if runs else None
-    if cap == CAP_HOPS:
-        frees = None
-    elif cap == CAP_MAIN_REPLIES:
-        rows = _outbound_rows(DEFAULT_OUTBOUND, now) or []
+    if cap == CAP_MAIN_REPLIES:
+        rows = _outbound_rows(DEFAULT_OUTBOUND, now)
+        if rows is None:
+            return _StatusBudget(MAX_REPLIES_PER_SENDER, MAX_REPLIES_PER_SENDER, OUTBOUND_WINDOW_SECONDS, None)
         mine = [float(r["at"]) for r in rows if r["to"] == MAIN_CODE]
         frees = min(mine) + OUTBOUND_WINDOW_SECONDS if mine else None
-    return _StatusBudget(used, frees)
+        return _StatusBudget(len(mine), MAX_REPLIES_PER_SENDER, OUTBOUND_WINDOW_SECONDS, frees)
+    runs = _run_rows(DEFAULT_RUNS, now)
+    if runs is None:
+        return _StatusBudget(MAX_RUNS_PER_DAY, MAX_RUNS_PER_DAY, RUNS_WINDOW_SECONDS, None)
+    frees_run = min(runs) + RUNS_WINDOW_SECONDS if runs else None
+    return _StatusBudget(len(runs), MAX_RUNS_PER_DAY, RUNS_WINDOW_SECONDS, frees_run)
 
 
 def _write_tick_status(result: dict | None) -> None:
@@ -3693,18 +3696,24 @@ def _write_tick_status(result: dict | None) -> None:
     """
     termination = (result or {}).get("termination", "crashed")
     state, task = _TICK_STATES.get(termination, ("idle", "Idle"))
-    cap = CAP_HOPS if termination == "budget" else CAP_RUNS
+    cap = CAP_RUNS
     if (
         state == "idle"
         and (result or {}).get("note") is None
         and MAIN_CODE in senders_at_cap(DEFAULT_OUTBOUND, time.time())
     ):
         state, task, cap = "limit", MAIN_REPLY_LIMIT_TASK, CAP_MAIN_REPLIES
+    budget = _status_budget(cap, time.time())
+    if state == "limit" and budget.frees_at() is None:
+        # "limit" NEVER SHIPS WITH A NULL cap_frees_at (widget owner's ruling).
+        # A binding cap with no computable free time is a corrupt ledger, which
+        # counts as the cap and retries next tick - so it reads as a backoff.
+        state, task = _TICK_STATES["usage-backoff"]
     root = _kit_root()
     try:
         kit.write_status(
             root, SELF_CODE, state, task, time.time(),
-            _status_budget(cap, time.time()),
+            budget,
             next_tick=time.time() + RESPONDER_TICK_SECONDS,
         )
     except (OSError, ValueError) as exc:
