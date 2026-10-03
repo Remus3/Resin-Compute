@@ -14,6 +14,8 @@ table is driven directly, including the ones this host cannot easily produce.
 from __future__ import annotations
 
 import importlib.util
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -209,6 +211,35 @@ def test_an_unloadable_predicate_fails_closed(monkeypatch, capsys):
     monkeypatch.setattr(importlib.util, "spec_from_file_location", _boom)
     assert precommit_gate._hash_lines_are_stripped() is False
     assert "scanning `#` lines too" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "body",
+    [b"raise SystemExit(0)\n", b"raise KeyboardInterrupt\n", b"raise SystemExit(1)\n"],
+    ids=["systemexit-0", "keyboardinterrupt", "systemexit-1"],
+)
+def test_a_predicate_that_raises_baseexception_at_import_fails_closed(tmp_path, body):
+    """A BaseException at predicate load used to escape `except Exception` and
+    end the gate with nothing scanned - SystemExit(0) passed an em-dash on the
+    SUBJECT line itself. Run as the hook runs it: the real gate file in a tree
+    whose `scripts/precommit_msg_check.py` raises at import."""
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "scripts").mkdir()
+    shutil.copy(REPO_ROOT / "tools" / "precommit_gate.py", tmp_path / "tools" / "precommit_gate.py")
+    (tmp_path / "scripts" / "precommit_msg_check.py").write_bytes(body)
+    msg = tmp_path / "msg"
+    msg.write_bytes(("docs: subject " + EM_DASH + " here\n").encode("utf-8"))
+    proc = subprocess.run(
+        [sys.executable, str(tmp_path / "tools" / "precommit_gate.py"), "--message-file", str(msg)],
+        cwd=str(tmp_path),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert proc.returncode == 1, (proc.returncode, proc.stderr)
+    assert "precommit_gate BLOCKED" in proc.stderr, proc.stderr
+    assert "scanning `#` lines too" in proc.stderr, proc.stderr
 
 
 def test_non_vacuity_the_glyph_half_passes_ascii_hash_lines(tmp_path, monkeypatch):
