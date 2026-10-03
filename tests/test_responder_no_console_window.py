@@ -161,7 +161,9 @@ def spawned(rsp, monkeypatch, tmp_path):
     kit_route(rsp, monkeypatch, tmp_path)
     monkeypatch.setattr(rsp, "backoff_active", lambda *_a, **_k: False)
 
-    record = _Captured(json.dumps({"result": "ok"}))
+    record = _Captured(
+        json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "ok"})
+    )
     monkeypatch.setattr(subprocess, "run", record)
 
     out = rsp._spawn_headless("a prompt", rsp.Bounds())
