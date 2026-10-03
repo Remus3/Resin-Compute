@@ -6,7 +6,9 @@ WHAT IS BEING GUARDED.
 but NOT by the same population, so NO CLAIM HERE MAY SCOPE TO THE DIRECTORY.
 BOTH SETS NOW MEASURE FIVE AND THEY ARE STILL DIFFERENT SETS, so equal sizes
 must not be read as one population. `slots.py` has FIVE carriers - CS, LW, RC,
-RSC, SS - all agreeing. `winmutex.py` has FIVE carriers whose names happen to
+RSC, SS - which all agreed at the SUPERSEDED digest as measured
+2026-09-21T00:50:57Z; the pin moved to C4 in `3d62942` and no foreign copy has
+been re-measured against it since. `winmutex.py` has FIVE carriers whose names happen to
 match that list while CS's copy there is a DIFFERENT FILE that diverges. See
 `SLOTS_CARRIERS` and `WINMUTEX_CARRIERS` below. RSC is this tree; Sibling-* resolves in a gitignored map.
 The participating loops do not talk to each other over any API. They coordinate
@@ -158,6 +160,17 @@ SHARED_SHA256 = {
     # carrier holds, which is the same defect class the 2026-09-07 round
     # closed. Carriers re-hash from their own disk; a digest quoted in a note
     # is not acceptance. `slots.py` did not move in this round.
+    #
+    # RE-PINNED 2026-10-03 in joint round C4, landed here in `3d62942` under
+    # MAIN's clause (b) ruling. `slots.py` moved from
+    # 71fa2a683f2eaa04dd61feb2bebc646b5f9086e692c5acc05a9239de49d07d1b, 9627
+    # bytes, to the digest below at 11426 bytes, re-derived by hashing this
+    # tree's own disk. BEHAVIOUR MOVED this time: `is_stale` now consults
+    # `pid_alive` on a readable record and age alone decides only past
+    # `HARD_STALE_MULTIPLE` times `stale_after`. The live-holder arm,
+    # `test_a_live_child_holder_past_stale_after_keeps_its_slot`, is the
+    # behaviour test that rides with this pin. `winmutex.py`
+    # did not move in this round.
     "slots.py": "290cbf80ce6989e15ad778be9032503733c8820030bfa6a9b27439b29d70486e",
     "winmutex.py": "df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7",
 }
@@ -203,8 +216,16 @@ SHARED_SHA256 = {
 # correct record of its own moment, and that is the strongest property available
 # to a claim about a disk this repository cannot poll. The figures follow:
 #
-#   ops/loop/slots.py      FIVE carriers, all agreeing at 71fa2a68, 9627 bytes:
-#                          CS, LW, RC, RSC, SS. LL holds no copy. CS JOINED
+#   ops/loop/slots.py      FIVE carriers: CS, LW, RC, RSC, SS. LL holds no copy.
+#                          BYTES, SPLIT BY WHO MEASURED THEM. This tree (RSC),
+#                          RE-MEASURED 2026-10-03 off its own disk: 290cbf80,
+#                          11426 bytes, the C4 pin above, landed in `3d62942`.
+#                          CS, LW, RC and SS: AS MEASURED 2026-09-21T00:50:57Z,
+#                          NOT RE-MEASURED - at that stamp all of them held the
+#                          SUPERSEDED 71fa2a68, 9627 bytes, which was then the
+#                          pin. Whether any has landed C4 since is unknown here;
+#                          a foreign disk is never re-measured from this tree,
+#                          so the history below stays history. CS JOINED
 #                          THIS TUPLE ON A RE-MEASUREMENT, and the row it
 #                          replaces is written out below because the mechanism
 #                          is the reusable part and the reversal is the
@@ -218,8 +239,9 @@ SHARED_SHA256 = {
 #                          ops/loop/slots.py` names commit
 #                          e5395d5418605e91967d26d9a622dbf728cf4f7d of Sun Sep
 #                          20 19:02:15 2026 -0500, and the file on that disk is
-#                          9627 bytes hashing to 71fa2a68 - the digest this pin
-#                          names. Git STORES those bytes in CS, so CS is a PIN
+#                          9627 bytes hashing to 71fa2a68 - the digest the pin
+#                          named AT THAT STAMP, superseded by C4 since. Git
+#                          STORED those bytes in CS, so CS is a PIN
 #                          CARRIER of this module.
 #                          THE SUPERSEDED ROW SAID CS HELD THOSE BYTES
 #                          UNTRACKED, which put them outside every `git
@@ -245,7 +267,8 @@ SHARED_SHA256 = {
 #                          it. THIS SET AND THE ONE ABOVE NOW HAPPEN TO LIST
 #                          THE SAME NAMES AND ARE STILL NOT THE SAME SET: they
 #                          were measured separately, they move separately, and
-#                          CS is at the pinned bytes above while holding a
+#                          CS held the then-pinned slots.py bytes above (as
+#                          measured, superseded by C4 since) while holding a
 #                          DIFFERENT FILE here. Equal membership today is a
 #                          coincidence of two snapshots, not a directory-wide
 #                          fact, which is why the predicate has to be applied
@@ -290,8 +313,8 @@ SHARED_SHA256 = {
 # WHAT CARRIES THE ARGUMENT. A sentence of the form <the directory> is the same
 # everywhere across <N> trees is FALSE AT EVERY N, and it stayed false when the
 # two module rows stopped disagreeing on size. The membership happens to match
-# today; the AGREEMENT does not, because CS sits at the pinned bytes for one
-# module and holds a different file for the other, so no <N> makes the
+# today; the AGREEMENT does not, because at the stamps CS sat at the then-pinned
+# bytes for one module and held a different file for the other, so no <N> makes the
 # directory-wide sentence true about bytes. The populations also still fail to
 # nest across the four rows here - LL is out of both modules and in CHANNEL.md,
 # SS is in both modules and out of CHANNEL.md, CS carries the lane-width file
@@ -311,8 +334,10 @@ SHARED_SHA256 = {
 # read a mechanical tie into them.
 
 #: PIN carriers of `ops/loop/slots.py` - the trees where git STORES that file,
-#: which is the only population a sha256 pin can act on. All five agree at the
-#: digest pinned above. CS entered this tuple on the 2026-09-21T00:50:57Z
+#: which is the only population a sha256 pin can act on. MEMBERSHIP, not bytes:
+#: as measured 2026-09-21T00:50:57Z and not re-measured, every member held the
+#: then-pinned 71fa2a68; the pin has since moved to C4 290cbf80 (`3d62942`) and
+#: only this tree's copy is known to hold it. CS entered this tuple on the 2026-09-21T00:50:57Z
 #: re-measurement, having been a disk holder at the previous stamp and having
 #: committed the file in between; the two commands that establish it and the
 #: predicate that did not change are in the population block above.
@@ -373,7 +398,9 @@ THIS_TREE = "RSC"
 CARRIERS_BY_MODULE = {
     "slots.py": (
         f"the {len(SLOTS_CARRIERS)} slots.py carriers "
-        f"({', '.join(SLOTS_CARRIERS)}), which all agree"
+        f"({', '.join(SLOTS_CARRIERS)}), which all agreed at the then-pinned "
+        "digest AS MEASURED 2026-09-21T00:50:57Z AND NOT SINCE - the pin has "
+        "moved to C4 since, so re-hash each carrier before acting on it"
     ),
     "winmutex.py": (
         f"the {len(WINMUTEX_CARRIERS)} winmutex.py carriers "
@@ -1062,6 +1089,124 @@ def test_a_lock_older_than_stale_after_is_reaped(slots, slot_root: Path):
 
     assert removed == 1
     assert not lock.exists()
+
+
+# The child that holds a slot for the arm-A test below. It loads the governor
+# BY PATH from argv - the same bytes the parent exercises - takes the only lane
+# through `hold()` itself, announces the slot through an atomically replaced
+# ready file, and stays inside the block until the parent drops a go file or a
+# deadline passes, so a crashed parent cannot leave it running forever.
+_LIVE_HOLDER_CHILD = r"""
+import importlib.util, os, sys, time
+from pathlib import Path
+module_path, root, ready, go = sys.argv[1:5]
+spec = importlib.util.spec_from_file_location("arm_a_child_slots", module_path)
+slots = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(slots)
+with slots.hold(1, repo="arm-a-child", run_id="arm-a", cycle=1, root=Path(root),
+                timeout=60.0, backoff=0.01, jitter=0.01) as slot:
+    tmp = Path(ready + ".tmp")
+    tmp.write_text(str(slot), encoding="utf-8")
+    tmp.replace(ready)
+    deadline = time.time() + 120.0
+    while not os.path.exists(go) and time.time() < deadline:
+        time.sleep(0.02)
+"""
+
+
+def _restamp(lock: Path, ts: float) -> None:
+    """Move a held lock's `ts` in place, leaving its pid - the CHILD's - alone."""
+    record = json.loads(lock.read_text(encoding="utf-8"))
+    record["ts"] = ts
+    lock.write_text(json.dumps(record), encoding="utf-8")
+
+
+def test_a_live_child_holder_past_stale_after_keeps_its_slot(slots, slot_root: Path):
+    """ARM A: a LIVE holder past `stale_after` but under the ceiling is not reaped.
+
+    The C4 re-pin in `3d62942` exists for exactly this case. `ts` is stamped
+    once at `hold()` entry and never refreshed, so a live pass that runs past
+    `DEFAULT_STALE_AFTER` looks, by age, exactly like a crashed one. The
+    superseded bytes answered on age FIRST and never asked `pid_alive`, so the
+    reaper stole the lane and a second acquirer walked in beside the first.
+
+    WHY A CHILD PROCESS and not `os.getpid()`. The holder here is a separate
+    interpreter, launched by `sys.executable`, that took the slot through the
+    real `hold()` path, so the pid in the lock is one this process can only
+    observe from outside - the shape a sibling's live pass has.
+
+    THE KILLED MUTANT, measured fail-first on a scratch copy: restoring the
+    age-first `if age > stale_after: return True` ahead of the liveness check
+    turns this RED at the reap assertion, while every other BEHAVIOUR arm in
+    this module that takes the `slots` fixture stays green under that mutant
+    (the byte pin goes red on any mutant, which is not a behaviour finding) -
+    the fresh-ts live-pid arm above never crosses `stale_after`,
+    and the age arm above sits past the ceiling where both versions agree.
+
+    The last step is the NON-VACUITY ARM: the same live child's lock, re-stamped
+    past `HARD_STALE_MULTIPLE` times `stale_after`, IS reaped. A reaper that
+    never reaps anything would pass every step before it.
+
+    The bucket is `slot_root`, a tmp_path - never the machine-wide one - and no
+    named mutex is touched.
+    """
+    ready = slot_root.parent / "arm_a_ready"
+    go = slot_root.parent / "arm_a_go"
+    child = subprocess.Popen(
+        [sys.executable, "-c", _LIVE_HOLDER_CHILD,
+         str(slots.__file__), str(slot_root), str(ready), str(go)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        deadline = time.time() + 60.0
+        while not ready.exists():
+            assert child.poll() is None, (
+                f"the holder child exited before taking a slot: {child.stderr.read()!r}"
+                if child.stderr else "the holder child exited before taking a slot"
+            )
+            assert time.time() < deadline, "the holder child never announced a slot"
+            time.sleep(0.02)
+        lock = Path(ready.read_text(encoding="utf-8"))
+        assert lock.parent == slot_root, "the child must hold a lane in the tmp bucket"
+        assert json.loads(lock.read_text(encoding="utf-8"))["pid"] == child.pid
+
+        stale_after = slots.DEFAULT_STALE_AFTER
+        _restamp(lock, time.time() - 1.5 * stale_after)
+        assert 1.5 < slots.HARD_STALE_MULTIPLE, "the re-stamp must sit UNDER the ceiling"
+
+        assert child.poll() is None, "the holder must be alive for this arm to mean anything"
+        removed = slots.reap(slot_root, 1, stale_after)
+        assert removed == 0, (
+            "a LIVE holder past stale_after but under the ceiling was reaped; its pass is "
+            "still running and a second acquirer can now take the same lane"
+        )
+        assert lock.exists()
+        assert json.loads(lock.read_text(encoding="utf-8"))["pid"] == child.pid
+
+        with pytest.raises(slots.SlotTimeout):
+            with slots.hold(1, repo="arm-a-parent", root=slot_root, stale_after=stale_after,
+                            timeout=0.5, backoff=0.01, jitter=0.0):
+                pytest.fail("acquired a lane a live holder still occupies")
+        assert json.loads(lock.read_text(encoding="utf-8"))["pid"] == child.pid
+
+        # Non-vacuity: past the fail-open ceiling, even a live pid loses the lane.
+        _restamp(lock, time.time() - (slots.HARD_STALE_MULTIPLE + 0.5) * stale_after)
+        assert child.poll() is None
+        assert slots.reap(slot_root, 1, stale_after) == 1, (
+            "the ceiling arm did not fire, so the arm above may be passing by never reaping"
+        )
+        assert not lock.exists()
+    finally:
+        go.write_text("go", encoding="utf-8")
+        try:
+            child.wait(timeout=60)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.wait(timeout=60)
+        if child.stderr:
+            child.stderr.close()
+    assert child.returncode == 0, "the holder child must leave hold() cleanly"
 
 
 def test_a_corrupt_lock_cannot_wedge_the_bucket_forever(slots, slot_root: Path):
