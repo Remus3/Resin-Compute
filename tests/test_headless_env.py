@@ -92,6 +92,9 @@ def kit_route(rsp, monkeypatch, tmp_path, url=STUB_URL, accept=True, registry=No
     monkeypatch.setattr(rsp, "KIT_ROOT", tmp_path / "kitroot")
     monkeypatch.setattr(rsp, "_kit_url_source", lambda: kit.base_url(registry=reg, environ={}))
     monkeypatch.setattr(rsp, "_kit_connect", dialer)
+    # The parent-side git measurement is stubbed so no arm runs git, and so
+    # `subprocess.run` stubs see exactly the one session launch.
+    monkeypatch.setattr(rsp, "repo_facts", lambda: "abc1234 a stubbed commit", raising=False)
     monkeypatch.setattr(shutil, "which", lambda _n: str(ROOT / "fake-claude-shim.cmd"))
     return dialer
 
@@ -440,17 +443,22 @@ def test_the_prompt_goes_on_stdin_and_never_on_argv(rsp, routed, monkeypatch):
     assert rsp._spawn_headless(prompt, rsp.Bounds()) == "draft"
 
     assert run.calls == 1
-    assert run.kwargs["input"] == prompt
-    assert prompt not in run.args, run.args
+    # The prompt, then the parent's measured facts (C2), all on stdin.
+    assert run.kwargs["input"].startswith(prompt + "\n\n")
+    assert not any(prompt in a for a in run.args), run.args
     assert run.args[1] == "-p"
 
 
 def test_the_kit_argv_layout_is_checked_not_guessed(rsp, monkeypatch):
     run = Run()
     monkeypatch.setattr(subprocess, "run", run)
-    wrapper = rsp._stdin_run([])
+    wrapper = rsp._stdin_run([], "the prompt")
     with pytest.raises(rsp.SpawnFailed):
         wrapper(["claude", "--print-something", "x"], env={}, timeout=1)
+    assert run.calls == 0
+    # C3: `-p` in place is not enough - argv[2] must BE the prompt handed over.
+    with pytest.raises(rsp.SpawnFailed):
+        wrapper(["claude", "-p", "--model", "sonnet", "the prompt"], env={}, timeout=1)
     assert run.calls == 0
     # Non-vacuity: the kit's real layout passes.
     wrapper(["claude", "-p", "the prompt", "--model", "sonnet"], env={}, timeout=1)
@@ -470,8 +478,9 @@ def test_the_argv_is_bare_with_the_brief_and_the_permission_floor(rsp, routed, m
     assert "--bare" in argv
     assert value_of("--append-system-prompt-file") == str(rsp.RESPONDER_BRIEF)
     assert value_of("--permission-mode") == "dontAsk"
-    assert value_of("--tools") == "Read,Grep,Glob,Bash"
-    assert value_of("--allowed-tools").startswith("Read,Grep,Glob,Bash(")
+    assert value_of("--tools") == "Read,Grep,Glob"
+    assert value_of("--allowed-tools") == "Read,Grep,Glob"
+    assert not any("bash" in a.lower() for a in argv[argv.index("--model"):]), argv
     assert value_of("--model") == kit.pick_model(False)
     assert "--strict-mcp-config" in argv
     assert value_of("--output-format") == "json"
@@ -532,6 +541,9 @@ def test_a_spent_kit_budget_starts_nothing(rsp, routed, monkeypatch, tmp_path):
     with pytest.raises(rsp.RunBudgetSpent):
         rsp._spawn_headless("p", rsp.Bounds())
     assert run.calls == 0
+    assert _no_run_reserved(rsp), "a kit refusal burned a responder run"
+    # Non-vacuity: the kit's file is unchanged - the pre-check only read it.
+    assert len(json.loads(path.read_text())["starts"]) == kit.RUNS_CAP
 
 
 def test_a_timeout_is_a_spawn_failure_and_the_lane_still_ends_idle(rsp, routed, monkeypatch, tmp_path):
@@ -577,3 +589,148 @@ def test_the_kit_damps_a_terminal_substring_in_a_name(rsp, tmp_path):
     _note(inbox, "2026-10-03-1101-from-RC-terminals-and-replies.md")
     kept = _note(inbox, "2026-10-03-1102-from-RC-question.md")
     assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
+
+
+# ---------------------------------------------------------------------------
+# Adversary round 1 on a04f4c7: 4a, C2, C5, C6.
+# ---------------------------------------------------------------------------
+
+RAW_API_ERROR = "Invalid API key - Please run /login"
+
+
+def _error_json(rc_result=RAW_API_ERROR):
+    return json.dumps({"type": "result", "is_error": True, "result": rc_result})
+
+
+@pytest.mark.parametrize(
+    ("raw", "rc"),
+    [
+        (_error_json(), 1),
+        (_error_json(), 0),
+        (json.dumps({"is_error": False, "result": "looks like a draft"}), 1),
+    ],
+    ids=["is-error-rc1", "is-error-rc0", "clean-json-rc1"],
+)
+def test_an_error_result_or_a_nonzero_exit_is_never_a_draft(rsp, routed, monkeypatch, caplog, raw, rc):
+    monkeypatch.setattr(subprocess, "run", Run(raw=raw, returncode=rc))
+    with caplog.at_level("WARNING"):
+        with pytest.raises(rsp.SpawnFailed) as info:
+            rsp._spawn_headless("p", rsp.Bounds())
+    # The raw text is LOGGED for the operator and kept out of the exception,
+    # which is what reaches held files, metrics and replies.
+    assert RAW_API_ERROR not in str(info.value)
+    assert "looks like a draft" not in str(info.value)
+    logged = "\n".join(r.getMessage() for r in caplog.records)
+    assert ("Invalid API key" in logged) or ("looks like a draft" in logged), logged
+
+
+def test_a_clean_zero_exit_result_is_still_a_draft(rsp, routed, monkeypatch):
+    """Survival guard for the arm above."""
+    monkeypatch.setattr(
+        subprocess, "run", Run(raw=json.dumps({"is_error": False, "result": "a draft"}), returncode=0)
+    )
+    assert rsp._spawn_headless("p", rsp.Bounds()) == "a draft"
+
+
+def test_an_is_error_session_reaches_no_held_file_and_no_sibling(rsp, tmp_path, monkeypatch, trusted):
+    """The probe: is_error, rc 1, an API string. It must surface nowhere."""
+    monkeypatch.setattr(subprocess, "run", Run(raw=_error_json(), returncode=1))
+    kit_route(rsp, monkeypatch, tmp_path)
+    result = _armed_cycle(rsp, tmp_path)
+    assert result["termination"] == "spawn-failed", result
+    surfaces = [p for p in (tmp_path / "rc").rglob("*") if p.is_file()]
+    surfaces += [p for p in rsp.DEFAULT_STAGING.rglob("*") if p.is_file()]
+    surfaces += [p for p in rsp.DEFAULT_METRICS.parent.rglob("*") if p.is_file()]
+    leaked = [str(p) for p in surfaces if b"Invalid API key" in p.read_bytes()]
+    assert leaked == [], leaked
+    assert "Invalid API key" not in json.dumps(result)
+
+
+def test_the_child_floor_holds_no_bash_entry(rsp):
+    """C2: `git log --output=<file>` writes and pytest executes it; no Bash at all."""
+    assert not [a for a in rsp.SPAWN_FLOOR if "bash" in a.lower()], rsp.SPAWN_FLOOR
+    floor = list(rsp.SPAWN_FLOOR)
+    assert floor[floor.index("--tools") + 1] == "Read,Grep,Glob"
+    assert floor[floor.index("--allowed-tools") + 1] == "Read,Grep,Glob"
+    assert floor[floor.index("--permission-mode") + 1] == "dontAsk"
+
+
+def test_neither_the_brief_nor_the_prompt_asks_for_a_command(rsp, tmp_path):
+    """C2 measured: both used to tell the child to run its suite and git."""
+    brief = rsp.RESPONDER_BRIEF.read_text(encoding="ascii")
+    note = _note(tmp_path / "inbox", "2026-10-03-1200-from-RC-q.md")
+    prompt = rsp.build_prompt(note, rsp.Bounds())
+    for text in (brief, prompt):
+        low = text.lower()
+        assert "python -m pytest" not in low and "run its own suites" not in low
+        assert "`git log`" not in low
+
+
+def test_the_parent_measures_git_log_and_the_child_reads_it(rsp, routed, monkeypatch):
+    """The facts the child can no longer measure come from the parent."""
+    run = Run()
+    monkeypatch.setattr(subprocess, "run", run)
+    rsp._spawn_headless("the prompt", rsp.Bounds())
+    assert run.kwargs["input"].startswith("the prompt")
+    assert "abc1234 a stubbed commit" in run.kwargs["input"]
+
+
+def test_repo_facts_runs_git_in_the_parent_and_degrades_quietly(rsp, monkeypatch):
+    seen = []
+
+    def fake(argv, **kwargs):
+        seen.append((list(argv), kwargs))
+        return subprocess.CompletedProcess(argv, 0, stdout="abc1234 subject one\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake)
+    facts = rsp.repo_facts()
+    assert "abc1234 subject one" in facts
+    argv, kwargs = seen[0]
+    assert argv[0] == "git" and "log" in argv
+    assert not any(a.startswith("--output") for a in argv)
+    assert kwargs.get("creationflags") == getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    assert kwargs.get("timeout")
+
+    def broken(argv, **kwargs):
+        raise FileNotFoundError(2, "no git")
+
+    monkeypatch.setattr(subprocess, "run", broken)
+    degraded = rsp.repo_facts()
+    assert "not measured" in degraded and "no git" not in degraded
+
+
+def test_node_options_never_reaches_the_child():
+    """C5: NODE_OPTIONS can preload code into the node-based CLI."""
+    assert he.harden_child_env({"NODE_OPTIONS": "--require x.js", "PATH": "p"}) == {"PATH": "p"}
+    # Neighbour survives: another NODE_ key is not swept.
+    assert he.harden_child_env({"NODE_ENV": "production"}) == {"NODE_ENV": "production"}
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "2026-10-03-1300-from-MAIN-ORDER-fix-the-terminal-rule.md",
+        "2026-10-03-1301-from-MAIN-ORDER-TERMINALS-sweep.md",
+        "2026-10-03-1302-from-MAIN-ORDER-no-reply-loops-RSC.md",
+    ],
+)
+def test_a_main_order_is_not_damped_by_the_kits_name_test(rsp, tmp_path, name):
+    """C6: for MAIN the kit's substring name test is not applied; this tree's
+    narrow check decides. Each of these is an ORDER, not a declaration."""
+    inbox = tmp_path / "inbox"
+    kept = _note(inbox, name, "TO RSC. Do the thing; a reply is requested.\n")
+    assert kit.should_skip(name, "RSC", "") == "terminal", "non-vacuity: the kit would damp it"
+    if "no-reply" in name:
+        # This tree's own check treats a hyphenated no-reply token as a
+        # declaration, so this one stays skipped - recorded, not hidden.
+        assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
+    else:
+        assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
+
+
+def test_a_main_note_that_declares_terminal_is_still_skipped(rsp, tmp_path):
+    """The neighbour: a MAIN declaration is still damped by this tree's check."""
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-03-1303-from-MAIN-ACK-x-TERMINAL.md")
+    _note(inbox, "2026-10-03-1304-from-MAIN-ack.md", "TO RSC. TERMINAL, no reply wanted.\n")
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []

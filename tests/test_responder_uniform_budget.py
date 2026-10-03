@@ -84,10 +84,10 @@ def test_the_spawn_argv_pins_the_permission_floor(rsp):
 
     assert value_of("--permission-mode") == "dontAsk"
     assert "--strict-mcp-config" in argv
-    assert value_of("--tools") == "Read,Grep,Glob,Bash"
-    assert value_of("--allowed-tools") == (
-        "Read,Grep,Glob,Bash(python -m pytest:*),Bash(git log:*),Bash(git status:*)"
-    )
+    # NO BASH (adversary C2): `git log --output=<file>` then pytest importing
+    # it was code execution under dontAsk.
+    assert value_of("--tools") == "Read,Grep,Glob"
+    assert value_of("--allowed-tools") == "Read,Grep,Glob"
     assert not any("bypassPermissions" in a for a in argv), argv
     assert not any("dangerously" in a.lower() for a in argv), argv
 
