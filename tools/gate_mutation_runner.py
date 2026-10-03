@@ -1317,17 +1317,17 @@ MESSAGE_MUTANTS: tuple[MessageMutant, ...] = (
 #: arm went red as designed, and they moved into `MESSAGE_MUTANTS`. A new
 #: survivor goes here, with its own arm asserting it still SURVIVES.
 #:
-#: KNOWN GAP, NOT A MUTANT, because this lane cannot drive it: an explicit
-#: `--cleanup=whitespace` or `--cleanup=verbatim` on an EDITOR commit. Git
-#: runs commit-msg before cleanup and does not tell the hook the flag, so
-#: `scripts/precommit_msg_check.py::hash_lines_are_stripped` reads the editor
-#: default (strip) and skips a `#` first line that will in fact land as the
-#: subject. The glyph half shares that predicate and so the gap: a glyph on a
-#: `#` line lands unscanned there too. Scanning every line instead falsely
-#: blocks editor flows, whose git template carries non-ASCII branch, author
-#: and path names that git strips after the hook. The lane
-#: commits through `-F` only, where git exports `GIT_EDITOR=:` and the hook
-#: fails closed, so no row here could grade the gap.
+#: EDITOR-FLOW `#` LINES ARE GRADED ELSEWHERE, because this lane cannot drive
+#: them. Git runs commit-msg before cleanup and does not tell the hook an
+#: explicit `--cleanup=` flag, but in the editor flow it writes its effective
+#: mode into the template ("will be ignored" vs "will be kept").
+#: `scripts/precommit_msg_check.py::hash_lines_are_stripped` reads the path
+#: `.githooks/commit-msg` exports as `RESIN_COMMIT_MSG_FILE` and skips `#`
+#: lines - in both message halves, which share it - only on the commit
+#: template's exact strip sentence; anything else fails closed. Its arms are
+#: end-to-end in `tests/test_hook_gate.py`. This lane commits through `-F`
+#: only, where git exports `GIT_EDITOR=:` and config alone decides, so no row
+#: here could grade the editor flow.
 KNOWN_MESSAGE_SURVIVORS: tuple[MessageMutant, ...] = ()
 
 
