@@ -4448,6 +4448,12 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
             f"the fleet kit's run budget is exhausted ({kit_budget.used()}/{kit_budget.cap})"
         )
 
+    # HALT BEFORE THE RESERVATION (refuted on 46c2b3e): a sentinel that landed
+    # since the tick's own check must not spend one of the day's runs. The
+    # check right before `kit.spawn` below stays, for a HALT that lands later.
+    if _halt_requested():
+        raise HaltedBeforeSpawn("the operator's HALT sentinel is present")
+
     # THE RESPONDER'S RUNS-PER-DAY BUDGET, reserved LAST before the session,
     # so a refused route or a missing executable spends no run.
     reserved, why_not = reserve_run(DEFAULT_RUNS, time.time())

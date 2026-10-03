@@ -795,26 +795,68 @@ def test_a_record_carrying_a_test_path_is_a_leak_inside_a_fire(tmp_path):
     assert conf._runtime_drift(*args, "", {"responder_outbound.json": (leaked, leaked)}, markers) is None
 
 
-def test_the_appended_tail_is_only_what_the_test_added():
+def _log_lines(n: int, start: int = 0) -> list[str]:
+    """`n` invocation-log lines, every tenth a `run_once` one, like pd.py's."""
+    return [
+        f"2026-10-0{1 + i % 2}T10:00:{i % 60:02d}\t"
+        f"{'run_once' if i % 10 == 0 else 'scheduledtask'}\t-\tstart\n"
+        for i in range(start, start + n)
+    ]
+
+
+def test_a_pure_trim_of_the_log_adds_no_lines():
+    """REFUTED on 46c2b3e (probe pd.py): `_trim_invocations` keeps the last
+    2000 lines, so the file SHRINKS, and reading it from offset 0 blamed its old
+    `run_once` lines on the running test. Lines are compared, not offsets."""
     conf = _root_conftest()
-    log = Path(conf.__file__).parent / "never-written"  # an absent file reads empty
-    assert conf._read_appended(log, 0) == ""
+    before = "".join(_log_lines(6000))
+    after = "".join(_log_lines(6000)[-2000:])
+    assert conf._new_log_lines(before, after) == ""
+    assert conf._test_shaped(conf._new_log_lines(before, after), {}, ()) == []
 
 
-def test_appended_bytes_are_read_from_the_old_size_past_any_cap(tmp_path):
+def test_a_trim_plus_an_append_yields_exactly_the_appended_lines():
+    conf = _root_conftest()
+    history = _log_lines(6000)
+    live = "2026-10-03T14:00:00\tscheduledtask\t-\tstart\n"
+    leak = "2026-10-03T14:00:01\tcli\t-\tstart\n"
+    before = "".join(history)
+    after = "".join(history[-2000:] + [live, leak])
+    new = conf._new_log_lines(before, after)
+    assert new == live + leak, new
+    found = conf._test_shaped(new, {}, ())
+    assert len(found) == 1 and "'cli'" in found[0], found
+
+
+def test_a_pure_append_and_an_identical_repeat_line_are_both_seen():
+    """An appended line that repeats one already in the log is still NEW."""
+    conf = _root_conftest()
+    history = _log_lines(50)
+    repeat = history[-1]
+    assert conf._new_log_lines("".join(history), "".join(history + [repeat])) == repeat
+    assert conf._new_log_lines("", "".join(history)) == "".join(history)
+    assert conf._new_log_lines("".join(history), "") == ""
+
+
+def test_a_rewrite_with_no_overlap_is_all_new():
+    conf = _root_conftest()
+    assert conf._new_log_lines("".join(_log_lines(5)), "rotated\n") == "rotated\n"
+
+
+def test_the_drift_check_reads_the_log_past_any_size_cap(tmp_path):
     """Refuted on 6f9dda2: a 1 MB read cap blinded the content check on a log
-    already past 1 MB. Only the bytes APPENDED since the snapshot are read."""
+    already past 1 MB. The whole log is read, so an append past 1 MB is seen."""
     conf = _root_conftest()
     log = tmp_path / "responder_invocations.log"
     big = b"2026-10-03T09:00:00\tscheduledtask\t-\tbudget\n" * 40000  # ~1.7 MB
     log.write_bytes(big)
-    old = log.stat().st_size
-    assert old > (1 << 20), "non-vacuity: the log must be past the old cap"
+    assert log.stat().st_size > (1 << 20), "non-vacuity: the log must be past the old cap"
+    before = conf._read_log_text(log)
     with log.open("ab") as handle:
         handle.write(b"2026-10-03T11:00:05\tcli\t-\tstart\n")
-    assert conf._read_appended(log, old) == "2026-10-03T11:00:05\tcli\t-\tstart\n"
-    log.write_bytes(b"rotated\n")
-    assert conf._read_appended(log, old) == "rotated\n", "a shrunk log is all new"
+    new = conf._new_log_lines(before, conf._read_log_text(log))
+    assert new == "2026-10-03T11:00:05\tcli\t-\tstart\n"
+    assert conf._read_log_text(tmp_path / "absent.log") == ""
 
 
 def test_the_temp_marker_is_the_pytest_basetemp_not_the_system_temp(request):

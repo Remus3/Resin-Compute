@@ -997,22 +997,41 @@ def _live_fire_windows(log_text: str, now: float) -> list[tuple[float, float]]:
     return sorted(windows)
 
 
-def _read_appended(path: Any, old_size: int) -> str:
-    """The bytes APPENDED to `path` since it was `old_size` long, as text.
+def _read_log_text(path: Any) -> str:
+    """The whole invocation log as text, UNCAPPED; absent or unreadable is "".
 
-    REFUTED ON 6f9dda2: the content check read at most 1 MB of a record, so on
-    a log past 1 MB it compared two identical prefixes and saw nothing. This
-    seeks to the snapshot's size and reads only what follows, uncapped. A file
-    that SHRANK was rotated or rewritten, so all of it is new. Absent or
-    unreadable reads as empty.
+    REFUTED ON 6f9dda2: a 1 MB read cap compared two identical prefixes of a
+    log past 1 MB and saw nothing. The log is held to 2000 lines by
+    `_trim_invocations`, so reading all of it is bounded.
     """
     try:
         with open(path, "rb") as handle:
-            size = os.fstat(handle.fileno()).st_size
-            handle.seek(old_size if 0 <= old_size <= size else 0)
             return handle.read().decode("ascii", "replace")
     except OSError:
         return ""
+
+
+def _new_log_lines(before: str, after: str) -> str:
+    """The lines `after` gained over `before`, compared as LINES, not offsets.
+
+    REFUTED ON 46c2b3e (probe pd.py): `_trim_invocations` REWRITES the log to
+    its last 2000 lines, so the file shrinks, and reading the shrunk file from
+    offset 0 blamed its old `run_once` lines on the running test - 200 false
+    findings from a pure trim. Ruled: find the overlap instead. The longest
+    suffix of `before` that is a prefix of `after` is what survived; the rest
+    of `after` is new. A pure append keeps all of `before` (overlap = all), a
+    pure trim yields nothing new, a trim plus an append yields exactly the
+    appended lines, and a rewrite with no overlap is all new. Order-aware, so
+    a new line that repeats an old one is still counted.
+    """
+    old = before.splitlines(keepends=True)
+    new = after.splitlines(keepends=True)
+    if not new:
+        return ""
+    for start in range(max(0, len(old) - len(new)), len(old)):
+        if old[start] == new[0] and old[start:] == new[: len(old) - start]:
+            return "".join(new[len(old) - start:])
+    return "".join(new)
 
 
 def _test_markers(*roots: str) -> tuple[str, ...]:
@@ -1119,21 +1138,13 @@ def _live_runtime_snapshot() -> dict[str, tuple[int, int]]:
 def _live_runtime_texts(paths: Any) -> dict[str, str]:
     """The whole text of each REWRITTEN record in `paths`, uncapped.
 
-    The invocation log is skipped: it is append-only and large, so its content
-    is read by `_read_appended` from the snapshot's size instead. The other
-    records are rewritten whole by `atomic_write_json` and are small, so a
-    before/after comparison of the full text is the honest diff for them.
+    Every record, the invocation log included, is read whole: the log is held
+    to 2000 lines by `_trim_invocations`, and its new content is then found by
+    LINE (`_new_log_lines`), never by byte offset. The other records are
+    rewritten whole by `atomic_write_json` and are small, so a before/after
+    comparison of the full text is the honest diff for them.
     """
-    texts: dict[str, str] = {}
-    for path in paths:
-        if os.path.basename(path) == _INVOCATION_LOG_NAME:
-            continue
-        try:
-            with open(path, "rb") as handle:
-                texts[path] = handle.read().decode("ascii", "replace")
-        except OSError:
-            texts[path] = ""
-    return texts
+    return {path: _read_log_text(path) for path in paths}
 
 
 def _session_temp_roots(request: pytest.FixtureRequest) -> tuple[str, ...]:
@@ -1184,7 +1195,7 @@ def _live_runtime_guard(request: pytest.FixtureRequest) -> Generator[RuntimeFenc
         appended = ""
         for n in changed:
             if os.path.basename(n) == _INVOCATION_LOG_NAME:
-                tail = _read_appended(n, before[n][0] if n in before else 0)
+                tail = _new_log_lines(before_texts.get(n, ""), after_texts.get(n, ""))
                 appended += tail
                 contents[n] = ("", tail)
         finding = _runtime_drift(

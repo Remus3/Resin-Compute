@@ -930,12 +930,18 @@ def _live_status_bytes(rsp):
         return None
 
 
-def test_the_tick_status_root_follows_the_redirected_records(rsp, tmp_path):
+def test_the_tick_status_root_follows_the_redirected_records(rsp, tmp_path, monkeypatch):
     """Safe by default: an arm that redirects the `DEFAULT_` records but never
     touches `KIT_ROOT` still cannot write the live status file."""
+    from ops.health import ENV_RUNTIME_DIR
+
     root = rsp._kit_root()
     assert tmp_path in root.parents, root
-    # Non-vacuity: a fresh, unredirected load points at the repo root.
+    # Non-vacuity: a fresh, unredirected load points at the repo root. The
+    # override is CLEARED for that load: with `RESINCOMPUTE_RUNTIME_DIR` set -
+    # as the live-runtime fence tells people to set it - a fresh load is
+    # redirected by the environment and this arm failed. Nothing is written.
+    monkeypatch.delenv(ENV_RUNTIME_DIR, raising=False)
     spec = importlib.util.spec_from_file_location("rsp_status_root_live", RESPONDER_PATH)
     live = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(live)
@@ -1021,6 +1027,29 @@ def test_a_halt_that_lands_after_the_tick_check_stops_the_spawn(
     assert result["termination"] == "halted", result
     status = _status(rsp)
     assert status["state"] == "halted" and status["task"] == "Halted", status
+
+
+def test_a_halt_before_the_run_is_reserved_burns_no_daily_run(
+    rsp, routed, monkeypatch, tmp_path, trusted
+):
+    """Refuted on 46c2b3e: the pre-spawn re-check ran AFTER `reserve_run`, so a
+    HALT that landed mid-tick still spent one of the day's runs."""
+    run = Run()
+    monkeypatch.setattr(subprocess, "run", run)
+
+    def exe_then_halt():
+        sentinel = rsp.halt_sentinel()
+        sentinel.parent.mkdir(parents=True, exist_ok=True)
+        sentinel.write_text("halt\n")
+        return str(FAKE_EXE)
+
+    monkeypatch.setattr(rsp, "_claude_exe", exe_then_halt)
+    result = _armed_cycle(rsp, tmp_path)
+
+    assert result["termination"] == "halted", result
+    assert run.calls == 0
+    runs = json.loads(rsp.DEFAULT_RUNS.read_text())["runs"] if rsp.DEFAULT_RUNS.exists() else []
+    assert runs == [], f"a HALT before the reservation still spent a daily run: {runs}"
 
 
 def test_a_halt_directory_halts_and_an_absent_one_does_not(rsp):
