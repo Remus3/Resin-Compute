@@ -755,7 +755,11 @@ def _hash_lines_are_stripped() -> bool:
     measured five false blocks at 8436e68 when every `#` line was scanned.
 
     Fails CLOSED: if the predicate cannot be loaded, every line is scanned and
-    the reason is written to stderr.
+    the reason is written to stderr. The catch is BaseException, not
+    Exception: a `SystemExit(0)` raised while the predicate file imported once
+    escaped and ended the gate at rc 0 with nothing scanned, passing an
+    em-dash on the subject line itself. A load that does not return is
+    "cannot confirm", never "done".
     """
     import importlib.util
 
@@ -767,7 +771,7 @@ def _hash_lines_are_stripped() -> bool:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return bool(module.hash_lines_are_stripped())
-    except Exception as exc:  # noqa: BLE001 - any failure must fail closed
+    except BaseException as exc:  # noqa: BLE001 - SystemExit too; see docstring
         sys.stderr.write(
             f"precommit_gate WARNING: could not load the cleanup predicate from "
             f"{path} ({type(exc).__name__}: {exc}) - scanning `#` lines too.\n"
