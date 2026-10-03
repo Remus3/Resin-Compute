@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import os
+import re
 import shutil
 from collections import Counter
 from pathlib import Path
@@ -1134,3 +1136,230 @@ def test_the_false_kill_property_cannot_fire_under_the_campaign_argv() -> None:
         "spec_from_file_location",
     ):
         assert phrase in doc, phrase
+
+
+# ---------------------------------------------------------------------------
+# THE MESSAGE LANE.
+#
+# Everything above mutates PYTHON SOURCE and grades the result with a pytest
+# exit code. Neither half reaches the commit-MESSAGE gate: `.githooks/
+# commit-msg` and `tools/precommit_gate.py --message-file` are not tagged
+# statements in `_run_once`, and their verdict is not a pytest exit code but
+# whether a real `git commit` lands. So the lane below mutates the MESSAGE
+# BYTES instead, and grades each mutant by attempting a REAL commit through the
+# REAL hooks in a throwaway repository - behaviour, never syntax.
+#
+# Three traps shape these arms, each measured in this tree before:
+#   - a shape grader can kill its own mutant, so a refusal only counts as a kill
+#     when the gate's OWN marker attributes it (MISATTRIBUTED otherwise);
+#   - a generalised mutant table can hold no-op mutants, so every mutant must
+#     change the message bytes, and the detector for that is itself driven;
+#   - a commit with nothing staged is refused by git before any hook runs, so
+#     an attempt that stages nothing raises rather than reporting a kill.
+# ---------------------------------------------------------------------------
+
+REQUIRE_FLAG = "RSC_REQUIRE_HOOK_GATE"
+_EM_DASH = chr(0x2014)
+
+
+def _lane_unavailable(reason: str) -> None:
+    if os.environ.get(REQUIRE_FLAG) == "1":
+        pytest.fail(f"{REQUIRE_FLAG}=1 demands the message lane run, and it could not: {reason}")
+    pytest.skip(f"{reason} (set {REQUIRE_FLAG}=1 to make this a failure)")
+
+
+def _require_lane_tools() -> None:
+    if shutil.which("git") is None:
+        _lane_unavailable("git is not on PATH")
+    if gmr.locate_posix_sh() is None:
+        _lane_unavailable("no POSIX sh on this machine, so the hooks cannot run")
+
+
+@pytest.fixture(scope="module")
+def armed_campaign(tmp_path_factory: pytest.TempPathFactory) -> gmr.MessageCampaign:
+    _require_lane_tools()
+    return gmr.run_message_campaign(tmp_path_factory.mktemp("armed"), armed=True)
+
+
+@pytest.fixture(scope="module")
+def disarmed_campaign(tmp_path_factory: pytest.TempPathFactory) -> gmr.MessageCampaign:
+    _require_lane_tools()
+    return gmr.run_message_campaign(tmp_path_factory.mktemp("disarmed"), armed=False)
+
+
+def test_the_python_lane_finds_nothing_to_mutate_in_the_message_hook() -> None:
+    """The characterisation behind the message lane: the source lane reads
+    `# GATE:` tags inside `_run_once`, and the message hook has neither."""
+    hook = (REPO_ROOT / ".githooks" / "commit-msg").read_text(encoding="utf-8")
+    assert gmr.find_gate_tags(hook) == []
+    assert "--message-file" in hook, "the hook no longer drives the message gate"
+
+
+def test_the_message_table_is_populated_and_names_are_unique() -> None:
+    names = [mutant.name for mutant in gmr.MESSAGE_MUTANTS]
+    assert len(names) >= 10, names
+    assert len(names) == len(set(names)), Counter(names).most_common(3)
+    assert {mutant.expect for mutant in gmr.MESSAGE_MUTANTS} == {gmr.REJECT, gmr.STRIP}
+
+
+def test_every_message_mutant_changes_the_message_bytes() -> None:
+    table = (*gmr.MESSAGE_MUTANTS, *gmr.KNOWN_MESSAGE_SURVIVORS)
+    assert gmr.no_op_message_mutants(table) == []
+    for mutant in table:
+        assert mutant.message != gmr.CLEAN_MESSAGE, mutant.name
+    names = [mutant.name for mutant in table]
+    assert len(names) == len(set(names)), Counter(names).most_common(3)
+
+
+@pytest.fixture(scope="module")
+def survivor_campaign(tmp_path_factory: pytest.TempPathFactory) -> gmr.MessageCampaign:
+    _require_lane_tools()
+    return gmr.run_message_campaign(
+        tmp_path_factory.mktemp("survivors"), armed=True, mutants=gmr.KNOWN_MESSAGE_SURVIVORS
+    )
+
+
+def test_the_recorded_hash_line_defects_still_survive_the_real_gate(
+    survivor_campaign: gmr.MessageCampaign,
+) -> None:
+    """A CHARACTERISATION of two real gate defects, not an endorsement of them.
+
+    When `tools/precommit_gate.py` and `scripts/precommit_msg_check.py` stop
+    skipping `#` lines that `git commit -F` keeps, this goes red: move the
+    mutants into `MESSAGE_MUTANTS` then.
+    """
+    assert survivor_campaign.controls_landed, gmr.format_message_report(survivor_campaign)
+    verdicts = {r.mutant.name: r.verdict for r in survivor_campaign.results}
+    assert verdicts == {m.name: gmr.SURVIVED for m in gmr.KNOWN_MESSAGE_SURVIVORS}, verdicts
+    glyph = survivor_campaign.result("glyph-in-hash-line")
+    assert glyph.attempt.landed is not None and chr(0x2014).encode("utf-8") in glyph.attempt.landed
+
+
+def test_non_vacuity_the_no_op_detector_fires_on_a_planted_no_op() -> None:
+    planted = gmr.MessageMutant(
+        name="planted-no-op", message=gmr.CLEAN_MESSAGE, expect=gmr.REJECT, marker=gmr.GLYPH_MARKER
+    )
+    assert gmr.no_op_message_mutants((*gmr.MESSAGE_MUTANTS, planted)) == ["planted-no-op"]
+
+
+def test_the_clean_message_is_ascii_and_a_valid_subject() -> None:
+    gmr.CLEAN_MESSAGE.decode("ascii")
+    subject = gmr.CLEAN_MESSAGE.split(b"\n", 1)[0].decode("ascii")
+    assert subject.startswith("docs(") and ": " in subject, subject
+
+
+def test_every_named_banned_glyph_has_a_mutant_that_carries_it() -> None:
+    from tools import precommit_gate
+
+    named = set(precommit_gate._BANNED)
+    assert _EM_DASH in named, "the gate no longer names the em-dash; this arm grades nothing"
+    carried = {
+        glyph
+        for glyph in named
+        for mutant in gmr.MESSAGE_MUTANTS
+        if glyph.encode("utf-8") in mutant.message
+    }
+    assert carried == named, sorted(f"U+{ord(g):04X}" for g in named - carried)
+
+
+def test_every_trailer_form_the_hook_strips_has_a_mutant() -> None:
+    hook = (REPO_ROOT / ".githooks" / "commit-msg").read_text(encoding="utf-8")
+    patterns = re.findall(r"-e '\^([^']+)'", hook)
+    assert patterns, "no grep -e pattern parsed from the hook; this arm grades nothing"
+    strip_markers = {mutant.marker.lower() for mutant in gmr.MESSAGE_MUTANTS if mutant.expect == gmr.STRIP}
+    for pattern in patterns:
+        assert pattern.lower() in strip_markers, (pattern, sorted(strip_markers))
+
+
+def _attempt(exit_code: int, moved: bool, stderr: str, landed: bytes | None = None) -> gmr.MessageAttempt:
+    before = "a" * 40
+    return gmr.MessageAttempt(
+        exit_code=exit_code,
+        head_before=before,
+        head_after=("b" * 40) if moved else before,
+        stderr=stderr,
+        landed=landed,
+    )
+
+
+def test_a_refusal_without_the_gate_marker_is_misattributed_not_killed() -> None:
+    mutant = next(m for m in gmr.MESSAGE_MUTANTS if m.expect == gmr.REJECT)
+    nothing_staged = _attempt(1, False, "nothing added to commit but untracked files present")
+    assert gmr.grade_message(mutant, nothing_staged) == gmr.MISATTRIBUTED
+    attributed = _attempt(1, False, f"... {mutant.marker} ...")
+    assert gmr.grade_message(mutant, attributed) == gmr.KILLED
+    landed = _attempt(0, True, "", gmr.CLEAN_MESSAGE)
+    assert gmr.grade_message(mutant, landed) == gmr.SURVIVED
+
+
+def test_a_strip_mutant_is_killed_only_when_the_trailer_does_not_land() -> None:
+    mutant = next(m for m in gmr.MESSAGE_MUTANTS if m.expect == gmr.STRIP)
+    stripped = _attempt(0, True, "", gmr.CLEAN_MESSAGE)
+    assert gmr.grade_message(mutant, stripped) == gmr.KILLED
+    kept = _attempt(0, True, "", mutant.message)
+    assert gmr.grade_message(mutant, kept) == gmr.SURVIVED
+    refused = _attempt(1, False, "commit-msg: subject line rejected")
+    assert gmr.grade_message(mutant, refused) == gmr.MISATTRIBUTED
+
+
+def test_the_lane_scrubs_every_variable_git_names_as_local() -> None:
+    _require_lane_tools()
+    local = gmr.git_local_env_vars()
+    assert "GIT_DIR" in local and "GIT_INDEX_FILE" in local, local
+    planted = {name: "planted" for name in local}
+    planted["GIT_EDITOR"] = "planted"
+    planted["KEEP_ME"] = "kept"
+    env = gmr.scrubbed_git_env(Path("C:/nowhere"), base=planted)
+    leaked = sorted(name for name in planted if env.get(name) == "planted")
+    assert leaked == [], leaked
+    assert env["KEEP_ME"] == "kept", "the scrub removed a non-git variable"
+
+
+@pytest.mark.parametrize("name", [mutant.name for mutant in gmr.MESSAGE_MUTANTS])
+def test_every_message_mutant_is_killed_by_the_real_gate(
+    armed_campaign: gmr.MessageCampaign, name: str
+) -> None:
+    result = armed_campaign.result(name)
+    assert result.verdict == gmr.KILLED, (
+        f"{name}: {result.verdict} exit={result.attempt.exit_code} "
+        f"stderr={result.attempt.stderr!r} landed={result.attempt.landed!r}"
+    )
+
+
+def test_non_vacuity_a_clean_message_lands_through_the_armed_gate(
+    armed_campaign: gmr.MessageCampaign,
+) -> None:
+    assert armed_campaign.armed is True
+    for control in (armed_campaign.control_before, armed_campaign.control_after):
+        assert control.exit_code == 0, control.stderr
+        assert control.head_after != control.head_before
+        assert control.landed is not None and control.landed.strip() == gmr.CLEAN_MESSAGE.strip()
+    assert armed_campaign.passed, gmr.format_message_report(armed_campaign)
+
+
+def test_non_vacuity_a_disarmed_clone_lets_every_mutant_survive(
+    disarmed_campaign: gmr.MessageCampaign,
+) -> None:
+    assert disarmed_campaign.armed is False
+    verdicts = {result.mutant.name: result.verdict for result in disarmed_campaign.results}
+    assert set(verdicts) == {mutant.name for mutant in gmr.MESSAGE_MUTANTS}
+    assert set(verdicts.values()) == {gmr.SURVIVED}, verdicts
+    assert disarmed_campaign.passed is False
+
+
+def test_an_attempt_with_nothing_staged_raises_rather_than_grading(tmp_path: Path) -> None:
+    _require_lane_tools()
+    repo = gmr.MessageGateRepo.create(tmp_path, armed=True)
+    with pytest.raises(gmr.VacuousAttemptError):
+        repo.attempt(gmr.CLEAN_MESSAGE, stage=False)
+
+
+def test_the_armed_repo_points_hooks_path_at_its_own_githooks(tmp_path: Path) -> None:
+    _require_lane_tools()
+    repo = gmr.MessageGateRepo.create(tmp_path, armed=True)
+    proc = repo.git("config", "--get", "core.hooksPath")
+    assert proc.returncode == 0, proc.stderr
+    assert Path(proc.stdout.strip()) == (repo.root / ".githooks"), proc.stdout
+    assert (repo.root / ".githooks" / "commit-msg").read_bytes() == (
+        REPO_ROOT / ".githooks" / "commit-msg"
+    ).read_bytes()
