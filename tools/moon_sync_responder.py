@@ -2670,34 +2670,26 @@ def log_invocation(source: str, note: str | None, outcome: str, now: float | Non
     return True
 
 
-#: DETAIL LINES A FIRE WRITES ARE HELD UNTIL ITS TERMINAL LINE IS WRITTEN.
-#: REFUTED ON f132394: the root conftest's `_live_fire_windows` ends a
-#: scheduled fire at the NEXT line carrying the fire's own label after its
-#: `start`, so a detail line written mid-fire - a deferral, an expiry, an
-#: unverifiable read class, a skipped or failed delivery - collapsed the fire's
-#: window to [start, start] and the live session's later record writes read as
-#: a test leak. Every such line keeps the fire's ONE label and its own stamp,
-#: and lands AFTER the terminal line, where a window neither opens nor closes.
-#: Outside `run_once` (`_FIRE_OPEN` false) a detail line is written at once.
-_FIRE_DETAIL: list[tuple[str, str | None, str, float]] = []
-_FIRE_OPEN: list[bool] = [False]
+#: THE LABEL OF A DETAIL LINE A FIRE WRITES BETWEEN ITS `start` AND ITS
+#: TERMINAL LINE: a deferral, an expiry, an unverifiable read class, a skipped
+#: or failed delivery. The caller's label rides in the outcome column as
+#: `<caller>:<outcome>`, so the line still says which fire wrote it.
+#:
+#: REFUTED TWICE. On f132394 these lines carried the fire's own label, and the
+#: root conftest's `_live_fire_windows` ends a scheduled fire at the NEXT line
+#: under that label, so the window collapsed to [start, start] and the live
+#: session's later writes read as a test leak. On 3a75d47 they were held in
+#: memory until the terminal line, and a hard kill during the spawn (task
+#: timeout, taskkill, os._exit) lost them - a regression, since the
+#: unverifiable-class line used to reach the log before the spawn. Ruled: write
+#: each one IMMEDIATELY, durable before the spawn, under this label, which the
+#: root conftest accepts as a live writer and never opens or closes a window on.
+FIRE_DETAIL_SOURCE = "firedetail"
 
 
 def _log_fire_detail(source: str, note: str | None, outcome: str, now: float | None = None) -> bool:
-    """A mid-fire detail line: held for `_flush_fire_detail` inside a fire."""
-    stamp = time.time() if now is None else now
-    if not _FIRE_OPEN[0]:
-        return log_invocation(source, note, outcome, now=stamp)
-    _FIRE_DETAIL.append((source, note, outcome, stamp))
-    return True
-
-
-def _flush_fire_detail() -> None:
-    """Write the held detail lines, in order, after the fire's terminal line."""
-    _FIRE_OPEN[0] = False
-    held, _FIRE_DETAIL[:] = list(_FIRE_DETAIL), []
-    for source, note, outcome, stamp in held:
-        log_invocation(source, note, outcome, now=stamp)
+    """A mid-fire detail line, written now, under `FIRE_DETAIL_SOURCE`."""
+    return log_invocation(FIRE_DETAIL_SOURCE, note, f"{source}:{outcome}", now=now)
 
 
 def _trim_invocations() -> None:
@@ -3840,8 +3832,6 @@ def run_once(
     """
     started = time.time() if now is None else now
     log_invocation(source, None, "start", now=started)
-    _FIRE_DETAIL[:] = []
-    _FIRE_OPEN[0] = True
     try:
         if _halt_requested():
             print("responder: HALTED - the operator's HALT sentinel is present")
@@ -3852,11 +3842,9 @@ def run_once(
         # A responder that tracebacks out of a scheduled task surfaces nothing
         # at all. The log says so before the exception continues on its way.
         log_invocation(source, None, "crashed")
-        _flush_fire_detail()
         _write_tick_status(None)
         raise
     log_invocation(source, result.get("note"), result["termination"])
-    _flush_fire_detail()
     _write_tick_status(result)
     return result
 
