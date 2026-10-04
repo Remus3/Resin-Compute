@@ -579,6 +579,38 @@ def test_positional_fallback_cannot_place_three_base_talents_against_two_bonus_k
     assert effective == base
 
 
+def test_positional_fallback_never_double_bonuses_a_directly_hit_skill():
+    """Docstring contract: the positional pairing fires only when the two MAPS are the
+    same length. Three bonus keys against two talents is not that, even after a direct
+    hit shrinks the pending set to two. The directly hit skill is bonused once and the
+    two unplaceable bonuses are RETURNED, never laundered onto the remaining talents."""
+    avatar = {
+        "avatarId": ARLECCHINO,
+        "skillLevelMap": {"9000101": 9, "9000102": 9},
+        "proudSkillExtraLevelMap": {"9000101": 3, "7777": 3, "7778": 3},
+    }
+    effective, base, unresolved = fold_talent_levels(avatar, positional_fallback=True)
+    assert effective == {9000101: 12, 9000102: 9}
+    assert base == {9000101: 9, 9000102: 9}
+    assert unresolved == {7777: 3, 7778: 3}
+
+
+def test_positional_fallback_never_fires_after_an_explicit_map_placement():
+    """Sibling of the direct-hit case: an explicit skill_group_map placement is also a
+    placement, so the positional branch must stay shut for the remainder."""
+    avatar = {
+        "avatarId": ARLECCHINO,
+        "skillLevelMap": {"9000101": 9, "9000102": 9},
+        "proudSkillExtraLevelMap": {"5555": 3, "7777": 3, "7778": 3},
+    }
+    effective, base, unresolved = fold_talent_levels(
+        avatar, skill_group_map={5555: 9000101}, positional_fallback=True
+    )
+    assert effective == {9000101: 12, 9000102: 9}
+    assert base == {9000101: 9, 9000102: 9}
+    assert unresolved == {7777: 3, 7778: 3}
+
+
 def test_zero_bonus_entries_are_neither_folded_nor_reported():
     """An EXPLICIT zero bonus is skipped at enka_mapper.py:200-201.
 
