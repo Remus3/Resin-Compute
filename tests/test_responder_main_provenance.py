@@ -1463,3 +1463,146 @@ def test_an_answered_deferral_entry_is_pruned(rsp, tmp_path):
     _cycle(rsp, tmp_path, inbox, {"MAIN": main, "RC": rc}, now=T0 + DEFER_T + 10)
 
     assert MAIN_NOTE not in _deferred_doc(rsp)["deferred"], _deferred_doc(rsp)
+
+
+# ---------------------------------------------------------------------------
+# Refutation round on f132394: the fire's log shape, the termination list and
+# pruning.
+# ---------------------------------------------------------------------------
+
+
+def _fires(rsp, text: str, source: str) -> list[tuple[str, list[str]]]:
+    """[(start stamp, [the outcomes of every `source` line until its terminal])]."""
+    fires: list[tuple[str, list[str]]] = []
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 4 or parts[1] != source:
+            continue
+        if parts[3] == "start":
+            fires.append((parts[0], []))
+        elif fires and (not fires[-1][1] or fires[-1][1][-1] not in rsp.TERMINATIONS):
+            fires[-1][1].append(parts[3])
+    return fires
+
+
+def _scheduled_release_run(rsp, tmp_path, base: float) -> str:
+    inbox, main = _bed(tmp_path, outbox_bytes=None)
+    _agree(rsp)
+    for k in range(DEFER_CHECKS):
+        rsp.run_once(
+            inbox=inbox, roots={"MAIN": main}, bounds=rsp.Bounds(armed=True),
+            spawn=lambda p, b: rsp.RESPONDER_TAG + "\n\nbody\n",
+            now=base + k * DEFER_SPACING, source=rsp.SOURCE_SCHEDULED_TASK,
+        )
+    assert MAIN_NOTE in _answered_names(rsp), "non-vacuity: the run never released"
+    return _log(rsp)
+
+
+def test_no_line_under_the_fires_label_sits_between_its_start_and_terminal(rsp, tmp_path):
+    """REFUTED ON f132394. The root conftest's `_live_fire_windows` closes a
+    scheduled fire on the NEXT line under its label, so a detail line written
+    mid-fire collapsed the window to [start, start] and the live session's own
+    writes read as a leak. Every fire's first non-start line must be terminal.
+    """
+    text = _scheduled_release_run(rsp, tmp_path, T0 - 7200)
+
+    fires = _fires(rsp, text, rsp.SOURCE_SCHEDULED_TASK)
+
+    assert len(fires) == DEFER_CHECKS, text
+    for stamp, outcomes in fires:
+        assert outcomes and outcomes[0] in rsp.TERMINATIONS, (stamp, outcomes, text)
+    assert "provenance-deferred-expired-absent" in text, "non-vacuity: no detail line"
+
+
+def test_the_root_conftest_window_spans_each_fire_start_to_terminal(rsp, tmp_path):
+    import conftest
+
+    base = T0 - 7200
+    text = _scheduled_release_run(rsp, tmp_path, base)
+    stamps: list[tuple[float, float]] = []
+    start: float | None = None
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 4 or parts[1] != rsp.SOURCE_SCHEDULED_TASK:
+            continue
+        at = time.mktime(time.strptime(parts[0], "%Y-%m-%dT%H:%M:%S"))
+        if parts[3] == "start":
+            start = at
+        elif parts[3] in rsp.TERMINATIONS and start is not None:
+            stamps.append((start, at))
+            start = None
+
+    windows = conftest._live_fire_windows(text, time.time())
+
+    assert len(stamps) == DEFER_CHECKS, text
+    assert windows == sorted(stamps), (windows, stamps, text)
+
+
+def test_a_fail_closed_deferral_line_does_not_close_the_fire(rsp, tmp_path):
+    """The `fail-closed:provenance-deferred-*` lines carry `failclosed`, which the
+    root conftest neither opens nor closes a window on and accepts as a live
+    writer. Pinned so a relabel cannot slip in."""
+    import conftest
+
+    inbox, main = _bed(tmp_path, outbox_bytes=None)
+    rsp.DEFAULT_PROVENANCE_DEFERRED.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_PROVENANCE_DEFERRED.write_bytes(b"{not json")
+    _agree(rsp)
+    rsp.run_once(
+        inbox=inbox, roots={"MAIN": main}, bounds=rsp.Bounds(armed=True),
+        spawn=lambda p, b: rsp.RESPONDER_TAG + "\n\nbody\n",
+        now=T0 - 7200, source=rsp.SOURCE_SCHEDULED_TASK,
+    )
+    text = _log(rsp)
+
+    assert f"{rsp.FAIL_CLOSED_SOURCE}\t{MAIN_NOTE}\tfail-closed:provenance-deferred-unreadable" in text
+    assert rsp.FAIL_CLOSED_SOURCE not in conftest._LIVE_FIRE_SOURCES
+    assert rsp.FAIL_CLOSED_SOURCE in conftest._LIVE_WRITER_SOURCES
+    ((stamp, outcomes),) = _fires(rsp, text, rsp.SOURCE_SCHEDULED_TASK)
+    assert outcomes[0] == "delivered", (outcomes, text)
+
+
+def test_a_deferral_only_tick_is_a_named_termination(rsp):
+    assert "provenance-deferred" in rsp.TERMINATIONS
+
+
+def test_a_released_entry_older_than_the_prune_age_is_pruned(rsp, tmp_path):
+    """A released note that is never answered - refused every tick, or outside
+    the window - must not hold a slot forever: 64 such would disable deferral."""
+    inbox, main = _bed(tmp_path, outbox_bytes=None)
+    stale, fresh = "stale-released.txt", "fresh-released.txt"
+    for name in (stale, fresh):
+        (inbox / name).write_bytes(b"still here\n")
+    old = T0 - rsp.DEFER_PRUNE_AGE_S
+    young = T0 - rsp.DEFER_PRUNE_AGE_S + 60
+    rows = {
+        stale: {"first_seen": old, "checks": 3, "last_check": old, "released": True},
+        fresh: {"first_seen": young, "checks": 3, "last_check": young, "released": True},
+    }
+    rsp.DEFAULT_PROVENANCE_DEFERRED.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_PROVENANCE_DEFERRED.write_text(json.dumps({"version": 1, "deferred": rows}))
+
+    result, _ = _cycle(rsp, tmp_path, inbox, {"MAIN": main}, now=T0)
+
+    assert result["termination"] == "provenance-deferred", result
+    kept = _deferred_doc(rsp)["deferred"]
+    assert stale not in kept, kept
+    assert fresh in kept, "the neighbour younger than the prune age did not survive"
+    assert rsp.DEFER_PRUNE_AGE_S >= 24 * 3600
+
+
+def test_an_entry_whose_inbox_file_is_gone_is_pruned(rsp, tmp_path):
+    inbox, main = _bed(tmp_path, outbox_bytes=None)
+    gone, present = "2026-10-03-0700-from-MAIN-gone.md", "present.txt"
+    (inbox / present).write_bytes(b"here\n")
+    row = {"first_seen": T0, "checks": 1, "last_check": T0, "released": False}
+    rsp.DEFAULT_PROVENANCE_DEFERRED.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_PROVENANCE_DEFERRED.write_text(
+        json.dumps({"version": 1, "deferred": {gone: row, present: row}})
+    )
+
+    _cycle(rsp, tmp_path, inbox, {"MAIN": main}, now=T0 + 1)
+
+    kept = _deferred_doc(rsp)["deferred"]
+    assert gone not in kept, kept
+    assert present in kept and MAIN_NOTE in kept, kept

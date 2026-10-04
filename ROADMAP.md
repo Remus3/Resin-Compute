@@ -116,7 +116,9 @@ version. What follows is everything the scaffold deliberately did not do.
   normal path. Not retryable: wrong-case sender name, missing roots row (host
   config, adjudicated), empty bundle, oversize copy, MISMATCH, NOT-ADDRESSED.
   Record `responder_provenance_deferred.json` under the runtime dir, name
-  keyed, at most 64 entries, no hashes; unreadable, unwritable, full or a
+  keyed, at most 64 entries, released ones pruned 24 h after first seen, no
+  hashes; detail lines held until the fire's terminal line (the root
+  conftest's live-fire window); unreadable, unwritable, full or a
   clock before `first_seen` releases at once, logged
   `fail-closed:provenance-deferred-<cause>`. A deferral-only tick ends
   `provenance-deferred`, status idle/Idle. Arms in

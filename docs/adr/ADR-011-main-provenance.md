@@ -57,7 +57,9 @@ used only where the v4 order puts it: adopting the v4 delivery and its bundle.
 
 **If this is ever reversed to C,** the shape is fixed now so it is not argued
 again: hold the note pending, re-check it for up to 3 ticks, then answer it as
-UNVERIFIABLE data with the log reason "MAIN not committed".
+UNVERIFIABLE data with the log line `provenance-deferred-expired-<class>`, the
+line the bounded deferral already writes (see Consequences, amended
+2026-10-03).
 
 ## Evidence, measured 2026-10-03
 
