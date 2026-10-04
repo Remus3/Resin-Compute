@@ -46,14 +46,14 @@ Questions it is built to answer:
 
 ## Status
 
-As of 2026-10-03. [`ROADMAP.md`](ROADMAP.md) is the live source; the full
+As of 2026-10-04. [`ROADMAP.md`](ROADMAP.md) is the live source; the full
 table is in [`docs/OVERVIEW.md`](docs/OVERVIEW.md#status-in-full).
 
 | | Area |
 |---|---|
-| **Shipped** | Wish forecaster (character, weapon, standard, Chronicled banners) - PityEngine HTTP service - headless lane with six jobs, daemon and supervisor - Enka ingest - state persistence - goal DAG with cycle detection and critical path - row-scoped provenance schema - cross-repo responder |
-| **Partial** | Dashboard (six panels; a fresh clone renders 2 READY, 4 NOT_WIRED) - material costs (zero rows) - scheduler (day offsets, no calendar dates) - resin panel (hand-typed observation) - constellation talent mapping |
-| **Planned** | Artifact scoring - banner calendar ("by when", not just "given N pulls") - income velocity - team solver |
+| **Shipped** | Wish forecaster (character, weapon, standard, Chronicled banners) - PityEngine HTTP service - headless lane with seven jobs, daemon and supervisor - Enka ingest - state persistence - goal DAG with cycle detection and critical path - row-scoped provenance schema - cross-repo responder - "by when" forecast over a caller-supplied banner schedule (POST /by-when; no calendar vendored) |
+| **Partial** | Dashboard (six panels; a fresh clone renders 2 READY, 4 NOT_WIRED) - material costs (zero rows) - scheduler (day offsets, no calendar dates) - resin panel (hand-typed observation) - constellation talent mapping - artifact scoring (engine only, no table, no panel) - income velocity (default-off job over operator-typed observations) |
+| **Planned** | banner calendar SOURCE (the "by when" route exists; nothing supplies the schedule yet) - team solver |
 
 ## Quickstart
 
@@ -125,13 +125,14 @@ probability of exactly `k` copies.
   [`docs/OVERVIEW.md`](docs/OVERVIEW.md#what-the-forecaster-models).
 - **Ingest.** `ingest/enka_client.py` sends a required custom User-Agent,
   honours `ttl` on every response and refuses UID enumeration.
-- **Headless lane.** `headless/runner.py` runs six registered jobs
-  (`sync_profile`, `reconcile_state`, `persist_state`, `recompute_plan`,
-  `forecast_pity`, `emit_health`) once, as a daemon, or under
-  `ops/supervisor.py`, which restarts it and writes a health file. Each live
-  pass holds a slot from a vendored machine-wide concurrency governor
-  (`ops/loop/`), so parallel background lanes on one machine queue rather than
-  collide.
+- **Headless lane.** `headless/runner.py` runs seven registered jobs
+  (`sync_profile`, `reconcile_state`, `reconcile_ledger`, `persist_state`,
+  `recompute_plan`, `forecast_pity`, `emit_health`) once, as a daemon, or under
+  `ops/supervisor.py`, which restarts it and writes a health file.
+  `reconcile_ledger` folds a hand-typed data/income_observations.json into the
+  ledger and is a SKIP until that file exists. Each live pass holds a slot from
+  a vendored machine-wide concurrency governor (`ops/loop/`), so parallel
+  background lanes on one machine queue rather than collide.
 - **Planning.** `engines/` holds the goal DAG, a resin-, rotation- and weekly
   lockout-aware scheduler and a recommendation solver - mechanism only, waiting
   on first-hand cost rows.
@@ -240,12 +241,14 @@ Resin-Compute/
       banners.py                   hazard tables and soft-pity ramps, all four
       markov.py                    absorbing Markov chain DP
       forecast.py                  public API
+      timeline.py                  "by when" over a caller-supplied banner schedule
       __main__.py                  stdlib HTTP service on 8790
       tests/                       the engine validates itself
   engines/                         planning and optimization, mechanism only
     objectives.py                  goal DAG, cycle detection, critical path
     scheduler.py                   resin, rotation and weekly lockout aware
     recommend.py                   what to get / who to build solver
+    artifact_score.py              substat weights and roll counts, caller-supplied tables
   ingest/                          external data, re-implemented from protocol
     enka_client.py                 stdlib urllib, ttl-honouring, policy bound
     enka_mapper.py                 raw payload to EnkaMappedProfile
@@ -260,6 +263,7 @@ Resin-Compute/
   shell/                           Electron companion with a tray, ADR-005
     main.js                        window, tray and supervisor lifecycle
     lib/                           endpoint, geometry, state, supervisor, tray
+    test/                          node --test suite, no electron
   ops/                             supervision and operational state
     supervisor.py                  watchdog, restart trigger, bounded backoff
     ResinCompute-Supervisor.xml    hidden ONLOGON task, elevated, no time limit

@@ -19,3 +19,5 @@ argument is not had twice.
 | [ADR-009](ADR-009-per-file-licence-headers.md) | No per-file licence headers and no SPDX identifiers | Accepted |
 | [ADR-010](ADR-010-write-tracer-coverage.md) | A tracked write tracer that publishes its own blind spots | Accepted |
 | [ADR-011](ADR-011-main-provenance.md) | Responder MAIN provenance is a direct outbox byte hash; kit verify_main is adoption-only | Accepted |
+| [ADR-012](ADR-012-artifact-scoring-model.md) | Artifact scoring is a weighted substat sum over caller-supplied tables; no number ships | Proposed |
+| [ADR-013](ADR-013-roots-map-identity-anchor.md) | Roots-map identity anchor - an untracked random beacon pinned by digest, no git and no tracked identity material | Proposed |

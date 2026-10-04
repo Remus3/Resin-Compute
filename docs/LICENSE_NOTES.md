@@ -301,6 +301,10 @@ with no byte pin at all is outside its reach by construction.
    `ingest/enka_client.py`. No upstream client source is copied.
 3. **Fetch at runtime**, with a custom User-Agent, honouring the response `ttl`,
    and never enumerating UIDs.
+4. **Vendor no banner schedule.** `POST /by-when` (`agents/pity_engine/timeline.py`)
+   computes over windows the caller supplies in the request; no banner name,
+   date or duration is stored in this tree, and its tests use invented labels
+   and far-future dates.
 
 ## Enka.Network usage policy, as published
 
