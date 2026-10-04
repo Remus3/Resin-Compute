@@ -113,10 +113,10 @@ Recorded verbatim, unverified, and NOT actionable by any code in this tree today
 Noelle DEF, Dehya HP, Arlecchino ATK% and Pyro damage bonus, Bennett Energy
 Recharge and base ATK, Lynette Energy Recharge.
 
-`MappedArtifact` parses substats but nothing scores them. ROADMAP records that
-artifact scoring "needs a stated scoring model before implementation, not after",
-and this section is a candidate input to that model rather than a substitute for
-it.
+`MappedArtifact` parses substats and `engines/artifact_score.py` scores them
+against caller-supplied weights (ADR-012, Proposed). This section remains a
+candidate input to such a table - NOT a weight table, and never a test
+expectation.
 
 ### 3.5 Free artifact sources
 
@@ -128,9 +128,10 @@ cannot currently even express "is this a Berserker piece".
 
 ## 4. TIME-SENSITIVE - decays, and unverifiable here by construction
 
-This repository has **no banner, event or shop calendar**. ROADMAP lists one
-under "Next" and gates it behind the same licence question as the cost tables. So
-every claim below is unverifiable here NOW and may also simply expire.
+This repository has **no banner, event or shop calendar**. `POST /by-when`
+answers "by when" only from a schedule the CALLER supplies; ROADMAP still gates
+a calendar SOURCE behind the same licence question as the cost tables. So every
+claim below is unverifiable here NOW and may also simply expire.
 
 - Lynette claimable free at Adventure Rank 25.
 - Dehya obtainable via a constellation-training selector or anniversary mail.

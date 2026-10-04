@@ -6,15 +6,15 @@ what the project deliberately refuses to do, the third-party data posture and
 the stack decision. Running and operating the tree is in `docs/OPERATIONS.md`.
 
 `ROADMAP.md` is the live source for status and open work. Everything below is
-its shape as of 2026-10-03, not a second source of truth.
+its shape as of 2026-10-04, not a second source of truth.
 
 ## Status in full
 
 | Status | Area | Where it stands |
 |---|---|---|
 | **[SHIPPED]** | Wish forecaster | Absorbing Markov chain over (copies, pity, guarantee, loss streak) for the character, weapon, standard and Chronicled banners. Correct for the current game version, and the three easy-to-get-wrong constants are regression-tested. |
-| **[SHIPPED]** | PityEngine service | Local HTTP on 8790, `GET /health` and `POST /forecast`, stdlib only. All four banner kinds are accepted over HTTP, Chronicled included, and an unknown banner returns 400 - though no HTTP-layer test covers the Chronicled route specifically. |
-| **[SHIPPED]** | Headless lane | Six registered jobs - `sync_profile`, `reconcile_state`, `persist_state`, `recompute_plan`, `forecast_pity`, `emit_health` - with a daemon mode and a supervisor. |
+| **[SHIPPED]** | PityEngine service | Local HTTP on 8790, `GET /health`, `POST /forecast` and `POST /by-when`, stdlib only. All four banner kinds are accepted over HTTP, Chronicled included, and an unknown banner returns 400. |
+| **[SHIPPED]** | Headless lane | Seven registered jobs - `sync_profile`, `reconcile_state`, `reconcile_ledger`, `persist_state`, `recompute_plan`, `forecast_pity`, `emit_health` - with a daemon mode and a supervisor. `reconcile_ledger` is default-off: it folds the operator-typed data/income_observations.json into the ledger and re-estimates income velocity, and SKIPs when that file is absent. |
 | **[SHIPPED]** | Enka ingest | Re-implemented from the published protocol and exercised against a real live profile. Custom User-Agent required, `ttl` honoured, UID enumeration refused. |
 | **[SHIPPED]** | State persistence | The headless lane writes the reconciled account state, and the surface cold-starts from it showing how old the reading is. |
 | **[SHIPPED]** | Goal DAG | Correct dependency graph with cycle detection and a critical path - 30 nodes across four chains for one character at level 60, 6/6/6 talents and a weapon at 60. |
@@ -28,9 +28,9 @@ its shape as of 2026-10-03, not a second source of truth.
 | **[PARTIAL]** | Provenance producer | The schema has no writer yet, so it has never met a real value. |
 | **[PARTIAL]** | Constellation talents | Exact only when the caller supplies a skill-group mapping. Without a licensed skill depot the mapper reports what it could not resolve instead of guessing - a product limitation, not a bug. |
 | **[LIVE]** | Concurrency governor | `ops/loop/` is vendored and digest-pinned, and since `1a6d8da` it is also LIVE: `run_daemon` in `headless/runner.py` holds a slot around each pass. No loop was invented to justify the vendored file - the daemon loop already existed and gained the governor it was always meant to have. A dry run takes no slot, and a slot timeout is a failed pass rather than permission to proceed unslotted. |
-| **[PLANNED]** | Artifact scoring | Artifacts parse cleanly, but nothing scores a substat roll and the scoring model has to be stated before it is built. |
-| **[PLANNED]** | Banner calendar | The forecaster answers "given N pulls" but not "by when", because nothing knows when a banner runs. |
-| **[PLANNED]** | Income velocity | Velocity estimation folds observed ledger entries, but nothing populates the ledger automatically. |
+| **[PARTIAL]** | Artifact scoring | `engines/artifact_score.py` scores substats against caller-supplied weights and counts rolls against caller-supplied magnitudes (ADR-012, Proposed); nothing supplies either table and no panel renders it. |
+| **[PARTIAL]** | Banner calendar | The forecaster now answers "by when" over `POST /by-when` (`agents/pity_engine/timeline.py`), but only from a schedule the CALLER supplies per request. No calendar source is vendored - that source still sits behind the same licence gate as the cost tables. |
+| **[PARTIAL]** | Income velocity | `core/ledger.py` estimates velocity from ledger entries, and the default-off `reconcile_ledger` job now feeds it from the operator-typed data/income_observations.json; the job SKIPs until that file exists, and nothing records an observation automatically. |
 | **[PLANNED]** | Team solver | Elemental reaction modelling, held back until the resource layer is complete. The shipped Teams panel states elemental IDENTITY only - nothing ranks or recommends. |
 
 ## Where it is going
@@ -39,13 +39,15 @@ The largest unlock is unglamorous: first-hand observed cost tables. The
 objective DAG, the scheduler and the plan panel are built and emit zeros until
 those rows exist.
 
-**Near-term, and user-visible.** Artifact scoring, once the scoring model is
-stated. A banner calendar, so the forecaster can answer "by when" and not only
-"given N pulls". Income velocity estimated from real ledger history instead of a
-typed-in figure. Row-scoped provenance enforced on `data/costs/` by a guard that
-rejects a row missing any receipt field, landing before the first row does. And
-a worked end-to-end goal emitting a DATED task list rather than today's correct
-DAG with empty costs and bare day offsets.
+**Near-term, and user-visible.** A banner calendar SOURCE, so the shipped "by
+when" route does not depend on the caller typing the schedule in - gated behind
+the same licence question as the cost tables. Income velocity from real ledger
+history: the `reconcile_ledger` job exists and waits on the operator-typed
+data/income_observations.json rather than on a figure typed into the snapshot.
+Row-scoped provenance enforced on `data/costs/` by a guard that rejects a row
+missing any receipt field, landing before the first row does. And a worked
+end-to-end goal emitting a DATED task list rather than today's correct DAG with
+empty costs and bare day offsets.
 
 **Later.** A team-composition solver with elemental reaction modelling, held
 until the resource layer is complete. Multi-account support - everything is

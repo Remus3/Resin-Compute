@@ -1,15 +1,25 @@
 # data - observations, and the receipt each one carries
 
-Two different kinds of thing live under this directory and the difference
-decides what the rules are.
+Three different kinds of thing live under this directory and the differences
+decide what the rules are.
 
 - `data/fixtures/` is **hand-authored** material for tests and the offline
   bootstrap path. Nothing upstream is vendored there and nothing ever will be.
   Its own README says which of its files are verified public game fact typed in
   by hand and which one is invented.
-- Everything else here is **observation**: values read off the game, out of a
-  file the game wrote, or out of a response an endpoint gave. Those are the rows
-  this README is about.
+- Everything else here, apart from the one file below, is **observation**:
+  values read off the game, out of a file the game wrote, or out of a response
+  an endpoint gave. Those are the rows this README is about.
+- data/income_observations.json is the third kind: **operator-typed input**,
+  not observation and not fixture. It is gitignored, carries no account id, and
+  holds `{"schema_version": 1, "observations": [{"id", "at", "currency",
+  "delta", "note"}]}` - one signed delta per row, typed by the operator from
+  what they saw in game. The headless job `reconcile_ledger` folds every row
+  into the pass's ledger with source `observation` and re-estimates income
+  velocity; with no file the job SKIPs. It carries no receipt because there is
+  no artefact to receipt - the operator is the source - which is why it is
+  `.json` and not `.jsonl`: the provenance sweep grades every `.jsonl` here as
+  a receipted row.
 
 **No observation row exists yet.** That is a statement of fact rather than an
 oversight - the schema had to exist before the first row landed, so that the
