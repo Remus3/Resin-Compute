@@ -13,12 +13,18 @@ from pathlib import Path
 import pytest
 
 from core.types import Element, EquipItemType
+from ingest.enka_client import DEFAULT_TTL_SECONDS
 from ingest.enka_mapper import (
+    REFINEMENT_MAX,
+    REFINEMENT_MIN,
     fold_talent_levels,
+    map_artifact,
     map_character,
     map_profile,
+    map_weapon,
     read_prop,
     refinement_from_affix_map,
+    split_equipment,
 )
 from ingest.static_data import StaticIdentity
 
@@ -349,3 +355,270 @@ def test_friendship_comes_from_fetter_info(payload):
     profile = map_profile(payload)
     assert _character(profile, ARLECCHINO).friendship == 10
     assert _character(profile, BENNETT).friendship == 8
+
+
+# ---------------------------------------------------------------------------
+# Boundary arms - each pins a branch the trap tests above leave unproven.
+# Inputs are hand-authored dicts; the only ids are the fixture's 9xxxxxxx
+# placeholders and the verified avatarIds already named at the top of this file.
+# ---------------------------------------------------------------------------
+
+
+# -- trap 4 edges: refinement_from_affix_map -------------------------------
+
+
+def test_affix_map_values_outside_the_documented_range_stay_inside_the_presented_rank():
+    """`MappedWeapon.refinement` stores the PRESENTED rank 1..5 (core/types.py).
+
+    The documented input range is 0..4. What an out-of-range value maps to is
+    NOT documented, so this arm pins only the field contract - whatever comes
+    back is still a presentable rank - and not the specific clamp value.
+    """
+    for out_of_range in (9, 5, -3):
+        presented = refinement_from_affix_map({"190000001": out_of_range})
+        assert REFINEMENT_MIN <= presented <= REFINEMENT_MAX, f"affixMap {out_of_range} -> {presented}"
+    assert (REFINEMENT_MIN, REFINEMENT_MAX) == (1, 5)
+
+
+def test_unreadable_affix_map_values_present_as_r1():
+    """Docstring: an absent or UNREADABLE map means an unrefined weapon, R1.
+
+    Where the R1 comes from: an unreadable value coerces to -1 and the result is
+    then clamped to REFINEMENT_MIN at enka_mapper.py:143. The `v >= 0` filter at
+    :139-141 is dead in effect - deleting it changes no output, because the
+    clamp catches the same cases - so this arm grades the clamp and the
+    non-dict branch at :136-137, not the filter.
+    """
+    assert refinement_from_affix_map({"190000001": "abc"}) == 1
+    assert refinement_from_affix_map({"190000001": None}) == 1
+    # A truthy non-dict is as unreadable as a missing one.
+    assert refinement_from_affix_map("4") == 1  # type: ignore[arg-type]
+
+
+def test_affix_map_string_coded_value_is_coerced_like_every_other_wire_number():
+    """Upstream sends numbers as strings in several places (mapper coercions)."""
+    assert refinement_from_affix_map({"190000001": "2"}) == 3
+
+
+# -- equipment edges: map_weapon / map_artifact / split_equipment ----------
+
+
+def test_weapon_entry_without_a_weapon_object_still_maps_as_a_weapon_at_r1():
+    """`flat.itemType` says weapon, so it IS one, even with no `weapon` sub-object.
+
+    Absent `affixMap` presents as R1 by the documented rule. The level and
+    ascension a missing `weapon` object falls to are NOT asserted: no document
+    states them, and the module's weapon default (enka_mapper.py:234, level 1)
+    disagrees with its character default (read_prop, 0). Which is right is an
+    adjudicator's call, not a pin.
+    """
+    weapon = map_weapon(
+        {
+            "itemId": 90000001,
+            "flat": {
+                "itemType": EquipItemType.WEAPON.value,
+                "nameTextHashMap": "SYNTHETIC_WEAPON_NAME_A",
+                "rankLevel": 4,
+            },
+        }
+    )
+    assert weapon.item_id == 90000001
+    assert weapon.name_hash == "SYNTHETIC_WEAPON_NAME_A"
+    assert weapon.rank_level == 4
+    assert weapon.refinement == 1
+
+
+def test_artifact_level_and_item_id_are_carried_verbatim(payload):
+    """Docstring: `level` is carried through VERBATIM, no off-by-one applied."""
+    profile = map_profile(payload)
+    artifact = _character(profile, ARLECCHINO).artifacts[0]
+    raw = next(
+        e for a in payload["avatarInfoList"] if a["avatarId"] == ARLECCHINO for e in a["equipList"] if "reliquary" in e
+    )
+    assert raw["reliquary"]["level"] == 21  # guard the guard: the fixture still carries it
+    assert artifact.level == 21
+    assert artifact.item_id == 90000002
+
+
+def test_artifact_substats_skip_non_dict_entries_and_coerce_string_values():
+    entry = {
+        "itemId": 90000002,
+        "flat": {
+            "itemType": EquipItemType.RELIQUARY.value,
+            "reliquarySubstats": [1, {"appendPropId": "SYNTHETIC_PROP_X", "propValue": "2.5"}],
+        },
+    }
+    assert map_artifact(entry).substats == (("SYNTHETIC_PROP_X", 2.5),)
+
+    entry["flat"]["reliquarySubstats"] = "x"
+    assert map_artifact(entry).substats == ()
+
+
+def test_split_equipment_skips_non_dict_entries_and_entries_without_flat():
+    """No `flat` means no `itemType`, and an unrecognised itemType is skipped."""
+    assert split_equipment(["x", 1, {"itemId": 1}]) == (None, ())
+    assert split_equipment("x") == (None, ())
+    assert split_equipment(None) == (None, ())
+
+
+def test_empty_equip_list_yields_no_weapon_and_no_artifacts(payload):
+    bennett = next(a for a in payload["avatarInfoList"] if a["avatarId"] == BENNETT)
+    assert bennett["equipList"] == []  # guard the guard
+    mapped = map_character(bennett)
+    assert mapped.weapon is None
+    assert mapped.artifacts == ()
+
+
+# -- trap 1 edge: avatarInfoList present but empty, or malformed ----------
+
+
+def test_present_but_empty_avatar_info_list_counts_as_an_open_showcase():
+    """Key PRESENCE is the documented signal, so [] is open-with-nobody-in-it."""
+    profile = map_profile({"avatarInfoList": []})
+    assert profile.showcase_open is True
+    assert profile.characters == ()
+
+
+def test_malformed_avatar_info_list_entries_are_skipped_not_fatal():
+    """SPEC section 5 says upstream never sends these shapes; the mapper still must not raise.
+
+    What `showcase_open` reads for a non-list value is deliberately NOT asserted:
+    it is a non-occurring input and no document assigns it a meaning.
+    """
+    profile = map_profile({"avatarInfoList": [1, None, {"avatarId": BENNETT}]})
+    assert [c.avatar_id for c in profile.characters] == [BENNETT]
+
+    profile = map_profile({"avatarInfoList": "x"})
+    assert profile.characters == ()
+
+
+# -- profile header edges --------------------------------------------------
+
+
+def test_player_info_that_is_not_a_dict_maps_to_a_blank_header():
+    profile = map_profile({"playerInfo": "x"})
+    assert profile.nickname == ""
+    assert profile.adventure_rank == 0
+    assert profile.world_level == 0
+
+
+def test_uid_argument_overrides_the_payload_uid():
+    assert map_profile({"uid": "000000000"}, uid="000000001").uid == "000000001"
+    assert map_profile({"uid": "000000000"}).uid == "000000000"
+    assert map_profile({}).uid == ""
+
+
+def test_ttl_absent_or_unreadable_defaults_to_the_client_fallback():
+    """A drift guard across three literal 60s, not a shared constant.
+
+    The mapper does not reference DEFAULT_TTL_SECONDS: enka_mapper.py:407 is a
+    literal 60, enka_client.py:99 another, core/types.py:309 a third. No
+    document says they must agree; this arm exists so that if one moves the
+    others are noticed.
+    """
+    assert map_profile({}).ttl_seconds == DEFAULT_TTL_SECONDS
+    assert map_profile({"ttl": "x"}).ttl_seconds == DEFAULT_TTL_SECONDS
+    assert map_profile({"ttl": "120"}).ttl_seconds == 120
+
+
+# -- trap 2 edge: talentIdList that is not a list ---------------------------
+
+
+def test_talent_id_list_that_is_not_a_list_counts_as_c0():
+    assert map_character({"avatarId": BENNETT, "talentIdList": "abc"}).constellations == 0
+    assert map_character({"avatarId": BENNETT, "talentIdList": {"a": 1}}).constellations == 0
+
+
+def test_missing_fetter_info_and_prop_map_default_to_zero():
+    mapped = map_character({"avatarId": BENNETT})
+    assert mapped.friendship == 0
+    assert mapped.level == 0
+    assert mapped.ascension == 0
+    assert mapped.talent_levels == {}
+
+    mapped = map_character({"avatarId": BENNETT, "fetterInfo": "x", "propMap": "y"})
+    assert (mapped.friendship, mapped.level, mapped.ascension) == (0, 0, 0)
+
+
+# -- trap 3 edges: the fold's resolution order ------------------------------
+
+
+def test_skill_group_map_is_threaded_through_map_profile():
+    """The live-shaped resolution must reach map_profile callers, not just fold callers."""
+    payload = {
+        "avatarInfoList": [
+            {
+                "avatarId": ARLECCHINO,
+                "skillLevelMap": {"9000101": 9},
+                "proudSkillExtraLevelMap": {"7777": 3},
+            }
+        ]
+    }
+    with_map = map_profile(payload, skill_group_map={7777: 9000101}).characters[0]
+    assert with_map.talent_levels == {9000101: 12}
+    assert with_map.talent_levels_base == {9000101: 9}
+
+    without_map = map_profile(payload).characters[0]
+    assert without_map.talent_levels == without_map.talent_levels_base == {9000101: 9}
+
+
+def test_positional_fallback_cannot_place_three_base_talents_against_two_bonus_keys():
+    """Three base talents, two bonus keys: the lengths differ, so even opt-in does not guess.
+
+    This says nothing about which constellation produces this shape; the
+    fixture's own C3 carries one bonus key. The subject is the length rule at
+    enka_mapper.py:172-173.
+    """
+    avatar = {
+        "avatarId": ARLECCHINO,
+        "skillLevelMap": {"9000101": 9, "9000102": 9, "9000103": 9},
+        "proudSkillExtraLevelMap": {"7777": 3, "7778": 3},
+    }
+    effective, base, unresolved = fold_talent_levels(avatar, positional_fallback=True)
+    assert unresolved == {7777: 3, 7778: 3}
+    assert effective == base
+
+
+def test_zero_bonus_entries_are_neither_folded_nor_reported():
+    """An EXPLICIT zero bonus is skipped at enka_mapper.py:200-201.
+
+    Pinned because a zero adds nothing to fold and nothing to report. The same
+    branch also swallows an UNREADABLE bonus value ("abc", None coerce to 0),
+    which SPEC 5.1 says should be RETURNED as unresolved rather than dropped.
+    That contradiction is filed for an adjudicator and is NOT asserted here;
+    a fix that tells unreadable from zero keeps this arm green.
+    """
+    avatar = {
+        "avatarId": ARLECCHINO,
+        "skillLevelMap": {"9000101": 9},
+        "proudSkillExtraLevelMap": {"9000101": 0, "7777": 0},
+    }
+    effective, base, unresolved = fold_talent_levels(avatar)
+    assert effective == base == {9000101: 9}
+    assert unresolved == {}
+
+
+def test_explicit_map_to_a_skill_absent_from_base_stays_unresolved():
+    """A caller-supplied mapping onto a skill the payload does not carry is not invented."""
+    avatar = {
+        "avatarId": ARLECCHINO,
+        "skillLevelMap": {"9000101": 9},
+        "proudSkillExtraLevelMap": {"7777": 3},
+    }
+    effective, base, unresolved = fold_talent_levels(avatar, skill_group_map={7777: 9000199})
+    assert unresolved == {7777: 3}
+    assert effective == base == {9000101: 9}
+
+
+# -- trap 6 edges: read_prop key and value shapes ---------------------------
+
+
+def test_read_prop_accepts_int_keys_and_rejects_blank_or_malformed_entries():
+    """Docstring: keys arrive as strings on the wire; an int key is accepted too."""
+    assert read_prop({4001: {"val": "5"}}, 4001) == 5
+    assert read_prop({"4001": {"val": ""}}, 4001, default=-1) == -1
+    assert read_prop({"4001": {"val": None}}, 4001, default=-1) == -1
+    assert read_prop({"4001": {"val": "abc"}}, 4001, default=-1) == -1
+    assert read_prop({"4001": "x"}, 4001, default=-1) == -1
+    # ival alone is "Ignore it" - with no val there is nothing to read.
+    assert read_prop({"4001": {"ival": "3"}}, 4001, default=-1) == -1
