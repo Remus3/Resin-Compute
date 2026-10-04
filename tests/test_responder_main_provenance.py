@@ -1684,6 +1684,7 @@ def test_a_detail_line_survives_a_hard_kill_during_the_spawn(rsp, tmp_path):
 def test_the_detail_label_is_a_live_writer_that_opens_and_closes_no_window(rsp):
     import conftest
 
+    assert rsp.FIRE_DETAIL_SOURCE == conftest._FIRE_DETAIL_SOURCE
     assert rsp.FIRE_DETAIL_SOURCE in conftest._LIVE_WRITER_SOURCES
     assert rsp.FIRE_DETAIL_SOURCE not in conftest._LIVE_FIRE_SOURCES
     stamp = "2026-10-03T10:00:00"
@@ -1696,3 +1697,63 @@ def test_the_detail_label_is_a_live_writer_that_opens_and_closes_no_window(rsp):
     at = [time.mktime(time.strptime(s, "%Y-%m-%dT%H:%M:%S")) for s in (stamp, later)]
 
     assert conftest._live_fire_windows(log, time.time()) == [(at[0], at[1])]
+
+
+# ---------------------------------------------------------------------------
+# Refutation round on 0e845b2: `firedetail` is a live-writer label, so the
+# root conftest's leak guard must read the CALLER prefix it carries, or a test
+# child's `cli:` detail line inside a live fire is excused.
+# ---------------------------------------------------------------------------
+
+_FIRE_AT = "2026-10-03T11:00:00"
+
+
+def _drift_inside_a_fire(appended: str):
+    import conftest
+
+    def at(s):
+        return time.mktime(time.strptime(s, "%Y-%m-%dT%H:%M:%S"))
+
+    fire = f"{_FIRE_AT}\tscheduledtask\t-\tstart\n"
+    return conftest._runtime_drift(
+        {"responder_invocations.log": (10, 1)}, {"responder_invocations.log": (60, 2)},
+        at("2026-10-03T11:00:05"), at("2026-10-03T11:00:06"), fire,
+        at("2026-10-03T11:00:07"), appended,
+    )
+
+
+@pytest.mark.parametrize(
+    "outcome, flagged",
+    [
+        ("cli:provenance-unverifiable-OSError", True),
+        ("run_once:skipped-existing", True),
+        ("suite:provenance-deferred-held", True),
+        ("no-caller-prefix", True),
+        (":empty-caller", True),
+        ("scheduledtask:provenance-deferred-expired-absent", False),
+    ],
+)
+def test_a_detail_line_is_excused_only_for_a_live_fire_caller(rsp, outcome, flagged):
+    line = f"{_FIRE_AT}\t{rsp.FIRE_DETAIL_SOURCE}\tn.md\t{outcome}\n"
+
+    verdict = _drift_inside_a_fire(line)
+
+    assert (verdict is not None) is flagged, (outcome, verdict)
+
+
+def test_a_child_delivery_detail_line_inside_a_live_fire_is_a_leak(rsp, tmp_path):
+    """The round-3 reproducer, in suite: a real `deliver` skip line written under
+    a test caller's label, judged against an OPEN scheduled fire."""
+    inbox = tmp_path / "leak_inbox"
+    inbox.mkdir()
+    name = "2026-10-03-1100-from-RSC-x.md"
+    (inbox / name).write_text("x")
+    rsp.deliver("body\n", name, [inbox])
+    rsp.deliver("body\n", name, [inbox], source=rsp.SOURCE_CLI)
+    appended = _log(rsp)
+    assert appended.count(f"\t{rsp.FIRE_DETAIL_SOURCE}\t") == 2, appended
+
+    verdict = _drift_inside_a_fire(appended)
+
+    assert verdict is not None and "firedetail" in verdict, verdict
+    assert _drift_inside_a_fire("") is None, "non-vacuity: the open fire itself is excused"
