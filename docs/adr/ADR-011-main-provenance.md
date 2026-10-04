@@ -80,6 +80,12 @@ map. Neither check tests the map. This is filed as open work in `ROADMAP.md`.
   UNVERIFIABLE MAIN note is recorded answered and never re-checked, so a note
   delivered before MAIN writes its outbox copy is lost. That gap exists under
   A and is worse under B.
+- Amended 2026-10-03: that gap is closed by a bounded deferral, not by
+  option C. A retryably UNVERIFIABLE MAIN note is held out of the queue and
+  re-checked by the same outbox byte hash, then released as UNVERIFIABLE data
+  after 3 counted checks (240 s apart) or 900 s; no git is added and the
+  decision above stands. See `defer_unverified` in
+  `tools/moon_sync_responder.py` and the DONE entry in `ROADMAP.md`.
 
 ## What would reverse this
 

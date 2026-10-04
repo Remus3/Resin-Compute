@@ -12,6 +12,27 @@ now.
 
 ---
 
+## 2026-10-03 (night) - a retryably UNVERIFIABLE MAIN note is deferred, boundedly, instead of lost
+
+Closes the liveness gap ADR-011 filed. Before: a MAIN note that arrived
+before MAIN wrote its outbox copy read UNVERIFIABLE on its first tick, was
+answered as data, went into the answered record, and was never re-checked.
+Now `Provenance` carries `retryable` (appended at the end, default False),
+True only for an absent or unlistable outbox copy or bundle twin and a copy
+that raised on read. `defer_unverified`, one plain assignment in `_run_once`
+between `drop_redrops` and `bypass_queue`, takes such a note out of the queue
+and records it by name in `responder_provenance_deferred.json` under the
+runtime dir (gitignored by `ops/runtime/*`). Released as data after 3 counted
+checks at least 240 s apart or 900 s after first seen; a later MATCH or
+MISMATCH drops the entry. Every failure of the record releases rather than
+holds. `_empty_termination` gained a defaulted parameter and returns
+`provenance-deferred`, which `_TICK_STATES` leaves at idle/Idle. The gate
+census floor and the gate name bindings are unchanged. Failing-first: 30 arms
+in `tests/test_responder_main_provenance.py` red before the change, with the
+behavioural ones reading `delivered` where `provenance-deferred` was wanted.
+Not done: the roots-map common-mode item stays open in `ROADMAP.md`, noted
+there as only partly feasible.
+
 ## 2026-10-03 (late) - MAIN provenance adjudicated: the outbox byte hash stays (ADR-011)
 
 DECISION RECORDED, NO CODE CHANGE. FLEET-KIT v4 item (3) asked whether the
