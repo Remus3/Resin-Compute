@@ -12,6 +12,60 @@ now.
 
 ---
 
+## 2026-10-03 (night) - a retryably UNVERIFIABLE MAIN note is deferred, boundedly, instead of lost
+
+Closes the liveness gap ADR-011 filed. Before: a MAIN note that arrived
+before MAIN wrote its outbox copy read UNVERIFIABLE on its first tick, was
+answered as data, went into the answered record, and was never re-checked.
+Now `Provenance` carries `retryable` (appended at the end, default False),
+True only for an absent or unlistable outbox copy or bundle twin and a copy
+that raised on read. `defer_unverified`, one plain assignment in `_run_once`
+between `drop_redrops` and `bypass_queue`, takes such a note out of the queue
+and records it by name in `responder_provenance_deferred.json` under the
+runtime dir (gitignored by `ops/runtime/*`). Released as data after 3 counted
+checks at least 240 s apart or 900 s after first seen; a later MATCH or
+MISMATCH drops the entry. Every failure of the record releases rather than
+holds. `_empty_termination` gained a defaulted parameter and returns
+`provenance-deferred`, which `_TICK_STATES` leaves at idle/Idle. The gate
+census floor and the gate name bindings are unchanged. Failing-first: 31 arms
+in `tests/test_responder_main_provenance.py` red against db634b1 (adversary
+measurement; the builder's own first run read 30, taken before the
+malformed-entry arm was added), with the behavioural ones reading `delivered`
+where `provenance-deferred` was wanted.
+
+REFUTED ON f132394 BY TWO ADVERSARIES, fixed in the follow-up commit. (1) The
+deferral's expiry line was written under the fire's own label mid-fire, and
+the root conftest's `_live_fire_windows` ends a scheduled fire at the next
+line under that label, so the window collapsed to [start, start] and the live
+session's later writes read as a leak (false drift in the armed checkout).
+Same hazard, pre-existing, in `provenance_for`'s unverifiable-class line and
+`deliver`'s three skip/fail lines: all now go through `_log_fire_detail`. The
+first fix, 3a75d47, held them in memory until the terminal line; a round-2
+adversary REFUTED it: a hard kill during the spawn lost them, a regression
+from db634b1 where the unverifiable-class line reached the log first.
+Adjudicated and landed in the next commit: each detail line is written AT
+ONCE under the label `firedetail` (`FIRE_DETAIL_SOURCE`), the caller's label
+carried as `<caller>:<outcome>`, and the root `conftest.py` lists
+`firedetail` in `_LIVE_WRITER_SOURCES` only, so it opens and closes no
+window. A child-interpreter arm kills the spawn with `os._exit` and finds both
+detail lines in the log; against the 3a75d47 module the same child found
+neither. The `fail-closed:provenance-deferred-*` lines carry `failclosed`,
+which opens and closes no window; pinned. A round-3 adversary REFUTED that
+commit's leak guard: `_test_shaped` read only the label column, so a test
+child's `firedetail ... cli:<outcome>` line inside a live fire was excused,
+where db634b1 caught the equivalent `cli` line. Fixed next: a `firedetail`
+line is test-shaped unless its caller prefix is in `_LIVE_FIRE_SOURCES`, and
+one with no prefix is test-shaped; arms for `cli`, `run_once`, `suite`, no
+prefix and empty prefix (flagged), `scheduledtask` (excused), and the real
+`deliver` reproducer, all red before the fix. (2) `provenance-deferred` joined
+`TERMINATIONS`. (3) A released entry is pruned 24 h after `first_seen`
+(`DEFER_PRUNE_AGE_S`), so never-answered notes cannot fill the 64 slots; the
+inbox-file-gone prune branch gained an arm. Each of the three fixes was
+mutated on a scratch copy and its arm went red. (4) ADR-011's hypothetical C
+log reason now names the real line.
+Not done: the roots-map common-mode item stays open in `ROADMAP.md`, noted
+there as only partly feasible.
+
 ## 2026-10-03 (late) - MAIN provenance adjudicated: the outbox byte hash stays (ADR-011)
 
 DECISION RECORDED, NO CODE CHANGE. FLEET-KIT v4 item (3) asked whether the
