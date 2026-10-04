@@ -12,6 +12,219 @@ now.
 
 ---
 
+## 2026-10-04 - cloud run: by-when route, reconcile_ledger, artifact scoring (ADR-012), ADR-013, hermeticity fixes, four rows closed by measurement
+
+Sits on PR #1, branch claude/new-session-19dmsr, head f85d39b, PENDING THE
+LOCAL MERGE: the cloud session that built it does not merge, and this
+paperwork commit lands on that same branch, so main carries none of it until
+the local session merges the PR. Every figure below is a Linux, Python
+3.11.15 reading from a fresh public clone; nothing was measured on Windows or
+on 3.14. One orchestrated run: each ROADMAP row was gap-analysed first, built
+TDD-first in an isolated worktree, refuted by independent agents with
+distinct lenses, and amended until no refutation stood. Shas are branch shas;
+the proving pointers are merged files and test names.
+
+WHAT LANDED, in branch order.
+(1) ce64007 - the Chronicled remainder. Two socket-level arms in
+`agents/pity_engine/tests/test_service.py`:
+`test_live_chronicled_forecast_is_byte_identical_to_the_library_call` and
+`test_live_bogus_banner_returns_400_without_raw_exception`. Measured at a
+discriminating state (pity 89, budget 1: chronicled 0.5, character 0.52106,
+standard 1.0); requesting "standard" instead reds the byte comparison, and
+the bogus arm posting a valid banner reds. Engine suite 80 -> 82.
+(2) 715caf0 and 5739a89 - the shell lib. Five files under `shell/test/` (57
+arms over endpoint, state, geometry, window and supervisor degraded paths);
+five lib mutants each red exactly the named test; node --test 52 -> 109 ->
+110. The adjudicated fix shrinks `isLoopback` in `shell/lib/endpoint.js` to
+127.0.0.1 and localhost, because `surface/server.py` binds AF_INET only: a
+bare ::1 built an invalid URL into an un-caught promise and [::1] misreported
+as "port held". Bracketing was rejected. D2, D3 and D4 are recorded under
+Known gaps, not fixed.
+(3) 389506a - hook-test hermeticity. `_run_sh` in
+`tests/test_hook_interpreter.py` scrubs an ambient PYTHON and
+RESIN_SKIP_PREPUSH; with PYTHON exported, the pre-push arms had run the real
+full suite recursively (11 nested pytest processes observed). Pinned by
+`test_an_ambient_python_never_reaches_the_selector_under_test` and two
+siblings. Residual recorded: on a host whose sh is bash, an exported shell
+function can shadow the stubbed PATH.
+(4) e7f1982 and 6587582 - Enka and objectives coverage, then the fix the arms
+exposed. 62 arms proven missing by a coverage matrix
+(`tests/test_ingest_mapper.py` 30 -> 50, `tests/test_ingest_client.py` 35 ->
+59 plus the opt-in skip, `tests/test_engines_objectives.py` 42 -> 60); a
+scope refuter cut ten pins of undocumented defaults before landing. The fix:
+`fold_talent_levels` in `ingest/enka_mapper.py` fired its opt-in positional
+fallback after a direct hit, bonusing one skill twice and laundering two
+unresolved bonuses; it now fires only when nothing was placed directly and
+the nonzero maps are the same length, the docstring's own contract. The
+default-off path is byte-identical before and after on a 22-input table.
+(5) 1020fb0 - liveness arms. Five argv-shape arms in
+`tests/test_task_liveness.py` take a lookup stub (the file's own precedent)
+instead of needing a PowerShell binary they never run;
+`test_the_lookup_stub_is_load_bearing_for_the_argv_arms` proves the stub is
+what puts the sentinel in argv[0]. `ops/check_task_liveness.py` is
+byte-identical. The full suite went from 5 host failures to 0 here, and CI no
+longer rests on the runner image shipping pwsh.
+(6) b1ead74 - citation guard part (1).
+`test_the_bare_path_sweep_walked_a_real_corpus` in
+`tests/test_docs_consistency.py` gains a per-suffix non-vacuity floor: one
+independent probe per declared suffix, and the probe's finds minus the
+extractor's finds must be empty. Of the 1820 four-branch subsets of the 16
+declared branches (the row's "13" matched no committed state), 4 survived the
+old floor and 0 survive the new. Refuted once - the probe lookahead admitted
+a slash, so a dir-dot-json over file-dot-py token false-redded - and fixed;
+the re-check's formal argument plus a 946,000-case fuzz found no over-see.
+(7) ebf2942 - `reconcile_ledger` in `headless/jobs.py`, between
+`reconcile_state` and `persist_state`, default-off. Reads the operator-typed,
+gitignored data/income_observations.json (schema_version 1: id, at,
+currency, delta, note; an `observations_path` option overrides), validates
+every row before appending any, rebuilds per pass for idempotency with an
+in-pass double-call guard, re-estimates the velocity; `persist_state` now
+depends on it. The dry-run output changed by one SKIP line and the job count
+only, and both runtime dirs stayed empty (builder and refuter). 45 arms in
+`tests/test_headless_reconcile_ledger.py`; mutants red for a partial fold, a
+dry run that appends, the guard off, and velocity not re-estimated. The
+whole-tree conflation census in `tests/test_task_state_claims.py` moved 76
+-> 107 (31 new Python lines naming a `state` attribute) and was re-measured
+at the seam.
+(8) 40a4b31 - POST /by-when. New `agents/pity_engine/timeline.py`
+(`BannerWindow`, `WindowOutcome`, `ByWhenResult`, `by_when`) and one new
+branch in `agents/pity_engine/__main__.py`, zero lines removed. The caller
+supplies the schedule; no calendar, banner name, date or duration lives in
+the tree (test dates are 2099 and 2100). Proven by
+`agents/pity_engine/tests/test_timeline.py` -
+`test_the_end_date_is_inclusive`, `test_accrual_is_floored_not_rounded`,
+`test_a_flat_curve_breaks_the_tie_on_the_earliest_eligible_day` - and
+`agents/pity_engine/tests/test_service_by_when.py`. ENGINE_VERSION stays
+0.1.0: a 23-case golden diff of every existing `/health`, `/forecast`, 400
+and 404 body is empty, by two independent scripts. Mutants: exclusive end 7
+red; overlap check off 3; unreachable raises 10; strict date dropped 5;
+latest-day tie-break 3; round for floor 3; `end <= as_of` 2; overflow guard
+off 1. Refuted once (three one-token mutants survived) and amended with four
+pins and a finiteness guard.
+(9) f23ad34 - `engines/artifact_score.py` with
+`docs/adr/ADR-012-artifact-scoring-model.md` (Status Proposed; operator
+confirmation pending). A weighted substat sum over caller-supplied weights,
+roll counts over caller-supplied magnitudes as floor((value + tolerance) /
+magnitude), a deterministic rank key; every numeral in the module is 0.0, no
+string literal, no I/O import, and an AST arm pins that. 20 arms in
+`tests/test_engines_artifact_score.py`, among them
+`test_both_weights_at_one_return_the_sum`. Refuted twice and amended three
+times: NaN in any sort-key field and a non-finite quotient are refused by
+name; the ADR states fold start, check order, absent-key validation,
+main-stat handling and the signed-zero tie rule; the roll example uses an
+opaque hand-built artifact with a magnitude labelled arbitrary in-sentence.
+(10) ebf89d4 - `docs/adr/ADR-013-roots-map-identity-anchor.md`, Status
+Proposed, design only, no code. Target: an untracked random beacon in MAIN's
+outbox, pinned here by digest, read only when a MAIN note is queued and after
+the byte match, no git. Rejected: any tracked digest of a URL, path or commit
+id, a confirmation oracle in a public clone; quorum with the kit's
+`verify_main` recorded as settled by ADR-011. Proven by the four ADR guards
+in `tests/test_docs_consistency.py`: `test_every_adr_file_appears_in_the_index`,
+`test_adr_numbers_are_unique_and_contiguous`,
+`test_every_adr_declares_a_status` and
+`test_every_path_the_docs_directory_points_at_is_tracked_by_git`. A hygiene
+refuter found no URL, hash, row value, sibling name or machine path after
+three rewordings. Five operator asks are listed in the ADR.
+(11) f85d39b - the merger: ADR index rows 012 and 013, README tree rows for
+`agents/pity_engine/timeline.py`, `engines/artifact_score.py` and
+`shell/test/`, the `agents/pity_engine/CHANGELOG.md` service section for
+POST /by-when (no revision bump), seven-job wording across `README.md` and
+`docs/OVERVIEW.md`, and the census constant re-measured at the seam (107,
+unchanged).
+
+CLOSED BY MEASUREMENT, NO CODE, each reproduced cold by a second agent.
+"THREE SILENT OVER-EXCLUSIONS IN core/repo_sweep.py": the prefix mutant reds
+`test_the_foreign_name_rule_is_exact_and_never_a_prefix_or_a_substring` in
+`tests/test_guard_worktree_exclusion.py` with 40 collateral names; the
+name-contains-marker mutant reds 9 arms across 5 modules (47ac112 said six;
+the sixth now derives its corpus from git ls-files and does not red); the
+literal-union mutant reds 2 arms in `tests/test_walkprune.py`. "A HAND-LIST
+OF DERIVING SITES": a staged fifth importer of `core/walkprune.py` reds
+`test_no_unregistered_module_imports_the_owner` naming the path; untracked
+it is invisible by design. "TWO TEST-INSTRUMENT GAPS", the open half:
+439bcc2 added the message lane to `tools/gate_mutation_runner.py`; its two
+recorded survivors are in MESSAGE_MUTANTS, KNOWN_MESSAGE_SURVIVORS is empty,
+17 kill instances pinned; `tests/test_gate_mutation_runner.py` read 87
+passed, re-measured by this ritual. Scope: the lane grades the -F path, the
+editor flow is graded in `tests/test_hook_gate.py`. "Prove the git hook gate
+FIRES, in CI": the ci.yml step "git hook gate armed and firing" runs
+`tests/test_hook_gate.py` under RSC_REQUIRE_HOOK_GATE=1 and covers both
+directions (staged glyph refused with HEAD unchanged; message glyph refused;
+clean commit lands with HEAD advanced); 60 passed, 0 skipped under the flag.
+
+ADJUDICATED (decision; why), one line each.
+- by-when as a new module and route, over fields on /forecast (edits the one
+  function every service test exercises) or a dashboard computation (outside
+  the engine's versioning); inclusive ends, overlap 400, closed window 400,
+  as_of required and strict, confidence 0.9, floor of the float product,
+  unreachable is a 200 with reachable=false; no ENGINE_VERSION bump because
+  no returned number changed.
+- reconcile_ledger reads a hand-authored file under RC_DATA_DIR with an
+  options override, over a CLI flag (runner changes behind AST guards) or a
+  tracked fixture (licence surface); rebuild-per-pass over a watermark
+  (lane-read state the AST guard forbids); `.json` not `.jsonl` because the
+  provenance sweep grades every `.jsonl` under data/ as a receipted row.
+- artifact scoring is a weighted sum with roll-count optional and rank
+  sort-only, over roll-count alone (nothing without unverifiable magnitudes)
+  or percentile-vs-reference; weights required, weight 0.0 is weighted,
+  unknown keys ignored but validated, NaN refused, signed zero equal; Status
+  Proposed because the operator asked for local confirmation.
+- roots map: a2 (untracked random beacon pinned by digest) as target, d
+  (status quo plus a session-start ritual) interim, b2 (tracked digest of the
+  gitignored map) runner-up, lost on hygiene - a tracked oracle in a public
+  repo is permanent and gate-invisible; c settled by ADR-011.
+- shell: fix D1 only; D2 is the safer side of an asymmetry, D3 is
+  unreachable from main.js, D4's root cause spans state.isBounds.
+- mapper: FIX the positional-fallback double bonus (the docstring is the
+  contract; the fix returns more unresolved, never a guess); RECORD the
+  weapon missing-level default (1 against the character's 0, contract silent)
+  and the swallowed unreadable bonus (surfacing it moves SPEC 5.1 text).
+- liveness: stub the lookup in the five argv arms, over planting a fake pwsh
+  (a bypass in spirit; the tree already recorded a CI incident of that shape)
+  or leaving the push blocked; the SKIP LIST's "check_task_liveness" was read
+  as the ritual, not its unit tests.
+- commit identity: the environment injects the repository's own author
+  identity; signing was turned off for this clone so the branch matches the
+  unsigned history, rather than re-authoring under an identity no commit here
+  carries.
+- baseline: taken with the ambient PYTHON unset after the recursion was
+  found, and recorded as such.
+
+REFUTED AND AMENDED. by-when: three one-token mutants survived -> four pins
+and a finiteness guard. Artifact scoring: ADR under-specification, a "no
+number ships" over-claim, a NaN rank-order leak and a floor overflow -> three
+amends, licence re-check CLEARED. Citation floor: the lookahead admitted a
+slash -> fixed, re-check NOT REFUTED. Hook hermeticity: the claim wording ->
+both asks implemented. Enka arms: ten pins of undocumented defaults -> cut.
+Endpoint fix: one stale comment reference -> corrected, behaviour held. The
+operator's SKIP LIST held: no responder, scheduled task, live fire, inbox,
+worktree housekeeping, PowerShell 5.1 or network act was attempted, and
+citation guard parts (2) to (4) were not touched.
+
+SEAM FIGURES, 2026-10-04, Python 3.11.15, Linux. Builder gate on f85d39b:
+tests 4052 passed 38 skipped 0 failed; engine 191 passed; ruff clean; mypy 42
+source files (base 40); node --test 110 pass; headless dry run rc 0, 0 pass 0
+fail 7 skip; `tests/test_hook_gate.py` 60 passed 0 skipped under
+RSC_REQUIRE_HOOK_GATE=1. Baseline at 3fc4f81 on the same host: tests 5 failed
+(host-only, no PowerShell) 3908 passed 38 skipped; engine 80; mypy 40; node
+52; dry run 6 skip. CI: the single job "lint, types, dual suite, headless
+smoke" passed on 1020fb0 (run 37187295913), 40a4b31 (run 37187819688) and
+f85d39b (run 37189991580); the docs-guards workflow passed on f85d39b (run
+37189991592). THIS PAPERWORK'S OWN GATE, same host, 2026-10-04, over the tree
+carrying these three edits: `python -m pytest tests` -> 4052 passed, 38
+skipped, 0 failed (121.89 s); `python -m pytest agents/pity_engine` -> 191
+passed (9.06 s); ruff clean; mypy 42 source files;
+`tests/test_docs_consistency.py` 42 passed; `tests/test_licence_posture.py` 52
+passed; `tests/test_no_sibling_names.py` with `tests/test_machine_identity.py`
+75 passed; `tests/test_task_state_claims.py` with `tests/test_readme_tree.py`
+and `tests/test_ci_workflow_complement.py` 95 passed;
+`tests/test_gate_mutation_runner.py` 87 passed; glyph gates selected=236
+scanned=235 exempt=1 over tracked non-md files and selected=56 scanned=56 over
+tracked md; the hand-off cleared the publisher's own extractor - size floor,
+ASCII rule, leak scan - with no leak (the publisher's --check itself refuses
+inside a linked worktree, which is its contract, not a finding). The headless
+dry run re-read 0 pass 0 fail 7 skip.
+
 ## 2026-10-03 (night) - two recorded gaps closed: the editor --cleanup= hole and the orphan runner .tmp
 
 Merged as db634b1 (branches ending ed2f4a0/ba8aaa0 and b982c90/ada50f9).

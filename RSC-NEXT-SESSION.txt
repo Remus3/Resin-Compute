@@ -1,7 +1,18 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-03 (night), gates measured at commit eee73c3 on main by the
-/done ritual; this paperwork commit landed after it. Everything below is a
-READING taken that day, not a promise about now. Re-measure before citing.
+Stamped 2026-10-04, gates measured at f85d39b on branch
+claude/new-session-19dmsr (PR #1) by the /done ritual in a Linux cloud clone;
+this paperwork commit landed after it ON THAT BRANCH, not on main. Everything
+below is a READING taken that day on Linux, Python 3.11.15 - not a promise
+about now, and not a Windows or Python 3.14 figure. Re-measure before citing.
+
+FIRST NEXT ACTION
+  Merge PR #1 (branch claude/new-session-19dmsr; head is the paperwork
+  commit on top of f85d39b) LOCALLY, then apply nothing further: the
+  ROADMAP, LEDGER and hand-off deltas for the run are already in it. CI was
+  green on 1020fb0, 40a4b31 and f85d39b (ci runs 37187295913, 37187819688,
+  37189991580; docs-guards 37189991592). After the merge run
+  python tools/publish_next_session.py from the canonical checkout so the
+  Desktop shortcut converges on this file.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -12,7 +23,8 @@ BOOTSTRAP - READ IN THIS ORDER
   git log --oneline -10
 Before planning any character build: docs/GOAL_SPEC_SEED_TEAM.md.
 Before adding any data source: docs/LICENSE_NOTES.md.
-Before re-litigating a past choice: docs/adr/README.md (ADR-011 is new).
+Before re-litigating a past choice: docs/adr/README.md (ADR-012 and ADR-013
+are new, both Proposed, neither accepted).
 CLAUDE.md's pre-condense text is verbatim in docs/claude-md-history.md.
 
 DO NOT RE-DERIVE GACHA CONSTANTS from memory or from a web search. They are
@@ -41,70 +53,112 @@ Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
 shared pytest temp dir: pass a private --basetemp whose PARENT EXISTS and
 which sits OUTSIDE the repo. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
-shell for a full-suite run: it causes 3 false failures.
+shell for a full-suite run: it causes 3 false failures. AMBIENT-PYTHON
+HAZARD: run pytest with PYTHON unset, or on a tree carrying 389506a - with
+PYTHON exported, the older tests/test_hook_interpreter.py ran the real full
+suite recursively from its pre-push arms (11 nested pytest processes
+measured, an unbounded hang).
 
-STATE OBSERVED 2026-10-03 AT eee73c3 (the /done gate run)
-  tests 3945 passed 5 skipped 1 failed - the failure was this ritual's own
-  ledger edit (a dead backticked pointer), fixed and re-run: docs_consistency
-  plus guard_worktree_exclusion 56 passed; pity_engine 80; node --test exit 0;
-  licence 52; docs 42; qa 17 passed 2 skipped 3 noted; ruff clean; mypy 40
-  source files clean; dry run rc 0 (0 pass 0 fail 6 skip); kit v4
-  conformance []. All Python 3.14.
-  Five skips, all host reasons: no exec bit on Windows
-  (test_gate_mutation_runner), live fetch opt-in (test_ingest_client),
-  bare python is 3.14 (test_interpreter_pinning), POSIX half
-  (test_responder_no_console_window), denied dir still lists
-  (test_session_hooks). A worktree shows MORE skips (no POSIX sh on PATH) -
-  that is the location trap, not a regression.
-  CI ci and docs-guards both GREEN on eee73c3 (runs 37169427234 and
-  37169427223). The paperwork commit after it is docs-only.
-  Live status file read back 2026-10-03T20:46 under the new code: state
-  limit, Turn Limit Reached, runs 3 of 3 (MAIN reply cap), window_s 86400
-  (int), cap_frees_at 23:11 local. The responder ticks every 5 min.
-  Notes to MAIN read back at the recipient by sha256: RSC 1540 (kit v5 gap
-  list) 1b3590c4..., RSC 1657 (ANSWER to MAIN 1325 with live sample)
-  ee9dcadc.... Both 2/2. No reply owed by MAIN.
+STATE OBSERVED 2026-10-04 AT f85d39b (Linux, Python 3.11.15, PYTHON unset)
+  The run's own gate on f85d39b: tests 4052 passed 38 skipped 0 failed;
+  pity_engine 191; node --test 110 pass 0 fail; qa 15 passed 4 skipped 3
+  noted; ruff clean; mypy 42 source files; dry run rc 0 (0 pass 0 fail 7
+  skip - two for no uid, four for no reconciled state in the pass,
+  emit_health for the dry run); glyph gates source selected 236 scanned 235
+  exempt 1, docs 56; tests/test_hook_gate.py 60 passed 0 skipped under
+  RSC_REQUIRE_HOOK_GATE=1. CI green on f85d39b (both workflows).
+  THIS RITUAL'S OWN READING over the paperwork commit: tests 4052 passed, 38
+  skipped, 0 failed (121.89 s); pity_engine 191 passed (9.06 s); ruff clean;
+  mypy 42 source files; docs guards 42 + 52 + 75 + 95 passed; glyph gates
+  236/235/1 and 56/56; dry run 0 pass 0 fail 7 skip; this file cleared the
+  publisher's extractor with no leak.
+  The 38 skips are host or opt-in reasons (-rs lists them). A Windows
+  reading of this tree is NOT on file: the last one is 2026-10-03 at eee73c3
+  (3945 passed 5 skipped, Python 3.14). A worktree shows MORE skips (no
+  POSIX sh on PATH) - that is the location trap, not a regression.
+  Baseline at 3fc4f81 on the same Linux host: tests 5 failed (all in
+  tests/test_task_liveness.py - no PowerShell on the host) 3908 passed 38
+  skipped; 1020fb0 took those five to 0 with ops/check_task_liveness.py
+  byte-identical.
+  Live status file, notes to MAIN, responder: NOT touched this run (the
+  inbox does not exist in the clone; nothing was fired). The 2026-10-03
+  readings stand: RSC 1540 and RSC 1657 read back 2/2 by sha256, no reply
+  owed by MAIN.
 
-OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
+OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now and Known gaps
+  0. Merge PR #1 locally (see FIRST NEXT ACTION).
   1. RENEW THE RESPONDER BEFORE 2026-11-01T22:56 LOCAL - unchanged. Re-run
      ops/install_responder_task.ps1, fresh gitignored agreement record, then
      ops/check_task_liveness.py must exit 0.
-  2. Known gaps recorded, not fixed: a forged scheduledtask log label during
-     a real fire is still excused by the drift check (conftest.py); a test
-     child's failclosed line is excused inside a live fire (pre-existing,
-     widened by the new fail-closed:provenance-deferred-* lines); the live
-     child reported only Read, not Grep/Glob, cause unconfirmed; dontAsk was
-     never exercised live.
-  3. Roots-map common-mode risk (ROADMAP "TEST THE ROOTS-MAP"): both MAIN
-     provenance checks trust the same roots row; only partly testable; needs
-     its own adjudication before code (git calls were rejected by ADR-011).
-  4. Commit-msg gate known FALSE BLOCKS, each worked around with
+  2. OPERATOR ASKS FROM THE 2026-10-04 RUN, each confirm-or-override:
+     (a) docs/adr/ADR-012-artifact-scoring-model.md: Proposed -> Accepted
+     (edit the Status line and the index row only), or override the model.
+     (b) docs/adr/ADR-013-roots-map-identity-anchor.md: rule on its five
+     asks - permission to arrange a beacon with MAIN under halt clause (c);
+     no tracked digest of a URL, path or commit id, ever; tick-time gate
+     plus a session-time arm; whether an untracked per-host map pin is
+     wanted as a stopgap; numbering. Code waits on the first two.
+     (c) Mapper contract (ingest/enka_mapper.py): the missing-level default
+     - a weapon reads 1, a character reads 0, recommended 0 = unknown for
+     both - and whether an unreadable bonus value should surface (SPEC 5.1
+     wording; today it is a no-op). Reproducers under ROADMAP Known gaps.
+     (d) Shell D2, D3, D4 (whitespace HOST refused while whitespace PORT
+     falls back; a string port dropped by spawnArgv; a negative size
+     accepted by isRect and isBounds): fix or accept. Reproducers under
+     ROADMAP Known gaps.
+  3. Known gaps recorded, not fixed (carried): a forged scheduledtask log
+     label during a real fire is still excused by the drift check
+     (conftest.py); a test child's failclosed line is excused inside a live
+     fire (pre-existing, widened by the fail-closed:provenance-deferred-*
+     lines); the live child reported only Read, not Grep/Glob, cause
+     unconfirmed; dontAsk was never exercised live. NEW 2026-10-04: the
+     positive branch of _powershell_executable has no hermetic arm on any
+     host; on a host whose sh is bash an exported shell function can shadow
+     the stubbed PATH in the hook arms; surface/server.py maps every bind
+     OSError to exit 2 "port held", so an unbindable host misreports.
+  4. Roots-map common-mode risk: DESIGNED 2026-10-04 as ADR-013 (Proposed,
+     not accepted). Was: both MAIN provenance checks trust the same roots
+     row; only partly testable; git calls were rejected by ADR-011. Code
+     waits on item 2(b).
+  5. Commit-msg gate known FALSE BLOCKS, each worked around with
      git commit -F <file>: a localised git; an editor commit with
      --no-status or commit.status=false after a merge conflict on a
      non-ASCII path (adjudicated KEEP fail-closed, pinned BLOCKED in
      tests/test_hook_gate.py); git commit -v scanning below the scissors
      line (predates, reasoned not measured). RESIDUAL under-block: -F/-m
      with commit.cleanup=strip configured plus an explicit keeping flag.
-  5. Orphan-temp sweep notes (round 2 NOT REFUTED): halt clause (a) also
+  6. Orphan-temp sweep notes (round 2 NOT REFUTED): halt clause (a) also
      covers WRITES - with RESINCOMPUTE_RUNTIME_DIR or RC_DATA_DIR pointing
      outside the repo the health file and other atomic writes still land
      there (predates); a dir swapped for a junction between root check and
      sweep is not caught.
-  6. Prov-defer notes, not defects: a deleted-then-redropped MAIN note gets a
+  7. Prov-defer notes, not defects: a deleted-then-redropped MAIN note gets a
      fresh first_seen (each hold still bounded at 900 s); entries for notes
      that leave the candidates unanswered stay until pruned at 24 h; a
      scheduled tick and a manual --once can lose one record update (no lock).
-  7. /120 counter notes, not defects: the MAIN-replies printability check
+  8. /120 counter notes, not defects: the MAIN-replies printability check
      is unreachable; an idle status over a non-oldest epoch-ms row reads
      120/120 while reserve_run still counts it as one; a one-off kit read
      error with the responder ledger full reads Backing Off, not the limit.
-  8. Inbox: about 411 files unread by the watcher; nothing new after SS 1348
-     except this tree's own 1540 and 1657. SS 1348 bucketed ingested,
-     nothing owed. The watermark was NOT marked (python
-     scripts/watch_inbox.py --mark only after a real triage).
-  9. Housekeeping: about 27 agent worktrees under .claude/worktrees, most
-     from earlier sessions. Check each branch is merged before removing;
-     the scratchpad ruling allows deleting this session's freely.
+  9. Inbox: about 411 files unread by the watcher as of 2026-10-03; nothing
+     new after SS 1348 except this tree's own 1540 and 1657. SS 1348
+     bucketed ingested, nothing owed. NOT re-read this run (the clone has no
+     inbox). The watermark was NOT marked (python scripts/watch_inbox.py
+     --mark only after a real triage).
+ 10. Housekeeping: about 27 agent worktrees under .claude/worktrees on the
+     Windows checkout, most from earlier sessions; this cloud run added none
+     there. Check each branch is merged before removing; the scratchpad
+     ruling allows deleting this session's freely.
+ 11. Residuals recorded this run, not defects: a resin READING is a balance
+     not a delta - a balance row kind (schema_version 2) in
+     data/income_observations.json would settle the resin-panel gap;
+     reconcile_ledger accepts schema_version 1.0 as a float and its override
+     path has no containment check; a corrupt observations file leaves
+     persist_state writing an empty ledger beside one FAIL (ruled); 11
+     declared citation suffixes have no corpus hit and KNOWN_SUFFIXES is
+     unpinned (citation guard part (2)); the by-when accrual is the floor of
+     a float product, so 0.29 per day over 100 days yields 28 where exact
+     decimal arithmetic gives 29 (ruled, recorded).
   DO NOT REDO: v3/v4 vendoring and provenance (reversed only by a new MAIN
   FLEET-KIT-vN note); the CLAUDE.md condense (reversed only by a MAIN kit
   change); Bash removed from the responder child floor (reversed only by a
@@ -115,7 +169,21 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
   death and never unlinked); ADR-011 outbox-hash provenance (reversed by a
   verified MAIN note ordering verify_main for runtime notes, or a measured
   hash-match MAIN never committed that mattered); the firedetail log label
-  (reversed only by a drift-check redesign that ends fires on terminals).
+  (reversed only by a drift-check redesign that ends fires on terminals);
+  the by-when design - a new timeline module and POST /by-when over a
+  caller-supplied schedule, inclusive ends, floor of the float product, no
+  ENGINE_VERSION bump (reversed only by a consumer needing a non-floor
+  accrual or by a calendar SOURCE ruling); the reconcile_ledger file
+  contract - gitignored data/income_observations.json, schema_version 1
+  signed deltas, rebuild per pass, .json not .jsonl (reversed by a
+  schema_version 2 balance row kind); ADR-012's model - weighted substat sum
+  over caller-supplied tables, no number ships (reversed by the operator's
+  override); the liveness stub - the five argv arms stub the PowerShell
+  lookup (reversed only by a positive-branch arm plus a Windows
+  measurement); the IPv6 loopback refusal in shell/lib/endpoint.js (reversed
+  only by the surface gaining an AF_INET6 bind under its own ADR); ADR-013's
+  hygiene ruling - no tracked digest of a URL, path or commit id (reversed
+  only by the operator's answer to its ask 2).
 
 TRAPS MEASURED - none are hypothetical
   A MID-FIRE LOG LINE UNDER THE FIRE'S OWN LABEL COLLAPSES THE DRIFT WINDOW.
@@ -164,6 +232,26 @@ TRAPS MEASURED - none are hypothetical
 
   NEVER write the account identity, the proxy address, its port or any machine
   path into a tracked file. Say "second account" and "local proxy".
+
+  AN AMBIENT PYTHON RECURSES THE PRE-PUSH TEST ARMS. With PYTHON exported,
+  the hook interpreter arms before 389506a ran the real full suite from
+  inside pytest - 11 nested pytest processes, measured 2026-10-04. Unset it,
+  or carry 389506a; a killed or timed-out run is NO RESULT.
+
+  A SAME-LENGTH MUTANT CAN RUN AGAINST A STALE .pyc. The bytecode cache
+  is keyed on source mtime and size, so a one-token edit of equal length
+  inside the mtime granularity is served the OLD bytecode and the mutant
+  reads green. Run mutation proofs under a fresh PYTHONPYCACHEPREFIX.
+
+  THE WHOLE-TREE CONFLATION CENSUS MOVES WHEN A .py LINE NAMES A state
+  ATTRIBUTE. tests/test_task_state_claims.py pins the count of tracked .py
+  and .ps1 lines the folded needle sees and the exact one does not (107 at
+  f85d39b, up from 76 after reconcile_ledger). Re-measure at the seam and
+  set the constant and its two comments together; emitters stay 0.
+
+  A ROADMAP ROW CAN BE STALE AT CLOSE TIME TOO. Four rows closed with no
+  code this run because the arms already existed. Gap-analyse before
+  building; "already done, closed by measurement" is a valid outcome.
 
 STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   FLEET-COMMON (embedded in CLAUDE.md) governs: sub-agent first, quiet chat,
