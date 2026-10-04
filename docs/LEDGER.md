@@ -39,9 +39,17 @@ the root conftest's `_live_fire_windows` ends a scheduled fire at the next
 line under that label, so the window collapsed to [start, start] and the live
 session's later writes read as a leak (false drift in the armed checkout).
 Same hazard, pre-existing, in `provenance_for`'s unverifiable-class line and
-`deliver`'s three skip/fail lines: all now go through `_log_fire_detail`, held
-until the fire's terminal line is written, keeping the one label and their own
-stamps. The `fail-closed:provenance-deferred-*` lines carry `failclosed`,
+`deliver`'s three skip/fail lines: all now go through `_log_fire_detail`. The
+first fix, 3a75d47, held them in memory until the terminal line; a round-2
+adversary REFUTED it: a hard kill during the spawn lost them, a regression
+from db634b1 where the unverifiable-class line reached the log first.
+Adjudicated and landed in the next commit: each detail line is written AT
+ONCE under the label `firedetail` (`FIRE_DETAIL_SOURCE`), the caller's label
+carried as `<caller>:<outcome>`, and the root `conftest.py` lists
+`firedetail` in `_LIVE_WRITER_SOURCES` only, so it opens and closes no
+window. A child-interpreter arm kills the spawn with `os._exit` and finds both
+detail lines in the log; against the 3a75d47 module the same child found
+neither. The `fail-closed:provenance-deferred-*` lines carry `failclosed`,
 which opens and closes no window; pinned. (2) `provenance-deferred` joined
 `TERMINATIONS`. (3) A released entry is pruned 24 h after `first_seen`
 (`DEFER_PRUNE_AGE_S`), so never-answered notes cannot fill the 64 slots; the

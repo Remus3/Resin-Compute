@@ -1606,3 +1606,93 @@ def test_an_entry_whose_inbox_file_is_gone_is_pruned(rsp, tmp_path):
     kept = _deferred_doc(rsp)["deferred"]
     assert gone not in kept, kept
     assert present in kept and MAIN_NOTE in kept, kept
+
+
+# ---------------------------------------------------------------------------
+# Refutation round on 3a75d47: detail lines held in memory were lost on a hard
+# kill during the spawn. Ruled: write each one at once, under `firedetail`.
+# ---------------------------------------------------------------------------
+
+#: The child: loads the module at argv[1], redirects every `DEFAULT_` Path under
+#: argv[2] exactly as the fixture does, and runs `DEFER_CHECKS` scheduled fires
+#: whose LAST spawn is a hard `os._exit` - no finally, no flush, no handler.
+_KILL_CHILD = r'''
+import importlib.util, json, os, sys, time
+from pathlib import Path
+module, tmp, repo = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+sys.path.insert(0, repo)
+spec = importlib.util.spec_from_file_location("rsp_kill_child", module)
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+for n in [n for n in dir(m) if n.startswith("DEFAULT_")]:
+    v = getattr(m, n)
+    if isinstance(v, Path):
+        setattr(m, n, tmp / "isolated" / n.lower() / v.name)
+m.DEFAULT_CONFIRMATION.parent.mkdir(parents=True, exist_ok=True)
+m.DEFAULT_CONFIRMATION.write_text(json.dumps(
+    {"confirmed_by": "MAIN", "note": "agreed.md", "expires": 9_999_999_999}))
+inbox = tmp / "inbox"
+inbox.mkdir(parents=True)
+(inbox / sys.argv[4]).write_bytes(b"# From MAIN\n\nTO RSC.\nReply.\n")
+main = tmp / "main"
+(main / "moon_sync_inbox").mkdir(parents=True)
+(main / "moon_sync_outbox").write_bytes(b"not a directory")
+checks = int(sys.argv[5])
+base = time.time() - 7200
+def die(*a, **k):
+    os._exit(3)
+for k in range(checks):
+    m.run_once(inbox=inbox, roots={"MAIN": main}, bounds=m.Bounds(armed=True),
+               spawn=die if k == checks - 1 else (lambda *a, **k: "unused"),
+               now=base + k * 240, source=m.SOURCE_SCHEDULED_TASK)
+print("NOT KILLED")
+'''
+
+
+def _killed_run(module: Path, tmp_path: Path) -> tuple[int, str]:
+    """(exit code, invocation log) of the child above. A CHILD, so the kill is real."""
+    import os
+    import subprocess
+    import sys
+
+    child = tmp_path / "kill_child.py"
+    child.write_bytes(_KILL_CHILD.encode("ascii"))
+    env = {**os.environ, "RESINCOMPUTE_RUNTIME_DIR": str(tmp_path / "child_runtime")}
+    done = subprocess.run(
+        [sys.executable, "-B", str(child), str(module), str(tmp_path), str(ROOT),
+         MAIN_NOTE, str(DEFER_CHECKS)],
+        env=env, capture_output=True, timeout=120,
+    )
+    log = tmp_path / "isolated" / "default_invocations" / "responder_invocations.log"
+    return done.returncode, log.read_text(encoding="ascii") if log.is_file() else ""
+
+
+def test_a_detail_line_survives_a_hard_kill_during_the_spawn(rsp, tmp_path):
+    code, log = _killed_run(MODULE, tmp_path)
+
+    assert code == 3, (code, log)
+    assert "NOT KILLED" not in log
+    lines = [ln.split("\t") for ln in log.splitlines()]
+    detail = [p for p in lines if len(p) == 4 and p[1] == rsp.FIRE_DETAIL_SOURCE]
+    outcomes = [p[3] for p in detail]
+    assert f"{rsp.SOURCE_SCHEDULED_TASK}:provenance-deferred-expired-NotADirectoryError" in outcomes, log
+    assert any(o.startswith(f"{rsp.SOURCE_SCHEDULED_TASK}:provenance-unverifiable-") for o in outcomes), log
+    fire = [p[3] for p in lines if len(p) == 4 and p[1] == rsp.SOURCE_SCHEDULED_TASK]
+    assert fire[-1] == "start", f"non-vacuity: the last fire was not killed mid-fire: {fire}"
+
+
+def test_the_detail_label_is_a_live_writer_that_opens_and_closes_no_window(rsp):
+    import conftest
+
+    assert rsp.FIRE_DETAIL_SOURCE in conftest._LIVE_WRITER_SOURCES
+    assert rsp.FIRE_DETAIL_SOURCE not in conftest._LIVE_FIRE_SOURCES
+    stamp = "2026-10-03T10:00:00"
+    later = "2026-10-03T10:01:00"
+    log = (
+        f"{stamp}\tscheduledtask\t-\tstart\n"
+        f"{stamp}\t{rsp.FIRE_DETAIL_SOURCE}\tn.md\tscheduledtask:provenance-deferred-held\n"
+        f"{later}\tscheduledtask\tn.md\tprovenance-deferred\n"
+    )
+    at = [time.mktime(time.strptime(s, "%Y-%m-%dT%H:%M:%S")) for s in (stamp, later)]
+
+    assert conftest._live_fire_windows(log, time.time()) == [(at[0], at[1])]
