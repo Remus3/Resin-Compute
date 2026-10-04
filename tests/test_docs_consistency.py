@@ -1213,25 +1213,61 @@ def test_every_bare_path_citation_in_plain_text_prose_resolves():
 
 
 def test_the_bare_path_sweep_walked_a_real_corpus():
-    """Non-vacuity, four ways, because one total floor was not enough.
+    """Non-vacuity, six ways, because one total floor was not enough and one
+    class-count floor was not enough either.
 
     MEASURED, and this is why the single floor was replaced: an extractor
     mutated to match only `md` still yielded 14 citations and cleared a floor of
     10, and one mutated to match only `py` yielded 11 and cleared it too. A
-    mutant that deleted 11 of the 13 suffix branches SURVIVED. A total floor
-    pins "the extractor matched something", which is not the property - the
-    property is that it still matches PATHS, plural, of the several shapes the
-    corpus really contains.
+    mutant that kept a single one of the declared suffix branches SURVIVED. A
+    total floor pins "the extractor matched something", which is not the
+    property - the property is that it still matches PATHS, plural, of the
+    several shapes the corpus really contains.
 
-    So: every document contributes, the file extractor spans several distinct
-    suffix classes, and the directory extractor is not silently dead. Each
-    assertion names what went to zero, because "the extractor is broken" without
-    a class name sends the next reader back to re-measure from scratch.
+    MEASURED AGAIN, 2026-10-04, and this is why the class-count floor gained a
+    per-suffix one: `>= 4` classes is cleared by any mutant that keeps four of
+    the suffixes the corpus happens to carry. Of the 1820 four-branch subsets of
+    the 16 declared branches, exactly 4 survived every other assertion in this
+    function - {ini,md,ps1,txt}, {ini,md,py,txt}, {ini,ps1,py,txt} and
+    {md,ps1,py,txt} - because a corpus carrying five suffixes always has four to
+    spare. With the per-suffix arm in place, 0 of the 1820 survive.
+
+    THE PER-SUFFIX ORACLE. For every declared suffix an INDEPENDENT one-suffix
+    probe - no alternation - asks whether the corpus carries a path-shaped token
+    ending in it, and every suffix the probe sees must be a class the extractor
+    extracted. A branch deleted from `_BARE_PATH` cannot also delete itself from
+    the oracle, so the red names the lost branch. ONE DIRECTION ONLY, by
+    construction: the probe's trailing lookahead forbids EVERY character the
+    extractor's body `[A-Za-z0-9_./-]*` would keep consuming - letters, digits,
+    `_`, `.`, `/` and `-` - so wherever the probe ends a token the extractor ends
+    one too, and the probe can only UNDER-see: it refuses the `.` the extractor
+    allows at `foo.py.`, a sentence end. That weakens the floor on an odd corpus
+    but never reds a correct extractor. `/` IS LOAD-BEARING AND WAS MEASURED
+    MISSING: a first cut forbade only `[A-Za-z0-9_.-]`, and a refuter's corpus
+    line naming a gitignored, vouched token - so legitimate to every other arm
+    in this file - whose DIRECTORY segment ended in `.json` and whose file ended
+    in `.py` made the probe see `.json` while the extractor returned one `.py`
+    citation, and the floor redded blaming an intact branch. (The literal is
+    not written here: this module may not be the only namer of an ignored
+    path, see `test_the_voucher_exclusions_are_load_bearing`.) The floor is
+    RELATIVE TO THE CORPUS, not to the declared set:
+    measured the same day, 11 of the 16 declared suffixes have no hit in the
+    corpus, so "every declared suffix >= 1" is impossible, and a typed list of
+    present or absent suffixes would be a content pin on a hand-off that is
+    regenerated every session. Suffixes the corpus does not carry are left to
+    the synthetic probes in `test_the_bare_path_extractor_is_narrow_and_not_blind`.
+
+    So: every document contributes, the oracle itself is alive, the file
+    extractor spans several distinct suffix classes, every suffix the oracle
+    sees is one the extractor extracted, and the directory extractor is not
+    silently dead. Each assertion names what went to zero, because "the
+    extractor is broken" without a class name sends the next reader back to
+    re-measure from scratch.
     """
     corpus = _tracked_non_markdown_prose()
+    texts = {doc: _read(doc) for doc in corpus}
     per_document = {
-        doc: len(_bare_path_citations(_read(doc))) + len(_bare_directory_citations(_read(doc)))
-        for doc in corpus
+        doc: len(_bare_path_citations(text)) + len(_bare_directory_citations(text)) for doc, text in texts.items()
     }
     empty = sorted(doc for doc, count in per_document.items() if count == 0)
     assert not empty, (
@@ -1239,14 +1275,33 @@ def test_the_bare_path_sweep_walked_a_real_corpus():
         f"contributes nothing is a document the arms above cannot fail on. Counts: {per_document}"
     )
 
-    classes = sorted({_citation_suffix(p) for doc in corpus for p in _bare_path_citations(_read(doc))})
+    extracted = {_citation_suffix(p) for text in texts.values() for p in _bare_path_citations(text)}
+    classes = sorted(extracted)
+    seen: dict[str, int] = {}
+    for suffix in sorted(BARE_PATH_SUFFIXES):
+        probe = re.compile(r"[A-Za-z0-9_]" + re.escape(suffix) + r"(?![A-Za-z0-9_./-])")
+        count = sum(len(probe.findall(text)) for text in texts.values())
+        if count:
+            seen[suffix] = count
+    assert seen, (
+        f"the per-suffix probe saw no path-shaped token of any declared suffix across {corpus}, while "
+        f"the extractor extracted {classes} - either the oracle regex is dead or the corpus lost every "
+        "file citation, and either way the per-suffix floor below would be measuring nothing"
+    )
     assert len(classes) >= 4, (
-        f"the file extractor spans only {len(classes)} suffix class(es) - {classes}. The corpus "
-        "carries markdown, python, ini and json citations, so a sweep this narrow means suffix "
+        f"the file extractor spans only {len(classes)} suffix class(es) - {classes}. An independent "
+        f"per-suffix probe sees {sorted(seen)} in the corpus, so a sweep this narrow means suffix "
         "branches have been lost from the pattern, not that the documents changed"
     )
+    lost = sorted(set(seen) - extracted)
+    assert not lost, (
+        f"suffix branch(es) LOST from the bare-path pattern: {lost}. An independent one-suffix probe "
+        f"sees each of them in the corpus - tally {seen} - but the extractor returned no citation of "
+        f"that class; it extracted {classes}. One probe per suffix and no alternation, so a branch "
+        "dropped from `_BARE_PATH` cannot also drop out of this oracle"
+    )
 
-    directories = sum(len(_bare_directory_citations(_read(doc))) for doc in corpus)
+    directories = sum(len(_bare_directory_citations(text)) for text in texts.values())
     assert directories >= 1, (
         "the directory extractor found nothing - `surface/`, `engines/`, `headless/` and "
         "`ingest/` are all cited in the hand-off and all tracked, so zero means the pattern "
