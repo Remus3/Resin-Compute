@@ -11,6 +11,18 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-04. REVIEW AND MERGE THE CLOUD PR #1.** A cloud session
+  worked 9 product items against GitHub and opened ONE pull request, #1
+  (by-when forecast, ledger reconciliation, artifact scoring, two new ADRs,
+  guard hardening; 40 files). Review it, land it with a real merge commit
+  (no squash, no rebase, no force), run every gate in `.claude/commands/done.md`
+  section 1, and record each landed item in `docs/LEDGER.md`.
+
+- **NEW 2026-10-04. MAIN ORDER 0020 (kit v5 inbound): DO NOT BUILD LOCAL
+  COPIES** of the watcher, secret resolver, dashboard token palette or
+  operator task engine as fleet-shared modules. A tree-local stopgap may stay
+  but must not grow. Reversed only by a MAIN FLEET-KIT-v5 note shipping them.
+
 - **DONE 2026-10-03 (night). FLEET-KIT v4 WRAP-UP, INCLUDING THE /120
   USAGE COUNTER.** (1) DONE in d8695e7 - see the adjudicated call below,
   `tools/moon_sync_responder.py` `_status_budget` and `docs/LEDGER.md`.
