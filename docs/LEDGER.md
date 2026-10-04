@@ -12,6 +12,43 @@ now.
 
 ---
 
+## 2026-10-04 (second ritual) - /done over an empty session: the gate re-measured at 2e5a610, paperwork only
+
+A cloud session on PR #1 (branch claude/new-session-19dmsr) was opened,
+cleared and closed with /done. Nothing was built; no file changed except the
+ritual's own three (this ledger, `ROADMAP.md` untouched in the end because no
+row was worked on, and `RSC-NEXT-SESSION.txt`); the inbox does not exist in
+the clone and nothing was fired. This entry exists so the ritual's reading has
+a dated home. It closes no ROADMAP row.
+
+Gate, this ritual, Linux, Python 3.11.15, PYTHON unset, tree at 2e5a610:
+`tests/test_licence_posture.py` 52 passed; `tests/test_docs_consistency.py`
+42 passed; `scripts/qa_companion.py` 15 passed 0 failed 4 skipped 3 noted;
+ruff clean; tests 4051 passed 39 skipped 0 failed in 166.12 s (collect-only
+4090); `agents/pity_engine` 191 passed in 9.16 s; shell node --test 110 pass
+0 fail; headless dry run rc 0, 0 pass 0 fail 7 skip; mypy clean over 42
+source files (advisory). Glyph gates: source selected 236 scanned 235 exempt
+1, docs 56 of 56, both 7-bit ASCII clean. The kit check printed 4 [].
+The 39 skips, listed with -rs: 31 reasons shared with CI's run on 2e5a610
+(ubuntu, Python 3.11.16, 4059 passed 31 skipped), plus 8 that belong to this
+account and host - six in `tests/test_moon_sync_responder.py` and one in
+`tests/test_session_hooks.py` because this account cannot be denied file
+access, and one in `tests/test_publish_next_session.py` because no PowerShell
+resolves here. Passed plus skipped is 4090 in this reading and in the previous
+ritual's 4052 plus 38, so the one extra skip is a pass turned skip and not a
+lost test; the previous ritual did not list its reasons, so it cannot be named
+with certainty. The likeliest is the bare-python arm in
+`tests/test_interpreter_pinning.py`, which skips whenever a bare python
+resolves to sys.executable, as it did here and on CI.
+`tools/publish_next_session.py --check` refused with reason no_desktop (this
+host has no Desktop), the same environmental refusal the previous ritual
+recorded; the hand-off cleared `extract_prompt` and `scan_for_leaks` with no
+leak. No memory directory exists for this project on this host, so there was
+nothing to index. CI: green on 2e5a610 (ci 37192046597, docs-guards
+37192046590); the runs fired by this paperwork commit were pending when this
+entry was written. The push goes to the PR branch, not main, per the
+cloud-run ruling in the entry below; the local session merges PR #1.
+
 ## 2026-10-04 - cloud run: by-when route, reconcile_ledger, artifact scoring (ADR-012), ADR-013, hermeticity fixes, four rows closed by measurement
 
 Sits on PR #1, branch claude/new-session-19dmsr, head f85d39b, PENDING THE
