@@ -14,7 +14,9 @@ bumps PREPEND a new entry there and never extend a prior version's line.
 
 The engine is exposed over local HTTP on port 8790 (`python -m
 agents.pity_engine`), mirroring how Sibling-C exposes Sibling-F on
-8860. Nothing in the compute path knows the transport exists.
+8860. Nothing in the compute path knows the transport exists. `POST /by-when`
+answers "by when" from a banner schedule the CALLER supplies - the engine
+vendors no calendar and reads no clock.
 
 Every domain constant traces to `docs/SPEC_SCAFFOLD.md` section 3. Three
 corrections to the original brief are load-bearing and are guarded by tests:
@@ -54,6 +56,7 @@ from .markov import (  # noqa: E402
     pull_distribution,
     solve,
 )
+from .timeline import BannerWindow, ByWhenResult, WindowOutcome, by_when  # noqa: E402
 
 __all__ = [
     "CAPTURING_RADIANCE_CAP",
@@ -67,9 +70,13 @@ __all__ = [
     "WEAPON_FEATURED_SINGLE_P",
     "WEAPON_FIVE_STAR_TABLE",
     "BannerConfig",
+    "BannerWindow",
+    "ByWhenResult",
     "ChainSolution",
+    "WindowOutcome",
     "banner_config",
     "build_five_star_table",
+    "by_when",
     "capturing_radiance_long_run_rate",
     "character_five_star_table",
     "character_rate_up",
