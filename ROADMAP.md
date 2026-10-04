@@ -32,7 +32,8 @@ version. What follows is everything the scaffold deliberately did not do.
   adjudicated - the responder keeps its direct outbox byte hash; kit
   `verify_main` is adoption-only. No code change.
 
-- **NEW 2026-10-03. TEST THE ROOTS-MAP COMMON-MODE RISK - ONLY PARTLY
+- **DESIGNED 2026-10-04 AS ADR-013 (Proposed); CODE WAITS ON THE OPERATOR
+  ASKS. WAS NEW 2026-10-03. TEST THE ROOTS-MAP COMMON-MODE RISK - ONLY PARTLY
   FEASIBLE.** Both MAIN provenance checks (`main_provenance` and kit
   `verify_main`) locate MAIN through the same row of the gitignored roots
   map, so a wrong row passes both and their agreement proves nothing about
@@ -42,6 +43,12 @@ version. What follows is everything the scaffold deliberately did not do.
   TRACKED identity anchor (for example MAIN's remote or a root commit), which
   means git calls on a five-minute timer that ADR-011 rejected for cost.
   Needs its own adjudication before any code.
+  DESIGNED 2026-10-04, see `docs/adr/ADR-013-roots-map-identity-anchor.md`
+  (Proposed, not accepted): target is an untracked random beacon in MAIN's
+  outbox pinned by digest here - no git, no tracked identity material; a
+  tracked digest of a URL, path or commit id is ruled out as a confirmation
+  oracle; quorum with verify_main recorded as settled by ADR-011; five
+  operator asks listed in the ADR. Code waits on the asks.
 
 - **DECIDED 2026-10-03. THE /120 COUNTER: TWO LEDGERS STAY, THE BINDING ONE
   REPORTS.** Status schema 1 is unchanged - no new field pair. Its
@@ -388,9 +395,17 @@ version. What follows is everything the scaffold deliberately did not do.
   CATCHES THE ANTHROPIC ADMIN-KEY FAMILY ONLY INCIDENTALLY, through the shared `sk-ant-` prefix rather than a rule
   of its own (CS 1820 item 2).
 
-- **NEW 2026-10-03. TWO TEST-INSTRUMENT GAPS FROM THE CHANNEL.**
-  `gate_mutation_runner` cannot mutate failure MESSAGES (RSC 0830, conceded) -
-  STILL OPEN; and `empty_parameter_set_mark` is not set to `fail_at_collect`,
+- **DONE 2026-10-04, BOTH HALVES. WAS NEW 2026-10-03. TWO TEST-INSTRUMENT GAPS
+  FROM THE CHANNEL.** `gate_mutation_runner` cannot mutate failure MESSAGES
+  (RSC 0830, conceded) - CLOSED BY MEASUREMENT 2026-10-04, NO NEW CODE:
+  `439bcc2` had already added the message lane to
+  `tools/gate_mutation_runner.py`; its two recorded survivors sit in
+  MESSAGE_MUTANTS with KNOWN_MESSAGE_SURVIVORS empty, 17 kill instances are
+  pinned, and `tests/test_gate_mutation_runner.py` read 87 passed on 2026-10-04
+  (Linux, Python 3.11.15), reproduced cold by a second agent. Recorded scope:
+  the lane grades the -F path; the editor flow is graded end to end in
+  `tests/test_hook_gate.py`. And `empty_parameter_set_mark` is not set to
+  `fail_at_collect`,
   so an empty parametrize skips instead of failing (LL 0930) - DONE in
   `bcbabc7`: `pytest.ini` sets it, proven by
   `tests/test_empty_parametrize_policy.py`, verified on 3.11.9 with pytest
@@ -445,7 +460,8 @@ version. What follows is everything the scaffold deliberately did not do.
   reason the live attestation can be trusted.
 
 
-- **NEW 2026-10-02. THREE SILENT OVER-EXCLUSIONS IN `core/repo_sweep.py`.**
+- **CLOSED 2026-10-04 BY MEASUREMENT, NO CODE. WAS NEW 2026-10-02. THREE SILENT
+  OVER-EXCLUSIONS IN `core/repo_sweep.py`.**
   The new production owner of the repository-root sweep predicate can be
   widened three ways that pass the ENTIRE suite unchanged, each measured by an
   adversary against a clone: replacing the exact-name match with a PREFIX
@@ -462,14 +478,28 @@ version. What follows is everything the scaffold deliberately did not do.
   without a leading dot - so every arm is VACUOUS ON THAT AXIS. Over-exclusion
   is the dangerous direction, because a guard that silently stops sweeping real
   content passes every bad-thing-gone arm while being destroyed.
+  CLOSED 2026-10-04, measured on a clone by one agent and reproduced cold by
+  a second, no code: the prefix mutant reds
+  `test_the_foreign_name_rule_is_exact_and_never_a_prefix_or_a_substring` in
+  `tests/test_guard_worktree_exclusion.py` with 40 collateral names; the
+  name-contains-marker mutant reds 9 arms across 5 modules (`47ac112`, which
+  closed the vacuous axis this row named, said six - the sixth now derives
+  its corpus from git ls-files and does not red); the literal-union mutant
+  reds 2 arms in `tests/test_walkprune.py`. Every mutant killed.
 
-- **NEW 2026-10-02. A HAND-LIST OF DERIVING SITES CANNOT NOTICE A NEW ONE.**
+- **CLOSED 2026-10-04 BY MEASUREMENT, NO CODE. WAS NEW 2026-10-02. A HAND-LIST
+  OF DERIVING SITES CANNOT NOTICE A NEW ONE.**
   `tests/test_walkprune.py::test_every_prune_site_derives_from_the_one_owner`
   names three deriving sites. `core/repo_sweep.py` is now a fourth and is
   unnamed there, and the arm does NOT red, because it is not exhaustive. That
   is the same class as a register satisfiable by a shrunk population, which was
   closed elsewhere in this tree the same day. Either derive the site list or
   give it a structural check, so a fifth site cannot appear unnoticed.
+  CLOSED 2026-10-04: the register is derived now. A staged fifth importer of
+  `core/walkprune.py` reds `test_no_unregistered_module_imports_the_owner` in
+  `tests/test_walkprune.py` naming the path; an UNTRACKED importer is
+  invisible to it by design, because the corpus is git ls-files. Reproduced
+  cold by a second agent.
 
 - **NEW 2026-10-02. THE IGNORED-HALF CITATION HOLE IS NARROWED, NOT CLOSED.**
   A gitignored bare citation now needs a tracked file to NAME the path, but
@@ -511,10 +541,12 @@ version. What follows is everything the scaffold deliberately did not do.
   is why no arm here can pin it.
 
 
-- **NEW 2026-09-21. PLAIN-TEXT CITATION GUARD: FOUR MEASURED HOLES LEFT OPEN.**
+- **PART (1) DONE 2026-10-04 AT `b1ead74`; PARTS (2) TO (4) STILL OPEN. WAS NEW
+  2026-09-21. PLAIN-TEXT CITATION GUARD: FOUR MEASURED HOLES LEFT OPEN.**
   `tests/test_docs_consistency.py` now guards bare path and directory citations
   in tracked `.txt` prose, landed at `264d9bd`. Four gaps stay, each measured.
-  (1) THE NON-VACUITY FLOOR IS WEAK - an extractor mutated to match only `md`
+  (1) DONE 2026-10-04 AT `b1ead74`, detail in this row's closing paragraph.
+  WAS: THE NON-VACUITY FLOOR IS WEAK - an extractor mutated to match only `md`
   yields 14 citations and clears the `>= 10` floor, and only `py` yields 11 and
   clears it, so a mutant deleting 11 of 13 suffix branches survives a
   total-count floor. (2) SHAPES THE EXTRACTOR CANNOT SEE - tracked files with no
@@ -531,6 +563,21 @@ version. What follows is everything the scaffold deliberately did not do.
   `.gitattributes` names a sibling's module as an incident reference and
   `ruff.toml` names `__init__.py`, neither as a live pointer. NOT DONE: decide
   whether (4) is worth closing at all given the over-fire cost.
+  PART (1) DONE 2026-10-04 at `b1ead74`:
+  `test_the_bare_path_sweep_walked_a_real_corpus` in
+  `tests/test_docs_consistency.py` carries a per-suffix non-vacuity floor - one
+  independent one-suffix probe per declared suffix, with the probe's finds
+  minus the extractor's finds required empty. Measured: of the 1820
+  four-branch subsets of the 16 declared branches (this row's "13" matched no
+  committed state), 4 survived the old floor and 0 survive the new; a mutant
+  keeping only ini, md, py and txt reds naming the ps1 suffix, one keeping
+  ini, md, ps1 and txt reds naming py. One refutation - the probe lookahead
+  admitted a slash, so a dir-dot-json over file-dot-py token false-redded -
+  was fixed, and the re-check's formal argument plus a 946,000-case fuzz found
+  no over-see. RESIDUAL, recorded: 11 declared suffixes have no corpus hit
+  and cannot be floored by a real-corpus arm; the shared KNOWN_SUFFIXES input
+  is unpinned (a part (2) item); the probe is blind to a sentence-end
+  path-dot token. Parts (2) to (4) are unchanged.
 
 - **NEW 2026-09-21. A LATENT NO-OP IS FLAGGED AND NOT FIXED IN THE CARRIER
   PROSE MUTANT TABLE.** In `tests/test_carrier_population_prose.py` the
@@ -842,10 +889,14 @@ version. What follows is everything the scaffold deliberately did not do.
   a synthetic log.
 
   WHY THIS DOES NOT CLOSE THE ROW, AND THE REASON IS IN THE CORPUS ITSELF. Of
-  the six jobs in the registry, five SKIP on every pass because no uid is
+  the six jobs then in the registry, five SKIP on every pass because no uid is
   configured on this host - verified by running `python -m headless.runner
   --once --dry-run`, where all six skip and the sixth, `emit_health`, skips only
-  for the dry run. So this corpus bounds the LOCAL-COMPUTE portion of an EMPTY
+  for the dry run. (RE-MEASURED 2026-10-04 at `f85d39b`, which carries SEVEN
+  jobs since `ebf2942` added `reconcile_ledger`: the dry run reads 0 pass 0
+  fail 7 skip - two for no uid, four for no reconciled state in the pass,
+  which the missing uid causes, and `emit_health` for the dry run. The
+  2026-09-20 corpus itself is unchanged.) So this corpus bounds the LOCAL-COMPUTE portion of an EMPTY
   pass and says nothing about a loaded one, and the one network-bound job
   contributed no time to any hold in it. The 4h30m question stays OPEN and RC,
   CS and LW still owe a loaded corpus. The artifact is at
@@ -6506,14 +6557,37 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Next
 
-- **Artifact scoring.** `MappedArtifact` parses cleanly but nothing scores a
-  substat roll. Needs a stated scoring model before implementation, not after.
-- **Banner calendar.** The forecaster answers "given N pulls" but not "by when",
-  because nothing knows when a banner runs. A calendar source has the same licence
-  gate as the cost tables.
-- **Income velocity from real history.** `estimate_velocity` folds observed ledger
-  entries, but nothing populates the ledger automatically yet. Wire it to a
-  reconciliation job.
+- **~~Artifact scoring.~~ DONE 2026-10-04 at `f23ad34`, model stated FIRST in
+  `docs/adr/ADR-012-artifact-scoring-model.md` (Proposed, adjudicated;
+  operator confirmation pending).** `engines/artifact_score.py` scores substats
+  as a weighted sum over CALLER-SUPPLIED weights and counts rolls against
+  CALLER-SUPPLIED magnitudes; no number ships, and an AST arm pins that every
+  numeral in the module is 0.0. Proven by `tests/test_engines_artifact_score.py`.
+  NOT DONE, by design: nothing supplies a weight or magnitude table and no
+  panel renders a score. Original row: `MappedArtifact` parses cleanly but
+  nothing scores a substat roll. Needs a stated scoring model before
+  implementation, not after.
+- **Banner calendar - PARTIAL 2026-10-04 at `40a4b31`.** `POST /by-when` in
+  `agents/pity_engine/__main__.py` answers "by when" over a schedule the CALLER
+  supplies per request (`agents/pity_engine/timeline.py`; ENGINE_VERSION
+  unchanged, a 23-case golden diff of every existing body empty; service
+  section in `agents/pity_engine/CHANGELOG.md`; proven by
+  `agents/pity_engine/tests/test_timeline.py` and
+  `agents/pity_engine/tests/test_service_by_when.py`). STILL OPEN: a calendar
+  SOURCE - nothing in the tree knows when a banner runs, and that source has
+  the same licence gate as the cost tables. Original row: The forecaster
+  answers "given N pulls" but not "by when", because nothing knows when a
+  banner runs. A calendar source has the same licence gate as the cost tables.
+- **~~Income velocity from real history.~~ CLOSED 2026-10-04 at `ebf2942`.** The
+  default-off `reconcile_ledger` job in `headless/jobs.py` folds the
+  operator-typed, gitignored data/income_observations.json (schema_version 1:
+  id, at, currency, delta, note) into the pass's ledger and re-estimates the
+  velocity; it SKIPs until that file exists. Proven by
+  `tests/test_headless_reconcile_ledger.py`. RESIDUAL: a resin READING is a
+  balance, not a delta - a balance row kind (schema_version 2) would settle
+  the resin-panel gap under Now. Original row: `estimate_velocity` folds
+  observed ledger entries, but nothing populates the ledger automatically
+  yet. Wire it to a reconciliation job.
 - **~~Chronicled Wish support in the service route.~~ THE PREMISE WAS FALSE AND
   THE ROW WAS STALE. CLOSED 2026-09-14 by measurement, not by work.** This row
   said the engine models Chronicled Wish while the HTTP route does not expose
@@ -6524,11 +6598,25 @@ version. What follows is everything the scaffold deliberately did not do.
   in `agents/pity_engine/__main__.py`, which builds its banner map from every
   member of `BannerKind`, and `CHRONICLED` is a member - so the route has
   accepted it since the map was written, and no work was ever outstanding. WHAT
-  REMAINS IS SMALLER AND DIFFERENT: there is no HTTP-layer test for the
-  chronicled banner, so the route is exposed-and-untested rather than absent.
+  REMAINED WAS SMALLER AND DIFFERENT, AND CLOSED 2026-10-04 at `ce64007`: there
+  was no HTTP-layer test for the chronicled banner, so the route was
+  exposed-and-untested rather than absent;
+  `agents/pity_engine/tests/test_service.py` now carries two socket-level
+  arms, one byte-equal to the library serialisation at a state where the
+  three banners differ, one for a bogus banner answered with the friendly 400
+  and no raw marker.
   The reusable finding is that a roadmap row can be false at birth rather than
   by decay, and that a rewrite which copies a row forward inherits its defect.
-- **Prove the git hook gate FIRES, in CI.** `CLAUDE.md` says a hook's PRESENCE is
+- **~~Prove the git hook gate FIRES, in CI.~~ CLOSED 2026-10-04 BY MEASUREMENT,
+  NO CODE.** The step "git hook gate armed and firing" in
+  `.github/workflows/ci.yml` runs `tests/test_hook_gate.py` under
+  RSC_REQUIRE_HOOK_GATE=1, and the arms cover BOTH directions this row
+  demanded: a staged banned glyph is refused with HEAD unchanged, a glyph in
+  the message is refused, and a clean commit lands with HEAD advanced.
+  Measured 2026-10-04 (Linux, Python 3.11.15): 60 passed, 0 skipped under the
+  flag; reproduced cold by a second agent. The row was stale, not wrong: the
+  step existed and nothing had flipped the row. Original row follows.
+  `CLAUDE.md` says a hook's PRESENCE is
   never proof it fires, and that the only valid test is end-to-end: stage a
   banned glyph, attempt a real commit, assert HEAD unchanged. Nothing automates
   that. `tests/test_hook_interpreter.py` proves the hooks pick a working
@@ -6649,3 +6737,65 @@ version. What follows is everything the scaffold deliberately did not do.
   `expand_character_goal(talent_gate=...)` accepts a real table the moment one is
   available. Same licence gate as the cost tables. Weapon level caps default to
   the character cap table for the same reason.
+
+- **Constellation fold tightened 2026-10-04 at `6587582`; two findings recorded,
+  not fixed.** The opt-in positional fallback in `fold_talent_levels`
+  (`ingest/enka_mapper.py`) now fires only when nothing was placed directly
+  and the nonzero maps match in count, so a direct hit is bonused once and the
+  remainder is RETURNED; before, a direct hit followed by the fallback bonused
+  one skill twice and laundered two unresolved bonuses. RECORDED: an
+  unreadable bonus value is skipped rather than returned unresolved -
+  `proudSkillExtraLevelMap` values pass through the mapper-wide coerce-to-0
+  rule and a 0 bonus is a no-op, so a map with one extra entry whose value is
+  "abc" yields unresolved {} while a value of 3 yields {7777: 3}; SPEC 5.1
+  defines unresolved as could-not-be-PLACED and types the third value as
+  skill id to int, which cannot carry a non-numeric value, and routing it into
+  pending would let the default-off fallback fire on a corrupt map. Also
+  `map_character` discards the fold's third value, so no production consumer
+  sees unresolved bonuses today. Operator ask: confirm the no-op reading (then
+  one sentence in the docstring and SPEC 5.1 plus a characterization arm) or
+  override to surface unreadables through a fourth return value.
+- **A missing or unreadable level has no documented default in the mapper.**
+  `map_weapon` fills `level` with 1 when `equipList[].weapon.level` is absent
+  or unreadable, while a character's missing `propMap` 4001, an artifact's
+  missing `reliquary.level` and both ascensions read 0. Only refinement's R1
+  floor is documented. SPEC 5 confirms `weapon.level` is always sent, so only
+  a malformed entry reaches this, and it then presents as a real level 1 / A0
+  / R1 weapon with nothing marking it degraded. Reproducer: a weapon entry
+  with an item id and a flat block but no weapon object maps to level 1.
+  Resolution pending the operator: 0 = unknown for weapon and character
+  (recommended), one sentence in the `MappedWeapon` and `MappedCharacter`
+  docs in `core/types.py`, one regression arm per site.
+- **The companion shell accepts only the two loopback spellings the surface
+  binds.** `shell/lib/endpoint.js` refuses `::1` and `[::1]` since `5739a89`
+  because `surface/server.py` serves AF_INET only; before that it accepted
+  them and the bare form built a URL the platform rejects. Three recorded,
+  unfixed asymmetries, none reachable with a bad outcome from `shell/main.js`:
+  a whitespace-only `RESIN_DASHBOARD_HOST` is refused with the friendly dialog
+  while a whitespace-only `RESIN_DASHBOARD_PORT` falls back to the default;
+  `supervisor.spawnArgv` drops a non-integer port silently, but its only
+  caller passes the integer `endpoint.resolve` returns; `geometry.isRect` and
+  `state.isBounds` accept a negative size, which `place` raises to the minimum
+  at the remembered origin, so a hand-edited state file yields a small visible
+  window. What would reverse the refusal: the surface gaining an AF_INET6
+  bind, which gets its own ADR under ADR-005's "if it ever leaves loopback"
+  clause.
+- **`surface/server.py` maps every bind `OSError` to exit 2 "port held".** A
+  `gaierror` on an unbindable host - `::1` or `[::1]` from a terminal `--host`
+  - is an `OSError`, so the shell reports the port as held when the address
+  family is the cause; the log line carries the real error. Recorded 2026-10-04
+  with the shell fix above; fixing it means a second exit code and a second
+  friendly message, which the shell must then learn.
+- **Hook arms: an exported shell function can shadow the stubbed PATH.** On a
+  host whose `/bin/sh` is bash, a function exported into the environment is
+  visible to the child `_run_prepush` spawns in `tests/test_hook_interpreter.py`
+  ahead of the stubbed PATH, so one more ambient-environment route into those
+  arms exists beside the PYTHON and RESIN_SKIP_PREPUSH pops that `389506a`
+  closed. Recorded in that module; no arm covers it.
+- **Liveness: the positive branch of `_powershell_executable` has no hermetic
+  arm on any host.** Since `1020fb0` the five argv-shape arms in
+  `tests/test_task_liveness.py` stub the lookup unconditionally, which is what
+  lets them run where no PowerShell is installed; the branch where the lookup
+  RESOLVES is exercised only by the real probe on a Windows host, and nothing
+  in the suite grades it. Closing it needs a positive-branch arm plus one
+  Windows measurement.
