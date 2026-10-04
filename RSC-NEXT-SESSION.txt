@@ -1,6 +1,6 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-03 (evening), gates measured at commit 22a5472 on main; the
-exec-bit CI fix and this paperwork landed after it. Everything below is a
+Stamped 2026-10-03 (night), gates measured at commit eee73c3 on main by the
+/done ritual; this paperwork commit landed after it. Everything below is a
 READING taken that day, not a promise about now. Re-measure before citing.
 
 BOOTSTRAP - READ IN THIS ORDER
@@ -12,9 +12,8 @@ BOOTSTRAP - READ IN THIS ORDER
   git log --oneline -10
 Before planning any character build: docs/GOAL_SPEC_SEED_TEAM.md.
 Before adding any data source: docs/LICENSE_NOTES.md.
-Before re-litigating a past choice: docs/adr/README.md.
-CLAUDE.md was condensed this session; its pre-condense text is verbatim in
-docs/claude-md-history.md.
+Before re-litigating a past choice: docs/adr/README.md (ADR-011 is new).
+CLAUDE.md's pre-condense text is verbatim in docs/claude-md-history.md.
 
 DO NOT RE-DERIVE GACHA CONSTANTS from memory or from a web search. They are
 verified and recorded in docs/SPEC_SCAFFOLD.md section 3, with corrections in
@@ -40,67 +39,103 @@ import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
 must print 4 [].
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
-shared pytest temp dir: pass a private --basetemp whose PARENT EXISTS.
+shared pytest temp dir: pass a private --basetemp whose PARENT EXISTS and
+which sits OUTSIDE the repo. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
+shell for a full-suite run: it causes 3 false failures.
 
-STATE OBSERVED 2026-10-03 AT 22a5472 (the /done gate run)
-  tests 3816 passed 4 skipped; pity_engine 80; node 52 pass 0 fail;
+STATE OBSERVED 2026-10-03 AT eee73c3 (the /done gate run)
+  tests 3945 passed 5 skipped 1 failed - the failure was this ritual's own
+  ledger edit (a dead backticked pointer), fixed and re-run: docs_consistency
+  plus guard_worktree_exclusion 56 passed; pity_engine 80; node --test exit 0;
   licence 52; docs 42; qa 17 passed 2 skipped 3 noted; ruff clean; mypy 40
-  source files clean; dry run rc 0; kit v4 conformance [].
-  CI ci was RED from 65c1622 to 22a5472 (Linux-only, see TRAPS); the exec-bit
-  fix commit after 22a5472 is the one that must read green. CHECK IT FIRST:
-  gh run list --branch main --limit 3.
-  Live status file read back 2026-10-03T14:31: state limit, task Turn Limit
-  Reached, runs 3 of 3 (MAIN reply cap), cap_frees_at 23:11 local.
+  source files clean; dry run rc 0 (0 pass 0 fail 6 skip); kit v4
+  conformance []. All Python 3.14.
+  Five skips, all host reasons: no exec bit on Windows
+  (test_gate_mutation_runner), live fetch opt-in (test_ingest_client),
+  bare python is 3.14 (test_interpreter_pinning), POSIX half
+  (test_responder_no_console_window), denied dir still lists
+  (test_session_hooks). A worktree shows MORE skips (no POSIX sh on PATH) -
+  that is the location trap, not a regression.
+  CI ci and docs-guards both GREEN on eee73c3 (runs 37169427234 and
+  37169427223). The paperwork commit after it is docs-only.
+  Live status file read back 2026-10-03T20:46 under the new code: state
+  limit, Turn Limit Reached, runs 3 of 3 (MAIN reply cap), window_s 86400
+  (int), cap_frees_at 23:11 local. The responder ticks every 5 min.
+  Notes to MAIN read back at the recipient by sha256: RSC 1540 (kit v5 gap
+  list) 1b3590c4..., RSC 1657 (ANSWER to MAIN 1325 with live sample)
+  ee9dcadc.... Both 2/2. No reply owed by MAIN.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
-  1. OPERATOR ORDER: FIRST ACTION. FINISH FLEET-KIT v4 WRAP-UP, INCLUDING
-     THE /120 USAGE COUNTER AND ITS RESET. The responder reserves runs in its
-     own OS-locked ledger (MAX_RUNS_PER_DAY 120, ops/runtime) while the kit
-     keeps a separate RunBudget under ops/loop/control - two counters. The
-     status file reports whichever cap binds. Settle: what [n/120] shows on
-     the widget when the RUN budget binds; when and how the count resets
-     (rolling 24 h window, cap_frees_at); whether to unify onto the kit's
-     RunBudget now that v4 locks and fails closed (blocked today by two
-     pinned properties: the v4 lock file outlives a dead holder by up to
-     120 s, and its stale cleanup unlinks the lock); and any reset the
-     operator flagged. Residual: when the kit's own budget binds,
-     cap_frees_at comes from the responder ledger.
-  2. Send MAIN the kit v5 gap list (reported, never patched): should_skip
-     damps a QUOTED marker line in non-ORDER classes (RSC bypasses it for
-     MAIN notes); spawn exposes no is_error/subtype (RSC keeps a run=
-     wrapper); RunBudget lock lifetime as above; ops/fleet_kit/fleet_headless.py halt_file
-     check uses exists(), so a dangling HALT link reads as go.
-  3. Responder provenance uses its own outbox hash, not v4 verify_main
-     (committed blob). Decide and record.
-  4. Known gaps recorded, not fixed: explicit --cleanup=whitespace/verbatim
-     on an editor commit hides # lines from the commit-msg gate; an
-     abandoned runner job can leave an orphan .tmp; a forged scheduledtask
-     log label during a real fire is still excused; the live child reported
-     only Read, not Grep/Glob; dontAsk was never exercised live.
-  5. RENEW THE RESPONDER BEFORE 2026-11-01T22:56 LOCAL - unchanged. Re-run
+  1. RENEW THE RESPONDER BEFORE 2026-11-01T22:56 LOCAL - unchanged. Re-run
      ops/install_responder_task.ps1, fresh gitignored agreement record, then
      ops/check_task_liveness.py must exit 0.
-  6. Inbox: triage anything after MAIN 1325 / SS 1348. SS 1348 (v4 adopted)
-     is unread by this tree.
+  2. Known gaps recorded, not fixed: a forged scheduledtask log label during
+     a real fire is still excused by the drift check (conftest.py); a test
+     child's failclosed line is excused inside a live fire (pre-existing,
+     widened by the new fail-closed:provenance-deferred-* lines); the live
+     child reported only Read, not Grep/Glob, cause unconfirmed; dontAsk was
+     never exercised live.
+  3. Roots-map common-mode risk (ROADMAP "TEST THE ROOTS-MAP"): both MAIN
+     provenance checks trust the same roots row; only partly testable; needs
+     its own adjudication before code (git calls were rejected by ADR-011).
+  4. Commit-msg gate known FALSE BLOCKS, each worked around with
+     git commit -F <file>: a localised git; an editor commit with
+     --no-status or commit.status=false after a merge conflict on a
+     non-ASCII path (adjudicated KEEP fail-closed, pinned BLOCKED in
+     tests/test_hook_gate.py); git commit -v scanning below the scissors
+     line (predates, reasoned not measured). RESIDUAL under-block: -F/-m
+     with commit.cleanup=strip configured plus an explicit keeping flag.
+  5. Orphan-temp sweep notes (round 2 NOT REFUTED): halt clause (a) also
+     covers WRITES - with RESINCOMPUTE_RUNTIME_DIR or RC_DATA_DIR pointing
+     outside the repo the health file and other atomic writes still land
+     there (predates); a dir swapped for a junction between root check and
+     sweep is not caught.
+  6. Prov-defer notes, not defects: a deleted-then-redropped MAIN note gets a
+     fresh first_seen (each hold still bounded at 900 s); entries for notes
+     that leave the candidates unanswered stay until pruned at 24 h; a
+     scheduled tick and a manual --once can lose one record update (no lock).
+  7. /120 counter notes, not defects: the MAIN-replies printability check
+     is unreachable; an idle status over a non-oldest epoch-ms row reads
+     120/120 while reserve_run still counts it as one; a one-off kit read
+     error with the responder ledger full reads Backing Off, not the limit.
+  8. Inbox: about 411 files unread by the watcher; nothing new after SS 1348
+     except this tree's own 1540 and 1657. SS 1348 bucketed ingested,
+     nothing owed. The watermark was NOT marked (python
+     scripts/watch_inbox.py --mark only after a real triage).
+  9. Housekeeping: about 27 agent worktrees under .claude/worktrees, most
+     from earlier sessions. Check each branch is merged before removing;
+     the scratchpad ruling allows deleting this session's freely.
   DO NOT REDO: v3/v4 vendoring and provenance (reversed only by a new MAIN
   FLEET-KIT-vN note); the CLAUDE.md condense (reversed only by a MAIN kit
   change); Bash removed from the responder child floor (reversed only by a
   live probe proving a Bash floor cannot write); the MAIN skip bypass
   (reversed only if kit v5 stops damping quoted markers); the --once slot,
-  the spawn cwd, the C4 landing, the test-leak fence.
+  the spawn cwd, the C4 landing, the test-leak fence; the /120 two-ledger
+  decision (reversed by a kit version whose lock is OS-held, freed on holder
+  death and never unlinked); ADR-011 outbox-hash provenance (reversed by a
+  verified MAIN note ordering verify_main for runtime notes, or a measured
+  hash-match MAIN never committed that mattered); the firedetail log label
+  (reversed only by a drift-check redesign that ends fires on terminals).
 
 TRAPS MEASURED - none are hypothetical
-  A HOOK COPIED WITH shutil.copyfile HAS NO EXEC BIT ON LINUX. git then
-  IGNORES the hook with only a hint on stderr, every gate reads as passing,
-  and Windows - which has no exec bit - stays green. update-index --chmod=+x
-  fixes only the index. Read CI after every hook or gate change.
+  A MID-FIRE LOG LINE UNDER THE FIRE'S OWN LABEL COLLAPSES THE DRIFT WINDOW.
+  conftest._live_fire_windows ends a scheduledtask fire at its next line.
+  Write detail under firedetail; never hold lines in memory (a hard kill
+  loses them).
 
-  AN AUDIT-HOOK FENCE GREEN ON WINDOWS CAN BE RED ON LINUX. Read CI.
+  A NEW ALLOWED LOG LABEL WIDENS THE LEAK GUARD. _test_shaped must check the
+  caller prefix too, or a test child's line inside a live fire is excused.
 
-  git commit -F AND -m KEEP # LINES. A gate that skips # lines as comments
-  lets a banned glyph or a # subject into history. In the editor flow git
-  strips them AFTER commit-msg runs, and git's own template lines can carry
-  non-ASCII branch, author and path names - so do not scan those.
+  A NEW TERMINATION MUST JOIN TERMINATIONS, with an `in` test.
+
+  A HOOK COPIED WITH shutil.copyfile HAS NO EXEC BIT ON LINUX. Read CI after
+  every hook or gate change.
+
+  git commit -F AND -m KEEP # LINES. In the editor flow git writes the
+  effective cleanup mode into the template sentence; that is what the gate
+  now reads.
+
+  ctypes OpenProcess RAISES for a pid of 2**32 or more. Bound parsed pids.
 
   A STATUS TASK NAME OUTSIDE THE MAIN 0915 SET RENDERS AS [?] ON THE
   OPERATOR'S WIDGET, and a limit with a null cap_frees_at reads [?] too.
@@ -116,13 +151,11 @@ TRAPS MEASURED - none are hypothetical
 
   NEVER RESUME A BUILDER WHILE AN ADVERSARY IS STILL ATTACKING THE SAME TREE.
 
-  A WORKTREE'S PATH LOCATION CHANGES WHICH TESTS SKIP. Compare skip REASONS.
-
   A SUBAGENT THAT SPAWNS ITS OWN CHILDREN NEVER HEARS THEIR RESULTS.
 
   A LENGTH CHECK IS NOT AN IDENTITY CHECK. Compare sha256.
 
-  AN OUTBOUND NOTE IN YOUR OWN OUTBOX IS NOT DELIVERY. Hash the recipient's
+  AN OUTBOUND NOTE IN YOUR OWN INBOX IS NOT DELIVERY. Hash the recipient's
   copy.
 
   write_text EMITS CRLF ON WINDOWS. Write bytes or newline=''.

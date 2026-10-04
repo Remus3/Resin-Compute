@@ -12,6 +12,33 @@ now.
 
 ---
 
+## 2026-10-03 (night) - two recorded gaps closed: the editor --cleanup= hole and the orphan runner .tmp
+
+Merged as db634b1 (branches ending ed2f4a0/ba8aaa0 and b982c90/ada50f9).
+(1) COMMIT-MSG GATE: git passes the hook no cleanup flag but writes the
+EFFECTIVE mode into the editor template ("will be ignored" vs "will be
+kept"). `.githooks/commit-msg` exports `RESIN_COMMIT_MSG_FILE` and
+`scripts/precommit_msg_check.py` skips `#` lines in an editor commit only on
+the exact strip sentence; keep sentence, no sentence and the `merge --edit`
+template fail closed. Eight end-to-end arms in `tests/test_hook_gate.py`, each
+with a hooks-off twin, red before the fix. An adversary REFUTED the first cut
+on one new false block (a `--no-status` editor commit after a conflict on a
+non-ASCII path); adjudicated KEEP fail-closed, recorded as a residual and
+pinned BLOCKED. Exec bit read back 100755 in the index for all three hooks.
+(2) ORPHAN TEMPS: `_die_holding_slot` ends with `os._exit`, skipping
+the `finally` in `core/atomic_io.py`. `headless/runner.py` `sweep_orphan_temps` now
+removes, on each live pass, only a regular file of the exact atomic_io temp
+shape whose pid is not ours, not alive and within 1..2**32-1, aged at least
+3600 s, inside the repo root; one bad entry is logged and skipped and the
+sweep can never fail a pass. Arms in
+`tests/test_headless_runner_orphan_temps.py`. Round 1 REFUTED (a pid of 2**32
+crashed the daemon via ctypes), round 2 NOT REFUTED.
+Also this session: RSC 1540 (kit v5 gap list, four gaps reproduced in
+`ops/fleet_kit/fleet_headless.py`) and RSC 1657 (ANSWER to MAIN 1325, live
+status sample written by d8695e7) delivered and read back 2/2 by sha256.
+Seam verify at db634b1, 2026-10-03, Python 3.14: tests 3902 passed 5
+skipped; CI ci and docs-guards green on db634b1.
+
 ## 2026-10-03 (night) - a retryably UNVERIFIABLE MAIN note is deferred, boundedly, instead of lost
 
 Closes the liveness gap ADR-011 filed. Before: a MAIN note that arrived

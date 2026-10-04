@@ -11,11 +11,12 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-10-03 (evening), HIGHEST PRIORITY. FLEET-KIT v4 WRAP-UP,
-  INCLUDING THE /120 USAGE COUNTER.** Operator: first thing next session.
-  (1) SETTLED 2026-10-03, uncommitted pending verification - see the
-  adjudicated call below and `docs/LEDGER.md`.
-  (2) Send MAIN the kit v5 gap list: should_skip damps quoted markers in
+- **DONE 2026-10-03 (night). FLEET-KIT v4 WRAP-UP, INCLUDING THE /120
+  USAGE COUNTER.** (1) DONE in d8695e7 - see the adjudicated call below,
+  `tools/moon_sync_responder.py` `_status_budget` and `docs/LEDGER.md`.
+  (2) DONE: two RSC notes to MAIN (1540 v5 gap list, 1657 ANSWER to MAIN
+  1325 with a live status sample), each read back 2/2 by sha256 at the
+  recipient. The v5 gap list sent - should_skip damps quoted markers in
   non-ORDER classes; spawn exposes no is_error/subtype; RunBudget lock
   lifetime; halt_file read with exists() (dangling link reads as go);
   `RunBudget` has no public single-read snapshot (`used`/`can_start`/
