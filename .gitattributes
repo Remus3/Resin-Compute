@@ -37,10 +37,10 @@
 *.ps1      text eol=crlf
 
 # Binary - never diffed, never EOL-converted.
-*.png      binary
-*.jpg      binary
-*.jpeg     binary
-*.ico      binary
-*.gz       binary
-*.zip      binary
-*.db       binary
+*.png      binary -eol
+*.jpg      binary -eol
+*.jpeg     binary -eol
+*.ico      binary -eol
+*.gz       binary -eol
+*.zip      binary -eol
+*.db       binary -eol

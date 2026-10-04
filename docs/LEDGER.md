@@ -7308,7 +7308,8 @@ conclusion. Verification pointer: the URL above, and `README.md` line 195.
 the dissolved copyleft rationale - "vendoring either would relicense this repo",
 which stopped being true when ADR-006 made this tree GPL-3-or-later - returned
 eight files and did not return `README.md`. The phrase wraps across
-`README.md:317-318`, so `relicense th` matches nothing on either line. A
+README.md lines 317-318 of that day's text (the README has since been
+rewritten), so `relicense th` matches nothing on either line. A
 multiline-aware re-grep found it. Any sweep that greps for prose must assume
 wrapping; a naive one scores clean by not looking.
 

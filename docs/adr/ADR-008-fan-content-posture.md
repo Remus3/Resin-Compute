@@ -24,6 +24,14 @@ each is cheap to re-measure:
 
 - **Zero vendored game assets.** No image, audio, video, font or binary asset is
   tracked anywhere in the repository.
+  AMENDED 2026-10-03: one image is now tracked, `docs/assets/social-preview.png`,
+  the repository's social preview card. It is ORIGINAL to this project - text,
+  a bar drawn from the README's example forecast and flat colour - and carries
+  no game art, icon, font file or any other HoYoverse material, so the leg this
+  bullet supports (zero VENDORED game assets) still holds. Alternatives were to
+  keep the card out of git (it then exists on one disk only) or to skip it
+  (GitHub falls back to a generated card). Re-open if any tracked image ever
+  includes game material.
 - **Zero vendored game data.** Everything under `data/fixtures/` is
   HAND-AUTHORED, and `data/fixtures/README.md` names which file is which kind.
   Two of the three are verified public game facts - real avatarIds and material

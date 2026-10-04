@@ -108,8 +108,8 @@ written down, so please read these before filing:
   Scheduler view, and has no execution time limit. Nothing installs it for you
   and the quickstart does not need it. It is the one thing in this repository
   that OUTLIVES THE CLONE: deleting the checkout leaves the task behind, still
-  firing at a path that has gone. `README.md` states all of that and gives the
-  removal commands.
+  firing at a path that has gone. `README.md` discloses it and
+  `docs/OPERATIONS.md` states all of that and gives the removal commands.
 - **The Wish History credential tool.** `tools/wish_authkey.py` extracts a
   short-lived authkey that the game itself writes into its own webview cache on
   the operator's machine. It is split into separate scan, capture and pull verbs
