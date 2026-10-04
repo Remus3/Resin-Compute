@@ -31,18 +31,16 @@ version. What follows is everything the scaffold deliberately did not do.
   adjudicated - the responder keeps its direct outbox byte hash; kit
   `verify_main` is adoption-only. No code change.
 
-- **NEW 2026-10-03. AN UNVERIFIABLE MAIN NOTE IS RECORDED ANSWERED AND NEVER
-  RE-CHECKED.** `tools/moon_sync_responder.py` near line 4207
-  (`_remember_answered`): a note delivered before MAIN writes its outbox copy
-  reads UNVERIFIABLE, is recorded answered, and is lost. Decide a bounded
-  retry. ADR-011 fixes the shape if one is adopted: hold pending, re-check up
-  to 3 ticks, then answer as UNVERIFIABLE data logged "MAIN not committed".
-
-- **NEW 2026-10-03. TEST THE ROOTS-MAP COMMON-MODE RISK.** Both MAIN
-  provenance checks (`main_provenance` and kit `verify_main`) locate MAIN
-  through the same row of the gitignored roots map, so a wrong row passes
-  both and their agreement proves nothing about the map. Neither tests the
-  map. Add a check that the MAIN row resolves to MAIN's real tree (ADR-011).
+- **NEW 2026-10-03. TEST THE ROOTS-MAP COMMON-MODE RISK - ONLY PARTLY
+  FEASIBLE.** Both MAIN provenance checks (`main_provenance` and kit
+  `verify_main`) locate MAIN through the same row of the gitignored roots
+  map, so a wrong row passes both and their agreement proves nothing about
+  the map. Neither tests the map. LIMIT, recorded 2026-10-03: a row that
+  points at a tree holding the same bytes is a MATCH by construction, so no
+  byte check can catch it; telling MAIN's real tree from a copy needs a
+  TRACKED identity anchor (for example MAIN's remote or a root commit), which
+  means git calls on a five-minute timer that ADR-011 rejected for cost.
+  Needs its own adjudication before any code.
 
 - **DECIDED 2026-10-03. THE /120 COUNTER: TWO LEDGERS STAY, THE BINDING ONE
   REPORTS.** Status schema 1 is unchanged - no new field pair. Its
@@ -106,6 +104,26 @@ version. What follows is everything the scaffold deliberately did not do.
   rejected, the kit file is the kit's and `kit.spawn` already appends one
   start per real spawn. REVERSE IF: a kit version (v5 gap list, item 2 above)
   ships an OS-held lock that frees on holder death and never unlinks.
+
+- **DONE 2026-10-03 (night). AN UNVERIFIABLE MAIN NOTE IS NO LONGER ANSWERED
+  ON ITS FIRST TICK AND LOST.** `defer_unverified` in
+  `tools/moon_sync_responder.py` holds a MAIN note whose verdict is
+  UNVERIFIABLE and `Provenance.retryable` (outbox copy or bundle twin absent
+  or unlistable, a copy that raised on read) out of the queue: no session, no
+  run, no hop, no reply slot. Released as UNVERIFIABLE data after 3 counted
+  checks at least 240 s apart or 900 s after first seen, logged
+  `provenance-deferred-expired-<class>`. A later MATCH or MISMATCH takes the
+  normal path. Not retryable: wrong-case sender name, missing roots row (host
+  config, adjudicated), empty bundle, oversize copy, MISMATCH, NOT-ADDRESSED.
+  Record `responder_provenance_deferred.json` under the runtime dir, name
+  keyed, at most 64 entries, no hashes; unreadable, unwritable, full or a
+  clock before `first_seen` releases at once, logged
+  `fail-closed:provenance-deferred-<cause>`. A deferral-only tick ends
+  `provenance-deferred`, status idle/Idle. Arms in
+  `tests/test_responder_main_provenance.py`. REVERSE IF: a held MAIN note is
+  measured lost or answered late in a way that mattered, or MAIN orders
+  first-tick answers; reverting is removing the one `defer_unverified`
+  assignment in `_run_once`.
 
 - **DONE 2026-10-03 (night). THE EDITOR `--cleanup=` GAP.** An explicit
   `--cleanup=whitespace` or `verbatim` on an editor commit no longer hides

@@ -394,6 +394,23 @@ RUN_BUDGET_REASON = "the runs-per-day budget is spent - nothing spawned"
 RUN_RECORD_REASON = "the run record could not be read or written - nothing spawned (fail closed)"
 RUN_LOCK_REASON = "another responder process holds the run lock - nothing spawned"
 
+#: THE PROVENANCE DEFERRAL RECORD (adjudicated 2026-10-03). A MAIN note whose
+#: provenance is RETRYABLY UNVERIFIABLE - MAIN's outbox copy not there yet, or a
+#: transient read failure - is held out of the queue for a bounded time instead
+#: of being answered as data on its first tick and never re-checked.
+#: `{"version": 1, "deferred": {name: {first_seen, checks, last_check,
+#: released}}}`. Keyed by NAME only: it never carries a hash, so it can never
+#: feed `content_seen` / `drop_redrops`. Every failure of this record RELEASES.
+DEFAULT_PROVENANCE_DEFERRED = RUNTIME_DIR / "responder_provenance_deferred.json"
+#: A re-check counts only this long after the last COUNTED one.
+DEFER_CHECK_SPACING_S = 240.0
+#: Released after this many counted checks ...
+DEFER_MAX_CHECKS = 3
+#: ... or this long after it was first seen, whichever comes first.
+DEFER_MAX_AGE_S = 900.0
+#: At most this many entries; a note that finds the record full is released.
+DEFER_MAX_ENTRIES = 64
+
 #: LITERAL CAPS ON THE RECORD, because the record is otherwise the held
 #: directory again in JSON. A note whose reasons vary every cycle would
 #: accumulate one fingerprint per cycle without them.
@@ -1437,12 +1454,18 @@ def bypass_queue(
     return kept
 
 
-def _empty_termination(bypass_only: bool) -> str:
-    """`budget` when a spent hop budget left nothing to bypass for, else `empty`.
+def _empty_termination(bypass_only: bool, deferred: bool = False) -> str:
+    """`budget` when a spent hop budget left nothing to bypass for, else
+    `provenance-deferred` when the queue is empty ONLY because notes were held
+    by `defer_unverified`, else `empty`.
 
-    A helper so `_run_once` gains no branch, as `_reply_termination` is.
+    A helper so `_run_once` gains no branch, as `_reply_termination` is. The
+    hop budget wins: with it spent, a deferred UNVERIFIABLE note could not have
+    been answered anyway, so the queue was not empty only for the deferral.
+    `provenance-deferred` is absent from `_TICK_STATES` on purpose and reads
+    "idle" / "Idle", a MAIN 0915 name.
     """
-    return "budget" if bypass_only else "empty"
+    return "budget" if bypass_only else "provenance-deferred" if deferred else "empty"
 
 
 def hops_used(inbox: Path) -> int:
@@ -1865,6 +1888,14 @@ class Provenance(NamedTuple):
     `error` is the exception class name for the invocation log only. `body` is
     the inbox copy's bytes EXACTLY as hashed, so the session is handed those
     bytes and never a later re-read. Both appended at the END with defaults.
+
+    `retryable` (appended at the END, default False) is True ONLY for an
+    UNVERIFIABLE that a later tick could turn into MATCH or MISMATCH: MAIN's
+    outbox copy (or bundle twin) not there or not listable, or a copy that
+    raised on read. Never for a filename that does not spell MAIN exactly, a
+    missing roots row (host config, adjudicated), an empty bundle, an oversize
+    copy, a structurally refused bundle, MISMATCH or NOT-ADDRESSED.
+    `defer_unverified` holds only these, and only for a bounded time.
     """
 
     verdict: str
@@ -1873,6 +1904,7 @@ class Provenance(NamedTuple):
     reason: str
     error: str | None = None
     body: bytes | None = None
+    retryable: bool = False
 
 
 #: This tree's code as a whole word, EXACT CASE: `rsc`, `RSCX` and `XRSC` never.
@@ -1930,6 +1962,15 @@ def _bytes_of(path: Path) -> tuple[bytes | None, str | None, str | None]:
     return data, None, None
 
 
+def _read_retryable(why: str | None, err: str | None) -> bool:
+    """Whether a failed `_bytes_of` could succeed on a later tick.
+
+    An absent copy (MAIN may not have written it yet) or a read that RAISED.
+    An oversize copy is a property of the bytes, not of the moment: not retried.
+    """
+    return err is not None or why == "the copy is not there"
+
+
 def _listed_exactly(directory: Path, name: str) -> tuple[bool, str | None]:
     """Whether `directory` lists `name` byte-for-byte, case included.
 
@@ -1945,6 +1986,14 @@ def _listed_exactly(directory: Path, name: str) -> tuple[bool, str | None]:
 
 #: A bundle holding more files than this is not a kit bundle; refuse to walk it.
 MAX_BUNDLE_FILES = 512
+
+#: `_bundle_listing`'s STRUCTURAL refusals. Each is a property of the bundle,
+#: not of the moment, so a bundle refused for one of them is never retryable.
+_BUNDLE_REFUSALS = frozenset({
+    "the bundle holds a link",
+    "the bundle holds too many files",
+    "the bundle holds a special file",
+})
 
 
 def _bundle_listing(base: Path) -> tuple[dict[str, Path] | None, str | None]:
@@ -2001,14 +2050,16 @@ def bundle_provenance(bundle: Path, outbox_dir: Path) -> Provenance:
     if not twin_is_dir:
         return Provenance(
             PROVENANCE_UNVERIFIABLE, None, None,
-            "MAIN's outbox holds no bundle of this name", list_err,
+            "MAIN's outbox holds no bundle of this name", list_err, None, True,
         )
     theirs, their_err = _bundle_listing(twin)
     ours, our_err = _bundle_listing(bundle)
     if theirs is None or ours is None:
+        listing_err = their_err or our_err
         return Provenance(
             PROVENANCE_UNVERIFIABLE, None, None,
-            "a bundle could not be listed file by file", their_err or our_err,
+            "a bundle could not be listed file by file", listing_err, None,
+            listing_err not in _BUNDLE_REFUSALS,
         )
     if not theirs or not ours:
         return Provenance(PROVENANCE_UNVERIFIABLE, None, None, "the bundle is empty")
@@ -2023,7 +2074,8 @@ def bundle_provenance(bundle: Path, outbox_dir: Path) -> Provenance:
             if data is None:
                 return Provenance(
                     PROVENANCE_UNVERIFIABLE, None, None,
-                    f"a bundle file could not be hashed - {why}", err,
+                    f"a bundle file could not be hashed - {why}", err, None,
+                    _read_retryable(why, err),
                 )
             sink[rel] = hashlib.sha256(data).hexdigest()
         if their_sha.get(rel) != our_sha.get(rel):
@@ -2072,19 +2124,22 @@ def main_provenance(note: Path, roots: dict[str, Path]) -> Provenance:
     if is_bundle:
         return bundle_provenance(note, outbox_dir)
     listed, list_err = _listed_exactly(outbox_dir, note.name)
+    # RETRYABLE from here on (adjudicated 2026-10-03): MAIN may not have
+    # written its copy yet, and a read that raised may not raise next tick.
+    # `defer_unverified` holds such a note, boundedly; nothing above is.
     if not listed:
         return Provenance(
             PROVENANCE_UNVERIFIABLE, None, None,
             "MAIN's outbox copy could not be hashed - "
             + ("the outbox could not be listed" if list_err else "the copy is not there"),
-            list_err,
+            list_err, None, True,
         )
     outbox_bytes, outbox_why, outbox_err = _bytes_of(outbox_dir / note.name)
     if outbox_bytes is None:
         return Provenance(
             PROVENANCE_UNVERIFIABLE, None, None,
             f"MAIN's outbox copy could not be hashed - {outbox_why}",
-            outbox_err,
+            outbox_err, None, _read_retryable(outbox_why, outbox_err),
         )
     outbox_sha = hashlib.sha256(outbox_bytes).hexdigest()
     inbox_bytes, inbox_why, inbox_err = _bytes_of(note)
@@ -2092,7 +2147,7 @@ def main_provenance(note: Path, roots: dict[str, Path]) -> Provenance:
         return Provenance(
             PROVENANCE_UNVERIFIABLE, outbox_sha, None,
             f"this inbox's copy could not be hashed - {inbox_why}",
-            inbox_err,
+            inbox_err, None, _read_retryable(inbox_why, inbox_err),
         )
     inbox_sha = hashlib.sha256(inbox_bytes).hexdigest()
     # BOTH THE BYTES AND THE DIGESTS must agree: the digest is what is quoted,
@@ -2897,6 +2952,144 @@ def drop_redrops(
             continue
         kept.append(n)
     return kept
+
+
+def _finite_stamp(value: Any) -> float | None:
+    """`value` as a finite float epoch, or None. A bool is not a number here."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value) if math.isfinite(value) else None
+
+
+def _defer_entries(loaded: Any) -> tuple[dict[str, dict], bool]:
+    """(entries, broken) from a `_load_record` result. Any doubt is `broken`.
+
+    Absent is the healthy empty state. Unreadable, not JSON, the wrong shape,
+    or ONE malformed entry all read as broken, and a broken record RELEASES
+    every note it would have held (`defer_unverified`) - never holds one.
+    """
+    if loaded is _MISSING:
+        return {}, False
+    rows = loaded.get("deferred") if isinstance(loaded, dict) else None
+    if not isinstance(rows, dict):
+        return {}, True
+    out: dict[str, dict] = {}
+    for name, row in rows.items():
+        if not isinstance(row, dict):
+            return {}, True
+        first = _finite_stamp(row.get("first_seen"))
+        last = _finite_stamp(row.get("last_check"))
+        checks, released = row.get("checks"), row.get("released")
+        if (
+            first is None
+            or last is None
+            or not isinstance(checks, int)
+            or isinstance(checks, bool)
+            or not isinstance(released, bool)
+        ):
+            return {}, True
+        out[name] = {
+            "first_seen": first, "checks": checks, "last_check": last, "released": released,
+        }
+    return out, False
+
+
+def _note_present(path: Path) -> bool:
+    try:
+        return path.is_file()
+    except OSError:
+        return False
+
+
+def defer_unverified(
+    candidates: list[Path],
+    verdicts: dict[str, Provenance],
+    path: Path,
+    now: float,
+    source: str,
+) -> list[Path]:
+    """`candidates` without the MAIN notes held for a bounded provenance retry.
+
+    ADJUDICATED 2026-10-03, closing the liveness gap ADR-011 left open: a MAIN
+    note delivered before MAIN writes its outbox copy read UNVERIFIABLE, was
+    answered as data on its first tick, and was never checked again. Now a
+    note whose verdict is UNVERIFIABLE AND `retryable` is taken out of the
+    queue - no session, no run reservation, no hop, no reply slot - and the
+    next tick's ONE verdict map re-checks it.
+
+    RELEASED, to be answered on the existing path as UNVERIFIABLE data, after
+    `DEFER_MAX_CHECKS` counted checks or `DEFER_MAX_AGE_S` after `first_seen`,
+    whichever comes first. A check counts only `DEFER_CHECK_SPACING_S` after
+    the last counted one, so a burst of ticks cannot spend the checks early.
+    `first_seen` is keyed by NAME and never reset, even when the bytes change.
+    A re-check that reads MATCH or MISMATCH drops the entry and the note takes
+    the normal path. Entries are pruned once answered or once the inbox file
+    is gone.
+
+    FAILS TOWARD RELEASE, never toward holding, because a hold that cannot be
+    remembered is a hold that restarts every tick: a record that cannot be
+    read, cannot be written, is full, or carries a `first_seen` later than the
+    clock releases the note at once, logged `fail-closed:provenance-deferred-
+    <cause>`. Name-keyed only: it never records a hash, so nothing here feeds
+    `content_seen` or `drop_redrops`. A HELPER SO `_run_once` GAINS NO BRANCH.
+    """
+    retry = [
+        n for n in candidates
+        if (v := verdicts.get(n.name)) is not None
+        and v.verdict == PROVENANCE_UNVERIFIABLE and v.retryable
+    ]
+    entries, broken = _defer_entries(_load_record(path))
+    original = {k: dict(v) for k, v in entries.items()}
+    names = {n.name for n in candidates}
+    if candidates:
+        inbox = candidates[0].parent
+        done = _answered(DEFAULT_ANSWERED)
+        for name in [k for k in entries if k not in names]:
+            if name in done or not _note_present(inbox / name):
+                del entries[name]
+    for n in candidates:
+        if n not in retry:
+            entries.pop(n.name, None)
+    held: set[str] = set()
+    for n in retry:
+        prov = verdicts[n.name]
+        entry = entries.get(n.name)
+        cause = (
+            "unreadable" if broken
+            else "full" if entry is None and len(entries) >= DEFER_MAX_ENTRIES
+            else "clock" if entry is not None and now < entry["first_seen"]
+            else None
+        )
+        if cause is not None:
+            _log_fail_closed(n.name, f"provenance-deferred-{cause}")
+            if cause != "full":
+                entries[n.name] = {
+                    "first_seen": now if entry is None else entry["first_seen"],
+                    "checks": 0 if entry is None else entry["checks"],
+                    "last_check": now, "released": True,
+                }
+            continue
+        if entry is None:
+            entry = {"first_seen": now, "checks": 1, "last_check": now, "released": False}
+            log_invocation(source, n.name, "provenance-deferred", now=now)
+        elif not entry["released"]:
+            if now - entry["last_check"] >= DEFER_CHECK_SPACING_S:
+                entry = {**entry, "checks": entry["checks"] + 1, "last_check": now}
+            if entry["checks"] >= DEFER_MAX_CHECKS or now - entry["first_seen"] >= DEFER_MAX_AGE_S:
+                entry = {**entry, "released": True}
+                log_invocation(
+                    source, n.name,
+                    f"provenance-deferred-expired-{prov.error or 'absent'}", now=now,
+                )
+        entries[n.name] = entry
+        if not entry["released"]:
+            held.add(n.name)
+    changed = entries != original or (broken and bool(retry))
+    if changed and not atomic_write_json(path, {"version": 1, "deferred": entries}):
+        for name in sorted(held):
+            _log_fail_closed(name, "provenance-deferred-unwritable")
+        return candidates
+    return [n for n in candidates if n.name not in held]
 
 
 def refusal_key(name: str, reasons: list[str]) -> str:
@@ -3966,10 +4159,19 @@ def _run_once(
     # held under another name are not picked again, whatever their mtime.
     backfill_answered_hashes(DEFAULT_ANSWERED, inbox, roots)
     candidates = drop_redrops(candidates, verdicts, content_seen(DEFAULT_ANSWERED, DEFAULT_REFUSALS))
+    # A RETRYABLY UNVERIFIABLE MAIN NOTE IS HELD, BOUNDEDLY, for a later tick's
+    # verdict (adjudicated 2026-10-03): no session, no run, no hop, no reply
+    # slot while held, and released as data at the bound. Plain assignments.
+    undeferred = candidates
+    candidates = defer_unverified(
+        candidates, verdicts, DEFAULT_PROVENANCE_DEFERRED, started, source
+    )
     queue = bypass_queue(main_first(candidates, verdicts, bounced), verdicts, bypass_only, answered)
     # GATE:empty-queue
     if not queue:
-        result["termination"] = _empty_termination(bypass_only)
+        result["termination"] = _empty_termination(
+            bypass_only, len(candidates) < len(undeferred)
+        )
         return result
 
     note = queue[0]
