@@ -84,10 +84,15 @@ STATE OBSERVED 2026-10-04 AT 2e5a610 (Linux, Python 3.11.15, PYTHON unset)
   access, and 1 in tests/test_publish_next_session.py because no PowerShell
   resolves here. Passed plus skipped is 4090 in this reading and in the
   previous ritual's 4052 plus 38, so the one extra skip is a pass turned
-  skip, not a lost test; the previous ritual did not list its reasons, so
-  it cannot be named with certainty. The likeliest is the bare-python arm
-  in tests/test_interpreter_pinning.py, which skips whenever a bare python
-  resolves to sys.executable, as it did here and on CI.
+  skip, not a lost test. NAMED by diffing the two -rs lists over the same
+  tree: the pre-push hook's own run, launched through
+  scripts/hook_python.sh, read 4052 passed 38 skipped (165.21 s) and
+  pity_engine 191 (9.87 s); the one skip present only under python -m
+  pytest is the bare-python arm in tests/test_interpreter_pinning.py, which
+  skips whenever a bare python resolves to sys.executable - true under
+  python -m pytest here and on CI, false under the hook's interpreter.
+  Environment, not tree. The paperwork pushed as 08da213 fired ci
+  37208549885 and docs-guards 37208549898, in progress at write time.
   The previous ritual, over the same tree at 2e5a610, read tests 4052
   passed 38 skipped 0 failed (121.89 s), pity_engine 191, ruff clean, mypy
   42, docs guards 42 + 52 + 75 + 95 passed, glyph gates 236/235/1 and 56/56,

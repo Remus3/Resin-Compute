@@ -36,18 +36,23 @@ account and host - six in `tests/test_moon_sync_responder.py` and one in
 access, and one in `tests/test_publish_next_session.py` because no PowerShell
 resolves here. Passed plus skipped is 4090 in this reading and in the previous
 ritual's 4052 plus 38, so the one extra skip is a pass turned skip and not a
-lost test; the previous ritual did not list its reasons, so it cannot be named
-with certainty. The likeliest is the bare-python arm in
+lost test. Named by diffing the two -rs lists over the same tree: the pre-push
+hook's own run, launched through `scripts/hook_python.sh`, read 4052 passed 38
+skipped in 165.21 s and `agents/pity_engine` 191 passed in 9.87 s, and the one
+skip present only under python -m pytest is the bare-python arm in
 `tests/test_interpreter_pinning.py`, which skips whenever a bare python
-resolves to sys.executable, as it did here and on CI.
+resolves to sys.executable - true under python -m pytest here and on CI, false
+under the hook's interpreter. Environment, not tree.
 `tools/publish_next_session.py --check` refused with reason no_desktop (this
 host has no Desktop), the same environmental refusal the previous ritual
 recorded; the hand-off cleared `extract_prompt` and `scan_for_leaks` with no
 leak. No memory directory exists for this project on this host, so there was
 nothing to index. CI: green on 2e5a610 (ci 37192046597, docs-guards
-37192046590); the runs fired by this paperwork commit were pending when this
-entry was written. The push goes to the PR branch, not main, per the
-cloud-run ruling in the entry below; the local session merges PR #1.
+37192046590); the paperwork pushed as 08da213 fired ci 37208549885 and
+docs-guards 37208549898, in progress when this sentence was written, and the
+follow-up commit naming the skip fires its own pair. The push goes to the PR
+branch, not main, per the cloud-run ruling in the entry below; the local
+session merges PR #1.
 
 ## 2026-10-04 - cloud run: by-when route, reconcile_ledger, artifact scoring (ADR-012), ADR-013, hermeticity fixes, four rows closed by measurement
 
