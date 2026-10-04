@@ -968,7 +968,13 @@ _LIVE_FIRE_SOURCES = ("scheduledtask",)
 #: `FAIL_CLOSED_SOURCE`, which a real fire writes on a busy run lock. A line
 #: appended during a test under ANY OTHER source is test-shaped - a child's
 #: `cli`, `suite`, `run_once` or probe line - and is a leak inside a fire too.
-_LIVE_WRITER_SOURCES = ("scheduledtask", "failclosed")
+#: `firedetail` is `FIRE_DETAIL_SOURCE`: a live fire's mid-fire detail lines,
+#: written before its spawn so a hard kill cannot lose them. It is NOT in
+#: `_LIVE_FIRE_SOURCES`, so it neither opens nor closes a window, and a
+#: `firedetail` line is a live writer's ONLY when the caller it carries in its
+#: outcome (`<caller>:<outcome>`) is in `_LIVE_FIRE_SOURCES` - see `_test_shaped`.
+_FIRE_DETAIL_SOURCE = "firedetail"
+_LIVE_WRITER_SOURCES = ("scheduledtask", "failclosed", _FIRE_DETAIL_SOURCE)
 #: The invocation log's name, which `_runtime_drift` reads line by line.
 _INVOCATION_LOG_NAME = "responder_invocations.log"
 
@@ -1062,6 +1068,15 @@ def _test_shaped(
         parts = line.split(chr(9))
         if len(parts) == 4 and parts[1] not in _LIVE_WRITER_SOURCES:
             why.append(f"the invocation log gained a {parts[1]!r} line")
+        elif len(parts) == 4 and parts[1] == _FIRE_DETAIL_SOURCE:
+            # REFUTED ON 0e845b2: the label alone is a live writer's, so the
+            # CALLER it carries (`<caller>:<outcome>`) decides. Only a live
+            # fire's own caller is excused; a `cli:` / `run_once:` / `suite:`
+            # detail line is a test child's, and a line with no caller prefix
+            # names no live writer at all.
+            caller, sep, _rest = parts[3].partition(":")
+            if not sep or caller not in _LIVE_FIRE_SOURCES:
+                why.append(f"the invocation log gained a 'firedetail' line from {caller!r}")
     for name, (old, new) in sorted(contents.items()):
         low_old, low_new = old.lower(), new.lower()
         if any(low_new.count(m) > low_old.count(m) for m in markers):
