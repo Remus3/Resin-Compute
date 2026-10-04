@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/social-preview.png" width="100%" alt="ResinCompute banner: wish and pity forecasting, resin budgeting and goal planning for Genshin Impact. Example forecast bar: pity 74, no guarantee, 30 wishes gives a 59.0 percent chance of the featured 5-star.">
+</p>
+
 # ResinCompute
 
 **Gacha arithmetic for Genshin Impact - wish and pity forecasting, resin

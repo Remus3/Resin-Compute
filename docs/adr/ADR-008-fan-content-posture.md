@@ -32,6 +32,8 @@ each is cheap to re-measure:
   keep the card out of git (it then exists on one disk only) or to skip it
   (GitHub falls back to a generated card). Re-open if any tracked image ever
   includes game material.
+  The same card is also shown as the banner at the top of `README.md`
+  (2026-10-03); that adds a reference, not a second tracked image.
 - **Zero vendored game data.** Everything under `data/fixtures/` is
   HAND-AUTHORED, and `data/fixtures/README.md` names which file is which kind.
   Two of the three are verified public game facts - real avatarIds and material
