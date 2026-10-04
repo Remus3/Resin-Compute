@@ -50,7 +50,14 @@ carried as `<caller>:<outcome>`, and the root `conftest.py` lists
 window. A child-interpreter arm kills the spawn with `os._exit` and finds both
 detail lines in the log; against the 3a75d47 module the same child found
 neither. The `fail-closed:provenance-deferred-*` lines carry `failclosed`,
-which opens and closes no window; pinned. (2) `provenance-deferred` joined
+which opens and closes no window; pinned. A round-3 adversary REFUTED that
+commit's leak guard: `_test_shaped` read only the label column, so a test
+child's `firedetail ... cli:<outcome>` line inside a live fire was excused,
+where db634b1 caught the equivalent `cli` line. Fixed next: a `firedetail`
+line is test-shaped unless its caller prefix is in `_LIVE_FIRE_SOURCES`, and
+one with no prefix is test-shaped; arms for `cli`, `run_once`, `suite`, no
+prefix and empty prefix (flagged), `scheduledtask` (excused), and the real
+`deliver` reproducer, all red before the fix. (2) `provenance-deferred` joined
 `TERMINATIONS`. (3) A released entry is pruned 24 h after `first_seen`
 (`DEFER_PRUNE_AGE_S`), so never-answered notes cannot fill the 64 slots; the
 inbox-file-gone prune branch gained an arm. Each of the three fixes was
