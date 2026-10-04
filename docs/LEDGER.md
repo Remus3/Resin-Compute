@@ -27,9 +27,27 @@ checks at least 240 s apart or 900 s after first seen; a later MATCH or
 MISMATCH drops the entry. Every failure of the record releases rather than
 holds. `_empty_termination` gained a defaulted parameter and returns
 `provenance-deferred`, which `_TICK_STATES` leaves at idle/Idle. The gate
-census floor and the gate name bindings are unchanged. Failing-first: 30 arms
-in `tests/test_responder_main_provenance.py` red before the change, with the
-behavioural ones reading `delivered` where `provenance-deferred` was wanted.
+census floor and the gate name bindings are unchanged. Failing-first: 31 arms
+in `tests/test_responder_main_provenance.py` red against db634b1 (adversary
+measurement; the builder's own first run read 30, taken before the
+malformed-entry arm was added), with the behavioural ones reading `delivered`
+where `provenance-deferred` was wanted.
+
+REFUTED ON f132394 BY TWO ADVERSARIES, fixed in the follow-up commit. (1) The
+deferral's expiry line was written under the fire's own label mid-fire, and
+the root conftest's `_live_fire_windows` ends a scheduled fire at the next
+line under that label, so the window collapsed to [start, start] and the live
+session's later writes read as a leak (false drift in the armed checkout).
+Same hazard, pre-existing, in `provenance_for`'s unverifiable-class line and
+`deliver`'s three skip/fail lines: all now go through `_log_fire_detail`, held
+until the fire's terminal line is written, keeping the one label and their own
+stamps. The `fail-closed:provenance-deferred-*` lines carry `failclosed`,
+which opens and closes no window; pinned. (2) `provenance-deferred` joined
+`TERMINATIONS`. (3) A released entry is pruned 24 h after `first_seen`
+(`DEFER_PRUNE_AGE_S`), so never-answered notes cannot fill the 64 slots; the
+inbox-file-gone prune branch gained an arm. Each of the three fixes was
+mutated on a scratch copy and its arm went red. (4) ADR-011's hypothetical C
+log reason now names the real line.
 Not done: the roots-map common-mode item stays open in `ROADMAP.md`, noted
 there as only partly feasible.
 

@@ -238,6 +238,9 @@ TERMINATIONS = (
     # string because the status file must count and name a free time from
     # the ledger that bound (`_status_budget`), and the log must say which.
     "kit-run-budget",
+    # THE QUEUE WAS EMPTY ONLY BECAUSE `defer_unverified` HELD a retryably
+    # UNVERIFIABLE MAIN note for a later tick's verdict. Nothing ran.
+    "provenance-deferred",
 )
 
 #: Set on the delivered path when the reply LANDED and the answered record did
@@ -410,6 +413,12 @@ DEFER_MAX_CHECKS = 3
 DEFER_MAX_AGE_S = 900.0
 #: At most this many entries; a note that finds the record full is released.
 DEFER_MAX_ENTRIES = 64
+#: A RELEASED entry is pruned this long after `first_seen` even when its note
+#: is never answered (refused every tick, or outside the trial window), so 64
+#: such notes cannot fill the record and switch deferral off. One day: 96 times
+#: the 900 s hold, so no live hold is ever cut short by it. The cost is bounded
+#: and stated: a note still pending a day later may be held once more.
+DEFER_PRUNE_AGE_S = 24 * 3600.0
 
 #: LITERAL CAPS ON THE RECORD, because the record is otherwise the held
 #: directory again in JSON. A note whose reasons vary every cycle would
@@ -1812,7 +1821,7 @@ def deliver(
         target = inbox / name
         try:
             if target.exists():
-                log_invocation(source, _log_label(target), "skipped-existing")
+                _log_fire_detail(source, _log_label(target), "skipped-existing")
                 results.append((False, target))
                 continue
             inbox.mkdir(parents=True, exist_ok=True)
@@ -1825,7 +1834,7 @@ def deliver(
                 # the exception itself and already logged its class through
                 # `core.log_setup`; naming a class this frame never saw would be
                 # a guess written down as a record.
-                log_invocation(source, _log_label(target), "delivery-failed-atomic-write")
+                _log_fire_detail(source, _log_label(target), "delivery-failed-atomic-write")
             results.append((written, target))
         except (OSError, ValueError) as exc:
             # A TYPE TEST, NEVER A MESSAGE MATCH. `UnicodeError` is the right
@@ -1834,7 +1843,7 @@ def deliver(
             # tuple that must not be absorbed.
             if isinstance(exc, UnicodeError):
                 raise
-            log_invocation(source, _log_label(target), f"delivery-failed-{type(exc).__name__}")
+            _log_fire_detail(source, _log_label(target), f"delivery-failed-{type(exc).__name__}")
             results.append((False, target))
     return results
 
@@ -2177,7 +2186,7 @@ def provenance_for(note: Path, verdicts: dict[str, Provenance], source: str) -> 
     if prov is None:
         return None
     if prov.error is not None:
-        log_invocation(source, note.name, f"provenance-unverifiable-{prov.error}")
+        _log_fire_detail(source, note.name, f"provenance-unverifiable-{prov.error}")
     return provenance_line(prov)
 
 
@@ -2661,6 +2670,36 @@ def log_invocation(source: str, note: str | None, outcome: str, now: float | Non
     return True
 
 
+#: DETAIL LINES A FIRE WRITES ARE HELD UNTIL ITS TERMINAL LINE IS WRITTEN.
+#: REFUTED ON f132394: the root conftest's `_live_fire_windows` ends a
+#: scheduled fire at the NEXT line carrying the fire's own label after its
+#: `start`, so a detail line written mid-fire - a deferral, an expiry, an
+#: unverifiable read class, a skipped or failed delivery - collapsed the fire's
+#: window to [start, start] and the live session's later record writes read as
+#: a test leak. Every such line keeps the fire's ONE label and its own stamp,
+#: and lands AFTER the terminal line, where a window neither opens nor closes.
+#: Outside `run_once` (`_FIRE_OPEN` false) a detail line is written at once.
+_FIRE_DETAIL: list[tuple[str, str | None, str, float]] = []
+_FIRE_OPEN: list[bool] = [False]
+
+
+def _log_fire_detail(source: str, note: str | None, outcome: str, now: float | None = None) -> bool:
+    """A mid-fire detail line: held for `_flush_fire_detail` inside a fire."""
+    stamp = time.time() if now is None else now
+    if not _FIRE_OPEN[0]:
+        return log_invocation(source, note, outcome, now=stamp)
+    _FIRE_DETAIL.append((source, note, outcome, stamp))
+    return True
+
+
+def _flush_fire_detail() -> None:
+    """Write the held detail lines, in order, after the fire's terminal line."""
+    _FIRE_OPEN[0] = False
+    held, _FIRE_DETAIL[:] = list(_FIRE_DETAIL), []
+    for source, note, outcome, stamp in held:
+        log_invocation(source, note, outcome, now=stamp)
+
+
 def _trim_invocations() -> None:
     """Hold the invocation log at a literal cap. Never raises.
 
@@ -3047,6 +3086,9 @@ def defer_unverified(
         for name in [k for k in entries if k not in names]:
             if name in done or not _note_present(inbox / name):
                 del entries[name]
+    for name in [k for k, e in entries.items() if e["released"]]:
+        if now - entries[name]["first_seen"] >= DEFER_PRUNE_AGE_S:
+            del entries[name]
     for n in candidates:
         if n not in retry:
             entries.pop(n.name, None)
@@ -3071,13 +3113,13 @@ def defer_unverified(
             continue
         if entry is None:
             entry = {"first_seen": now, "checks": 1, "last_check": now, "released": False}
-            log_invocation(source, n.name, "provenance-deferred", now=now)
+            _log_fire_detail(source, n.name, "provenance-deferred-held", now=now)
         elif not entry["released"]:
             if now - entry["last_check"] >= DEFER_CHECK_SPACING_S:
                 entry = {**entry, "checks": entry["checks"] + 1, "last_check": now}
             if entry["checks"] >= DEFER_MAX_CHECKS or now - entry["first_seen"] >= DEFER_MAX_AGE_S:
                 entry = {**entry, "released": True}
-                log_invocation(
+                _log_fire_detail(
                     source, n.name,
                     f"provenance-deferred-expired-{prov.error or 'absent'}", now=now,
                 )
@@ -3798,6 +3840,8 @@ def run_once(
     """
     started = time.time() if now is None else now
     log_invocation(source, None, "start", now=started)
+    _FIRE_DETAIL[:] = []
+    _FIRE_OPEN[0] = True
     try:
         if _halt_requested():
             print("responder: HALTED - the operator's HALT sentinel is present")
@@ -3808,9 +3852,11 @@ def run_once(
         # A responder that tracebacks out of a scheduled task surfaces nothing
         # at all. The log says so before the exception continues on its way.
         log_invocation(source, None, "crashed")
+        _flush_fire_detail()
         _write_tick_status(None)
         raise
     log_invocation(source, result.get("note"), result["termination"])
+    _flush_fire_detail()
     _write_tick_status(result)
     return result
 
