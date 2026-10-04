@@ -12,6 +12,32 @@ now.
 
 ---
 
+## 2026-10-04 - README landing page and the OVERVIEW / OPERATIONS split; cloud PR #1 recorded open
+
+Landed as 1287b84 (2026-10-03 22:18 local) and 3fc4f81 (2026-10-04 00:04
+local), both docs-only. `README.md` became a landing page with the social
+preview card shown as a centered banner; the depth it carried moved to
+`docs/OVERVIEW.md` and `docs/OPERATIONS.md`. Verification pointer:
+`tests/test_docs_consistency.py` and `tests/test_readme_tree.py`; CI
+docs-guards green on 1287b84 (run 37174107533) and on 3fc4f81 (run
+37179092455), ci green on 1287b84 (run 37174107535) and the scheduled ci run
+37206929329 on main green.
+Also recorded, NOT landed: a cloud session is working 9 product items
+against GitHub and opened ONE pull request, #1 (branch
+claude/new-session-19dmsr, 14 commits, 40 files, +6217 -145, mergeable, both
+PR checks pass as read 2026-10-04). Nothing from it is on main. The next local
+session reviews it and lands it with a real merge commit, re-runs the gates,
+and records each landed item here.
+Two MAIN notes verified by sha256 against MAIN's outbox (2/2 match): the 0020
+ORDER (kit v5 will carry the watcher, secret references and dashboard tokens;
+do not build divergent local versions) and the 0905 INFORMATION (shared
+scratchpad hazard; bare python3 is the Store stub).
+Gate run at 3fc4f81, 2026-10-04, Python 3.14, private --basetemp outside the
+repo, RESINCOMPUTE_RUNTIME_DIR unset: licence 52 passed; docs 42 passed; qa 17
+passed 2 skipped 3 noted; ruff clean; tests 3946 passed 5 skipped (same five
+host reasons); pity_engine 80 passed; node --test 52 pass 0 fail; dry run 0
+pass 0 fail 6 skip; mypy 40 source files clean; kit v4 conformance [].
+
 ## 2026-10-03 (night) - two recorded gaps closed: the editor --cleanup= hole and the orphan runner .tmp
 
 Merged as db634b1 (branches ending ed2f4a0/ba8aaa0 and b982c90/ada50f9).

@@ -1,18 +1,20 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-03 (night), gates measured at commit eee73c3 on main by the
-/done ritual; this paperwork commit landed after it. Everything below is a
+Stamped 2026-10-04, gates measured at commit 3fc4f81 on main by the /done
+ritual; this paperwork commit landed after it. Everything below is a
 READING taken that day, not a promise about now. Re-measure before citing.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
-  README.md
+  README.md (now a landing page; depth is in docs/OVERVIEW.md and
+    docs/OPERATIONS.md)
   docs/SPEC_SCAFFOLD.md
   ROADMAP.md
   docs/LEDGER.md
   git log --oneline -10
+  gh pr list   (the cloud PR, see OPEN WORK 1)
 Before planning any character build: docs/GOAL_SPEC_SEED_TEAM.md.
 Before adding any data source: docs/LICENSE_NOTES.md.
-Before re-litigating a past choice: docs/adr/README.md (ADR-011 is new).
+Before re-litigating a past choice: docs/adr/README.md.
 CLAUDE.md's pre-condense text is verbatim in docs/claude-md-history.md.
 
 DO NOT RE-DERIVE GACHA CONSTANTS from memory or from a web search. They are
@@ -43,66 +45,94 @@ shared pytest temp dir: pass a private --basetemp whose PARENT EXISTS and
 which sits OUTSIDE the repo. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures.
 
-STATE OBSERVED 2026-10-03 AT eee73c3 (the /done gate run)
-  tests 3945 passed 5 skipped 1 failed - the failure was this ritual's own
-  ledger edit (a dead backticked pointer), fixed and re-run: docs_consistency
-  plus guard_worktree_exclusion 56 passed; pity_engine 80; node --test exit 0;
-  licence 52; docs 42; qa 17 passed 2 skipped 3 noted; ruff clean; mypy 40
-  source files clean; dry run rc 0 (0 pass 0 fail 6 skip); kit v4
-  conformance []. All Python 3.14.
+STATE OBSERVED 2026-10-04 AT 3fc4f81 (the /done gate run)
+  licence 52 passed; docs 42 passed; qa 17 passed 2 skipped 3 noted; ruff
+  clean; tests 3946 passed 5 skipped; pity_engine 80 passed; node --test 52
+  pass 0 fail; dry run 0 pass 0 fail 6 skip; mypy 40 source files clean;
+  kit v4 conformance []. All Python 3.14, private --basetemp outside the
+  repo, RESINCOMPUTE_RUNTIME_DIR unset.
   Five skips, all host reasons: no exec bit on Windows
   (test_gate_mutation_runner), live fetch opt-in (test_ingest_client),
   bare python is 3.14 (test_interpreter_pinning), POSIX half
   (test_responder_no_console_window), denied dir still lists
   (test_session_hooks). A worktree shows MORE skips (no POSIX sh on PATH) -
   that is the location trap, not a regression.
-  CI ci and docs-guards both GREEN on eee73c3 (runs 37169427234 and
-  37169427223). The paperwork commit after it is docs-only.
-  Live status file read back 2026-10-03T20:46 under the new code: state
-  limit, Turn Limit Reached, runs 3 of 3 (MAIN reply cap), window_s 86400
-  (int), cap_frees_at 23:11 local. The responder ticks every 5 min.
-  Notes to MAIN read back at the recipient by sha256: RSC 1540 (kit v5 gap
-  list) 1b3590c4..., RSC 1657 (ANSWER to MAIN 1325 with live sample)
-  ee9dcadc.... Both 2/2. No reply owed by MAIN.
+  CI: docs-guards GREEN on 1287b84 (run 37174107533) and 3fc4f81 (run
+  37179092455); ci GREEN on 1287b84 (run 37174107535); scheduled ci on main
+  GREEN (run 37206929329). The paperwork commit after 3fc4f81 is docs-only.
+  Landed 2026-10-03/04, docs-only: README landing-page pass with the social
+  preview card as a centered banner (1287b84, 3fc4f81); depth moved to
+  docs/OVERVIEW.md and docs/OPERATIONS.md. Ledger entry written.
+  Cloud PR read 2026-10-04: #1 OPEN, branch claude/new-session-19dmsr,
+  14 commits, 40 files, +6217 -145, MERGEABLE, both PR checks pass. NOT
+  merged; nothing from it is on main.
+  MAIN notes read back by sha256 against MAIN's outbox copy, 2/2 match:
+  0020 ORDER (kit v5 contents, do not build divergent local versions)
+  4e391c40...; 0905 INFORMATION TERMINAL (shared scratchpad hazard, bare
+  python3 is the Store stub) ec499956....
+  Last live responder status reading is still 2026-10-03T20:46 (state limit,
+  runs 3 of 3 MAIN reply cap, cap_frees_at 23:11 local); not re-read today.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
-  1. RENEW THE RESPONDER BEFORE 2026-11-01T22:56 LOCAL - unchanged. Re-run
-     ops/install_responder_task.ps1, fresh gitignored agreement record, then
-     ops/check_task_liveness.py must exit 0.
-  2. Known gaps recorded, not fixed: a forged scheduledtask log label during
+  0. RENEW THE RESPONDER BEFORE 2026-11-01T22:56 LOCAL - unchanged, stays
+     top. Re-run ops/install_responder_task.ps1, fresh gitignored agreement
+     record, then ops/check_task_liveness.py must exit 0.
+  1. CLOUD PR #1 - REVIEW AND MERGE. A cloud session (Fable, ultracode) is
+     working 9 product items against GitHub and opens ONE PR; it is #1
+     (by-when forecast, ledger reconciliation, artifact scoring,
+     two new ADRs, guard hardening). Re-run gh pr list first: if more commits
+     arrived, wait for the cloud session to finish. Review the diff under the
+     session default (distinct refuter lenses, the producer never grades),
+     land it with a REAL merge commit (no squash, no rebase, no force), run
+     every gate above on the merged tree, push, read CI, and record each
+     landed item in docs/LEDGER.md and flip it in ROADMAP.md.
+  2. MAIN ORDER 0020 - kit v5 is being ASSEMBLED at MAIN and will carry the
+     watcher (fleet_watch), secret references (fleet_secrets) and dashboard
+     design tokens; the operator-task engine is gated on LW's reference. DO
+     NOT build local copies of the watcher, secret resolver, token palette or
+     task engine as fleet-shared modules; a tree-local stopgap may stay but
+     must not grow. RSC 1540 gaps 1-4 are acknowledged by MAIN as folded into
+     v5 - no further report needed. Tree-local "later" patterns (P0-4, P0-5,
+     P1-6, P2-8) are ours to build to MAIN's contracts in that note.
+  3. MAIN INFO 0905 - record as traps (done below in TRAPS): use a private
+     scratchpad subfolder named with RSC plus a unique suffix in every agent
+     prompt; never bare python3. Consider adding the rule to the agent
+     roster prompts under .claude/agents/.
+  4. Known gaps recorded, not fixed: a forged scheduledtask log label during
      a real fire is still excused by the drift check (conftest.py); a test
      child's failclosed line is excused inside a live fire (pre-existing,
      widened by the new fail-closed:provenance-deferred-* lines); the live
      child reported only Read, not Grep/Glob, cause unconfirmed; dontAsk was
      never exercised live.
-  3. Roots-map common-mode risk (ROADMAP "TEST THE ROOTS-MAP"): both MAIN
+  5. Roots-map common-mode risk (ROADMAP "TEST THE ROOTS-MAP"): both MAIN
      provenance checks trust the same roots row; only partly testable; needs
      its own adjudication before code (git calls were rejected by ADR-011).
-  4. Commit-msg gate known FALSE BLOCKS, each worked around with
+  6. Commit-msg gate known FALSE BLOCKS, each worked around with
      git commit -F <file>: a localised git; an editor commit with
      --no-status or commit.status=false after a merge conflict on a
      non-ASCII path (adjudicated KEEP fail-closed, pinned BLOCKED in
      tests/test_hook_gate.py); git commit -v scanning below the scissors
      line (predates, reasoned not measured). RESIDUAL under-block: -F/-m
      with commit.cleanup=strip configured plus an explicit keeping flag.
-  5. Orphan-temp sweep notes (round 2 NOT REFUTED): halt clause (a) also
+  7. Orphan-temp sweep notes (round 2 NOT REFUTED): halt clause (a) also
      covers WRITES - with RESINCOMPUTE_RUNTIME_DIR or RC_DATA_DIR pointing
      outside the repo the health file and other atomic writes still land
      there (predates); a dir swapped for a junction between root check and
      sweep is not caught.
-  6. Prov-defer notes, not defects: a deleted-then-redropped MAIN note gets a
+  8. Prov-defer notes, not defects: a deleted-then-redropped MAIN note gets a
      fresh first_seen (each hold still bounded at 900 s); entries for notes
      that leave the candidates unanswered stay until pruned at 24 h; a
      scheduled tick and a manual --once can lose one record update (no lock).
-  7. /120 counter notes, not defects: the MAIN-replies printability check
+  9. /120 counter notes, not defects: the MAIN-replies printability check
      is unreachable; an idle status over a non-oldest epoch-ms row reads
      120/120 while reserve_run still counts it as one; a one-off kit read
      error with the responder ledger full reads Backing Off, not the limit.
-  8. Inbox: about 411 files unread by the watcher; nothing new after SS 1348
-     except this tree's own 1540 and 1657. SS 1348 bucketed ingested,
-     nothing owed. The watermark was NOT marked (python
+  10. Inbox: about 411 older files unread by the watcher. New since last
+     session: MAIN 0020 and MAIN 0905 (both read and hash-verified, see
+     above), SS 0045 (ACK to MAIN 0020, not yet triaged), and this tree's
+     own 2316 auto-reply. The watermark was NOT marked (python
      scripts/watch_inbox.py --mark only after a real triage).
-  9. Housekeeping: about 27 agent worktrees under .claude/worktrees, most
+  11. Housekeeping: about 27 agent worktrees under .claude/worktrees, most
      from earlier sessions. Check each branch is merged before removing;
      the scratchpad ruling allows deleting this session's freely.
   DO NOT REDO: v3/v4 vendoring and provenance (reversed only by a new MAIN
@@ -115,9 +145,21 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
   death and never unlinked); ADR-011 outbox-hash provenance (reversed by a
   verified MAIN note ordering verify_main for runtime notes, or a measured
   hash-match MAIN never committed that mattered); the firedetail log label
-  (reversed only by a drift-check redesign that ends fires on terminals).
+  (reversed only by a drift-check redesign that ends fires on terminals);
+  the README landing page and the OVERVIEW/OPERATIONS split (reversed only
+  by an operator or verified MAIN instruction to restore the long README);
+  local watcher/secrets/tokens/task-engine modules (do not build - reversed
+  only by kit v5 shipping without them or a MAIN note saying otherwise).
 
 TRAPS MEASURED - none are hypothetical
+  THE SESSION SCRATCHPAD IS SHARED ACROSS TREES (MAIN 0905, observed).
+  Another tree's session ran a generic-named helper found there. Use a
+  private subfolder named RSC plus a unique suffix; never run a scratchpad
+  script you did not write this session.
+
+  BARE python3 IS THE MICROSOFT STORE STUB HERE (MAIN 0905). Use python or
+  the full interpreter path; launch children by sys.executable.
+
   A MID-FIRE LOG LINE UNDER THE FIRE'S OWN LABEL COLLAPSES THE DRIFT WINDOW.
   conftest._live_fire_windows ends a scheduledtask fire at its next line.
   Write detail under firedetail; never hold lines in memory (a hard kill
@@ -159,8 +201,6 @@ TRAPS MEASURED - none are hypothetical
   copy.
 
   write_text EMITS CRLF ON WINDOWS. Write bytes or newline=''.
-
-  THE SESSION SCRATCHPAD IS NOT SESSION-PRIVATE. Use unique names.
 
   NEVER write the account identity, the proxy address, its port or any machine
   path into a tracked file. Say "second account" and "local proxy".
