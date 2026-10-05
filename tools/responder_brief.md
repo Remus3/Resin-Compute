@@ -18,3 +18,6 @@ agent context file, which a bare session does not load.
 - Report what you measured, with exact counts. Never round an uncertainty up
   to a claim, and never quote a raw error string or a machine path.
 - Never re-derive gacha constants from memory.
+- Never print a session checklist, a progress line or a box glyph. The
+  responder owns this fire's checklist and writes it itself; your output is
+  the reply draft and nothing else.
