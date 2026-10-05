@@ -2660,7 +2660,10 @@ def log_invocation(source: str, note: str | None, outcome: str, now: float | Non
     happened.
     """
     stamp = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now or time.time()))
-    line = f"{stamp}\t{source}\t{note or '-'}\t{outcome}\n"
+    # NO CONTROL CHARACTER REACHES A COLUMN (round 4, defect 3): a note name
+    # or an outcome carrying a TAB or a newline would forge a second record,
+    # including one under a live writer's label. Replaced, as `_log_label` does.
+    line = f"{stamp}\t{_log_safe(source)}\t{_log_safe(note or '-')}\t{_log_safe(outcome)}\n"
     try:
         if not _ensure_parent(DEFAULT_INVOCATIONS):
             return False
@@ -2682,6 +2685,19 @@ def log_invocation(source: str, note: str | None, outcome: str, now: float | Non
         return False
     _trim_invocations()
     return True
+
+
+#: The characters that split a record: the column TAB and every character
+#: `str.splitlines` treats as a line break, which is how every reader of this
+#: log (the root conftest included) splits it. A NUL is NOT here on purpose:
+#: `tests/test_responder_broadcast_refusal.py` pins that a NUL-bearing
+#: destination is logged as it is, and a NUL splits no record.
+_LOG_BREAKERS = frozenset("\t\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029")
+
+
+def _log_safe(text: str) -> str:
+    """`text` with every record-splitting character replaced by `?`."""
+    return "".join("?" if c in _LOG_BREAKERS else c for c in str(text))
 
 
 #: THE LABEL OF A DETAIL LINE A FIRE WRITES BETWEEN ITS `start` AND ITS
@@ -3757,6 +3773,34 @@ def _reply_termination(
     return "delivered"
 
 
+def _release_outbound(path: Path, to: str, at: float) -> bool:
+    """Remove the ONE reservation row this fire wrote for `to` at `at` (round
+    4, defect 1), so the per-sender cap counts only replies that LANDED. A
+    record that cannot be read or rewritten is left alone and logged: it
+    stays at the safe side, capped."""
+    rows = _outbound_rows(path, at)
+    if rows is None:
+        _log_fail_closed(None, "outbound-unreleased")
+        return False
+    for i, row in enumerate(rows):
+        if row["to"] == to and float(row["at"]) == at:
+            if atomic_write_json(path, {"version": 1, "replies": rows[:i] + rows[i + 1:]}):
+                return True
+            _log_fail_closed(None, "outbound-unreleased")
+            return False
+    return False
+
+
+def _release_undelivered(result: dict, only: set[str] | None, started: float) -> None:
+    """The work lane's half of `_release_outbound`: a reply that ended
+    `undelivered` gives back its reservation. `reserve-failed` wrote none.
+    No-op with triage off, so the pre-v8 record is unchanged."""
+    note = result.get("note")
+    if only is None or result.get("termination") != "undelivered" or not isinstance(note, str):
+        return
+    _release_outbound(DEFAULT_OUTBOUND, sender_of(note) or "", started)
+
+
 def _forget_undelivered(path: Path, name: str, delivered: bool, only: set[str] | None) -> None:
     """Remember a note as answered ONLY when its reply landed (round 3, defect
     3). The cycle records it before it knows; with triage on, an undelivered
@@ -3906,6 +3950,7 @@ def run_once(
                 )
                 _record_work_reply(result, only, source)
                 _count_work_lane(result, only, inbox, source, started)
+                _release_undelivered(result, only, started)
         except BaseException:
             # A responder that tracebacks out of a scheduled task surfaces nothing
             # at all. The log says so before the exception continues on its way.
@@ -5090,20 +5135,33 @@ def _cooling(now: float, source: str = SOURCE_RUN_ONCE) -> set[str]:
 
     A cooldown ending later than `now + MAIN_WORK_COOLDOWN_S` cannot have been
     written by this clock (round 3, defect 2: a forward clock glitch froze a
-    MAIN note for 364 days). It is CORRUPT: dropped from the record and logged,
-    so the note is retried with the attempt window it already has."""
+    MAIN note for 364 days). It is CLAMPED to that bound and logged (round 4,
+    defect 4): a year-ahead glitch clears within 6 h of the clock's return, and
+    a small backward clock step only re-bounds a valid cooldown, never drops
+    it. Names are logged only when they are plain note names (round 4, defect
+    3): a key in this record is data and may carry a TAB or a newline."""
     cooldown = _cooldowns(DEFAULT_WORK_ATTEMPTS)
-    corrupt = {n for n, until in cooldown.items() if until > now + MAIN_WORK_COOLDOWN_S}
-    for name in sorted(corrupt):
-        _log_fire_detail(source, name, "work-cooldown-corrupt-dropped")
-    if corrupt:
-        kept = {n: u for n, u in cooldown.items() if n not in corrupt}
-        if not _write_attempts(DEFAULT_WORK_ATTEMPTS, _attempts(DEFAULT_WORK_ATTEMPTS), kept):
-            _log_fail_closed(None, "work-cooldown-unrecorded")
-    cooling = {n for n, until in cooldown.items() if n not in corrupt and now < until}
+    bound = now + MAIN_WORK_COOLDOWN_S
+    clamped = {n for n, until in cooldown.items() if until > bound}
+    for name in sorted(clamped):
+        _log_fire_detail(source, _safe_note_label(name), "work-cooldown-clamped")
+        cooldown[name] = bound
+    if clamped and not _write_attempts(DEFAULT_WORK_ATTEMPTS, _attempts(DEFAULT_WORK_ATTEMPTS), cooldown):
+        _log_fail_closed(None, "work-cooldown-unrecorded")
+    cooling = {n for n, until in cooldown.items() if now < until}
     for name in sorted(cooling):
-        _log_fire_detail(source, name, f"work-cooling-until-{int(cooldown[name])}")
+        _log_fire_detail(source, _safe_note_label(name), f"work-cooling-until-{int(cooldown[name])}")
     return cooling
+
+
+#: A note name as this module writes and reads them: one plain path segment.
+_SAFE_NOTE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}")
+
+
+def _safe_note_label(name: str) -> str:
+    """`name` when it is a plain note name, else a fixed placeholder.
+    `fullmatch`, never `match` with `$`, which accepts a trailing newline."""
+    return name if _SAFE_NOTE_NAME.fullmatch(name) else "<unsafe-note-name>"
 
 
 def _cool_main(note: str, now: float, source: str) -> bool:
@@ -5132,8 +5190,9 @@ def _count_work_lane(
     - one seen-ledger line (verdict `work-parked`, which leaves the work set)
     and one detail line - so it can never loop silently. A MAIN note is never
     parked: it COOLS DOWN (`MAIN_WORK_COOLDOWN_S`) and comes back with a fresh
-    attempt window. A MAIN cooldown that cannot be recorded falls back to the
-    park, the only state that cannot loop. Nothing with triage off."""
+    attempt window. A MAIN cooldown that cannot be recorded leaves the note
+    eligible (run budget bound) and is logged fail-closed on every fire it
+    recurs (round 4, defect 2). Nothing with triage off."""
     note = result.get("note")
     if only is None or not isinstance(note, str) or note not in only:
         return
@@ -5141,7 +5200,11 @@ def _count_work_lane(
         return
     if _count_attempt(DEFAULT_WORK_ATTEMPTS, note, MAX_WORK_ATTEMPTS, "work") < MAX_WORK_ATTEMPTS:
         return
-    if _is_main(note) and _cool_main(note, time.time() if now is None else now, source):
+    if _is_main(note):
+        # NEVER PARKED (round 4, defect 2). A cooldown that cannot be recorded
+        # leaves the MAIN note eligible, bounded by the run budget; `_cool_main`
+        # logs it fail-closed, and does so again on every fire it recurs.
+        _cool_main(note, time.time() if now is None else now, source)
         return
     path = (inbox or DEFAULT_INBOX) / note
     base = inbox_kit.classify(note, SELF_CODE, _note_head(path))
@@ -5352,7 +5415,12 @@ def _inbox_triage(
     # 3, defect 1): a park whose ledger line could not land must still take
     # the note out. With BOTH records unwritable no bound can be recorded at
     # all, so no sibling note is worked; MAIN keeps its path (sec 0).
-    spent = {n for n, c in _attempts(DEFAULT_WORK_ATTEMPTS).items() if c >= MAX_WORK_ATTEMPTS}
+    # A MAIN note is NEVER dropped by its count (round 4, defect 2): only a
+    # valid cooldown holds it (`_cooling` below).
+    spent = {
+        n for n, c in _attempts(DEFAULT_WORK_ATTEMPTS).items()
+        if c >= MAX_WORK_ATTEMPTS and not _is_main(n)
+    }
     bounded = ledger_ok or _record_writable(DEFAULT_WORK_ATTEMPTS)
     if not bounded:
         _log_fail_closed(None, "work-bound-unrecordable")
@@ -5453,6 +5521,7 @@ def _send_batch(
     written = deliver(text, slug, [d / "moon_sync_inbox" for d in destinations_for(items[0][0], roots)], source=source)
     if not (bool(written) and all(ok for ok, _t in written)):
         _log_fire_detail(source, slug, "triage-answer-undelivered-unseen")
+        _release_outbound(DEFAULT_OUTBOUND, code, started)
         return set(), names
     deliver(text, slug, [inbox], source=source)
     try:

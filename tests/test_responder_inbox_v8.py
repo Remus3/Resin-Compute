@@ -812,13 +812,102 @@ def _main_bed(rsp, tmp_path, monkeypatch):
 
 
 def test_r4_d2_a_forward_clock_glitch_cannot_freeze_a_main_note(rsp, tmp_path, monkeypatch):
-    """Ported test_M: a cooldown ending past now + MAIN_WORK_COOLDOWN_S is corrupt."""
+    """Ported test_M, as amended in round 4: a cooldown ending past
+    now + MAIN_WORK_COOLDOWN_S is CLAMPED to that bound, never kept and never
+    dropped - a year-ahead glitch clears within 6 h of the clock's return."""
     _name, fires = _main_bed(rsp, tmp_path, monkeypatch)
     t0 = time.time()
     assert fires(t0 + 365 * 86400, 3) == rsp.MAX_WORK_ATTEMPTS
-    assert fires(t0 + 7 * 3600, 20) == rsp.MAX_WORK_ATTEMPTS
+    assert fires(t0 + 7 * 3600, 5) == 0, "a clamped cooldown still holds"
     detail = _detail(rsp)
-    assert any(d.startswith("run_once:work-cooldown-corrupt") for d in detail), detail
+    assert any(d.startswith("run_once:work-cooldown-clamped") for d in detail), detail
+    assert fires(t0 + 7 * 3600 + rsp.MAIN_WORK_COOLDOWN_S + 60, 4) == rsp.MAX_WORK_ATTEMPTS
+
+
+def test_r5_4_a_small_backward_clock_step_only_re_bounds_a_cooldown(rsp, tmp_path, monkeypatch):
+    _name, fires = _main_bed(rsp, tmp_path, monkeypatch)
+    t0 = time.time()
+    assert fires(t0, 3) == rsp.MAX_WORK_ATTEMPTS
+    # The clock steps back 1 h: the cooldown now ends 7 h ahead, more than 6.
+    assert fires(t0 - 3600, 3) == 0, "a backward step must not drop a valid cooldown"
+
+
+def _main_box_bed(rsp, tmp_path, monkeypatch):
+    (tmp_path / "main").mkdir()
+    box = tmp_path / "main" / "moon_sync_inbox"
+    monkeypatch.setattr(rsp, "provenance_map", lambda q, r: {})
+    _agree(rsp)
+    monkeypatch.setattr(rsp, "workspace_trust", lambda *_a, **_k: (True, "trusted"))
+    sessions = Sessions(rsp)
+
+    def fire(at: float) -> dict:
+        return rsp.run_once(inbox=tmp_path / "inbox", roots={"MAIN": tmp_path / "main"},
+                            bounds=rsp.Bounds(armed=True), spawn=sessions.spawn,
+                            triage_spawn=sessions.triage_spawn, now=at)
+
+    return box, fire
+
+
+def test_r5_1_an_undelivered_reply_releases_its_sender_reservation(rsp, tmp_path, monkeypatch):
+    """Ported test_V: three failed deliveries to MAIN must not spend MAIN's
+    per-sender cap, or a NEW MAIN note waits about a day."""
+    _note(tmp_path / "inbox", "2026-10-05-0150-from-MAIN-ORDER-to-RSC-a.md")
+    box, fire = _main_box_bed(rsp, tmp_path, monkeypatch)
+    box.write_bytes(b"file, not a dir")
+    t0 = time.time()
+    for i in range(3):
+        assert fire(t0 + i * 300)["termination"] == "undelivered"
+    box.unlink()
+    box.mkdir()
+    b = "2026-10-05-0250-from-MAIN-ORDER-to-RSC-b.md"
+    _note(tmp_path / "inbox", b)
+    result = fire(t0 + 3600)
+    assert result["note"] == b and result["termination"] == "delivered", result
+    assert rsp.MAIN_CODE not in rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, t0 + 3600)
+
+
+def test_r5_2_a_main_note_is_never_dropped_by_its_attempt_count(rsp, tmp_path, monkeypatch):
+    """Ported test_S: cooldown write AND park line both fail on the third
+    attempt; the MAIN note must stay eligible, logged fail-closed."""
+    _name, fires = _main_bed(rsp, tmp_path, monkeypatch)
+    t0 = time.time()
+    assert fires(t0, 2) == 2
+    real_w, real_m = rsp._write_attempts, fi.mark_seen
+
+    def no_cooldown(path, counts, cooldown):
+        return False if cooldown else real_w(path, counts, cooldown)
+
+    def no_mark(*_a, **_k):
+        raise OSError("transient")
+
+    monkeypatch.setattr(rsp, "_write_attempts", no_cooldown)
+    monkeypatch.setattr(fi, "mark_seen", no_mark)
+    assert fires(t0 + 10, 1) == 1
+    monkeypatch.setattr(rsp, "_write_attempts", real_w)
+    monkeypatch.setattr(fi, "mark_seen", real_m)
+    later = fires(t0 + 7 * 3600, 5) + fires(t0 + 30 * 86400, 5)
+    assert later > 0, "a MAIN note was dropped forever by its attempt count"
+    text = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii")
+    assert "fail-closed:work-cooldown-unrecorded" in text
+
+
+def test_r5_3_a_cooldown_key_cannot_forge_a_log_record(rsp, tmp_path, monkeypatch):
+    """Ported test_T."""
+    _name, fires = _main_bed(rsp, tmp_path, monkeypatch)
+    t0 = time.time()
+    evil = "a" + chr(10) + "2026-10-05T00:00:00" + chr(9) + "scheduledtask" + chr(9) + "-"
+    rsp.DEFAULT_WORK_ATTEMPTS.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_WORK_ATTEMPTS.write_text(json.dumps({"version": 1, "attempts": {}, "cooldown": {evil: t0 + 100}}))
+    fires(t0, 1)
+    lines = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines()
+    assert all(len(ln.split("\t")) == 4 for ln in lines), lines
+    assert not [ln for ln in lines if ln.split("\t")[1] == "scheduledtask"]
+
+
+def test_r5_3_log_invocation_never_writes_a_control_character_into_a_column(rsp):
+    rsp.log_invocation("run_once", "x" + chr(9) + "y" + chr(10) + "z" + chr(13), "o" + chr(10) + "p")
+    lines = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines()
+    assert len(lines) == 1 and len(lines[0].split("\t")) == 4, lines
 
 
 def test_r4_d2_each_fire_holding_a_main_note_says_so(rsp, tmp_path, monkeypatch):
