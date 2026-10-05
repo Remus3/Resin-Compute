@@ -285,3 +285,78 @@ def test_a_poisoned_environment_cannot_move_the_ceiling():
         f"{[str(CROSS_REPO_CEILING)] * 3} for (constant, Config(), load_config()). "
         + CONTRACT
     )
+
+
+# --- LANE_CAP: the per-repo lane cap for a future lane driver -------------
+#
+# FLEET-COMMON item 13 d and the kit's `fleet_lanes.run_lane(cap=...)`. The
+# ruling recorded in CLAUDE.md ("Session checklist - FLEET-COMMON item 13 in
+# this tree") fixes it at 3 and NOT environment-overridable, for the same
+# reason as the ceiling above: a lane driver that reads its cap from a shell
+# variable lets one local setting widen work every carrier budgets against.
+# Written out independently, never imported as its own expectation.
+PER_REPO_LANE_CAP = 3
+
+PLAUSIBLE_LANE_CAP_ENV_NAMES = (
+    "LANE_CAP",
+    "RESIN_LANE_CAP",
+    "RC_LANE_CAP",
+    "RSC_LANE_CAP",
+    "FLEET_LANE_CAP",
+    "LANES",
+    "RESIN_LANES",
+)
+
+
+def test_the_lane_cap_is_three():
+    from core.config import LANE_CAP
+
+    assert LANE_CAP == PER_REPO_LANE_CAP
+    assert type(LANE_CAP) is int
+
+
+def test_the_lane_cap_never_exceeds_the_cross_repo_ceiling():
+    """Every lane holds at most one slot, so the lanes must fit the bucket."""
+    from core.config import LANE_CAP
+
+    assert 1 <= LANE_CAP <= MAX_CONCURRENT_LANES
+
+
+def test_the_module_docstring_records_the_lane_cap():
+    import core.config as config_module
+
+    doc = " ".join((config_module.__doc__ or "").split())
+    assert "LANE_CAP" in doc, "the module docstring no longer records LANE_CAP"
+
+
+def test_load_config_never_names_the_lane_cap():
+    assert "LANE_CAP" not in inspect.getsource(load_config)
+
+
+def test_lane_cap_is_not_read_from_the_environment():
+    """BEHAVIOURAL, in a fresh child, with a paired non-vacuity arm.
+
+    The same child also prints `load_config().engine_host` under a poisoned
+    RESIN_ENGINE_HOST, so the poisoning is proven to reach the module: a child
+    that never saw the environment would report 3 for every wrong reason.
+    """
+    poisoned = dict(os.environ)
+    for name in PLAUSIBLE_LANE_CAP_ENV_NAMES:
+        poisoned[name] = "9"
+    poisoned["RESIN_ENGINE_HOST"] = "10.0.0.9"
+
+    probe = "import core.config as c;print(c.LANE_CAP, c.load_config().engine_host)"
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=str(REPO_ROOT), env=poisoned, capture_output=True, text=True, timeout=120,
+    )
+
+    assert result.returncode == 0, f"probe failed: {result.stderr}"
+    observed = result.stdout.split()
+    assert observed[1] == "10.0.0.9", (
+        "non-vacuity: the poisoned environment did not reach the child, so the "
+        "lane-cap assertion below would measure nothing"
+    )
+    assert observed[0] == str(PER_REPO_LANE_CAP), (
+        f"a poisoned environment moved LANE_CAP to {observed[0]}"
+    )
