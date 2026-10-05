@@ -66,6 +66,11 @@ exclude = [
 "ops/supervisor.py" = ["BLE001"]
 # Tests assert on constants that read as magic numbers by design.
 "tests/*.py" = ["B011"]
+# Kit v8 fleet_inbox.py fails UP031 (8 printf-style formats, measured
+# 2026-10-05). Kit bytes are never patched; this one rule on this one kit file
+# is ignored instead of excluding the whole kit dir, and the defect is reported
+# to MAIN. Remove when a kit version ships the file clean.
+"ops/fleet_kit/fleet_inbox.py" = ["UP031"]
 "agents/pity_engine/tests/*.py" = ["B011"]
 
 [lint.isort]
