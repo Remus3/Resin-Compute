@@ -108,17 +108,19 @@ def test_a_mutated_claude_md_is_reported(tmp_path, old, new, expected):
     assert expected in KIT.conformance(root)
 
 
-#: The files kit v7 pins, per the MAIN 0215 ORDER of 2026-10-05, sorted as
+#: The files kit v8 pins, per the MAIN 0310 ORDER of 2026-10-05, sorted as
 #: `sorted()` orders them. v4 added LICENSE and NOTICE (Apache-2.0, holder the
 #: operator); v5 added fleet_watch.py, fleet_secrets.py and the two token
-#: files; v6 added fleet_lanes.py; v7 added fleet_checklist.py and changed only
-#: FLEET-COMMON.md and fleet_headless.py besides.
-V7_PINNED_FILES = (
+#: files; v6 added fleet_lanes.py; v7 added fleet_checklist.py; v8 added
+#: fleet_inbox.py and changed only FLEET-COMMON.md and fleet_headless.py
+#: besides.
+V8_PINNED_FILES = (
     "FLEET-COMMON.md",
     "LICENSE",
     "NOTICE",
     "fleet_checklist.py",
     "fleet_headless.py",
+    "fleet_inbox.py",
     "fleet_lanes.py",
     "fleet_secrets.py",
     "fleet_watch.py",
@@ -128,24 +130,24 @@ V7_PINNED_FILES = (
 
 #: MANIFEST.json is not in its own `files` map, so conformance() cannot notice
 #: a file and the manifest edited TOGETHER (its own docstring says MAIN's drift
-#: sweep catches that). Pinning the manifest's digest here, as the MAIN 0215
-#: ORDER section 1 states it, closes that gap inside this tree.
-V7_MANIFEST_SHA256 = "6e6225e10ecc8c0efc38d9027aa1443d38886ebc4b95402a7856e294ea23a9bf"
+#: sweep catches that). Pinning the manifest's digest here, as the MAIN 0310
+#: ORDER section 2 states it, closes that gap inside this tree.
+V8_MANIFEST_SHA256 = "fbbffed9818367888e1f9458f501ccf94edbf55a8ce7218a9e8d485166d37580"
 
 
-def test_the_vendored_kit_is_v7_and_pins_its_licence_files():
-    """The ORDER adopted is v7; a v8 drop must update this arm deliberately."""
+def test_the_vendored_kit_is_v8_and_pins_its_licence_files():
+    """The ORDER adopted is v8; a v9 drop must update this arm deliberately."""
     raw = (KIT_DIR / "MANIFEST.json").read_bytes()
     manifest = json.loads(raw.decode("ascii"))
-    assert KIT.KIT_VERSION == 7
-    assert manifest["version"] == 7
-    assert tuple(sorted(manifest["files"])) == V7_PINNED_FILES
-    assert hashlib.sha256(raw).hexdigest() == V7_MANIFEST_SHA256, (
-        "ops/fleet_kit/MANIFEST.json is not MAIN's v7 manifest byte-for-byte"
+    assert KIT.KIT_VERSION == 8
+    assert manifest["version"] == 8
+    assert tuple(sorted(manifest["files"])) == V8_PINNED_FILES
+    assert hashlib.sha256(raw).hexdigest() == V8_MANIFEST_SHA256, (
+        "ops/fleet_kit/MANIFEST.json is not MAIN's v8 manifest byte-for-byte"
     )
 
 
-@pytest.mark.parametrize("name", V7_PINNED_FILES)
+@pytest.mark.parametrize("name", V8_PINNED_FILES)
 def test_an_edited_kit_file_is_reported(tmp_path, name):
     root = _scratch_copy(tmp_path)
     target = root / "ops" / "fleet_kit" / name
@@ -165,9 +167,9 @@ def test_a_manifest_version_mismatch_is_reported(tmp_path):
     root = _scratch_copy(tmp_path)
     path = root / "ops" / "fleet_kit" / "MANIFEST.json"
     data = path.read_bytes()
-    assert b'"version": 7' in data, "mutation target absent - this mutant would be a no-op"
-    path.write_bytes(data.replace(b'"version": 7', b'"version": 6', 1))
-    assert "manifest v6 != kit v7" in KIT.conformance(root)
+    assert b'"version": 8' in data, "mutation target absent - this mutant would be a no-op"
+    path.write_bytes(data.replace(b'"version": 8', b'"version": 7', 1))
+    assert "manifest v7 != kit v8" in KIT.conformance(root)
 
 
 #: U+2610 as UTF-8, built from the code point so this file stays 7-bit.

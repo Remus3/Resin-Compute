@@ -141,7 +141,7 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
     ),
     "ops/fleet_kit/fleet_headless.py": (
         3,
-        "FLEET-KIT v7, vendored and never edited; re-triaged 2026-10-05 by "
+        "FLEET-KIT v8, vendored and never edited; re-triaged 2026-10-05 by "
         "reading each site, the same three as v4. _git: git, from the caller "
         "or _find_on_path('git'). _kill_tree: taskkill.exe under "
         "SYSTEMROOT/System32, else _find_on_path('taskkill'). _run: Popen of "
@@ -150,14 +150,14 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
     ),
     "ops/fleet_kit/fleet_lanes.py": (
         1,
-        "FLEET-KIT v7 (lanes since v6), vendored and never edited; triaged "
+        "FLEET-KIT v8 (lanes since v6), vendored and never edited; triaged "
         "2026-10-05. _git(*args, git='git'): the head is the parameter, "
         "default the bare name git, and every caller in that file passes "
         "git arguments. Never a Python.",
     ),
     "ops/fleet_kit/fleet_secrets.py": (
         1,
-        "FLEET-KIT v7 (secrets since v5), vendored and never edited; triaged "
+        "FLEET-KIT v8 (secrets since v5), vendored and never edited; triaged "
         "2026-10-05. _default_runner(argv): argv is built by "
         "_resolve_command from a caller's {'command': [...]} secret ref, its "
         "head an absolute path or a bare name resolved on PATH with the "
