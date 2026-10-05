@@ -245,6 +245,10 @@ TERMINATIONS = (
     # THE QUEUE WAS EMPTY ONLY BECAUSE `defer_unverified` HELD a retryably
     # UNVERIFIABLE MAIN note for a later tick's verdict. Nothing ran.
     "provenance-deferred",
+    # ITEM 14, TRIAGE ON ONLY: the work lane's reply was reserved but did not
+    # land in the sender's inbox. Never `delivered`, never recorded answered;
+    # the note is retried, bounded by `MAX_WORK_ATTEMPTS`.
+    "undelivered",
 )
 
 #: Set on the delivered path when the reply LANDED and the answered record did
@@ -3731,14 +3735,40 @@ def _reserve_targets(
     return [], [], [OUTBOUND_UNRESERVED_REASON]
 
 
-def _reply_termination(reserve_reasons: list[str]) -> str:
+def _reply_termination(
+    reserve_reasons: list[str], delivered: bool = True, only: set[str] | None = None
+) -> str:
     """`reserve-failed` when the reservation refused, `delivered` otherwise.
 
     A helper so `_run_once` gains no branch. The note is still recorded as
     answered on `reserve-failed` - dropped, the safe side - and the drop is in
     the invocation log twice: the fail-closed line and this termination.
+
+    WITH TRIAGE ON (`only` not None; round 3, defect 3) a reply that did not
+    land is `undelivered`, never `delivered`, and `_forget_undelivered` takes
+    the note back out of the answered record, so the work lane retries it
+    within `MAX_WORK_ATTEMPTS`. Both trailing parameters have defaults, so
+    the pre-v8 path is byte-for-byte unchanged.
     """
-    return "reserve-failed" if reserve_reasons else "delivered"
+    if reserve_reasons:
+        return "reserve-failed"
+    if only is not None and not delivered:
+        return "undelivered"
+    return "delivered"
+
+
+def _forget_undelivered(path: Path, name: str, delivered: bool, only: set[str] | None) -> None:
+    """Remember a note as answered ONLY when its reply landed (round 3, defect
+    3). The cycle records it before it knows; with triage on, an undelivered
+    or unreserved reply is taken back out - name and content hash - so the
+    note is retried rather than silently dropped. No-op with triage off."""
+    if only is None or delivered:
+        return
+    names = _answered(path)
+    if name not in names:
+        return
+    if not atomic_write_json(path, _answered_doc(names - {name}, _answered_hashes(path))):
+        _log_fail_closed(name, "answered-unforgettable")
 
 
 def record_backoff(path: Path, reset_at: float | None, now: float) -> bool:
@@ -4480,7 +4510,7 @@ def _run_once(
         # GATE:delivery-write-all
         result["delivered"] = all(ok for ok, _ in written) and bool(written)
         result["actions"] = ["A5"]
-        result["termination"] = _reply_termination(reserve_reasons)
+        result["termination"] = _reply_termination(reserve_reasons, result["delivered"], only)
 
         # THE RETURN VALUE IS OBSERVED, AND IT WAS A BARE STATEMENT HERE. A False
         # reached neither `result`, nor `record_cycle`'s reasons column, nor the
@@ -4500,6 +4530,8 @@ def _run_once(
         # THE CONTENT HASH, so a byte-identical re-drop under another name never
         # spends a second reply (`drop_redrops`). A no-op for a non-MAIN note.
         _remember_answered_sha(DEFAULT_ANSWERED, note.name, _content_sha(note, verdicts))
+        # ITEM 14 (round 3, defect 3): answered only when the reply LANDED.
+        _forget_undelivered(DEFAULT_ANSWERED, note.name, result["delivered"], only)
 
     finished = time.time()
     record_cycle(
@@ -4876,7 +4908,9 @@ DEFAULT_WORK_ATTEMPTS = RUNTIME_DIR / "responder_work_attempts.json"
 #: The work lane's terminations that mean a session RAN for the note and
 #: produced no reply. A budget, halt, route or backoff refusal is the fire's
 #: state, not the note's, and is not counted.
-WORK_ATTEMPT_TERMINATIONS = ("exhausted", "refused", "spawn-failed", "unrecordable")
+WORK_ATTEMPT_TERMINATIONS = (
+    "exhausted", "refused", "spawn-failed", "unrecordable", "undelivered", "reserve-failed",
+)
 
 #: A MAIN note at `MAX_WORK_ATTEMPTS` COOLS DOWN for this long, then gets a
 #: fresh attempt window: at most 3 sessions per 6 h, about 12 a day per note,
@@ -5051,9 +5085,25 @@ def _write_attempts(path: Path, counts: dict[str, int], cooldown: dict[str, floa
     return _ensure_parent(path) and atomic_write_json(path, doc)
 
 
-def _cooling(now: float) -> set[str]:
-    """MAIN notes inside their work-lane cooldown at `now`."""
-    return {n for n, until in _cooldowns(DEFAULT_WORK_ATTEMPTS).items() if now < until}
+def _cooling(now: float, source: str = SOURCE_RUN_ONCE) -> set[str]:
+    """MAIN notes inside their work-lane cooldown at `now`, each logged.
+
+    A cooldown ending later than `now + MAIN_WORK_COOLDOWN_S` cannot have been
+    written by this clock (round 3, defect 2: a forward clock glitch froze a
+    MAIN note for 364 days). It is CORRUPT: dropped from the record and logged,
+    so the note is retried with the attempt window it already has."""
+    cooldown = _cooldowns(DEFAULT_WORK_ATTEMPTS)
+    corrupt = {n for n, until in cooldown.items() if until > now + MAIN_WORK_COOLDOWN_S}
+    for name in sorted(corrupt):
+        _log_fire_detail(source, name, "work-cooldown-corrupt-dropped")
+    if corrupt:
+        kept = {n: u for n, u in cooldown.items() if n not in corrupt}
+        if not _write_attempts(DEFAULT_WORK_ATTEMPTS, _attempts(DEFAULT_WORK_ATTEMPTS), kept):
+            _log_fail_closed(None, "work-cooldown-unrecorded")
+    cooling = {n for n, until in cooldown.items() if n not in corrupt and now < until}
+    for name in sorted(cooling):
+        _log_fire_detail(source, name, f"work-cooling-until-{int(cooldown[name])}")
+    return cooling
 
 
 def _cool_main(note: str, now: float, source: str) -> bool:
@@ -5298,7 +5348,31 @@ def _inbox_triage(
         sibling_room = bool(cap.allow(REPLY_CLASS))
     except (OSError, ValueError):
         sibling_room = False
-    return {n for n in pool - answered - _cooling(started) if sibling_room or _is_main(n)}
+    # THE WORK BOUND IS READ FROM THE ATTEMPTS RECORD, NOT THE LEDGER (round
+    # 3, defect 1): a park whose ledger line could not land must still take
+    # the note out. With BOTH records unwritable no bound can be recorded at
+    # all, so no sibling note is worked; MAIN keeps its path (sec 0).
+    spent = {n for n, c in _attempts(DEFAULT_WORK_ATTEMPTS).items() if c >= MAX_WORK_ATTEMPTS}
+    bounded = ledger_ok or _record_writable(DEFAULT_WORK_ATTEMPTS)
+    if not bounded:
+        _log_fail_closed(None, "work-bound-unrecordable")
+    cooling = _cooling(started, source)
+    return {
+        n for n in pool - answered - cooling - spent
+        if _is_main(n) or (sibling_room and bounded)
+    }
+
+
+def _record_writable(path: Path) -> bool:
+    """Whether a JSON record at `path` can be (re)written now. Never raises."""
+    try:
+        if not _ensure_parent(path):
+            return False
+        if path.exists():
+            return path.is_file() and _writable_in_place(path)
+        return _dir_accepts_new_file(path.parent)
+    except (OSError, ValueError):
+        return False
 
 
 def _mtime(path: Path) -> float:
