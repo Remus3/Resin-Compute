@@ -96,16 +96,16 @@ def _log_lines(rsp) -> list[list[str]]:
     return [line.split("\t") for line in text.splitlines()]
 
 
-def _recording(monkeypatch) -> list[dict]:
+def _recording(rsp, monkeypatch) -> list[dict]:
     docs: list[dict] = []
-    real = kit.write_progress
+    real = rsp._write_progress_doc
 
-    def spy(root, task, pct, step, eta_s, status, clock=time.time, checklist=None):
-        doc = real(root, task, pct, step, eta_s, status, clock=clock, checklist=checklist)
+    def spy(*args, **kwargs):
+        doc = real(*args, **kwargs)
         docs.append(doc)
         return doc
 
-    monkeypatch.setattr(kit, "write_progress", spy)
+    monkeypatch.setattr(rsp, "_write_progress_doc", spy)
     return docs
 
 
@@ -134,13 +134,19 @@ def test_every_fire_ends_with_a_done_progress_file_and_an_empty_checklist(rsp, t
 def test_the_first_write_is_running_with_R1_to_R4_in_order_and_every_later_write_is_a_suffix(
     rsp, tmp_path, monkeypatch
 ):
-    docs = _recording(monkeypatch)
+    docs = _recording(rsp, monkeypatch)
     result = _armed(rsp, tmp_path, monkeypatch, lambda prompt, bounds: _draft(rsp))
     assert result["termination"] == "delivered", result
     mine = [d for d in docs if d["task"] == "rsc-responder"]
     assert len(mine) >= 3, mine
     assert mine[0]["status"] == "running"
     assert [r["id"] for r in mine[0]["checklist"]] == ROW_IDS
+    # Item 13 a/d: every running row names a state and an ETA; the first is running.
+    for doc in mine[:-1]:
+        rows = doc["checklist"]
+        assert rows[0]["state"] == "running", doc
+        assert all(r["state"] in ("running", "pending") for r in rows), doc
+        assert all(isinstance(r["eta_s"], int) for r in rows), doc
     for before, after in zip(mine, mine[1:]):
         b = [r["id"] for r in before["checklist"]]
         a = [r["id"] for r in after["checklist"]]
@@ -210,12 +216,73 @@ def test_a_failing_progress_write_never_ends_the_fire(rsp, tmp_path, monkeypatch
     def broken(*_a, **_k):
         raise exc("no progress for you")
 
-    monkeypatch.setattr(kit, "write_progress", broken)
+    monkeypatch.setattr(rsp, "_write_progress_doc", broken)
     result = rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
     assert result["termination"] == "empty", result
     outcomes = [p[3] for p in _log_lines(rsp) if len(p) == 4]
     assert f"fail-closed:kit-progress-{exc.__name__}" in outcomes, outcomes
     assert outcomes[-1] == "empty", outcomes
+
+
+def _hold_reader(path: Path, seconds: float, opened: threading.Event) -> threading.Thread:
+    """A REAL reader: an open handle on the progress file for `seconds`."""
+
+    def hold():
+        with open(path, "rb"):
+            opened.set()
+            time.sleep(seconds)
+
+    worker = threading.Thread(target=hold, name="progress-reader")
+    worker.start()
+    return worker
+
+
+def _seed_progress(rsp) -> Path:
+    path = _progress_path(rsp)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b'{"status": "running", "seeded": true}')
+    return path
+
+
+def test_a_briefly_held_reader_is_outlasted_by_the_bounded_replace_retry(rsp, tmp_path):
+    """Defect 11: Windows refuses a replace onto a file a reader holds open."""
+    path = _seed_progress(rsp)
+    opened = threading.Event()
+    reader = _hold_reader(path, 0.15, opened)
+    assert opened.wait(5)
+    try:
+        rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
+    finally:
+        reader.join(10)
+    doc = json.loads(path.read_text(encoding="ascii"))
+    assert doc.get("status") == "done", doc
+    assert list(path.parent.glob("*.tmp")) == []
+
+
+def test_a_reader_held_past_the_retry_leaves_no_orphaned_tmp(rsp, tmp_path):
+    path = _seed_progress(rsp)
+    opened = threading.Event()
+    reader = _hold_reader(path, 3.0, opened)
+    assert opened.wait(5)
+    try:
+        result = rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
+        assert result["termination"] == "empty", result
+        assert list(path.parent.glob("*.tmp")) == [], "this pid's tmp outlived a failed replace"
+    finally:
+        reader.join(10)
+    import sys
+
+    if sys.platform == "win32":
+        outcomes = [p[3] for p in _log_lines(rsp) if len(p) == 4]
+        assert any(o.startswith("fail-closed:kit-progress-") for o in outcomes), outcomes
+
+
+def test_a_foreign_tmp_beside_the_progress_file_is_never_deleted(rsp, tmp_path):
+    path = _seed_progress(rsp)
+    foreign = path.with_name(path.name + ".999999.tmp")
+    foreign.write_bytes(b"another process")
+    rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
+    assert foreign.read_bytes() == b"another process"
 
 
 class _Stop(Exception):
