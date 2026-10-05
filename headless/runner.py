@@ -23,6 +23,19 @@ vendored `ops/loop/slots.py`, so each LIVE pass runs inside a held slot and a
 slot is held around the pass and nothing else, per that module's own contract,
 and a dry run takes none: a slot is a lock file, and a dry run writes none.
 
+A LIVE pass also reports as it goes (FLEET-COMMON items 12 and 13 d). Inside
+its slot it writes progress task `rsc-runner` through the vendored kit's
+`write_progress`, carrying the item-13 checklist of the pass's jobs,
+REMAINING ones only, and logs the same block with the box rendered `[ ]`,
+because the log is a 7-bit sink. The session number is the pass's cycle.
+The progress root is the repo root only for the default runtime directory;
+any redirected runtime puts it under `<runtime>/kit_root` (`kit_root`), the
+rule the responder's `_kit_root` follows, so a test that redirects the
+runtime can never write the live `ops/loop/control/`. A failed progress
+write never fails a pass, and a dry, halted or starved pass writes none.
+This module reaches no kit spawn: its slot is held by `slots.hold`, and the
+kit's rule is one slot per executor call, never both.
+
 Exit codes:
   0  the pass completed; no job failed, or it was a dry run
   1  at least one job FAILed in a non-dry run, or a live --once pass did not
@@ -37,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib
 import logging
 import os
 import re
@@ -90,6 +104,25 @@ EXIT_USAGE = 2
 #: without releasing its slot. Never 259: that is Windows STILL_ACTIVE, and
 #: `slots.pid_alive` would read the dead process as alive.
 EXIT_JOB_ABANDONED = 3
+
+#: FLEET-COMMON item 12 / 13 d: the progress task a LIVE pass writes, as
+#: `<kit_root>/ops/loop/control/progress/rsc-runner.json`. Named in CLAUDE.md
+#: ("Session checklist - FLEET-COMMON item 13 in this tree").
+PROGRESS_TASK = "rsc-runner"
+
+#: The item-13 box as a 7-bit sink renders it. The kit carries U+2610 as an
+#: escape; this module only ever replaces it, never spells it.
+ASCII_BOX = "[ ]"
+
+#: Bounded retry around each progress write. The kit's
+#: `fleet_headless._atomic_write` has none and never removes its tmp - a kit
+#: defect reported to MAIN, never patched here - and on Windows `replace`
+#: is refused while any reader holds the target open. Mirrors the kit's own
+#: `fleet_lanes._retry`, with a longer budget (20 x 25 ms) because a widget
+#: polling the file is the expected reader. Read at call time so a test can
+#: shrink the sleep.
+PROGRESS_RETRIES = 20
+PROGRESS_RETRY_SLEEP_SECONDS = 0.025
 
 #: The operator's durable disarm. A file with this name in the runtime
 #: directory (the `runtime_dir` argument, else the directory the health file
@@ -397,6 +430,198 @@ def _run_job_bounded(
     return result, True
 
 
+# ---------------------------------------------------------------------------
+# Live-pass progress: FLEET-COMMON items 12 and 13 d
+# ---------------------------------------------------------------------------
+
+
+def kit_root(runtime_dir: str | None) -> Path:
+    """The root the kit's progress file goes under. SAFE BY DEFAULT.
+
+    The repo root only when the runtime directory is the default
+    `<repo root>/ops/runtime`. Any redirection - the `runtime_dir` argument or
+    `RESINCOMPUTE_RUNTIME_DIR` - puts it under `<runtime>/kit_root`, so every
+    arm that redirects the runtime keeps the progress file in tmp. The same
+    rule as the responder's `_kit_root`, with the same recorded residual: a
+    production host that redirects its runtime publishes progress there, not
+    in the fleet path. Pure path arithmetic; nothing is created.
+    """
+    resolved = health_mod.runtime_dir(Path(runtime_dir) if runtime_dir else None)
+    repo = Path(health_mod.REPO_ROOT)
+    if _same_path(resolved, repo / "ops" / "runtime"):
+        return repo
+    return resolved / "kit_root"
+
+
+def _same_path(left: Path, right: Path) -> bool:
+    """Normalised equality. Unknown means DIFFERENT, so the default is tmp-safe."""
+    try:
+        return os.path.normcase(os.path.abspath(left)) == os.path.normcase(
+            os.path.abspath(right)
+        )
+    except Exception:  # noqa: BLE001 - unknown means not the live root
+        return False
+
+
+def _load_kit() -> tuple[Any, Any]:
+    """The vendored kit's `fleet_headless` and `fleet_checklist`.
+
+    By importlib and typed Any, as the responder loads it: the kit sits
+    outside this tree's mypy roots and is never edited here. Imported at call
+    time, never at module scope, so the kit cannot break `--once --dry-run`.
+    """
+    headless_kit: Any = importlib.import_module("ops.fleet_kit.fleet_headless")
+    checklist_kit: Any = importlib.import_module("ops.fleet_kit.fleet_checklist")
+    return headless_kit, checklist_kit
+
+
+class _PassProgress:
+    """One LIVE pass's item-13 checklist and its item-12 progress file.
+
+    One row per job, `J<n>: Run job <name>`, completed as each job is
+    processed, so the file always holds the REMAINING jobs only. NEVER RAISES:
+    every kit call is caught, logged and dropped, so progress reporting can
+    never fail, stop or delay a pass. A checklist that cannot be built
+    disables the reporter for this pass and nothing else.
+    """
+
+    def __init__(
+        self, runtime_dir: str | None, cycle: int, specs: Sequence[jobs_mod.JobSpec]
+    ) -> None:
+        self._cycle = cycle
+        self._kit: Any = None
+        self._checklist: Any = None
+        self._box = ""
+        self._root: Path | None = None
+        self._ids: dict[str, str] = {}
+        self._total = len(specs)
+        self._warned = False
+        try:
+            headless_kit, checklist_kit = _load_kit()
+            rows = []
+            for index, spec in enumerate(specs, start=1):
+                ident = f"J{index}"
+                self._ids[spec.name] = ident
+                rows.append(checklist_kit.item(ident, f"Run job {spec.name}"))
+            self._checklist = checklist_kit.Checklist(cycle, rows)
+            self._box = str(checklist_kit.BOX)
+            self._root = kit_root(None if runtime_dir is None else str(runtime_dir))
+            self._kit = headless_kit
+        except Exception:  # noqa: BLE001 - reporting never fails a pass
+            self._checklist = None
+            log.warning(
+                "cycle %d: the session checklist could not be built; the pass runs "
+                "without a progress file",
+                cycle,
+            )
+            log.debug("checklist build failed", exc_info=True)
+
+    def _log_block(self, text: str) -> None:
+        for line in text.replace(self._box, ASCII_BOX).splitlines():
+            log.info("%s", line.encode("ascii", "replace").decode("ascii"))
+
+    def begin(self) -> None:
+        if self._checklist is None:
+            return
+        try:
+            self._log_block(self._checklist.start())
+        except Exception:  # noqa: BLE001 - reporting never fails a pass
+            log.debug("checklist block could not be rendered", exc_info=True)
+        self._write("running", "pass started")
+
+    def job_started(self, name: str) -> None:
+        ident = self._ids.get(name)
+        if self._checklist is None or ident is None:
+            return
+        try:
+            self._checklist.set_state(ident, "running", JOB_DEADLINE_SECONDS)
+        except Exception:  # noqa: BLE001
+            log.debug("checklist state update failed", exc_info=True)
+        self._write("running", f"job {name} running")
+
+    def job_finished(self, name: str) -> None:
+        ident = self._ids.get(name)
+        if self._checklist is None or ident is None:
+            return
+        try:
+            update = self._checklist.complete(ident)
+            if update:
+                self._log_block(update)
+        except Exception:  # noqa: BLE001
+            log.debug("checklist completion failed", exc_info=True)
+        self._write("running", f"job {name} finished")
+
+    def finish(self, ok: bool, step: str) -> None:
+        self._write("done" if ok else "failed", step)
+
+    def _remove_own_tmp(self) -> None:
+        """Delete THIS process's kit tmp, `<task>.json.<own pid>.tmp`, if any.
+
+        The kit leaves it behind when its `replace` is refused, and its name is
+        not an `atomic_io` temp, so `sweep_orphan_temps` would never reach it.
+        Only this pid's name is touched: another process's tmp may be a write
+        in flight. After a successful write the name no longer exists, so this
+        is a no-op then. Never raises.
+        """
+        if self._root is None or self._kit is None:
+            return
+        try:
+            target = Path(self._root) / self._kit.PROGRESS_REL / (PROGRESS_TASK + ".json")
+            target.with_name(f"{target.name}.{os.getpid()}.tmp").unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001 - cleanup never fails a pass
+            log.debug("could not remove this process's progress tmp", exc_info=True)
+
+    def _write(self, status: str, step: str) -> None:
+        if self._checklist is None or self._kit is None or self._root is None:
+            return
+        try:
+            rows = self._checklist.rows()
+            remaining = len(self._checklist.remaining())
+            if status == "done":
+                pct = 100
+            elif self._total:
+                pct = int(100 * (self._total - remaining) / self._total)
+            else:
+                pct = 0
+            eta = (
+                min(remaining * float(JOB_DEADLINE_SECONDS), float(PASS_DEADLINE_SECONDS))
+                if status == "running"
+                else 0
+            )
+            attempts = max(1, int(PROGRESS_RETRIES))
+            pause = threading.Event()
+            try:
+                for attempt in range(attempts):
+                    try:
+                        self._kit.write_progress(
+                            self._root,
+                            PROGRESS_TASK,
+                            pct=pct,
+                            step=step,
+                            eta_s=eta,
+                            status=status,
+                            checklist=rows,
+                        )
+                        break
+                    except OSError:
+                        if attempt + 1 == attempts:
+                            raise
+                        # Not `time.sleep`: this module's `time` binding is
+                        # reserved for the monotonic pass deadline.
+                        pause.wait(float(PROGRESS_RETRY_SLEEP_SECONDS))
+            finally:
+                self._remove_own_tmp()
+        except Exception:  # noqa: BLE001 - a failed write never fails a pass
+            if not self._warned:
+                self._warned = True
+                log.warning(
+                    "cycle %d: could not write the %s progress file; the pass goes on",
+                    self._cycle,
+                    PROGRESS_TASK,
+                )
+            log.debug("progress write failed", exc_info=True)
+
+
 def run_pass(
     uid: str | None = None,
     dry_run: bool = False,
@@ -404,12 +629,16 @@ def run_pass(
     runtime_dir: str | None = None,
     options: dict[str, Any] | None = None,
     write_summary: bool = True,
+    progress: _PassProgress | None = None,
 ) -> PassResult:
     """Run one reconciliation pass.
 
     Never raises on a job failure. The only exception that escapes is a
     `KeyError` from `select_jobs` for an unknown job name, which is a usage
     error the caller reports before any job runs.
+
+    `progress` is appended with a default, per the dataclass-style convention:
+    a LIVE governed pass passes its `_PassProgress`, every other caller none.
     """
     started_at = _utc_now_iso()
     specs = select_jobs(job_names)
@@ -467,6 +696,8 @@ def run_pass(
             )
             outcome.quarantine_skipped += 1
         else:
+            if progress is not None:
+                progress.job_started(spec.name)
             result, overran = _run_job_bounded(spec, context)
             if overran:
                 outcome.overran += 1
@@ -481,6 +712,8 @@ def run_pass(
         context.results[spec.name] = result
         outcome.results.append(result)
         log.info("%-6s %-16s %s", result.status, result.name, result.message)
+        if progress is not None:
+            progress.job_finished(spec.name)
 
     outcome.finished_at = _utc_now_iso()
     log.info("%s", outcome.summary_line())
@@ -960,9 +1193,25 @@ def _run_governed_pass(
             timeout=slot_timeout,
             log=lambda message: log.info("%s", message),
         ):
-            outcome = run_pass(
-                uid=uid, dry_run=False, job_names=job_names, runtime_dir=runtime_dir
-            )
+            # Item-13 checklist and item-12 progress, LIVE passes only, inside
+            # the hold because the pass is the work it reports on. Finished
+            # BEFORE the abandonment check, which never returns.
+            progress = _PassProgress(runtime_dir, cycle, select_jobs(job_names))
+            progress.begin()
+            try:
+                outcome = run_pass(
+                    uid=uid,
+                    dry_run=False,
+                    job_names=job_names,
+                    runtime_dir=runtime_dir,
+                    progress=progress,
+                )
+            except BaseException:
+                # The raw error belongs to the log via the caller, never to a
+                # file the operator's widget renders.
+                progress.finish(False, "the pass stopped on an error - see the runner log")
+                raise
+            progress.finish(outcome.ok, outcome.summary_line())
             if abandoned_jobs():
                 # INSIDE the hold, on purpose: this never returns, so the
                 # hold's `finally` never runs and the slot is NOT released.

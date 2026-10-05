@@ -45,6 +45,7 @@ and think about the three-repo consequence instead.
 """
 from __future__ import annotations
 
+import ast
 import dataclasses
 import inspect
 import os
@@ -284,4 +285,144 @@ def test_a_poisoned_environment_cannot_move_the_ceiling():
         f"a poisoned environment moved the ceiling: got {observed}, expected "
         f"{[str(CROSS_REPO_CEILING)] * 3} for (constant, Config(), load_config()). "
         + CONTRACT
+    )
+
+
+# --- LANE_CAP: the per-repo lane cap for a future lane driver -------------
+#
+# FLEET-COMMON item 13 d and the kit's `fleet_lanes.run_lane(cap=...)`. The
+# ruling recorded in CLAUDE.md ("Session checklist - FLEET-COMMON item 13 in
+# this tree") fixes it at 3 and NOT environment-overridable, for the same
+# reason as the ceiling above: a lane driver that reads its cap from a shell
+# variable lets one local setting widen work every carrier budgets against.
+# Written out independently, never imported as its own expectation.
+PER_REPO_LANE_CAP = 3
+
+PLAUSIBLE_LANE_CAP_ENV_NAMES = (
+    "LANE_CAP",
+    "RESIN_LANE_CAP",
+    "RC_LANE_CAP",
+    "RSC_LANE_CAP",
+    "FLEET_LANE_CAP",
+    "LANES",
+    "RESIN_LANES",
+)
+
+
+def test_the_lane_cap_is_three():
+    from core.config import LANE_CAP
+
+    assert LANE_CAP == PER_REPO_LANE_CAP
+    assert type(LANE_CAP) is int
+
+
+def test_the_lane_cap_never_exceeds_the_cross_repo_ceiling():
+    """Every lane holds at most one slot, so the lanes must fit the bucket."""
+    from core.config import LANE_CAP
+
+    assert 1 <= LANE_CAP <= MAX_CONCURRENT_LANES
+
+
+def test_the_module_docstring_records_the_lane_cap():
+    import core.config as config_module
+
+    doc = " ".join((config_module.__doc__ or "").split())
+    assert "LANE_CAP" in doc, "the module docstring no longer records LANE_CAP"
+
+
+def _lane_cap_assignments(source: str) -> list[ast.expr]:
+    """The value expression of every module-level assignment to LANE_CAP."""
+    values: list[ast.expr] = []
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.Assign):
+            if any(isinstance(t, ast.Name) and t.id == "LANE_CAP" for t in node.targets):
+                values.append(node.value)
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "LANE_CAP"
+            and node.value is not None
+        ):
+            values.append(node.value)
+    return values
+
+
+def _is_the_literal_cap(values: list[ast.expr]) -> bool:
+    return (
+        len(values) == 1
+        and isinstance(values[0], ast.Constant)
+        and type(values[0].value) is int
+        and values[0].value == PER_REPO_LANE_CAP
+    )
+
+
+def test_lane_cap_is_assigned_a_plain_int_literal():
+    """STRUCTURAL: exactly one assignment, and it is the literal 3.
+
+    The behavioural child probe below only covers the names it poisons; an
+    adversary showed `int(os.environ.get("RSC_FLEET_LANE_CAP", "3"))` passes it.
+    Any expression other than the literal - a call, a name, a lookup - fails
+    here, whatever variable it reads.
+    """
+    source = (REPO_ROOT / "core" / "config.py").read_text(encoding="utf-8")
+    values = _lane_cap_assignments(source)
+    assert _is_the_literal_cap(values), (
+        f"core/config.py must assign LANE_CAP exactly once, to the int literal "
+        f"{PER_REPO_LANE_CAP}; found {[ast.dump(v) for v in values]}"
+    )
+
+
+@pytest.mark.parametrize(
+    "mutant",
+    [
+        'LANE_CAP = int(os.environ.get("RSC_FLEET_LANE_CAP", "3"))\n',
+        "LANE_CAP = _env_int('X', 3)\n",
+        "LANE_CAP = MAX_CONCURRENT_LANES\n",
+        "LANE_CAP = 3.0\n",
+        "LANE_CAP = True\n",
+        "LANE_CAP = 4\n",
+        "LANE_CAP = 3\nLANE_CAP = int(os.environ['X'])\n",
+        "LANE_CAP: int = os.environ.get('X', 3)\n",
+    ],
+)
+def test_the_lane_cap_literal_check_rejects_a_mutant(mutant):
+    """Non-vacuity: each of these is refused by the structural check above."""
+    assert not _is_the_literal_cap(_lane_cap_assignments(mutant))
+
+
+def test_the_lane_cap_literal_check_accepts_the_literal():
+    assert _is_the_literal_cap(_lane_cap_assignments("LANE_CAP = 3\n"))
+    assert _is_the_literal_cap(_lane_cap_assignments("LANE_CAP: int = 3\n"))
+
+
+def test_load_config_never_names_the_lane_cap():
+    assert "LANE_CAP" not in inspect.getsource(load_config)
+
+
+def test_lane_cap_is_not_read_from_the_environment():
+    """BEHAVIOURAL, in a fresh child, with a paired non-vacuity arm.
+
+    The same child also prints `load_config().engine_host` under a poisoned
+    RESIN_ENGINE_HOST, so the poisoning is proven to reach the module: a child
+    that never saw the environment would report 3 for every wrong reason.
+    """
+    poisoned = dict(os.environ)
+    for name in PLAUSIBLE_LANE_CAP_ENV_NAMES:
+        poisoned[name] = "9"
+    poisoned["RESIN_ENGINE_HOST"] = "10.0.0.9"
+
+    probe = "import core.config as c;print(c.LANE_CAP, c.load_config().engine_host)"
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=str(REPO_ROOT), env=poisoned, capture_output=True, text=True, timeout=120,
+    )
+
+    assert result.returncode == 0, f"probe failed: {result.stderr}"
+    observed = result.stdout.split()
+    assert observed[1] == "10.0.0.9", (
+        "non-vacuity: the poisoned environment did not reach the child, so the "
+        "lane-cap assertion below would measure nothing"
+    )
+    assert observed[0] == str(PER_REPO_LANE_CAP), (
+        f"a poisoned environment moved LANE_CAP to {observed[0]}"
     )

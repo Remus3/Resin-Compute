@@ -61,6 +61,17 @@ not owned by this process, so the rule does not reach it, and making it
 env-derived would hand one local shell variable the power to lift a limit
 every other participating repository is relying on. Changing it is a JOINT act
 across all of them in one round.
+
+`LANE_CAP` is the second value here that is NOT read from the environment.
+It is the per-repo lane cap a future lane driver passes to the vendored
+kit's `fleet_lanes.run_lane(cap=LANE_CAP)` - how many lanes of THIS tree may
+run at once, each in its own worktree and each holding at most one governor
+slot. It is 3, by the ruling recorded in CLAUDE.md ("Session checklist -
+FLEET-COMMON item 13 in this tree"), and it is not environment-overridable
+for the reason above: every lane spends from the same shared bucket, so a
+local shell variable must not be able to widen it. It never exceeds
+`MAX_CONCURRENT_LANES` nor the kit's own `LANE_CAP_MAX`;
+`tests/test_fleet_lanes_adoption.py` pins both bounds.
 """
 from __future__ import annotations
 
@@ -126,6 +137,12 @@ DEFAULT_ENKA_USER_AGENT = "ResinCompute/0.1 (local single-account planner)"
 #: docstring above records why an override on one side raises the effective
 #: ceiling for every side.
 MAX_CONCURRENT_LANES = 3
+
+#: Per-repo lane cap for a future lane driver: `fleet_lanes.run_lane(cap=...)`.
+#: A constant, not a `Config` field and not environment-overridable - see the
+#: module docstring. Changing it is a ruling, recorded in CLAUDE.md with its
+#: reversal condition, never a local tweak.
+LANE_CAP = 3
 
 
 @dataclass(frozen=True)
