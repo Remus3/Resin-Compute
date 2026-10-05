@@ -25,7 +25,8 @@ line-length = 120
 # the pin. Kit v4 was MEASURED clean under this config on 2026-10-03 with
 # `ruff check --no-force-exclude ops/fleet_kit/fleet_headless.py`, so the
 # exclusion was dropped. If a later kit version is not clean, do not patch
-# the bytes: restore `extend-exclude = ["ops/fleet_kit"]` and report to MAIN.
+# the bytes: per-file-ignore only the failing rule on only the failing kit
+# file (see [lint.per-file-ignores]) and report to MAIN.
 
 [lint]
 select = [

@@ -114,6 +114,7 @@ def test_prose_mentioning_session_is_not_the_counter():
         pytest.param(["SESSION:56"], id="garbled-no-space"),
         pytest.param(["SESSION: 56 (proxy)"], id="garbled-trailing-text"),
         pytest.param(["  SESSION: 56"], id="garbled-indented"),
+        pytest.param(["SESSION: 56", "  SESSION: 57"], id="good-plus-indented"),
         pytest.param(["SESSION: -1"], id="garbled-negative"),
         pytest.param(["SESSION: 56", "SESSION: x"], id="good-plus-garbled"),
     ],
