@@ -674,8 +674,31 @@ READ_ONLY_PROGRESS_RULING = "NOT a repo edit"
 
 DISPATCH_PROTOCOL = REPO_ROOT / ".claude" / "commands" / "orchestrated-run.md"
 
-#: FLEET-COMMON item 3: status on request is these four, one short line each.
-STATUS_VOCABULARY = "done / left / +added / -retracted"
+#: FLEET-COMMON item 3 as amended by kit v7 item 13: status on request is the
+#: remaining checklist (item 13 b), with -retracted on one short line. Re-pinned
+#: 2026-10-05; the superseded kit-v2 shape is SUPERSEDED_STATUS_VOCABULARY.
+STATUS_VOCABULARY = "the remaining checklist (item 13 b), -retracted on one short line"
+
+#: The kit-v2 status shape and no-checklist rule, both superseded by item 13 for
+#: the session checklist. Neither may survive in the protocol docs, or a session
+#: reading them is told to refuse the one list the operator now orders.
+SUPERSEDED_STATUS_VOCABULARY = "done / left / +added / -retracted"
+SUPERSEDED_NO_CHECKLIST_RULE = "no inline checklists"
+
+#: The command docs that state the chat status shape.
+STATUS_SHAPE_DOCS = (
+    REPO_ROOT / ".claude" / "commands" / "orchestrated-run.md",
+    REPO_ROOT / ".claude" / "commands" / "ui-audit.md",
+)
+
+
+def _superseded_status_phrases(text: str) -> list[str]:
+    lowered = text.lower()
+    return [
+        phrase
+        for phrase in (SUPERSEDED_STATUS_VOCABULARY, SUPERSEDED_NO_CHECKLIST_RULE)
+        if phrase.lower() in lowered
+    ]
 
 
 def _missing_progress_tokens(text: str) -> list[str]:
@@ -712,6 +735,30 @@ def test_the_dispatch_protocol_names_the_progress_file_and_the_status_vocabulary
     assert not missing, f"orchestrated-run.md never states {missing}"
     assert "names the progress file" in text, "the dispatch protocol never requires the prompt to name the file"
     assert STATUS_VOCABULARY in text, "orchestrated-run.md does not carry the FLEET-COMMON item 3 status shape"
+
+
+@pytest.mark.parametrize("doc", STATUS_SHAPE_DOCS, ids=lambda path: path.name)
+def test_the_protocol_docs_carry_no_superseded_status_shape(doc):
+    """Kit v7 item 13 supersedes the kit-v2 'no inline checklists' rule for the
+    session checklist, and item 3 now answers status with the remaining list."""
+    text = doc.read_text(encoding="utf-8")
+    assert _superseded_status_phrases(text) == [], (
+        f"{doc.name} still states a superseded status rule: {_superseded_status_phrases(text)}"
+    )
+    assert "item 13" in text, f"{doc.name} never points at FLEET-COMMON item 13"
+
+
+def test_the_superseded_status_sweep_fires_and_spares_the_new_shape():
+    """Non-vacuity plus survivor: each superseded phrase is caught in any case,
+    and the new shape alone is not."""
+    assert _superseded_status_phrases(STATUS_VOCABULARY) == []
+    assert _superseded_status_phrases("**Chat carries No Inline Checklists**") == [
+        SUPERSEDED_NO_CHECKLIST_RULE
+    ]
+    assert _superseded_status_phrases("x " + SUPERSEDED_STATUS_VOCABULARY) == [
+        SUPERSEDED_STATUS_VOCABULARY
+    ]
+    assert STATUS_VOCABULARY != SUPERSEDED_STATUS_VOCABULARY
 
 
 def test_the_progress_sweep_fires_on_a_missing_token_and_a_missing_ruling(tmp_path):

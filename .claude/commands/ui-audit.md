@@ -317,7 +317,9 @@ AUDIT: BLOCKED - <n> MUST-FIX open
   unmeasured, never rounded up to clean.
 - That per-phase report goes to the CONTROLLER that dispatched the audit, not
   into the operator's chat. The main thread relays the verdict line and any
-  MUST-FIX that needs a ruling, one line each, and never re-prints the phases as
-  an inline checklist (FLEET-COMMON item 3). An audit expected to take over 5
+  MUST-FIX that needs a ruling, one line each, and never re-prints the phases
+  in chat (FLEET-COMMON item 3). The only task list chat carries is the item 13
+  session checklist, where the whole audit is one task line, and status on
+  request is the remaining checklist (item 13 b). An audit expected to take over 5
   minutes writes its progress file after each phase, per
   `.claude/agents/ui-auditor.md`.

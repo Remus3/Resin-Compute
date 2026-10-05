@@ -151,6 +151,15 @@ BANNER_SHAPE = re.compile(
     re.MULTILINE,
 )
 
+#: What `tools/session_checklist.py` prints: the FLEET-COMMON item 13 counter
+#: line, read from the `SESSION: <n>` line of `RSC-NEXT-SESSION.txt`. A THIRD
+#: SessionStart hook, wired 2026-10-05 for the kit-v7 order. ONE line, matched
+#: whole-body, and NUMERIC only: the hook's degraded `Session ? checklist` line
+#: is correct behaviour for a broken hand-off, but the live hand-off is not
+#: broken, so seeing it here means the counter line was lost and this arm
+#: should go red. `tests/test_session_checklist.py` grades the degraded path.
+SESSION_COUNTER_SHAPE = re.compile(r"\ASession [1-9][0-9]* checklist - [ -~]+\r?\n\Z")
+
 #: What `scripts/watch_inbox.py --quiet-when-empty` prints. A THIRD hook was
 #: wired on `UserPromptSubmit`, because `SessionStart` fires ONCE and cannot see
 #: a note that lands mid-session - which is the COMMON case on this channel.
@@ -273,6 +282,7 @@ EXPECTED_SHAPE = {
         QUIET_SHAPE
     ),
     'python "$CLAUDE_PROJECT_DIR/tools/caveman_default.py"': BANNER_SHAPE,
+    'python "$CLAUDE_PROJECT_DIR/tools/session_checklist.py"': SESSION_COUNTER_SHAPE,
 }
 
 #: sha256 of the `_BANNER` string literal in `tools/caveman_default.py`, and its
@@ -757,6 +767,47 @@ def test_session_start_invokes_the_inbox_watcher():
         f"{len(naming)} of {len(session)} SessionStart command(s) invoke {WATCHER}: "
         f"{[hook.command for hook in session]}"
     )
+
+
+#: The item-13 counter hook, repo-relative.
+SESSION_COUNTER_HOOK = "tools/session_checklist.py"
+
+
+def test_session_start_invokes_the_session_counter_hook_once():
+    """FLEET-COMMON item 13 a, interactive path: the counter line must reach
+    session context at every start, including the far side of `/clear`."""
+    session = [hook for hook in _hook_commands(_load_settings()) if hook.event == "SessionStart"]
+    naming = [
+        hook for hook in session if SESSION_COUNTER_HOOK in _repo_relative_command(hook.command)
+    ]
+    assert len(naming) == 1, (
+        f"{len(naming)} of {len(session)} SessionStart command(s) invoke "
+        f"{SESSION_COUNTER_HOOK}: {[hook.command for hook in session]}"
+    )
+    others = [
+        hook
+        for hook in _hook_commands(_load_settings())
+        if hook.event != "SessionStart"
+        and SESSION_COUNTER_HOOK in _repo_relative_command(hook.command)
+    ]
+    assert others == [], f"the counter hook is declared on another event: {others}"
+
+
+def test_the_session_counter_shape_accepts_the_counter_and_refuses_the_rest():
+    """Non-vacuity for the EXPECTED_SHAPE row: the degraded line, an empty run,
+    a traceback and a second line each fail; the real line passes."""
+    good = "Session 56 checklist - first reply prints it per FLEET-COMMON item 13\n"
+    assert SESSION_COUNTER_SHAPE.search(good)
+    assert SESSION_COUNTER_SHAPE.search(good.replace("\n", "\r\n"))
+    for bad in (
+        "",
+        "Session ? checklist - RSC-NEXT-SESSION.txt has no single readable line\n",
+        "Session 0 checklist - x\n",
+        good + good,
+        "Traceback (most recent call last):\n" + good,
+        good.replace("item", "item " + chr(0x2610)),
+    ):
+        assert not SESSION_COUNTER_SHAPE.search(bad), repr(bad)
 
 
 def test_no_declared_hook_marks_the_inbox_as_read():
@@ -1567,9 +1618,10 @@ def test_every_declared_command_has_a_stated_output_shape():
     and correct while naming a command nobody declares, or the reverse.
     """
     commands = _hook_commands(_load_settings())
-    assert len(commands) >= 3, (
-        f"{len(commands)} hook command(s) declared; SessionStart carries two and "
-        "UserPromptSubmit carries the quiet watcher"
+    assert len(commands) >= 4, (
+        f"{len(commands)} hook command(s) declared; SessionStart carries three "
+        "(watcher, banner, session counter) and UserPromptSubmit carries the "
+        "quiet watcher"
     )
     ungraded = []
     for hook in commands:
