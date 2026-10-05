@@ -747,6 +747,111 @@ def test_r3_a_main_note_always_refused_cools_down_and_is_retried_never_parked(rs
     assert name in doc.get("cooldown", {}), doc
 
 
+def _refused_work(rsp):
+    sessions = Sessions(rsp)
+    sessions.spawn = lambda prompt, bounds: (sessions.work.append(prompt), "")[1]
+    return sessions
+
+
+def test_r4_d1_an_unwritable_seen_ledger_cannot_unbound_the_work_lane(rsp, tmp_path, monkeypatch):
+    """Ported test_K: the park's ledger line cannot land, so the attempts count
+    alone must take the note out of the work set."""
+    (rsp._kit_root() / fi.SEEN_REL).mkdir(parents=True)
+    _note(tmp_path / "inbox", "2026-10-05-0100-from-RC-ORDER-measure.md")
+    sessions = _refused_work(rsp)
+    for _ in range(10):
+        _fire(rsp, tmp_path, monkeypatch, sessions)
+    assert len(sessions.work) == rsp.MAX_WORK_ATTEMPTS, len(sessions.work)
+
+
+def test_r4_d1_a_seen_ledger_that_turns_read_only_cannot_unbound_it_either(rsp, tmp_path, monkeypatch):
+    """Ported test_L."""
+    import stat
+
+    _note(tmp_path / "inbox", "2026-10-05-0100-from-RC-ORDER-measure.md")
+    sessions = _refused_work(rsp)
+    _fire(rsp, tmp_path, monkeypatch, sessions)
+    seen = rsp._kit_root() / fi.SEEN_REL
+    os.chmod(seen, stat.S_IREAD)
+    try:
+        for _ in range(9):
+            _fire(rsp, tmp_path, monkeypatch, sessions)
+    finally:
+        os.chmod(seen, stat.S_IREAD | stat.S_IWRITE)
+    assert len(sessions.work) == rsp.MAX_WORK_ATTEMPTS, len(sessions.work)
+
+
+def test_r4_d1_both_records_unwritable_gives_siblings_an_empty_work_set(rsp, tmp_path, monkeypatch):
+    (rsp._kit_root() / fi.SEEN_REL).mkdir(parents=True)
+    rsp.DEFAULT_WORK_ATTEMPTS.mkdir(parents=True)
+    _note(tmp_path / "inbox", "2026-10-05-0100-from-RC-ORDER-measure.md")
+    sessions = _refused_work(rsp)
+    for _ in range(4):
+        _fire(rsp, tmp_path, monkeypatch, sessions)
+    assert sessions.work == []
+
+
+def _main_bed(rsp, tmp_path, monkeypatch):
+    name = "2026-10-05-0150-from-MAIN-ORDER-to-RSC-always-refused.md"
+    _note(tmp_path / "inbox", name)
+    (tmp_path / "main" / "moon_sync_inbox").mkdir(parents=True)
+    monkeypatch.setattr(rsp, "provenance_map", lambda q, r: {})
+    _agree(rsp)
+    monkeypatch.setattr(rsp, "workspace_trust", lambda *_a, **_k: (True, "trusted"))
+    sessions = _refused_work(rsp)
+
+    def fires(at: float, n: int) -> int:
+        before = len(sessions.work)
+        for i in range(n):
+            rsp.run_once(inbox=tmp_path / "inbox", roots={"MAIN": tmp_path / "main"},
+                         bounds=rsp.Bounds(armed=True), spawn=sessions.spawn,
+                         triage_spawn=sessions.triage_spawn, now=at + i)
+        return len(sessions.work) - before
+
+    return name, fires
+
+
+def test_r4_d2_a_forward_clock_glitch_cannot_freeze_a_main_note(rsp, tmp_path, monkeypatch):
+    """Ported test_M: a cooldown ending past now + MAIN_WORK_COOLDOWN_S is corrupt."""
+    _name, fires = _main_bed(rsp, tmp_path, monkeypatch)
+    t0 = time.time()
+    assert fires(t0 + 365 * 86400, 3) == rsp.MAX_WORK_ATTEMPTS
+    assert fires(t0 + 7 * 3600, 20) == rsp.MAX_WORK_ATTEMPTS
+    detail = _detail(rsp)
+    assert any(d.startswith("run_once:work-cooldown-corrupt") for d in detail), detail
+
+
+def test_r4_d2_each_fire_holding_a_main_note_says_so(rsp, tmp_path, monkeypatch):
+    _name, fires = _main_bed(rsp, tmp_path, monkeypatch)
+    t0 = time.time()
+    fires(t0, 3)
+    before = sum(d.startswith("run_once:work-cooling") for d in _detail(rsp))
+    fires(t0 + 3600, 2)
+    after = sum(d.startswith("run_once:work-cooling") for d in _detail(rsp))
+    assert after - before == 2, _detail(rsp)
+
+
+def test_r4_d3_an_undelivered_work_reply_is_never_recorded_answered(rsp, tmp_path, monkeypatch):
+    """Ported test_Q: a work-lane reply that did not land is not 'delivered'."""
+    name = "2026-10-05-0160-from-RC-FIX-x.md"
+    _note(tmp_path / "inbox", name)
+    (tmp_path / "rc").mkdir()
+    (tmp_path / "rc" / "moon_sync_inbox").write_bytes(b"a file where the inbox should be")
+    _agree(rsp)
+    monkeypatch.setattr(rsp, "workspace_trust", lambda *_a, **_k: (True, "trusted"))
+    sessions = Sessions(rsp)
+    results = []
+    for _ in range(rsp.MAX_WORK_ATTEMPTS + 2):
+        results.append(rsp.run_once(inbox=tmp_path / "inbox", roots={"RC": tmp_path / "rc"},
+                                    bounds=rsp.Bounds(armed=True), spawn=sessions.spawn,
+                                    triage_spawn=sessions.triage_spawn))
+    assert all(r["termination"] != "delivered" for r in results if not r["delivered"]), results
+    assert results[0]["termination"] == "undelivered", results[0]
+    assert name not in rsp._answered(rsp.DEFAULT_ANSWERED)
+    assert len(sessions.work) == rsp.MAX_WORK_ATTEMPTS, "an undelivered reply must count as an attempt"
+    assert "undelivered" in rsp.TERMINATIONS and "undelivered" in rsp.WORK_ATTEMPT_TERMINATIONS
+
+
 def test_r2_d1_a_budget_refusal_is_not_a_work_attempt(rsp, tmp_path, monkeypatch):
     name = "2026-10-05-0110-from-RC-ORDER-later.md"
     _note(tmp_path / "inbox", name)
