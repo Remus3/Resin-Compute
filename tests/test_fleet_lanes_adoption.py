@@ -45,12 +45,50 @@ KIT_DIR = "ops/fleet_kit/"
 #: The lane-lock directory spelled as a path, either separator, or the kit's
 #: own constant name. Built from pieces so this module's source does not match
 #: its own detector.
+#: The joint between the two components may be a separator inside one string
+#: (`control/lanes`, `control\\lanes`), or a split across string literals
+#: (`"control" / "lanes"`, `join(..., "control", "lanes")`).
 _LANE_LOCK_PATH = re.compile(
-    "control" + r"[/\\]+" + "lanes" + r"\b" + "|" + r"\b" + "LANES" + "_REL" + r"\b"
+    "control"
+    + r"""(?:[/\\]+|["']\s*(?:/|,)\s*["'])"""
+    + "lanes"
+    + r"\b"
+    + "|"
+    + r"\b"
+    + "LANES"
+    + "_REL"
+    + r"\b"
 )
 
 _SLOT_HOLD = re.compile(r"\bslots(?:_mod)?\s*\.\s*hold\s*\(")
 _KIT_SPAWN = re.compile(r"\b(?:kit|fleet_headless)\s*\.\s*spawn\s*\(")
+#: `from <module> import <names>`, single-line or parenthesised; the names
+#: part is group 2. An `as` alias still names the imported symbol first.
+_FROM_IMPORT = re.compile(
+    r"^[ \t]*from[ \t]+([\w.]+)[ \t]+import[ \t]+(\([^)]*\)|[^\n]*)", re.MULTILINE
+)
+
+
+def _imports_name(text: str, module_tail: str, name: str) -> bool:
+    """True when `text` imports `name` from a module ending in `module_tail`."""
+    for match in _FROM_IMPORT.finditer(text):
+        module = match.group(1)
+        if module != module_tail and not module.endswith("." + module_tail):
+            continue
+        names = match.group(2).split("#", 1)[0] if "(" not in match.group(2) else match.group(2)
+        for part in names.strip("()").split(","):
+            words = part.split()
+            if words and words[0] == name:
+                return True
+    return False
+
+
+def _holds_a_slot(text: str) -> bool:
+    return bool(_SLOT_HOLD.search(text)) or _imports_name(text, "slots", "hold")
+
+
+def _spawns(text: str) -> bool:
+    return bool(_KIT_SPAWN.search(text)) or _imports_name(text, "fleet_headless", "spawn")
 
 
 def _tracked_py() -> list[str]:
@@ -94,9 +132,9 @@ def hold_and_spawn(sources: dict[str, str]) -> tuple[list[str], list[str]]:
     for rel, text in sources.items():
         if rel.startswith(KIT_DIR) or rel.startswith("tests/") or rel == "conftest.py":
             continue
-        if _SLOT_HOLD.search(text):
+        if _holds_a_slot(text):
             holders.append(rel)
-            if _KIT_SPAWN.search(text):
+            if _spawns(text):
                 both.append(rel)
     return holders, both
 
@@ -162,13 +200,21 @@ def test_the_lane_lock_detector_fires_on_a_planted_writer() -> None:
         "headless/planted_a.py": 'p = root / "ops/loop/control/lanes" / "0.lock"\n',
         "headless/planted_b.py": 'p = root / "ops\\\\loop\\\\control\\\\lanes"\n',
         "headless/planted_c.py": "from ops.fleet_kit.fleet_lanes import LANES_REL\n",
+        "headless/planted_d.py": 'p = root / "ops" / "loop" / "control" / "lanes" / "0.lock"\n',
+        "headless/planted_e.py": "p = os.path.join(root, 'ops', 'loop', 'control', 'lanes')\n",
+        "headless/planted_f.py": 'p = Path(root, "control", "lanes")\n',
         "headless/clean.py": 'p = root / "ops/loop/control/progress"\n',
+        "headless/clean_parts.py": 'p = root / "ops" / "loop" / "control" / "progress"\n',
+        "headless/clean_word.py": "# the lanes widget reads control files\n",
     }
     _, offenders = lane_lock_writers(planted)
     assert sorted(offenders) == [
         "headless/planted_a.py",
         "headless/planted_b.py",
         "headless/planted_c.py",
+        "headless/planted_d.py",
+        "headless/planted_e.py",
+        "headless/planted_f.py",
     ]
 
 
@@ -224,8 +270,32 @@ def test_the_hold_and_spawn_detector_fires_on_a_planted_module() -> None:
             "with slots_mod.hold(max_slots=3):\n    kit.spawn(note, governor=None)\n"
         ),
         "headless/hold_only.py": "with slots.hold(max_slots=3):\n    pass\n",
+        "headless/planted_imports.py": (
+            "from ops.loop.slots import hold\n"
+            "from ops.fleet_kit.fleet_headless import spawn\n"
+            "with hold(max_slots=3):\n    spawn(note)\n"
+        ),
+        "headless/planted_paren.py": (
+            "from ops.loop.slots import (\n    SlotTimeout,\n    hold as take,\n)\n"
+            "from .fleet_headless import (build_argv, spawn)\n"
+        ),
+        "headless/import_hold_only.py": "from ops.loop.slots import hold\n",
+        "headless/no_hold.py": (
+            "from ops.loop.slots import SlotTimeout\n"
+            "holding = 1  # hold\nkit.spawn(note)\n"
+        ),
         "tests/test_x.py": "with slots.hold():\n    kit.spawn(x)\n",
     }
     holders, both = hold_and_spawn(planted)
-    assert sorted(holders) == ["headless/hold_only.py", "headless/planted.py"]
-    assert both == ["headless/planted.py"]
+    assert sorted(holders) == [
+        "headless/hold_only.py",
+        "headless/import_hold_only.py",
+        "headless/planted.py",
+        "headless/planted_imports.py",
+        "headless/planted_paren.py",
+    ]
+    assert sorted(both) == [
+        "headless/planted.py",
+        "headless/planted_imports.py",
+        "headless/planted_paren.py",
+    ]

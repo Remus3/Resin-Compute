@@ -45,6 +45,7 @@ and think about the three-repo consequence instead.
 """
 from __future__ import annotations
 
+import ast
 import dataclasses
 import inspect
 import os
@@ -327,6 +328,71 @@ def test_the_module_docstring_records_the_lane_cap():
 
     doc = " ".join((config_module.__doc__ or "").split())
     assert "LANE_CAP" in doc, "the module docstring no longer records LANE_CAP"
+
+
+def _lane_cap_assignments(source: str) -> list[ast.expr]:
+    """The value expression of every module-level assignment to LANE_CAP."""
+    values: list[ast.expr] = []
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.Assign):
+            if any(isinstance(t, ast.Name) and t.id == "LANE_CAP" for t in node.targets):
+                values.append(node.value)
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "LANE_CAP"
+            and node.value is not None
+        ):
+            values.append(node.value)
+    return values
+
+
+def _is_the_literal_cap(values: list[ast.expr]) -> bool:
+    return (
+        len(values) == 1
+        and isinstance(values[0], ast.Constant)
+        and type(values[0].value) is int
+        and values[0].value == PER_REPO_LANE_CAP
+    )
+
+
+def test_lane_cap_is_assigned_a_plain_int_literal():
+    """STRUCTURAL: exactly one assignment, and it is the literal 3.
+
+    The behavioural child probe below only covers the names it poisons; an
+    adversary showed `int(os.environ.get("RSC_FLEET_LANE_CAP", "3"))` passes it.
+    Any expression other than the literal - a call, a name, a lookup - fails
+    here, whatever variable it reads.
+    """
+    source = (REPO_ROOT / "core" / "config.py").read_text(encoding="utf-8")
+    values = _lane_cap_assignments(source)
+    assert _is_the_literal_cap(values), (
+        f"core/config.py must assign LANE_CAP exactly once, to the int literal "
+        f"{PER_REPO_LANE_CAP}; found {[ast.dump(v) for v in values]}"
+    )
+
+
+@pytest.mark.parametrize(
+    "mutant",
+    [
+        'LANE_CAP = int(os.environ.get("RSC_FLEET_LANE_CAP", "3"))\n',
+        "LANE_CAP = _env_int('X', 3)\n",
+        "LANE_CAP = MAX_CONCURRENT_LANES\n",
+        "LANE_CAP = 3.0\n",
+        "LANE_CAP = True\n",
+        "LANE_CAP = 4\n",
+        "LANE_CAP = 3\nLANE_CAP = int(os.environ['X'])\n",
+        "LANE_CAP: int = os.environ.get('X', 3)\n",
+    ],
+)
+def test_the_lane_cap_literal_check_rejects_a_mutant(mutant):
+    """Non-vacuity: each of these is refused by the structural check above."""
+    assert not _is_the_literal_cap(_lane_cap_assignments(mutant))
+
+
+def test_the_lane_cap_literal_check_accepts_the_literal():
+    assert _is_the_literal_cap(_lane_cap_assignments("LANE_CAP = 3\n"))
+    assert _is_the_literal_cap(_lane_cap_assignments("LANE_CAP: int = 3\n"))
 
 
 def test_load_config_never_names_the_lane_cap():
