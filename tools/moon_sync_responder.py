@@ -3875,6 +3875,7 @@ def run_once(
                     started, grammar, source, only,
                 )
                 _record_work_reply(result, only, source)
+                _count_work_lane(result, only, inbox, source)
         except BaseException:
             # A responder that tracebacks out of a scheduled task surfaces nothing
             # at all. The log says so before the exception continues on its way.
@@ -4864,8 +4865,28 @@ REPLY_CLASS = "ANSWER"
 WORK_VERDICTS: tuple[str | None, ...] = (None, "ANSWER-refused-escalated", "triage-failed-escalated")
 
 
+#: Failed WORK-LANE sessions per note before it is parked (refutation round
+#: 2, defect 1). With the inbox-wide hop gate lifted, a note whose draft is
+#: refused or empty would otherwise buy a full session on every fire forever.
+MAX_WORK_ATTEMPTS = 3
+
+#: Per-note failed work-lane session counts, persisted like the triage ones.
+DEFAULT_WORK_ATTEMPTS = RUNTIME_DIR / "responder_work_attempts.json"
+
+#: The work lane's terminations that mean a session RAN for the note and
+#: produced no reply. A budget, halt, route or backoff refusal is the fire's
+#: state, not the note's, and is not counted.
+WORK_ATTEMPT_TERMINATIONS = ("exhausted", "refused", "spawn-failed", "unrecordable")
+
+
 def _triage_switch() -> str:
-    return os.environ.get(ENV_TRIAGE, "").strip()
+    """The switch's value. `TRIAGE_OFF_SUITE` counts as the suite's only while
+    pytest is running (refutation round 2, defect 5); anywhere else it is the
+    operator's "0", which is logged on every fire."""
+    value = os.environ.get(ENV_TRIAGE, "").strip()
+    if value == TRIAGE_OFF_SUITE and not os.environ.get("PYTEST_CURRENT_TEST"):
+        return "0"
+    return value
 
 
 def _triage_engaged() -> bool:
@@ -4891,11 +4912,20 @@ def _reply_hop(note: Path, only: Any = True) -> int | None:
 
 
 def _hop_stamp(draft: str, hop_n: int | None, bounds: Bounds) -> str:
-    """`draft` with a `HOP: <n>` last line - only when it passes the gate on
-    its own, so an empty draft stays `exhausted`, as `stamp_reply` does."""
+    """`draft` with a `HOP: <n>` line IN ITS HEAD - only when it passes the gate
+    on its own, so an empty draft stays `exhausted`, as `stamp_reply` does.
+
+    IN THE HEAD (refutation round 2, defect 4): the kit's `scan` reads only a
+    note's first 1500 bytes, so a HOP line appended to a long reply read as
+    HOP 1 at a v8 receiver. It goes right under the tag line, or under the
+    provenance line of a MAIN reply, which must stay at line 2."""
     if hop_n is None or validate_draft(draft, bounds):
         return draft
-    return draft.rstrip("\n") + f"\n\nHOP: {hop_n}\n"
+    lines = draft.split("\n")
+    at = 1 if lines and lines[0].strip() == RESPONDER_TAG else 0
+    if at and len(lines) > 1 and lines[1].startswith(PROVENANCE_PREFIX):
+        at = 2
+    return "\n".join([*lines[:at], f"HOP: {hop_n}", *lines[at:]])
 
 
 def _work_lane_only(candidates: list[Path], only: set[str] | None) -> list[Path]:
@@ -4971,26 +5001,51 @@ def _decision(action: str, base: Any, reason: str) -> Any:
     return inbox_kit.Decision(action, base.cls, base.sender, reason, base.hop)
 
 
-def _triage_attempts() -> dict[str, int]:
-    doc = _load_record(DEFAULT_TRIAGE_ATTEMPTS)
+def _attempts(path: Path) -> dict[str, int]:
+    doc = _load_record(path)
     rows = doc.get("attempts") if isinstance(doc, dict) else None
     if not isinstance(rows, dict):
         return {}
     return {k: v for k, v in rows.items() if isinstance(k, str) and isinstance(v, int)}
 
 
-def _count_triage_failure(name: str) -> int:
-    """One more failed triage for `name`. FAIL CLOSED: when the count cannot
-    be recorded it reads as exhausted, so the note escalates rather than
-    being retried without bound."""
-    counts = _triage_attempts()
+def _triage_attempts() -> dict[str, int]:
+    return _attempts(DEFAULT_TRIAGE_ATTEMPTS)
+
+
+def _count_attempt(path: Path, name: str, cap: int, what: str) -> int:
+    """One more failed attempt for `name` in the record at `path`. FAIL CLOSED:
+    a count that cannot be recorded reads as `cap`, and the CALLER acts on it
+    in the same fire (refutation round 2, defect 3) - a next fire would re-read
+    the old count and the bound would never bind."""
+    counts = _attempts(path)
     counts[name] = counts.get(name, 0) + 1
-    if not _ensure_parent(DEFAULT_TRIAGE_ATTEMPTS) or not atomic_write_json(
-        DEFAULT_TRIAGE_ATTEMPTS, {"version": 1, "attempts": counts}
-    ):
-        _log_fail_closed(name, "triage-attempts-unrecorded")
-        return MAX_TRIAGE_ATTEMPTS
+    if not _ensure_parent(path) or not atomic_write_json(path, {"version": 1, "attempts": counts}):
+        _log_fail_closed(name, f"{what}-attempts-unrecorded")
+        return cap
     return counts[name]
+
+
+def _count_triage_failure(name: str) -> int:
+    return _count_attempt(DEFAULT_TRIAGE_ATTEMPTS, name, MAX_TRIAGE_ATTEMPTS, "triage")
+
+
+def _count_work_lane(result: dict, only: set[str] | None, inbox: Path | None, source: str) -> None:
+    """Defect 1 of round 2: a work-lane session that ran and produced no reply
+    counts against its note; at `MAX_WORK_ATTEMPTS` the note is PARKED - one
+    seen-ledger line (verdict `work-parked`, which leaves the work set) and one
+    detail line - so it can never loop silently. Nothing with triage off."""
+    note = result.get("note")
+    if only is None or not isinstance(note, str) or note not in only:
+        return
+    if result.get("termination") not in WORK_ATTEMPT_TERMINATIONS:
+        return
+    if _count_attempt(DEFAULT_WORK_ATTEMPTS, note, MAX_WORK_ATTEMPTS, "work") < MAX_WORK_ATTEMPTS:
+        return
+    path = (inbox or DEFAULT_INBOX) / note
+    base = inbox_kit.classify(note, SELF_CODE, _note_head(path))
+    _mark(_kit_root(), path, _decision(inbox_kit.WORK, base, "work lane kept failing"), "work-parked", source)
+    _log_fire_detail(source, note, "work-parked")
 
 
 def _triage_prompt(name: str, text: str) -> str:
@@ -5091,6 +5146,11 @@ def _inbox_triage(
         if ledger_ok and not _mark(root, path, decision, verdict, source):
             ledger_ok, budget = False, 0
 
+    def escalate(path: Path, d: Any) -> None:
+        """Triage kept failing for this note: the work lane takes it NOW."""
+        mark(path, _decision(inbox_kit.WORK, d, "triage kept failing"), "triage-failed-escalated")
+        work_now.add(path.name)
+
     for path, d in rows:
         name, code = path.name, sender_of(path.name)
         if name in answered:
@@ -5134,8 +5194,7 @@ def _inbox_triage(
         if not destinations_for(path, roots):
             continue  # unseen: a roots map that names no destination may be repaired
         if attempts.get(name, 0) >= MAX_TRIAGE_ATTEMPTS:
-            mark(path, _decision(inbox_kit.WORK, d, "triage kept failing"), "triage-failed-escalated")
-            work_now.add(name)
+            escalate(path, d)
             continue
         new_dest = code not in planned
         if budget <= 0 or code in capped or (new_dest and room - len(planned) <= 0):
@@ -5155,8 +5214,9 @@ def _inbox_triage(
             continue
         except Exception as exc:  # noqa: BLE001 - a fire must survive ANY session failure
             _log_fire_detail(source, name, f"triage-spawn-failed-{exc.__class__.__name__}")
-            attempts[name] = _count_triage_failure(name)
             budget = 0
+            if _count_triage_failure(name) >= MAX_TRIAGE_ATTEMPTS:
+                escalate(path, d)
             continue
         verdict, answer = inbox_kit.parse_verdict(raw)
         if verdict != "ANSWER":
@@ -5165,11 +5225,23 @@ def _inbox_triage(
             answers.setdefault(code, []).append((path, answer, d))
             planned.add(code)
     for code, items in answers.items():
-        work_now |= _send_batch(root, code, items, roots, inbox, bounds, started, source)
+        escalated, failed = _send_batch(root, code, items, roots, inbox, bounds, started, source)
+        work_now |= escalated
+        # A SEND THAT FAILED AFTER A PAID TRIAGE counts against the note
+        # (round 2, defect 2): otherwise it is re-triaged and paid for every
+        # fire. At the bound it goes to the work lane in this same fire.
+        for path, _answer, d in items:
+            if path.name in failed and _count_triage_failure(path.name) >= MAX_TRIAGE_ATTEMPTS:
+                escalate(path, d)
+    # THE LAST ROW PER NOTE DECIDES: a note parked or answered after it was
+    # first seen as work leaves the work set.
+    last: dict[str, dict] = {}
+    for r in _seen_rows(root):
+        if isinstance(r.get("note"), str):
+            last[r["note"]] = r
     pool = work_now | {
-        r["note"] for r in _seen_rows(root)
+        n for n, r in last.items()
         if r.get("action") == inbox_kit.WORK and r.get("verdict") in WORK_VERDICTS
-        and isinstance(r.get("note"), str)
     }
     try:
         sibling_room = bool(cap.allow(REPLY_CLASS))
@@ -5201,9 +5273,10 @@ def _send_batch(
     bounds: Bounds,
     started: float,
     source: str,
-) -> set[str]:
+) -> tuple[set[str], set[str]]:
     """ONE note to `code` carrying every triage ANSWER for it (item 14 rule 3).
-    Returns the notes ESCALATED to the work lane.
+    Returns (notes ESCALATED to the work lane, notes whose SEND FAILED after
+    a paid triage - the caller counts those against the note).
 
     Gated like a work-lane reply: `may_reply` on every part, the daily cap,
     `validate_draft` (tag, ASCII, size, traceback, account path, credentials),
@@ -5212,13 +5285,15 @@ def _send_batch(
     notes go to the work lane. A cap refusal, a failed reservation or a failed
     delivery leaves every part UNSEEN, so the next fire tries again.
     """
+    names = {p.name for p, _a, _d in items}
+
     def finish(verdict: str) -> None:
         for path, _answer, d in items:
             _mark(root, path, d, verdict, source)
 
     if not all(inbox_kit.may_reply(d.cls, d.hop) for _p, _a, d in items):
         finish("ANSWER-hop-limit")
-        return set()
+        return set(), set()
     cap = inbox_kit.OutboundCap(root)
     try:
         allowed = bool(cap.allow(REPLY_CLASS))
@@ -5226,7 +5301,7 @@ def _send_batch(
         allowed = False
     if not allowed:
         _log_fire_detail(source, code, "triage-answer-capped-unseen")
-        return set()
+        return set(), names
     hop_n = max(int(inbox_kit.next_hop(d.hop)) for _p, _a, d in items)
     try:
         slug, body, _names = inbox_kit.batch_note(
@@ -5246,14 +5321,14 @@ def _send_batch(
         for path, _answer, d in items:
             _mark(root, path, _decision(inbox_kit.WORK, d, "batched answer refused"),
                   "ANSWER-refused-escalated", source)
-        return {p.name for p, _a, _d in items}
+        return names, set()
     if not record_outbound(DEFAULT_OUTBOUND, code, started, True):
         _log_fail_closed(slug, "outbound-unreserved-unseen")
-        return set()
+        return set(), names
     written = deliver(text, slug, [d / "moon_sync_inbox" for d in destinations_for(items[0][0], roots)], source=source)
     if not (bool(written) and all(ok for ok, _t in written)):
         _log_fire_detail(source, slug, "triage-answer-undelivered-unseen")
-        return set()
+        return set(), names
     deliver(text, slug, [inbox], source=source)
     try:
         row = cap.record(slug, REPLY_CLASS, code, parts=len(items))
@@ -5266,7 +5341,7 @@ def _send_batch(
         if not _remember_answered(DEFAULT_ANSWERED, path.name):
             _log_fail_closed(path.name, "answered-unrecorded")
     finish("ANSWER")
-    return set()
+    return set(), set()
 
 
 def _record_work_reply(result: dict, only: set[str] | None, source: str) -> None:

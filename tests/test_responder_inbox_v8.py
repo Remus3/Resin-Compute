@@ -445,7 +445,7 @@ def test_an_exhausted_draft_gets_no_hop_line(rsp):
     bounds = rsp.Bounds()
     assert rsp._hop_stamp(rsp.RESPONDER_TAG + "\n", 2, bounds) == rsp.RESPONDER_TAG + "\n"
     stamped = rsp._hop_stamp(rsp.RESPONDER_TAG + "\n\nbody\n", 2, bounds)
-    assert stamped.endswith("\nHOP: 2\n") and fi.hop(stamped) == 2
+    assert stamped.splitlines()[:2] == [rsp.RESPONDER_TAG, "HOP: 2"] and fi.hop(stamped) == 2
     assert rsp._hop_stamp(rsp.RESPONDER_TAG + "\n\nbody\n", None, bounds) == rsp.RESPONDER_TAG + "\n\nbody\n"
 
 
@@ -687,3 +687,106 @@ def test_d12_a_budget_refusal_is_not_counted_against_the_note(rsp, tmp_path, mon
         _fire(rsp, tmp_path, monkeypatch, sessions)
     assert [r for r in _seen(rsp) if r["note"] == name] == []
     assert len(sessions.triage) == rsp.MAX_TRIAGE_ATTEMPTS + 1
+
+
+# ---------------------------------------------------------------- refutation round 2
+# Ported from the round-2 refuter's repros (test_A, test_B/F, test_D, test_I).
+
+
+def _old_tagged_copies(rsp, inbox: Path, n: int = 9) -> None:
+    for i in range(n):
+        path = _note(inbox, f"2026-01-01-000{i}-from-RSC-auto-reply-to-x{i}.md", rsp.RESPONDER_TAG + "\n\nold\n")
+        os.utime(path, (1, 1))
+
+
+def test_r2_d1_a_sibling_order_whose_draft_keeps_failing_is_parked_not_respawned(rsp, tmp_path, monkeypatch):
+    """test_A: with the inbox-wide hop gate lifted, a refused or empty draft must
+    not buy a full work session on every fire forever."""
+    inbox = tmp_path / "inbox"
+    _old_tagged_copies(rsp, inbox)
+    name = "2026-10-05-0100-from-RC-ORDER-measure.md"
+    _note(inbox, name)
+    sessions = Sessions(rsp)
+    sessions.spawn = lambda prompt, bounds: (sessions.work.append(prompt), "")[1]
+    for _ in range(rsp.MAX_WORK_ATTEMPTS + 3):
+        _fire(rsp, tmp_path, monkeypatch, sessions)
+    assert len(sessions.work) == rsp.MAX_WORK_ATTEMPTS, len(sessions.work)
+    rows = [r for r in _seen(rsp) if r["note"] == name]
+    assert rows[-1]["verdict"] == "work-parked", rows
+    assert any(d.startswith("run_once:work-parked") for d in _detail(rsp)), _detail(rsp)
+
+
+def test_r2_d1_a_budget_refusal_is_not_a_work_attempt(rsp, tmp_path, monkeypatch):
+    name = "2026-10-05-0110-from-RC-ORDER-later.md"
+    _note(tmp_path / "inbox", name)
+    sessions = Sessions(rsp)
+
+    def refused(prompt, bounds):
+        sessions.work.append(prompt)
+        raise rsp.RunBudgetSpent("the runs-per-day budget is spent")
+
+    sessions.spawn = refused
+    for _ in range(rsp.MAX_WORK_ATTEMPTS + 1):
+        _fire(rsp, tmp_path, monkeypatch, sessions)
+    assert len(sessions.work) == rsp.MAX_WORK_ATTEMPTS + 1
+    assert all(r["verdict"] != "work-parked" for r in _seen(rsp))
+
+
+def test_r2_d3_an_unwritable_work_attempt_record_parks_at_once(rsp, tmp_path, monkeypatch):
+    rsp.DEFAULT_WORK_ATTEMPTS.mkdir(parents=True)  # a directory where the record should be
+    name = "2026-10-05-0120-from-RC-FIX-x.md"
+    _note(tmp_path / "inbox", name)
+    sessions = Sessions(rsp)
+    sessions.spawn = lambda prompt, bounds: (sessions.work.append(prompt), "")[1]
+    for _ in range(3):
+        _fire(rsp, tmp_path, monkeypatch, sessions)
+    assert len(sessions.work) == 1
+    assert [r["verdict"] for r in _seen(rsp) if r["note"] == name][-1] == "work-parked"
+
+
+def test_r2_d2_an_unreservable_answer_is_not_re_triaged_every_fire(rsp, tmp_path, monkeypatch):
+    """test_B / test_F: a send failure after triage counts against the note."""
+    name = "2026-10-05-0130-from-RC-QUESTION-x.md"
+    _note(tmp_path / "inbox", name)
+    sessions = Sessions(rsp, {name: "VERDICT: ANSWER\nYes, it is 42.\n"})
+    monkeypatch.setattr(rsp, "record_outbound", lambda *a, **k: False)
+    for _ in range(rsp.MAX_TRIAGE_ATTEMPTS + 3):
+        _fire(rsp, tmp_path, monkeypatch, sessions)
+    assert len(sessions.triage) == rsp.MAX_TRIAGE_ATTEMPTS, len(sessions.triage)
+    assert "triage-failed-escalated" in [r["verdict"] for r in _seen(rsp) if r["note"] == name]
+
+
+def test_r2_d3_an_unwritable_triage_attempt_record_escalates_in_the_same_fire(rsp, tmp_path, monkeypatch):
+    """test_I: the fail-closed must outlive the fire that hit it."""
+    rsp.DEFAULT_TRIAGE_ATTEMPTS.mkdir(parents=True)
+    name = "2026-10-05-0140-from-RC-QUESTION-x.md"
+    _note(tmp_path / "inbox", name)
+    sessions = Sessions(rsp, raises=RuntimeError("session died"))
+    for _ in range(4):
+        _fire(rsp, tmp_path, monkeypatch, sessions)
+    assert len(sessions.triage) == 1, len(sessions.triage)
+    assert "triage-failed-escalated" in [r["verdict"] for r in _seen(rsp) if r["note"] == name]
+
+
+def test_r2_d4_the_hop_line_is_inside_the_kits_head_window(rsp):
+    """test_D: a kit receiver reads only the first 1500 bytes."""
+    draft = rsp.RESPONDER_TAG + "\n\n" + ("measured line of prose.\n" * 120)
+    out = rsp._hop_stamp(draft, 2, rsp.Bounds(armed=True))
+    assert len(out.encode("ascii")) > 1500
+    assert fi.hop(out.encode("ascii")[:1500].decode("ascii")) == 2
+
+
+def test_r2_d4_a_main_reply_keeps_its_provenance_line_at_line_two(rsp):
+    line = rsp.PROVENANCE_PREFIX + " computed by the responder, not by the session: x"
+    draft = rsp.RESPONDER_TAG + "\n" + line + "\n\nbody\n"
+    out = rsp._hop_stamp(draft, 2, rsp.Bounds(armed=True))
+    assert out.splitlines()[:3] == [rsp.RESPONDER_TAG, line, "HOP: 2"], out
+
+
+def test_r2_d5_the_suite_off_value_is_honoured_only_under_pytest(rsp, tmp_path, monkeypatch):
+    rsp.INBOX_TRIAGE = None
+    monkeypatch.setenv(rsp.ENV_TRIAGE, rsp.TRIAGE_OFF_SUITE)
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
+    lines = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines()
+    assert any(ln.endswith("\tfail-closed:inbox-triage-off") for ln in lines), lines
