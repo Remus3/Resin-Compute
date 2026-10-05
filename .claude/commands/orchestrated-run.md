@@ -26,12 +26,20 @@ and a main thread blocked on a sweep is a session they cannot interrupt.
 Background the long work, and never fabricate or predict a pending agent's
 result - if the operator asks before it lands, say it is still running.
 
-**Chat carries no inline checklists, step lists or task-list dumps** (FLEET-COMMON
-item 3). At-a-glance status comes from the background work itself and from the
-progress files below, not from a list re-printed in chat. When the operator asks
-for status, answer in exactly this shape, one short line each:
-done / left / +added / -retracted - what finished, what remains, what was added
-since the last answer, and what was dropped.
+**The session checklist is the ONE task list chat carries** (FLEET-COMMON
+item 13, kit v7; for this one purpose it supersedes the kit-v2 rule that chat
+carried no checklist at all). The first reply prints `Session <n> checklist`,
+with n taken from the `SESSION: <n>` line of `RSC-NEXT-SESSION.txt` that the
+SessionStart hook `tools/session_checklist.py` names, then one line per task in
+execution order - `<box> <ID>: <imperative task>`, plus `(<state>, ~ETA)` only
+while it runs - and last `<box> /done`, where `<box>` is U+2610 in chat. At
+most one trailing sentence, and only for an ordering constraint. After every 4
+or more completed tasks, print only the remaining tasks, newly added ones
+marked `+` before the ID; never list completed ones. No other step lists or
+task-list dumps: at-a-glance status otherwise comes from the background work
+and from the progress files below. When the operator asks for status, answer
+with the remaining checklist (item 13 b), -retracted on one short line. When
+no task remains, run `/done` unprompted (item 13 c).
 
 ## The shape, and what was deliberately not ported
 
@@ -132,7 +140,7 @@ simply not happened yet.
   The union goes to a scratch file, and it is also recorded in full in the
   canonical block below, which is where the operator reads it. Chat gets ONE
   line - the path count and the overlap result - not the list itself, because a
-  re-printed path list is the task-list dump FLEET-COMMON item 3 forbids. Check
+  re-printed path list is a task-list dump FLEET-COMMON item 3 forbids. Check
   it mechanically rather than by eye - a twelve-path union is exactly the size
   at which reading is unreliable:
 
@@ -356,7 +364,8 @@ python -m pytest agents/pity_engine
   verdict; and every UNRESOLVED item.
 - **Anything unverified is labelled unverified.** Do not round an uncertainty up
   to a claim, and do not report a subagent's number as your own observation.
-- Finish with `/done`, which is the ritual in `.claude/commands/done.md`.
+- Finish with `/done`, which is the ritual in `.claude/commands/done.md`, run
+  unprompted once no checklist task remains (FLEET-COMMON item 13 c).
 
 ## Safety rails
 

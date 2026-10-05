@@ -7,6 +7,11 @@ argument-hint: [optional one-line session topic]
 
 Run EVERY section, in order, quietly. Session topic, if given: $ARGUMENTS
 
+**/done RUNS UNPROMPTED** once no session-checklist task remains (FLEET-COMMON
+items 5 and 13 c, kit v7). The session invokes it itself the moment its
+`Session <n> checklist` is down to the `/done` line - it does not wait for the
+operator to type `/done`. In an interactive session the operator then clears.
+
 **THE ONLY CHAT OUTPUT OF /done IS ONE LINE** (FLEET-COMMON rule 5 in
 `CLAUDE.md`):
 
@@ -21,6 +26,16 @@ goes into the files below - `docs/LEDGER.md`, `ROADMAP.md` and
 `RSC-NEXT-SESSION.txt` - never into chat. Never carry forward a count from
 earlier in the session or from a subagent; record only what you observed in
 this ritual.
+
+## Pre-flight - the session checklist
+
+Pre-flight: every checklist task done or carried into the hand-off.
+
+Every task the session printed on its item-13 `Session <n> checklist` is
+either DONE - and the ledger entry in section 5 says so - or CARRIED into
+`RSC-NEXT-SESSION.txt` in section 7, verbatim or tighter. A task that is
+neither stops the ritual, and the one line names it. This is the same carry-
+forward rule as FLEET-COMMON item 5, applied to the list the session printed.
 
 ## 0. What this session touched
 
@@ -118,6 +133,16 @@ first. Rewrite it, then commit it with the rest of the paperwork.
   have actually bitten here; open work highest priority first; what must NOT be
   redone, each entry stating what would reverse it.
 - A recorded act names what was READ BACK after it, never what was run.
+- **The session counter (FLEET-COMMON item 13 a).** Read n from the ONE
+  column-0 `SESSION: <n>` line of the CURRENT file before rewriting it, then
+  write exactly one `SESSION: <n+1>` line, as the LAST line of the new file.
+  Never two such lines, never a leading zero, never trailing text on the line.
+  If the current file has no single readable counter line, stop: that is the
+  failure line. The SessionStart hook `tools/session_checklist.py` reads this
+  line to name the next session, and `tests/test_session_checklist.py` fails
+  on a missing or duplicated one. The seed was 56, a COMMIT-COUNT PROXY (55
+  commits had touched the hand-off under either name since 9e2bf0b), not a
+  count of sessions.
 - **Raw text, no markdown wrapper, no fence.** 7-bit ASCII, at least 2000 bytes,
   enforced by `tools/publish_next_session.py`.
 - **The file is tracked and the repository is public.** It is swept by
