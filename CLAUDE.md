@@ -289,7 +289,15 @@ line number - and in `docs/claude-md-history.md`.
   before an ordinary push that passes both suites and the sibling-name sweep with
   `RESIN_SKIP_PREPUSH` unset. A halt is cleared by the operator or by a
   SHA-256-verified MAIN note - see MAIN SPEAKS FOR THE OPERATOR below.
-- **Why:** `ops/loop/slots.py:39` puts `DEFAULT_ROOT` in a machine-wide bucket
+- **Clause (a) cleared for lanes and the governor (FLEET-KIT v6 and v7).** The
+  SHA-256-verified MAIN v6 2237 ORDER of 2026-10-04 and v7 0215 ORDER of
+  2026-10-05 clear clause (a) for lane worktrees and for governor slot and
+  queue writes made by an ATTENDED adoption or by a lane driver. The
+  UNATTENDED responder takes no slot and runs no lane (ruling (i) under the
+  session checklist section below). `refs/fleet-lanes/` lives inside `.git`, is
+  never pushed, and is not a halt. Clause (b) is unchanged. Reversed by: a MAIN
+  ruling, or a lane write landing outside the lane's own worktree.
+- **Why:** `ops/loop/slots.py:40` puts `DEFAULT_ROOT` in a machine-wide bucket
   under `C:\ProgramData`, and since `1a6d8da` `run_daemon` in
   `headless/runner.py` holds a slot for each LIVE pass. A dry run takes no slot;
   a `SlotTimeout` is a failed pass, never permission to run unslotted. Do not
@@ -340,6 +348,66 @@ on 2026-10-02. Recorded by codename only, quoted verbatim:
   `moon_sync_inbox/` is gitignored and every guard builds its corpus from
   `git ls-files`.
 
+## Session checklist - FLEET-COMMON item 13 in this tree
+
+MAIN 0215 ORDER of 2026-10-05 (FLEET-KIT v7, SHA-256 verified), carrying the
+v6 2237 ORDER's lane items. Item 13 is in the block above; this is where it
+lives here.
+
+- **Counter.** The single `SESSION: <n>` line of `RSC-NEXT-SESSION.txt`. /done
+  writes n+1. The seed 56 is a commit-count proxy, not a count of sessions.
+- **Interactive start.** The `SessionStart` hook in `.claude/settings.json`
+  prompts the first reply to print the item-13a block.
+- **Responder.** The parent owns its fire's checklist and writes progress
+  task `rsc-responder`. Only the fire that holds the responder progress lock
+  writes it. The read-only child it spawns never prints one.
+- **Runner.** `headless/runner.py` writes progress task `rsc-runner` on live
+  passes.
+- **ASCII sinks** (logs, progress files read by 7-bit tools, committed bytes)
+  render the box as `[ ]`. U+2610 is never a literal in a tracked file; the kit
+  carries it as an escape, and `tests/test_fleet_kit.py` pins that.
+
+ADJUDICATED RULINGS (decided by a distinct adjudicator for the v7 adoption; do
+not re-litigate without the reversal condition):
+
+- **(i) The responder spawns with governor=None for EVERY note class.**
+  - Alternative rejected: governor='queued' for ORDER, FIX and RULING notes.
+  - Why: the v6 ORDER's section-2 slot trigger is "writes code, and every lane
+    run". The child is writes_code=False, holds only Read, Grep and Glob, and
+    runs in no lane. The v6 4a "every call" wording rests on a stale premise
+    (`run_daemon` has held a slot per live pass since `1a6d8da`). A queued
+    ticket from the UNATTENDED loop is a ProgramData write, which v6 4b leaves
+    to the attended session.
+  - Reversed by: the child gaining any write tool, a MAIN ruling, or proxy 429s
+    while acknowledgements overlap lanes.
+- **(ii) The responder logs the ASCII checklist block only on fires that reach
+  the kit spawn. Every fire writes the progress file.**
+  - Alternative rejected: a 2-line block on every idle fire.
+  - Why: about 288 fires a day against the responder log's 2000-line cap. An
+    idle block roughly halves retention and breaks the arm that pins log lines
+    as start/terminal pairs. v7's own Why says "without reading logs", so the
+    progress file is the primary channel.
+  - Reversed by: a MAIN ruling, or the log cap being raised.
+- **(iii) The parent owns the checklist; the brief forbids the child from
+  printing one.**
+  - Alternative rejected: the literal v7 section-4 wording, where the spawned
+    session prints and writes it.
+  - Why: the child's spawn floor is Read, Grep and Glob, so it cannot write a
+    progress file, and the reply validator rejects any non-ASCII byte, so a
+    U+2610 in the draft would reject every reply.
+  - Reversed by: the child gaining a write tool and a non-draft output
+    channel.
+
+Standing rules, each with its reversal:
+
+- The runner keeps one slots.hold per live pass. Reversed by: a MAIN ruling
+  that retires the governor.
+- Future lane driver: run_lane with cap=LANE_CAP (a constant in
+  `core/config.py`); cwd = the claim worktree; spawn(governor='queued');
+  progress `lane-<i>.json` under the MAIN checkout's progress dir, never in
+  the worktree. Reversed by: a later kit version or MAIN ruling that changes
+  the lane contract.
+
 ## Output
 
 - Keep each response under 500 output tokens.
@@ -349,6 +417,9 @@ on 2026-10-02. Recorded by codename only, quoted verbatim:
   reduction against ordinary prose. Declared by the `SessionStart` hook
   `tools/caveman_default.py` with `tools/caveman.md` as the skill body; its
   `_BANNER` string must stay byte-identical across the fleet.
+- **The one non-ASCII glyph in chat** is the FLEET-COMMON item-13 checklist box,
+  U+2610. Everywhere else chat stays 7-bit, `_BANNER` is untouched, and an ASCII
+  sink renders the box as `[ ]`.
 - **Terseness is for CHAT ONLY.** Paths, commands, code, identifiers and every
   committed artifact stay byte-exact and uncompressed. Answer clarifying
   questions in plain English. Not wenyan - tried and reverted 2026-06-27.
