@@ -884,6 +884,43 @@ def _is_write_open(args: tuple[Any, ...]) -> bool:
     return isinstance(mode, str) and any(c in mode for c in "wax+")
 
 
+#: FLEET-COMMON item 13 and 14 files the responder and the runner write under
+#: the kit's root, `ops/loop/control/`. Their LIVE spellings are fenced here, in
+#: the same style: the progress tasks `rsc-responder` and `rsc-runner` (and each
+#: one's `<name>.<pid>.tmp` sibling), and the kit's v8 inbox ledgers. Every
+#: other file in that tree - another tree's lane progress, the status file - is
+#: left alone on purpose (adjudicated scope).
+_LIVE_CONTROL_DIR = _norm(Path(__file__).parent / "ops" / "loop" / "control")
+_LIVE_PROGRESS_DIR = _norm(Path(__file__).parent / "ops" / "loop" / "control" / "progress")
+_LIVE_PROGRESS_NAMES = ("rsc-responder.json", "rsc-runner.json")
+_LIVE_LEDGER_NAMES = ("inbox_seen.jsonl", "outbound_notes.jsonl")
+
+
+def _is_live_progress_record(path: Any, dir_fd: Any = -1) -> bool:
+    """True for a live progress file or v8 inbox ledger named above, or its tmp."""
+    text = _resolve_event_path(path, dir_fd)
+    if text is None:
+        return False
+    head, _sep, tail = text.rpartition(os.sep)
+    if head == _LIVE_PROGRESS_DIR:
+        names = _LIVE_PROGRESS_NAMES
+    elif head == _LIVE_CONTROL_DIR:
+        names = _LIVE_LEDGER_NAMES
+    else:
+        return False
+    return any(tail == n or tail.startswith(n + ".") for n in names)
+
+
+#: Item 14 triage is OFF for the suite unless an arm opts in with the module
+#: attribute `INBOX_TRIAGE = True` (see `tests/test_responder_inbox_v8.py`).
+#: The pre-v8 arms drive the responder's WORK LANE with notes v8 would triage
+#: first; set here, at import, so every child interpreter inherits it too.
+#: `0-suite` is the responder's QUIET off value (`TRIAGE_OFF_SUITE`): the
+#: operator's "0" logs a fail-closed line every fire, which would break the
+#: arms that pin exact invocation-log shapes.
+os.environ["RESINCOMPUTE_RESPONDER_TRIAGE"] = "0-suite"
+
+
 def _live_runtime_fence(event: str, args: tuple[Any, ...]) -> None:
     if event == "open":
         if not args or not _is_write_open(args):
@@ -895,7 +932,7 @@ def _live_runtime_fence(event: str, args: tuple[Any, ...]) -> None:
             return
         spec = found
     for raw, dir_fd in _event_paths(spec, args):
-        if _is_live_responder_record(raw, dir_fd):
+        if _is_live_responder_record(raw, dir_fd) or _is_live_progress_record(raw, dir_fd):
             message = (
                 f"{event} on {raw!r} writes a LIVE responder record. Redirect "
                 "every DEFAULT_ path of the responder under tmp_path, and give any "
