@@ -3875,7 +3875,7 @@ def run_once(
                     started, grammar, source, only,
                 )
                 _record_work_reply(result, only, source)
-                _count_work_lane(result, only, inbox, source)
+                _count_work_lane(result, only, inbox, source, started)
         except BaseException:
             # A responder that tracebacks out of a scheduled task surfaces nothing
             # at all. The log says so before the exception continues on its way.
@@ -4878,6 +4878,15 @@ DEFAULT_WORK_ATTEMPTS = RUNTIME_DIR / "responder_work_attempts.json"
 #: state, not the note's, and is not counted.
 WORK_ATTEMPT_TERMINATIONS = ("exhausted", "refused", "spawn-failed", "unrecordable")
 
+#: A MAIN note at `MAX_WORK_ATTEMPTS` COOLS DOWN for this long, then gets a
+#: fresh attempt window: at most 3 sessions per 6 h, about 12 a day per note,
+#: and the run budget still binds. ADJUDICATED 2026-10-05. Alternatives
+#: rejected: a terminal park (item 14 sec 0 - nothing may make a note wait for
+#: a human, and MAIN speaks for the operator) and endless per-fire retry (the
+#: runaway the round-2 refuter measured). Non-MAIN notes keep the terminal
+#: park. Reversed by: a MAIN ruling.
+MAIN_WORK_COOLDOWN_S = 6 * 3600.0
+
 
 def _triage_switch() -> str:
     """The switch's value. `TRIAGE_OFF_SUITE` counts as the suite's only while
@@ -5020,27 +5029,69 @@ def _count_attempt(path: Path, name: str, cap: int, what: str) -> int:
     the old count and the bound would never bind."""
     counts = _attempts(path)
     counts[name] = counts.get(name, 0) + 1
-    if not _ensure_parent(path) or not atomic_write_json(path, {"version": 1, "attempts": counts}):
+    if not _write_attempts(path, counts, _cooldowns(path)):
         _log_fail_closed(name, f"{what}-attempts-unrecorded")
         return cap
     return counts[name]
+
+
+def _cooldowns(path: Path) -> dict[str, float]:
+    """note -> epoch its MAIN cooldown ends, from the work-attempts record."""
+    doc = _load_record(path)
+    rows = doc.get("cooldown") if isinstance(doc, dict) else None
+    if not isinstance(rows, dict):
+        return {}
+    return {k: float(v) for k, v in rows.items() if isinstance(k, str) and _finite_number(v)}
+
+
+def _write_attempts(path: Path, counts: dict[str, int], cooldown: dict[str, float]) -> bool:
+    doc: dict[str, Any] = {"version": 1, "attempts": counts}
+    if cooldown:
+        doc["cooldown"] = cooldown
+    return _ensure_parent(path) and atomic_write_json(path, doc)
+
+
+def _cooling(now: float) -> set[str]:
+    """MAIN notes inside their work-lane cooldown at `now`."""
+    return {n for n, until in _cooldowns(DEFAULT_WORK_ATTEMPTS).items() if now < until}
+
+
+def _cool_main(note: str, now: float, source: str) -> bool:
+    """MAIN's bound (adjudicated): a fresh attempt window after a cooldown,
+    never a terminal park. False when the record cannot be written."""
+    counts = _attempts(DEFAULT_WORK_ATTEMPTS)
+    counts.pop(note, None)
+    cooldown = {n: u for n, u in _cooldowns(DEFAULT_WORK_ATTEMPTS).items() if u > now}
+    cooldown[note] = now + MAIN_WORK_COOLDOWN_S
+    if not _write_attempts(DEFAULT_WORK_ATTEMPTS, counts, cooldown):
+        _log_fail_closed(note, "work-cooldown-unrecorded")
+        return False
+    _log_fire_detail(source, note, f"work-cooldown-{int(MAIN_WORK_COOLDOWN_S)}s")
+    return True
 
 
 def _count_triage_failure(name: str) -> int:
     return _count_attempt(DEFAULT_TRIAGE_ATTEMPTS, name, MAX_TRIAGE_ATTEMPTS, "triage")
 
 
-def _count_work_lane(result: dict, only: set[str] | None, inbox: Path | None, source: str) -> None:
+def _count_work_lane(
+    result: dict, only: set[str] | None, inbox: Path | None, source: str, now: float | None = None
+) -> None:
     """Defect 1 of round 2: a work-lane session that ran and produced no reply
-    counts against its note; at `MAX_WORK_ATTEMPTS` the note is PARKED - one
-    seen-ledger line (verdict `work-parked`, which leaves the work set) and one
-    detail line - so it can never loop silently. Nothing with triage off."""
+    counts against its note; at `MAX_WORK_ATTEMPTS` a sibling's note is PARKED
+    - one seen-ledger line (verdict `work-parked`, which leaves the work set)
+    and one detail line - so it can never loop silently. A MAIN note is never
+    parked: it COOLS DOWN (`MAIN_WORK_COOLDOWN_S`) and comes back with a fresh
+    attempt window. A MAIN cooldown that cannot be recorded falls back to the
+    park, the only state that cannot loop. Nothing with triage off."""
     note = result.get("note")
     if only is None or not isinstance(note, str) or note not in only:
         return
     if result.get("termination") not in WORK_ATTEMPT_TERMINATIONS:
         return
     if _count_attempt(DEFAULT_WORK_ATTEMPTS, note, MAX_WORK_ATTEMPTS, "work") < MAX_WORK_ATTEMPTS:
+        return
+    if _is_main(note) and _cool_main(note, time.time() if now is None else now, source):
         return
     path = (inbox or DEFAULT_INBOX) / note
     base = inbox_kit.classify(note, SELF_CODE, _note_head(path))
@@ -5247,7 +5298,7 @@ def _inbox_triage(
         sibling_room = bool(cap.allow(REPLY_CLASS))
     except (OSError, ValueError):
         sibling_room = False
-    return {n for n in pool - answered if sibling_room or _is_main(n)}
+    return {n for n in pool - answered - _cooling(started) if sibling_room or _is_main(n)}
 
 
 def _mtime(path: Path) -> float:

@@ -716,6 +716,37 @@ def test_r2_d1_a_sibling_order_whose_draft_keeps_failing_is_parked_not_respawned
     assert any(d.startswith("run_once:work-parked") for d in _detail(rsp)), _detail(rsp)
 
 
+def test_r3_a_main_note_always_refused_cools_down_and_is_retried_never_parked(rsp, tmp_path, monkeypatch):
+    """Adjudicated: MAIN never parks (item 14 sec 0) and never retries every fire.
+    3 sessions, then 0 during the 6 h cooldown, then 3 more after it."""
+    name = "2026-10-05-0150-from-MAIN-ORDER-to-RSC-always-refused.md"
+    _note(tmp_path / "inbox", name)
+    (tmp_path / "main" / "moon_sync_inbox").mkdir(parents=True)
+    monkeypatch.setattr(rsp, "provenance_map", lambda q, r: {})
+    _agree(rsp)
+    monkeypatch.setattr(rsp, "workspace_trust", lambda *_a, **_k: (True, "trusted"))
+    sessions = Sessions(rsp)
+    sessions.spawn = lambda prompt, bounds: (sessions.work.append(prompt), "")[1]
+    t0 = time.time()
+
+    def fires(at: float, n: int) -> int:
+        before = len(sessions.work)
+        for i in range(n):
+            rsp.run_once(inbox=tmp_path / "inbox", roots={"MAIN": tmp_path / "main"},
+                         bounds=rsp.Bounds(armed=True), spawn=sessions.spawn,
+                         triage_spawn=sessions.triage_spawn, now=at + i)
+        return len(sessions.work) - before
+
+    assert fires(t0, 4) == rsp.MAX_WORK_ATTEMPTS
+    assert fires(t0 + 3600, 3) == 0, "a cooling MAIN note was retried inside its cooldown"
+    assert getattr(rsp, "MAIN_WORK_COOLDOWN_S", 6 * 3600) == 6 * 3600
+    assert fires(t0 + 6 * 3600 + 60, 4) == rsp.MAX_WORK_ATTEMPTS
+    assert all(r["verdict"] != "work-parked" for r in _seen(rsp)), _seen(rsp)
+    assert sum(d.startswith("run_once:work-cooldown") for d in _detail(rsp)) == 2, _detail(rsp)
+    doc = json.loads(rsp.DEFAULT_WORK_ATTEMPTS.read_text(encoding="utf-8"))
+    assert name in doc.get("cooldown", {}), doc
+
+
 def test_r2_d1_a_budget_refusal_is_not_a_work_attempt(rsp, tmp_path, monkeypatch):
     name = "2026-10-05-0110-from-RC-ORDER-later.md"
     _note(tmp_path / "inbox", name)
