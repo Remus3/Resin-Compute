@@ -147,6 +147,16 @@ def test_the_vendored_kit_is_v8_and_pins_its_licence_files():
     )
 
 
+def test_the_kit_directory_holds_only_the_pinned_files():
+    """conformance() reads only the files its manifest names, so a rogue file
+    dropped beside them is invisible to it. The directory must hold exactly the
+    pinned set plus MANIFEST.json (bytecode caches excepted)."""
+    present = sorted(
+        p.name for p in KIT_DIR.iterdir() if p.name != "__pycache__"
+    )
+    assert tuple(present) == tuple(sorted((*V8_PINNED_FILES, "MANIFEST.json")))
+
+
 @pytest.mark.parametrize("name", V8_PINNED_FILES)
 def test_an_edited_kit_file_is_reported(tmp_path, name):
     root = _scratch_copy(tmp_path)
