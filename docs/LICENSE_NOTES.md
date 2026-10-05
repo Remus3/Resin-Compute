@@ -208,10 +208,12 @@ is better than implying a completeness this section does not have.
 
 | Vendored path | Upstream | Inbound licence | SPDX | Copyright holder | Bytes changed here |
 |---|---|---|---|---|---|
-| `ops/fleet_kit/` (`fleet_headless.py`, `FLEET-COMMON.md`, `MANIFEST.json`, `LICENSE`, `NOTICE`) | MAIN, the supervisor tree; FLEET-KIT v4 per the MAIN 1204 ORDER of 2026-10-03 | Apache License 2.0 | `Apache-2.0` | the operator | **None.** Byte-identical to upstream; the kit's own `LICENSE` and `NOTICE` are retained verbatim beside the code |
+| `ops/fleet_kit/` (`fleet_headless.py`, `fleet_checklist.py`, `fleet_inbox.py`, `fleet_lanes.py`, `fleet_secrets.py`, `fleet_watch.py`, `tokens.json`, `tokens.css`, `FLEET-COMMON.md`, `MANIFEST.json`, `LICENSE`, `NOTICE`) | MAIN, the supervisor tree; FLEET-KIT v8 per the MAIN 0310 ORDER of 2026-10-05, which supersedes the v7 0215 ORDER of the same day and the v4 1204 ORDER of 2026-10-03 and carries the v6 2237 ORDER's adoption items | Apache License 2.0 | `Apache-2.0` | the operator | **None.** Byte-identical to upstream; the kit's own `LICENSE` and `NOTICE` are retained verbatim beside the code |
 
-Every file was verified against MAIN's outbox copy by SHA-256 before it was
-copied, and is pinned after copying by the kit's own `MANIFEST.json`, which
+Every file was verified by SHA-256 against the digests in section 2 of the
+SHA-256-verified v8 ORDER note before it was copied - twelve of twelve equal,
+`LICENSE` unchanged from v4 - and is pinned after copying by the kit's own
+`MANIFEST.json`, which
 `conformance()` in `ops/fleet_kit/fleet_headless.py` checks and
 `tests/test_fleet_kit.py` runs. The licence facts were read from the kit's
 files on disk, not from the ORDER note: `ops/fleet_kit/LICENSE` is the
@@ -222,6 +224,17 @@ placeholder in that LICENSE is the licence's own how-to-apply appendix and
 not the grant. The NOTICE's SCOPE paragraph says the grant also covers the
 FLEET-COMMON block every fleet tree embeds byte-for-byte in its `CLAUDE.md`, so
 that block inside this tree's `CLAUDE.md` is Apache-2.0 material too.
+
+The NOTICE (unchanged from v7 to v8) has a SCOPE paragraph naming eight files - `FLEET-COMMON.md`,
+`fleet_headless.py`, `fleet_watch.py`, `fleet_secrets.py`, `tokens.json`,
+`tokens.css`, `LICENSE` and `NOTICE` - plus `MANIFEST.json` itself. It does
+not name `fleet_lanes.py` (v6), `fleet_checklist.py` (v7) or `fleet_inbox.py`
+(v8), although its opening words say the licence covers every file named in
+the manifest, and all three are named there. `fleet_lanes.py` and
+`fleet_inbox.py` also carry their own Apache-2.0 SPDX header;
+`fleet_checklist.py` carries none. This tree reads all three as covered by
+the manifest clause and does not edit the NOTICE to say so: the omission is a
+kit defect for MAIN to fix in a later kit version, never a local patch.
 
 Combination: Apache-2.0 code combined into this GPL-3.0-or-later work is
 permitted, one-way, for the reason the compatibility subsection above gives.
