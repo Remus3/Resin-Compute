@@ -97,6 +97,7 @@ import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -116,6 +117,9 @@ from core.atomic_io import atomic_write_json, atomic_write_text, read_json  # no
 # `union-attr` findings in `usage_line` that would turn this tree's mypy gate
 # red over bytes it may not touch. Measured 2026-10-03 on the v4 merge.
 kit: Any = importlib.import_module("ops.fleet_kit.fleet_headless")
+#: The v8 kit's inbox-cost module (FLEET-COMMON item 14), loaded the same way
+#: and for the same reason: vendored bytes this tree may not edit.
+inbox_kit: Any = importlib.import_module("ops.fleet_kit.fleet_inbox")
 
 #: The operator's log. A failed session's RAW output goes here and nowhere a
 #: sibling or a held file can see it.
@@ -3800,6 +3804,7 @@ def run_once(
     now: float | None = None,
     grammar: str = GRAMMAR,
     source: str = SOURCE_RUN_ONCE,
+    triage_spawn: Callable[..., str] | None = None,
 ) -> dict:
     """One cycle, with its outcome guaranteed to reach the invocation log.
 
@@ -3829,24 +3834,55 @@ def run_once(
     names one caller and whose terminal line names another is two records of one
     event, and the line that matters most - what died - would be the one
     carrying the wrong name.
+
+    FLEET-COMMON ITEM 13 (ruled, CLAUDE.md "Session checklist"): the fire owns
+    its checklist and writes progress task `PROGRESS_TASK` through the kit -
+    but ONLY while it holds the non-blocking progress lock
+    (`progress_lock_path`), taken before the first write and released after
+    the terminal one. A fire that finds it busy logs `kit-progress-busy` and
+    otherwise runs unchanged: the lock never gates the fire, it only decides
+    who may write the file. Every write is fail-closed (`_progress`).
+
+    FLEET-COMMON ITEM 14: before the cycle, `_inbox_triage` disposes of every
+    unseen note that is not work; the cycle then only sees the work lane's
+    notes. `triage_spawn` is the injected triage session, APPENDED AT THE END
+    with a default like `source`.
     """
     started = time.time() if now is None else now
     log_invocation(source, None, "start", now=started)
+    lock = _acquire_progress_lock()
+    if lock is None:
+        _log_fail_closed(None, "kit-progress-busy")
+    ctx = _FireContext(source, lock is not None)
+    _FIRE.ctx = ctx
     try:
-        if _halt_requested():
-            print("responder: HALTED - the operator's HALT sentinel is present")
-            result = _halted_result(grammar)
-        else:
-            result = _run_once(inbox, roots, bounds, spawn, started, grammar, source)
-    except BaseException:
-        # A responder that tracebacks out of a scheduled task surfaces nothing
-        # at all. The log says so before the exception continues on its way.
-        log_invocation(source, None, "crashed")
-        _write_tick_status(None)
-        raise
-    log_invocation(source, result.get("note"), result["termination"])
-    _write_tick_status(result)
-    return result
+        _progress(ctx, 0, "fire started", "running", CHECKLIST_ROWS, 0)
+        try:
+            if _halt_requested():
+                print("responder: HALTED - the operator's HALT sentinel is present")
+                result = _halted_result(grammar)
+            else:
+                only = _inbox_triage(inbox, roots, bounds, _tracked(triage_spawn, "triage"), started, source)
+                _progress(ctx, 25, "inbox triaged", "running", CHECKLIST_ROWS[1:], 0)
+                result = _run_once(
+                    inbox, roots, bounds, _tracked(spawn, "inbox"), started, grammar, source, only
+                )
+                _record_work_reply(result, only, source)
+        except BaseException:
+            # A responder that tracebacks out of a scheduled task surfaces nothing
+            # at all. The log says so before the exception continues on its way.
+            _progress(ctx, 100, "fire crashed", "failed", (), 0)
+            log_invocation(source, None, "crashed")
+            _write_tick_status(None)
+            raise
+        _progress(ctx, 100, f"fire ended {result['termination']}", "done", (), 0)
+        log_invocation(source, result.get("note"), result["termination"])
+        _write_tick_status(result)
+        return result
+    finally:
+        _FIRE.ctx = None
+        if lock is not None:
+            _release_run_lock(lock)
 
 
 #: The operator's HALT sentinel, by the name `headless/runner.py` uses for its
@@ -4088,8 +4124,15 @@ def _run_once(
     started: float,
     grammar: str,
     source: str = SOURCE_RUN_ONCE,
+    only: set[str] | None = None,
 ) -> dict:
     """The cycle itself: find a note, draft a reply, gate it, deliver or hold.
+
+    `only` (item 14, APPENDED AT THE END with a default) is the work lane's
+    note set from `_inbox_triage`; None keeps every candidate, which is the
+    pre-v8 behaviour and what triage switched off means. It narrows the queue
+    and adds the HOP line through plain assignments only, so no consult site
+    is added here and the gate census is unchanged.
 
     `spawn` is injected so the session is a seam rather than a dependency. The
     draft comes back as TEXT and every decision about it is made out here.
@@ -4185,6 +4228,8 @@ def _run_once(
         deprioritise=bounced,
         capped=senders_at_cap(DEFAULT_OUTBOUND, started),
     )
+    # ITEM 14: only the work lane's notes reach a session from here.
+    candidates = _work_lane_only(candidates, only)
     # ONE PROVENANCE VERDICT PER MAIN NOTE, computed here and nowhere else in
     # the cycle: ordering, the bypass, the reply line and the prompt body all
     # read this map.
@@ -4302,7 +4347,8 @@ def _run_once(
         return result
 
     child = draft
-    draft = stamp_reply(child, provenance, bounds)
+    # ITEM 14 rule 4: the HOP line, last, and only on a draft that passes alone.
+    draft = _hop_stamp(stamp_reply(child, provenance, bounds), _reply_hop(note, only), bounds)
     reasons = [*validate_draft(draft, bounds), *provenance_reasons(child, draft, provenance, bounds)]
     reply_name = _reply_name(note)
     # NAMED FOR THE SITE, NOT FOR ONE OF ITS OUTCOMES. This branch emits BOTH
@@ -4564,6 +4610,463 @@ def _kit_root() -> Path:
 #: Interval PT5M), so the idle status names the next tick that far ahead.
 RESPONDER_TICK_SECONDS = 300.0
 
+
+# ---------------------------------------------------------------------------
+# FLEET-COMMON ITEM 13 - the fire's checklist, owned by this parent process.
+# ---------------------------------------------------------------------------
+
+#: The progress task this responder writes (ruled; `rsc-` keeps it apart from
+#: other trees' files in a shared progress directory).
+PROGRESS_TASK = "rsc-responder"
+
+#: The progress lock's file name, beside the run record. It starts with
+#: `responder`, so the root conftest already fences its live spelling.
+PROGRESS_LOCK_NAME = "responder_progress.lock"
+
+#: The fire's tasks, in order. Every later progress write carries a SUFFIX of
+#: these - the remaining ones only (item 13 b) - and the terminal write none.
+CHECKLIST_ROWS: tuple[tuple[str, str], ...] = (
+    ("R1", "Triage the inbox"),
+    ("R2", "Pick a work note"),
+    ("R3", "Run the read-only session"),
+    ("R4", "Deliver or hold the reply"),
+)
+
+#: The note label of a run whose caller names no note (item 14 rule 5).
+SPAWN_LABEL = "rsc-responder"
+
+
+def progress_lock_path() -> Path:
+    """DERIVED FROM `DEFAULT_RUNS`, like `halt_sentinel`, so an arm that
+    redirects the records redirects the lock too."""
+    return DEFAULT_RUNS.parent / PROGRESS_LOCK_NAME
+
+
+def _acquire_progress_lock() -> int | None:
+    """The progress lock, or None when busy or unopenable. Never raises."""
+    lock = progress_lock_path()
+    if not _ensure_parent(lock):
+        return None
+    return _acquire_run_lock(lock)
+
+
+class _FireContext:
+    """What one fire's progress writes and checklist block need to know."""
+
+    def __init__(self, source: str, holder: bool) -> None:
+        self.source = source
+        self.holder = holder
+        self.block_logged = False
+
+
+#: The fire running on THIS thread. Per thread, so an arm that runs two fires
+#: at once in one process keeps their checklists apart.
+_FIRE = threading.local()
+
+
+def _fire_ctx() -> _FireContext | None:
+    ctx = getattr(_FIRE, "ctx", None)
+    return ctx if isinstance(ctx, _FireContext) else None
+
+
+def _progress(
+    ctx: _FireContext | None,
+    pct: int,
+    step: str,
+    status: str,
+    rows: tuple[tuple[str, str], ...],
+    eta_s: int | None = None,
+) -> None:
+    """One progress write through the kit, by the lock holder only. FAIL CLOSED:
+    a write that fails is logged and never ends the fire."""
+    if ctx is None or not ctx.holder:
+        return
+    checklist = [{"id": i, "task": t, "state": None, "eta_s": None} for i, t in rows]
+    try:
+        kit.write_progress(_kit_root(), PROGRESS_TASK, pct, step, eta_s, status, checklist=checklist)
+    except (OSError, ValueError, OverflowError) as exc:
+        _log_fail_closed(None, f"kit-progress-{exc.__class__.__name__}")
+
+
+def _session_number() -> str:
+    """`len(kit starts in the window) + 1`, read through the kit's own parser;
+    `?` when the ledger cannot be read."""
+    try:
+        starts = kit.RunBudget(_kit_root() / kit.BUDGET_REL)._load()
+    except (kit.BudgetUnreadable, OSError, ValueError):
+        return "?"
+    return str(len(starts) + 1)
+
+
+def _log_checklist_block(source: str, rows: tuple[tuple[str, str], ...]) -> None:
+    """RULING (ii): the ASCII block, on a fire that reaches a spawn only, each
+    line under `FIRE_DETAIL_SOURCE` with the caller prefix. `[ ]` is the ASCII
+    rendering of the item-13 box; the glyph itself never reaches this log."""
+    _log_fire_detail(source, None, f"Session {_session_number()} checklist")
+    for _id, task in rows:
+        _log_fire_detail(source, None, f"[ ] {task}")
+    _log_fire_detail(source, None, "[ ] /done")
+
+
+def _on_spawn(kind: str) -> None:
+    """Called immediately before a session starts, from the kit route or the
+    injected one. A triage session runs inside R1; the work session is R3."""
+    ctx = _fire_ctx()
+    if ctx is None:
+        return
+    rows = CHECKLIST_ROWS if kind == "triage" else CHECKLIST_ROWS[2:]
+    if not ctx.block_logged:
+        ctx.block_logged = True
+        _log_checklist_block(ctx.source, rows)
+    _progress(ctx, 10 if kind == "triage" else 50, f"{kind} session running", "running", rows)
+
+
+def _after_spawn(kind: str) -> None:
+    """The work session returned: only R4 remains."""
+    if kind != "triage":
+        _progress(_fire_ctx(), 75, "session finished", "running", CHECKLIST_ROWS[3:], 0)
+
+
+def _tracked(spawn: Callable[..., str] | None, kind: str) -> Callable[..., str] | None:
+    """An INJECTED session with the same checklist hooks the kit route calls
+    inside `_spawn_headless`. None stays None, so the real route (and the
+    parent-measured `repo_facts`) is chosen exactly as before."""
+    if spawn is None:
+        return None
+    inner = spawn
+
+    def run(*args: Any) -> str:
+        _on_spawn(kind)
+        out = inner(*args)
+        _after_spawn(kind)
+        return out
+
+    return run
+
+
+# ---------------------------------------------------------------------------
+# FLEET-COMMON ITEM 14 - inbox cost discipline (kit v8, MAIN 0310 ORDER).
+# ---------------------------------------------------------------------------
+#
+# RULE 1, MEASURED 2026-10-05: this tree has NO lane loop that fires
+# unattended. The one registered unattended tick is the responder's own task
+# (`RSC-InboxResponder`, PT5M); the supervisor task that would run
+# `headless.runner --daemon` is not registered and no runner process exists,
+# and the runner never reads the channel inbox. So THIS responder stays the
+# ONE inbox handler, and triage folds into its tick. No task was disabled.
+#
+# LEDGERS. `DEFAULT_ANSWERED` stays AUTHORITATIVE for "a reply went out"; the
+# kit's seen ledger (`fleet_inbox.SEEN_REL` under `_kit_root()`) records the
+# triage disposition. Every answered note is written to the seen ledger when a
+# fire meets it, and every triage ANSWER that is sent is written to the answered
+# record, so the two never disagree about an answered note.
+
+#: Off only when this is "0". The root conftest sets it for the pre-v8 arms,
+#: which drive the WORK LANE with notes v8 would triage; production never sets
+#: it. A module attribute `INBOX_TRIAGE` (True/False) outranks it.
+ENV_TRIAGE = "RESINCOMPUTE_RESPONDER_TRIAGE"
+INBOX_TRIAGE: bool | None = None
+
+#: Triage sessions per fire at most. The rest wait, unseen, for the next fire.
+TRIAGE_PER_FIRE = 3
+
+#: The class of every note this responder writes.
+REPLY_CLASS = "ANSWER"
+
+
+def _triage_engaged() -> bool:
+    if INBOX_TRIAGE is not None:
+        return bool(INBOX_TRIAGE)
+    return os.environ.get(ENV_TRIAGE, "").strip() != "0"
+
+
+def _note_head(path: Path) -> str:
+    try:
+        with path.open("rb") as handle:
+            return handle.read(1500).decode("utf-8", "replace")
+    except OSError:
+        return ""
+
+
+def _reply_hop(note: Path, only: Any = True) -> int | None:
+    """The HOP a reply to `note` carries: its own plus one. None when triage
+    is off for this fire (`only` None), so the pre-v8 bytes are unchanged."""
+    if only is None:
+        return None
+    return int(inbox_kit.next_hop(inbox_kit.hop(_note_head(note))))
+
+
+def _hop_stamp(draft: str, hop_n: int | None, bounds: Bounds) -> str:
+    """`draft` with a `HOP: <n>` last line - only when it passes the gate on
+    its own, so an empty draft stays `exhausted`, as `stamp_reply` does."""
+    if hop_n is None or validate_draft(draft, bounds):
+        return draft
+    return draft.rstrip("\n") + f"\n\nHOP: {hop_n}\n"
+
+
+def _work_lane_only(candidates: list[Path], only: set[str] | None) -> list[Path]:
+    """The candidates the work lane may take; all of them when `only` is None."""
+    if only is None:
+        return candidates
+    return [c for c in candidates if c.name in only]
+
+
+def _seen_rows(root: Path) -> list[dict]:
+    """The seen ledger's rows; [] when absent or unreadable."""
+    try:
+        raw = (root / inbox_kit.SEEN_REL).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    rows: list[dict] = []
+    for line in raw.splitlines():
+        try:
+            doc = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(doc, dict):
+            rows.append(doc)
+    return rows
+
+
+def _mark(root: Path, note: Path, decision: Any, verdict: str | None, source: str) -> bool:
+    """The mechanical ack: one seen-ledger line and one detail line, no note."""
+    try:
+        inbox_kit.mark_seen(root, note, decision, verdict)
+    except (OSError, ValueError) as exc:
+        _log_fail_closed(note.name, f"inbox-seen-{exc.__class__.__name__}")
+        return False
+    tail = f"-{verdict}" if verdict else ""
+    _log_fire_detail(source, note.name, f"triage-{decision.action}{tail}")
+    return True
+
+
+def _decision(action: str, base: Any, reason: str) -> Any:
+    return inbox_kit.Decision(action, base.cls, base.sender, reason, base.hop)
+
+
+def _inbox_triage(
+    inbox: Path | None,
+    roots: dict[str, Path] | None,
+    bounds: Bounds | None,
+    triage_spawn: Callable[..., str] | None,
+    started: float,
+    source: str,
+) -> set[str] | None:
+    """ITEM 14 rule 2 on one fire. Returns the work lane's note set, or None
+    when triage is off or this fire may not act (disarmed, outside the window,
+    unagreed, answered record unusable) - the cycle's own gates then decide,
+    exactly as before, and nothing is written here.
+
+    Per unseen note, oldest mtime first (`fleet_inbox.scan`):
+      answered already / before the window / not opted in / auto-reply /
+      TERMINAL                     -> seen, nothing else;
+      skip, ack                    -> seen, nothing else (never a note);
+      work (ORDER / FIX / RULING)  -> seen as work; the work lane answers it;
+      triage                       -> one TRIAGE_SPAWN session, at most
+                                      `TRIAGE_PER_FIRE` a fire; NOREPLY / ACK
+                                      are seen; ANSWER from MAIN escalates to
+                                      the work lane (its provenance path);
+                                      any other ANSWER is batched, ONE note
+                                      per destination (`_send_batch`).
+    A triage note that cannot be answered TODAY - the daily outbound cap, the
+    sender's reply cap or a spent hop budget - is left UNSEEN and spends
+    nothing; a failed triage session also leaves it unseen. Either way the next
+    fire retries it unattended.
+    """
+    if not _triage_engaged():
+        return None
+    inbox = inbox or DEFAULT_INBOX
+    bounds = bounds or Bounds()
+    if not bounds.armed or not window_open(bounds, now=started):
+        return None
+    if not counterparty_agreed(DEFAULT_CONFIRMATION, now=started)[0]:
+        return None
+    if not answered_usable(DEFAULT_ANSWERED)[0]:
+        return None
+    roots = load_roots() if roots is None else roots
+    root = _kit_root()
+    answered = _answered(DEFAULT_ANSWERED)
+    try:
+        rows = inbox_kit.scan(root, inbox, SELF_CODE)
+    except (OSError, ValueError) as exc:
+        _log_fail_closed(None, f"inbox-scan-{exc.__class__.__name__}")
+        rows = []
+    cap = inbox_kit.OutboundCap(root)
+    capped = senders_at_cap(DEFAULT_OUTBOUND, started)
+    hops_ok = within_budget(inbox, bounds)
+    spawner = triage_spawn or _spawn_triage
+    budget = TRIAGE_PER_FIRE
+    answers: dict[str, list[tuple[Path, str, Any]]] = {}
+    for path, d in rows:
+        name, code = path.name, sender_of(path.name)
+        if name in answered:
+            _mark(root, path, d, "answered", source)
+            continue
+        if bounds.window_opens is not None and _mtime(path) < bounds.window_opens:
+            _mark(root, path, d, "before-window", source)
+            continue
+        if d.action in (inbox_kit.SKIP, inbox_kit.ACK):
+            _mark(root, path, d, None, source)
+            continue
+        if not name.lower().endswith(".md"):
+            # A BOUNCE IS A FILE THAT IS NOT A NOTE (`BOUNCE_SUFFIX`). The kit's
+            # scan lists `.txt` too, so the bounce-war breaker stays in front.
+            _mark(root, path, _decision(inbox_kit.SKIP, d, "not a note"), "not-a-note", source)
+            continue
+        if code is None or code == SELF_CODE or code not in OPTED_IN:
+            _mark(root, path, d, "not-opted-in", source)
+            continue
+        if d.action == inbox_kit.WORK:
+            _mark(root, path, d, None, source)
+            continue
+        text = _read_text(path)
+        if is_auto_reply(name, text):
+            _mark(root, path, _decision(inbox_kit.SKIP, d, "auto-reply"), "auto-reply", source)
+            continue
+        if is_terminal_note(name, text):
+            _mark(root, path, _decision(inbox_kit.SKIP, d, "terminal"), "terminal", source)
+            continue
+        if not destinations_for(path, roots):
+            _mark(root, path, d, "no-destination", source)
+            continue
+        main = code == MAIN_CODE
+        try:
+            room = main or (cap.allow(REPLY_CLASS) and code not in capped and hops_ok)
+        except (OSError, ValueError):
+            room = False
+        if budget <= 0 or not room:
+            continue
+        budget -= 1
+        try:
+            raw = spawner(inbox_kit.triage_prompt(name, text), bounds, name)
+        except UsageLimited as exc:
+            _usage_limited_termination(DEFAULT_BACKOFF, exc.reset_at, started, name)
+            _log_fire_detail(source, name, "triage-usage-limited")
+            budget = 0
+            continue
+        except Exception as exc:  # noqa: BLE001 - a fire must survive ANY session failure
+            _log_fire_detail(source, name, f"triage-spawn-failed-{exc.__class__.__name__}")
+            budget = 0
+            continue
+        verdict, answer = inbox_kit.parse_verdict(raw)
+        if verdict != "ANSWER":
+            _mark(root, path, d, verdict, source)
+        elif main:
+            _mark(root, path, _decision(inbox_kit.WORK, d, "triage escalated"), "ANSWER-escalated", source)
+        else:
+            answers.setdefault(code, []).append((path, answer, d))
+    for code, items in answers.items():
+        _send_batch(root, code, items, roots, inbox, bounds, started, source)
+    # THE WORK LANE'S SET, from the ledger: work seen on first sight (verdict
+    # None) or escalated by triage, and not answered yet.
+    return {
+        r["note"] for r in _seen_rows(root)
+        if r.get("action") == inbox_kit.WORK
+        and r.get("verdict") in (None, "ANSWER-escalated")
+        and isinstance(r.get("note"), str)
+    } - answered
+
+
+def _mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def _tag_batch(body: str) -> str:
+    """The kit's batched note with this responder's tag under its title, so the
+    far end's auto-reply breaker and this tree's hop count both see it."""
+    title, _, rest = body.partition("\n")
+    return f"{title}\n\n{RESPONDER_TAG}\n{rest}"
+
+
+def _send_batch(
+    root: Path,
+    code: str,
+    items: list[tuple[Path, str, Any]],
+    roots: dict[str, Path],
+    inbox: Path,
+    bounds: Bounds,
+    started: float,
+    source: str,
+) -> None:
+    """ONE note to `code` carrying every triage ANSWER for it (item 14 rule 3).
+
+    Gated exactly like a work-lane reply: `may_reply` on every part, the daily
+    cap, `validate_draft` (tag, ASCII, size, traceback, account path,
+    credentials), the per-sender reservation BEFORE the write, then
+    `deliver` and an own copy. A refused draft is HELD and never sent. Every
+    part is recorded seen; a sent one is also recorded answered.
+    """
+    def finish(verdict: str) -> None:
+        for path, _answer, d in items:
+            _mark(root, path, d, verdict, source)
+
+    if not all(inbox_kit.may_reply(d.cls, d.hop) for _p, _a, d in items):
+        finish("ANSWER-hop-limit")
+        return
+    cap = inbox_kit.OutboundCap(root)
+    try:
+        allowed = bool(cap.allow(REPLY_CLASS))
+    except (OSError, ValueError):
+        allowed = False
+    if not allowed:
+        finish("ANSWER-capped")
+        return
+    hop_n = max(int(inbox_kit.next_hop(d.hop)) for _p, _a, d in items)
+    try:
+        slug, body, _names = inbox_kit.batch_note(
+            SELF_CODE, code, [(p.name, a) for p, a, _d in items], hop_n=hop_n
+        )
+        text = _tag_batch(body)
+        reasons = validate_draft(text, bounds)
+    except ValueError:
+        # `batch_note` refuses a non-ASCII answer by raising. The answer is
+        # model output and never reaches a held file in that case.
+        slug = f"{time.strftime('%Y-%m-%d-%H%M')}-from-{SELF_CODE}-{REPLY_CLASS}-to-{code}.md"
+        text, reasons = "", ["the draft is not 7-bit ascii"]
+    if reasons:
+        withhold = not text or CREDENTIAL_REASON in reasons or CREDENTIAL_SCAN_FAILED in reasons
+        _hold(DEFAULT_STAGING, slug, CREDENTIAL_WITHHELD if withhold else text, reasons, started)
+        _log_fire_detail(source, slug, "triage-answer-held")
+        finish("ANSWER-refused")
+        return
+    if not record_outbound(DEFAULT_OUTBOUND, code, started, True):
+        _log_fail_closed(slug, "outbound-unreserved-note-dropped")
+        finish("ANSWER-unreserved")
+        return
+    written = deliver(text, slug, [d / "moon_sync_inbox" for d in destinations_for(items[0][0], roots)], source=source)
+    deliver(text, slug, [inbox], source=source)
+    sent = bool(written) and all(ok for ok, _t in written)
+    if sent:
+        try:
+            cap.record(slug, REPLY_CLASS, code, parts=len(items))
+        except (OSError, ValueError) as exc:
+            _log_fail_closed(slug, f"outbound-cap-{exc.__class__.__name__}")
+        for path, _answer, _d in items:
+            if not _remember_answered(DEFAULT_ANSWERED, path.name):
+                _log_fail_closed(path.name, "answered-unrecorded")
+    finish("ANSWER" if sent else "ANSWER-undelivered")
+
+
+def _record_work_reply(result: dict, only: set[str] | None, source: str) -> None:
+    """Item 14 rule 3 for the work lane: `.record` after a delivered reply.
+
+    The record's class is the INCOMING note's - ORDER, FIX or RULING, which the
+    kit exempts - because the reply is that work's own answer; a MAIN note
+    triage escalated keeps its class and counts. Nothing is recorded with
+    triage off, so the pre-v8 path writes no new file.
+    """
+    note = result.get("note")
+    if only is None or not result.get("delivered") or not isinstance(note, str):
+        return
+    cls = inbox_kit.note_class(note) or REPLY_CLASS
+    try:
+        inbox_kit.OutboundCap(_kit_root()).record(note, cls, sender_of(note) or "")
+    except (OSError, ValueError) as exc:
+        _log_fail_closed(note, f"outbound-cap-{exc.__class__.__name__}")
+
 #: THE KIT'S OWN INJECTION POINTS, as module attributes so an arm can substitute
 #: them. Production never does. An arm injects a URL through the kit's
 #: `base_url(registry=..., environ=...)` and a socket through `connect`; the
@@ -4757,8 +5260,15 @@ def _session_result(done: subprocess.CompletedProcess) -> str:
     return result
 
 
-def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
+def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "", kind: str = "inbox") -> str:
     """Run one headless session through the FLEET KIT and return its draft.
+
+    ITEM 14 rule 5: every run carries a non-empty note label (`SPAWN_LABEL`
+    when the caller names no note) and a kind - "inbox" for the work lane's
+    draft, "triage" for `_spawn_triage`, which takes the kit's
+    `fleet_inbox.TRIAGE_SPAWN` shape (sonnet, effort low, bare, 300 s) and no
+    brief. Both pass governor=None explicitly (ruling (i), CLAUDE.md). `kind`
+    is APPENDED AT THE END with a default.
 
     ARMING IS A SEPARATE ACT FROM BUILDING and this function existing does not
     arm anything: `run_once` reaches it only when `bounds.armed` is True, which
@@ -4856,16 +5366,19 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
     # start, and a sentinel that landed since must still mean no spawn.
     if _halt_requested():
         raise HaltedBeforeSpawn("the operator's HALT sentinel is present")
+    shape: dict[str, Any] = dict(inbox_kit.TRIAGE_SPAWN) if kind == "triage" else {}
+    # ITEM 13: the fire's checklist moves on, and the block is logged once.
+    _on_spawn(kind)
     try:
         line = kit.spawn(
             _kit_root(),
             SELF_CODE,
             full_prompt,
-            note=note_name,
+            note=note_name or SPAWN_LABEL,
             writes_code=False,
-            bare=SPAWN_BARE,
-            rules_file=RESPONDER_BRIEF,
-            timeout=bounds.spawn_timeout_seconds,
+            bare=shape.get("bare", SPAWN_BARE),
+            rules_file=None if shape else RESPONDER_BRIEF,
+            timeout=shape.get("timeout", bounds.spawn_timeout_seconds),
             extra=SPAWN_FLOOR,
             run=_capturing_run(finished, full_prompt),
             url_source=_kit_url_source,
@@ -4873,7 +5386,13 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
             exe_source=lambda: exe,
             cwd=SPAWN_CWD,
             stdin=True,
+            model=shape.get("model"),
+            effort=shape.get("effort"),
             halt_file=halt_sentinel(),
+            # RULING (i): no governor slot for any note class - the child
+            # writes no code and runs in no lane. Explicit, never defaulted.
+            governor=None,
+            kind=kind,
         )
     except kit.BudgetUnreadable:
         # By TYPE, before the string match below: its text contains "budget".
@@ -4890,6 +5409,7 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
         raise SpawnFailed(exc.__class__.__name__) from None
     finally:
         _write_idle()
+    _after_spawn(kind)
     if line.get("error") == "timeout":
         # v4 RETURNS on a timeout, after killing the process tree, instead of
         # raising; it is still a spawn failure and never a draft.
@@ -4901,6 +5421,13 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "") -> str:
     if limited:
         raise UsageLimited(reset_at)
     return _session_result(done)
+
+
+def _spawn_triage(prompt: str, bounds: Bounds, note_name: str) -> str:
+    """ONE triage session for one note (item 14 rule 2): the kit's
+    `TRIAGE_SPAWN` shape, kind "triage", every budget, halt and route check of
+    `_spawn_headless`. Returns the raw text `fleet_inbox.parse_verdict` reads."""
+    return _spawn_headless(prompt, bounds, note_name=note_name, kind="triage")
 
 
 def _spawn_unwired(prompt: str, bounds: Bounds) -> str:
