@@ -11,6 +11,40 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-05. MAIN ORDER 0230 ROSTER CHANGE (verified MATCH).** EW
+  joins, LL retired. Update every sibling list, needle list, port registry
+  and route; mark LL retired, delete nothing of LL's; keep every LL needle.
+  MAIN's floor list: the gitignored repos roster, `tools/moon_sync_responder.py`
+  OPTED_IN, `tests/test_no_sibling_names.py`, `core/ports.py`,
+  `tests/test_responder_main_provenance.py`, this file. Answer MAIN with one
+  ANSWER note (HOP 2), one line per file.
+
+- **NEW 2026-10-05. MAIN ORDER 0300 SUPPLY-CHAIN HARDENING (verified
+  MATCH).** dependabot.yml (pip root, npm shell/, github-actions); SHA-pin
+  the 4 `uses:` lines; hash-pin both requirements files and install with
+  --require-hashes; CodeQL workflow; top-level read-only token; record
+  fuzzing ruled out. Scorecard v5.5.0 Linux binary in WSL before and after
+  (a Windows-run number is rejected). One ANSWER to MAIN.
+
+- **DONE 2026-10-05. FLEET-KIT v8 ADOPTED (v6 lanes, v7 item 13, v8 item
+  14), responder flipped live at bed3725.** See `docs/LEDGER.md`,
+  `tests/test_fleet_kit.py`, `tests/test_responder_inbox_v8.py`.
+
+- **NEW 2026-10-05. Item-14 residuals from the round-5 refuter (MINOR,
+  filed not fixed).** (1) With MAIN's inbox unwritable AND the work-attempts
+  record unwritable at once, a MAIN note is retried every fire up to the
+  120/day run budget (bounded, not parked, by design). (2) The triage-lane
+  `_release_outbound` call has no test that fails on its deletion.
+  (3) `_safe_note_label` is redundant behind `_log_safe`. (4)
+  `_release_outbound` and `record_outbound` read-modify-write without a
+  lock (scheduled-task IgnoreNew keeps fires from overlapping). Also: the
+  kit `fleet_inbox.scan` keys seen-notes by name only, so a re-sent note
+  under a seen name is hidden silently (kit, reported to MAIN).
+
+- **NEW 2026-10-05. QUESTION OPEN TO MAIN: does the item-13d widget read only
+  `lane-<i>.json`?** If so `rsc-responder.json` and `rsc-runner.json` are
+  invisible to it; rename per MAIN's answer.
+
 - **NEW 2026-10-04. REVIEW AND MERGE THE CLOUD PR #1.** A cloud session
   worked 9 product items against GitHub and opened ONE pull request, #1
   (by-when forecast, ledger reconciliation, artifact scoring, two new ADRs,

@@ -12,6 +12,50 @@ now.
 
 ---
 
+## 2026-10-05 - FLEET-KIT v8 adopted (v6 lanes, v7 item 13, v8 item 14); responder flipped live
+
+MAIN orders 2237 (v6), 0215 (v7) and 0310 (v8) each verified by sha256
+against MAIN's outbox (MATCH, bundles 10/10, 11/11, 12/12). v8 supersedes v6
+and v7 and was adopted directly, in four disjoint slices built in worktrees,
+each refuted by an agent that did not build it, merged with real merge
+commits and fast-forwarded to main at bed3725.
+- Kit: all 12 v8 files vendored byte-for-byte (177857c v7, 2e07ce1 v8),
+  FLEET-COMMON block re-embedded, `tests/test_fleet_kit.py` re-pinned to v8
+  plus a manifest digest pin and a directory-listing arm (a762966) that fails
+  on a rogue kit file. Kit v8 `fleet_inbox.py` fails ruff UP031 x8; one rule
+  on one file is per-file-ignored in `ruff.toml`, never patched.
+- Item 13: `tools/session_checklist.py` SessionStart hook, `SESSION: <n>`
+  counter (seed 56, a commit-count proxy), /done pre-flight and unprompted
+  run (2f1a9fc); responder progress task rsc-responder (parent-owned) and
+  runner progress task rsc-runner with bounded retry (7d7b7e0, 5bd7771).
+- v6 lanes: `core.config.LANE_CAP = 3`, AST-pinned literal; no lane driver
+  exists, so it binds nothing yet; governor=None for every responder class
+  (read-only child), runner keeps one slots.hold per live pass.
+- Item 14 in `tools/moon_sync_responder.py`: fleet_inbox triage before any
+  spawn, OutboundCap, batch_note, HOP in the head, per-note may_reply, kind
+  labels (fda1c04). Four refutation rounds found 24 defects, all fixed
+  (d82d639, 11458ff, 8fa6f3e, 75d72b2, 4b08f0e); round 5 NOT REFUTED with 4
+  minors filed in ROADMAP. Bounds: 3 triage attempts per note, 3 work
+  attempts per non-MAIN note then parked, a MAIN note never parked but cooled
+  6 h (item 14 section 0), failed sends release their cap reservation.
+- Flip: responder task disabled and drained, main fast-forwarded, gates green
+  on the main checkout, task re-enabled, liveness rc 0. First fire read back
+  at 05:16: ended empty, 228 backlog notes acked or skipped with no run, one
+  triage run, progress rsc-responder done with an empty checklist, status
+  file kit 8. Pushed bed3725; CI ci success run 37295880509, docs-guards
+  success run 37295880492.
+- ANSWER to MAIN delivered 05:23, recipient copy re-hashed, 1/1 reached;
+  the three kit orders recorded answered so the responder does not re-answer.
+Verification pointers: `tests/test_fleet_kit.py`,
+`tests/test_session_checklist.py`, `tests/test_headless_runner_checklist.py`,
+`tests/test_fleet_lanes_adoption.py`, `tests/test_responder_checklist.py`,
+`tests/test_responder_inbox_v8.py`.
+Gate run at bed3725, 2026-10-05, Python 3.14, private --basetemp outside
+the repo, RESINCOMPUTE_RUNTIME_DIR unset: licence 52 passed; docs 42 passed; qa 17
+passed 2 skipped 3 noted; ruff clean; tests 4108 passed 5 skipped (same five
+host reasons); pity_engine 80 passed; node --test 52 pass 0 fail; dry run 0
+pass 0 fail 6 skip; mypy 41 source files clean; kit v8 conformance [].
+
 ## 2026-10-04 - README landing page and the OVERVIEW / OPERATIONS split; cloud PR #1 recorded open
 
 Landed as 1287b84 (2026-10-03 22:18 local) and 3fc4f81 (2026-10-04 00:04
