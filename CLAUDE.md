@@ -427,6 +427,16 @@ Standing rules, each with its reversal:
   the worktree. Reversed by: a later kit version or MAIN ruling that changes
   the lane contract.
 
+## Inbox cost - FLEET-COMMON item 14 in this tree
+
+MAIN 0310 ORDER of 2026-10-05 (FLEET-KIT v8, SHA-256 verified). Adoption of
+item 14 (fleet_inbox triage before any spawn, the 6-notes-a-day outbound cap,
+HOP lines, never answer an answer, kind-labelled usage lines) lands in the
+responder slice, `tools/moon_sync_responder.py`. Hard constraint from the
+order: inbox handling stays automatic and unattended; nothing may make a note
+wait for a human. Kit v8 `fleet_inbox.py` fails ruff UP031 and is
+per-file-ignored for that one rule in `ruff.toml`, never patched.
+
 ## Output
 
 - Keep each response under 500 output tokens.
