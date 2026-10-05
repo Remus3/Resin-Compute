@@ -114,6 +114,16 @@ PROGRESS_TASK = "rsc-runner"
 #: escape; this module only ever replaces it, never spells it.
 ASCII_BOX = "[ ]"
 
+#: Bounded retry around each progress write. The kit's
+#: `fleet_headless._atomic_write` has none and never removes its tmp - a kit
+#: defect reported to MAIN, never patched here - and on Windows `replace`
+#: is refused while any reader holds the target open. Mirrors the kit's own
+#: `fleet_lanes._retry`, with a longer budget (20 x 25 ms) because a widget
+#: polling the file is the expected reader. Read at call time so a test can
+#: shrink the sleep.
+PROGRESS_RETRIES = 20
+PROGRESS_RETRY_SLEEP_SECONDS = 0.025
+
 #: The operator's durable disarm. A file with this name in the runtime
 #: directory (the `runtime_dir` argument, else the directory the health file
 #: resolves to) stops every LIVE pass before it takes a slot. The runner NEVER
@@ -544,6 +554,23 @@ class _PassProgress:
     def finish(self, ok: bool, step: str) -> None:
         self._write("done" if ok else "failed", step)
 
+    def _remove_own_tmp(self) -> None:
+        """Delete THIS process's kit tmp, `<task>.json.<own pid>.tmp`, if any.
+
+        The kit leaves it behind when its `replace` is refused, and its name is
+        not an `atomic_io` temp, so `sweep_orphan_temps` would never reach it.
+        Only this pid's name is touched: another process's tmp may be a write
+        in flight. After a successful write the name no longer exists, so this
+        is a no-op then. Never raises.
+        """
+        if self._root is None or self._kit is None:
+            return
+        try:
+            target = Path(self._root) / self._kit.PROGRESS_REL / (PROGRESS_TASK + ".json")
+            target.with_name(f"{target.name}.{os.getpid()}.tmp").unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001 - cleanup never fails a pass
+            log.debug("could not remove this process's progress tmp", exc_info=True)
+
     def _write(self, status: str, step: str) -> None:
         if self._checklist is None or self._kit is None or self._root is None:
             return
@@ -561,15 +588,29 @@ class _PassProgress:
                 if status == "running"
                 else 0
             )
-            self._kit.write_progress(
-                self._root,
-                PROGRESS_TASK,
-                pct=pct,
-                step=step,
-                eta_s=eta,
-                status=status,
-                checklist=rows,
-            )
+            attempts = max(1, int(PROGRESS_RETRIES))
+            pause = threading.Event()
+            try:
+                for attempt in range(attempts):
+                    try:
+                        self._kit.write_progress(
+                            self._root,
+                            PROGRESS_TASK,
+                            pct=pct,
+                            step=step,
+                            eta_s=eta,
+                            status=status,
+                            checklist=rows,
+                        )
+                        break
+                    except OSError:
+                        if attempt + 1 == attempts:
+                            raise
+                        # Not `time.sleep`: this module's `time` binding is
+                        # reserved for the monotonic pass deadline.
+                        pause.wait(float(PROGRESS_RETRY_SLEEP_SECONDS))
+            finally:
+                self._remove_own_tmp()
         except Exception:  # noqa: BLE001 - a failed write never fails a pass
             if not self._warned:
                 self._warned = True
