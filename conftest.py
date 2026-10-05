@@ -915,7 +915,10 @@ def _is_live_progress_record(path: Any, dir_fd: Any = -1) -> bool:
 #: attribute `INBOX_TRIAGE = True` (see `tests/test_responder_inbox_v8.py`).
 #: The pre-v8 arms drive the responder's WORK LANE with notes v8 would triage
 #: first; set here, at import, so every child interpreter inherits it too.
-os.environ["RESINCOMPUTE_RESPONDER_TRIAGE"] = "0"
+#: `0-suite` is the responder's QUIET off value (`TRIAGE_OFF_SUITE`): the
+#: operator's "0" logs a fail-closed line every fire, which would break the
+#: arms that pin exact invocation-log shapes.
+os.environ["RESINCOMPUTE_RESPONDER_TRIAGE"] = "0-suite"
 
 
 def _live_runtime_fence(event: str, args: tuple[Any, ...]) -> None:
