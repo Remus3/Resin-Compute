@@ -28,6 +28,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 KIT_DIR = REPO_ROOT / "ops" / "fleet_kit"
 HOOK = KIT_DIR / "fleet_subagent_first.py"
@@ -223,6 +225,34 @@ def test_the_done_dispatch_detector_fires_when_the_rule_is_late():
     planted = "# /done\n\nRun every section.\n\n## 1. Gate\n\nDispatch to ONE sub-agent; relays only its final line.\n"
     head = _dispatch_section(planted)
     assert "ONE sub-agent" not in head
+
+
+#: Kit v10 item 4 reaches every command the main session runs, not only
+#: /done: /orchestrated-run and /ui-audit each dispatch to ONE sub-agent and
+#: the main session relays only its final line. Each entry names the final
+#: line vocabulary the preamble must state.
+DISPATCHED_COMMANDS = {
+    "orchestrated-run.md": ("RUN: COMPLETE", "RUN: BLOCKED - "),
+    "ui-audit.md": ("AUDIT: PASS", "AUDIT: BLOCKED - "),
+}
+
+
+@pytest.mark.parametrize("name", sorted(DISPATCHED_COMMANDS))
+def test_command_dispatches_to_one_sub_agent(name):
+    text = (REPO_ROOT / ".claude" / "commands" / name).read_bytes().decode("ascii")
+    # Whitespace-normalised: a phrase reflowed across a line break still counts.
+    head = " ".join(_dispatch_section(text).split())
+    assert "ONE sub-agent" in head, f"{name} preamble does not dispatch to ONE sub-agent"
+    assert "FLEET-KIT v10" in head and "item 4" in head, f"{name} preamble does not cite kit v10 item 4"
+    assert "relays only" in head and "final line" in head, f"{name} preamble does not relay only the final line"
+    for line in DISPATCHED_COMMANDS[name]:
+        assert line in head, f"{name} preamble does not name the final line {line!r}"
+
+
+def test_the_command_dispatch_detector_fires_on_a_preamble_without_it():
+    planted = "# /ui-audit\n\nRun every phase.\n\n## 9. Verdict\n\nONE sub-agent; relays only its final line, AUDIT: PASS.\n"
+    head = _dispatch_section(planted)
+    assert "ONE sub-agent" not in head and "AUDIT: PASS" not in head
 
 
 # ---------------------------------------------------------------- emit()
