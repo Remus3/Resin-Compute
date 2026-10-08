@@ -19,33 +19,29 @@ conversational answer. SUBSTANCE decides, not file count - a one-file change to
 `engines/` is substantive, a five-file rename is not. The reasoning is recorded
 in ADR-007.
 
-**THE MAIN SESSION DISPATCHES THE WHOLE RUN TO ONE SUB-AGENT** (FLEET-KIT
-v10, MAIN 0839 ORDER of 2026-10-08, section 3 item 4; the same shape as
-`.claude/commands/done.md`). The main session runs no phase itself: under the
-kit's SUBAGENT-FIRST PreToolUse hook every Bash, PowerShell, Read, Edit, Write,
-Grep, Glob, NotebookEdit and MultiEdit call in the main thread is denied (or,
-in log mode, logged as would-deny). It prints the session checklist, then
-launches ONE sub-agent, in the background, whose prompt is this file's phases
-in order plus the unit of work, the session counter `n` and the list of
-checklist tasks the session printed (the sub-agent cannot see the main
-thread's context, so those inputs travel in its prompt). That sub-agent is the
-ORCHESTRATOR every phase below names: it reads, plans, dispatches the
-`planner`, `builder`, `verifier`, `adjudicator` and `adversary` agents, merges
-and reports. Its phase-7 report goes to the main session, not into chat, and
-its reply ends with exactly one line: `RUN: COMPLETE`, or
-`RUN: BLOCKED - <what stopped it>`. The main session relays only that final
-line, byte-exact, plus one line for each item the operator must act on, and
-re-prints no phase. A sub-agent that returns no such line is a failure; the
-main session relays `RUN: BLOCKED - the orchestrator sub-agent returned no
-final line` and does not retry.
+**THE MAIN SESSION IS THE ORCHESTRATOR AND THE MERGER, AND THE MAIN SESSION
+DISPATCHES EVERY TOOL CALL** (FLEET-KIT v10, MAIN 0839 ORDER of 2026-10-08,
+section 3 item 4). It plans, decides and merges, and it makes NO direct tool
+call: under the kit's SUBAGENT-FIRST PreToolUse hook every Bash, PowerShell,
+Read, Edit, Write, Grep, Glob, NotebookEdit and MultiEdit call in the main
+thread is denied (or, in log mode, logged as would-deny). Every read, grep,
+recall, Bash command, edit, suite run, merge and commit in the phases below
+goes to a `planner`, `builder`, `verifier`, `adjudicator` or `adversary`
+sub-agent from `.claude/agents/`. The orchestration itself cannot be handed to
+one sub-agent: a sub-agent has no Agent tool, so it could not dispatch the
+planner, builders, verifier, adjudicator and adversaries this protocol needs.
+Each sub-agent's prompt carries everything it needs, because sub-agent context
+does not inherit the main thread's. Each sub-agent reports to the main
+session, not into chat; the main session relays to chat only results, verdict
+lines and anything the operator must act on, one line each (FLEET-COMMON
+item 2).
 
-**The orchestrator does NOT run long builds, long suites or wide sweeps
-inline either.** That is not a style preference: the operator's session is the
-only place they can ask a question, and a session blocked on a sweep is a
-session they cannot interrupt. That is also why the orchestrator runs in the
-background. Background the long work, and never fabricate or predict a pending
-agent's result - if the operator asks before it lands, say it is still
-running.
+**The main thread does NOT run long builds, long suites or wide sweeps
+inline.** That is not a style preference: the operator's session is the only
+place they can ask a question, and a main thread blocked on a sweep is a
+session they cannot interrupt. Background the long work, and never fabricate
+or predict a pending agent's result - if the operator asks before it lands,
+say it is still running.
 
 **The session checklist is the ONE task list chat carries** (FLEET-COMMON
 item 13, kit v7; for this one purpose it supersedes the kit-v2 rule that chat
@@ -385,11 +381,8 @@ python -m pytest agents/pity_engine
   verdict; and every UNRESOLVED item.
 - **Anything unverified is labelled unverified.** Do not round an uncertainty up
   to a claim, and do not report a subagent's number as your own observation.
-- End the reply with the final line, `RUN: COMPLETE` or
-  `RUN: BLOCKED - <what stopped it>`, and nothing after it.
-- The MAIN SESSION, not the orchestrator, then finishes with `/done`, which is
-  the ritual in `.claude/commands/done.md`, run unprompted once no checklist
-  task remains (FLEET-COMMON item 13 c). `/done` dispatches its own sub-agent.
+- Finish with `/done`, which is the ritual in `.claude/commands/done.md`, run
+  unprompted once no checklist task remains (FLEET-COMMON item 13 c).
 
 ## Safety rails
 
