@@ -11,6 +11,11 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **E: move follow-through (session 59).** Hand-off item 0a steps a-d. MIG-1
+  residues of the 14 pruned worktrees are kept at ops/runtime/mig1_residue/
+  (gitignored runtime artifact, one folder per worktree); review and discard
+  once item 0a closes.
+
 - **DONE 2026-10-07. MAIN 2155 C: PATH INVENTORY ANSWERED** (ANSWER 2225,
   1/1 reached) and the **per-sender cap no longer parks verified MAIN
   ORDER/FIX/RULING** (merge a487d15, `tests/test_responder_loop_breakers.py`).

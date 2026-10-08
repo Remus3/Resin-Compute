@@ -493,7 +493,7 @@ def test_the_install_documentation_is_not_collateral_damage():
     starts flagging install instructions, it fails here first.
     """
     text = _read("README.md")
-    assert "C:" + "\\" + "Resin Compute" in text
+    assert "E:" + "\\" + "Resin Compute" in text
     assert leaked_accounts(text) == []
 
 
