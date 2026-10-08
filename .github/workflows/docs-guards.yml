@@ -81,28 +81,30 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v6
+      # SHA-pinned like ci.yml (MAIN ORDER 0300); the comment is the tag.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           # The selection below shells out to `git ls-files`, which needs a
           # real index. A depth-1 clone provides one; being explicit that this
           # job is git-dependent.
           fetch-depth: 1
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: |
             requirements.txt
             requirements-dev.txt
+            requirements-dev.lock
 
       - name: Install dev deps
+        # Hash-pinned, same line and same reasons as ci.yml's install step.
         run: |
-          python -m pip install --upgrade pip
           # This job runs on the docs half of all commits, so it installs the
           # same small dev set the rest of the tree uses and nothing more. The
           # runtime is stdlib-only, so there is no second install to skip.
-          pip install -r requirements-dev.txt
+          python -m pip install --require-hashes -r requirements-dev.lock -r requirements-dev.txt
 
       - name: ASCII hygiene over tracked .md
         # Runs FIRST because it is seconds long and it is the check most likely

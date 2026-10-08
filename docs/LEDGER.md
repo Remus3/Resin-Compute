@@ -12,6 +12,39 @@ now.
 
 ---
 
+## 2026-10-08 - MAIN ORDER 0300 supply-chain hardening, builder slice (session 63)
+
+- Repo visibility read back PUBLIC (`gh repo view`), so the CodeQL upload is
+  not guarded; the reason sits in the workflow header.
+- Actions SHA-pinned with the tag as a trailing comment, each SHA resolved
+  from the release tag via the commits API and cross-read from git/ref:
+  actions/checkout v6.1.0 d23441a48e516b6c34aea4fa41551a30e30af803,
+  actions/setup-python v6.3.0 ece7cb06caefa5fff74198d8649806c4678c61a1,
+  github/codeql-action v4.38.3 24c54180a607b1449ed407dd24f251e4e9147c8d
+  (annotated tag dereferenced). Majors kept at v6; Dependabot proposes v7.
+- requirements-dev.lock added: the dev closure with a sha256 per
+  distribution, `uv pip compile --generate-hashes --universal` at Python
+  3.11. Both workflows install it with `--require-hashes`; the
+  `pip install --upgrade pip` lines are dropped. Hash enforcement was proven
+  in a 3.11 venv by deleting one hash (install refused) and by a version
+  edit (hash mismatch refused). No unhashed pip line remains.
+- `.github/dependabot.yml` (github-actions, pip at the root, npm at shell/,
+  weekly, one group each) and `.github/workflows/codeql.yml` (python,
+  javascript-typescript, actions; build-mode none; security-events write at
+  job level only). Every workflow keeps top-level `contents: read`.
+- tests/test_supply_chain.py pins those properties; five arms were red
+  before the change, each with a non-vacuity arm.
+- FUZZING RULED OUT (MAIN adjudication in the same order): these are
+  single-user local tools whose parsers read the operator's own files and
+  pinned upstream data, not untrusted network input, so a fuzzer buys
+  Scorecard points rather than risk reduction. Reversed by: the tree parsing
+  untrusted input (network-facing service, third-party files, a published
+  parser library) or an operator order.
+- Scorecard v5.5.0 linux binary, checksum-verified, run in WSL before any
+  push at d6bce85: aggregate 4.7. Pinned-Dependencies 0, SAST 0,
+  Dependency-Update-Tool 0, Token-Permissions 10, Security-Policy 10,
+  Vulnerabilities 10. The after run follows the merger's push.
+
 ## 2026-10-08 - Session 62 /done: worktree housekeeping, inbox watermark, gates
 
 - Worktrees: the four merged session-62 worktrees (agent-af2a0f85823855fa5,

@@ -1,0 +1,42 @@
+# Dependabot version updates (MAIN ORDER 0300, 2026-10-05).
+#
+# One entry per ecosystem actually present, weekly, one group each so a week is
+# at most one PR per ecosystem rather than a burst. PRs are merged by this tree
+# once its gating CI is green on them; nothing here auto-merges.
+#
+# - github-actions keeps the SHA pins in .github/workflows/ and their trailing
+#   `# vX.Y.Z` comments current together.
+# - pip at the root covers requirements.txt (deliberately empty), the
+#   requirements-dev.txt declaration and the hash-pinned requirements-dev.lock.
+#   A bump to the .txt pin must land with a regenerated lock; see the lock's
+#   header for the command. tests/test_supply_chain.py reds on drift.
+# - npm at /shell covers the Electron companion's package.json and lockfile.
+#
+# tests/test_supply_chain.py pins the three entries, the weekly interval and the
+# groups block.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      pip-dev:
+        patterns: ['*']
+
+  - package-ecosystem: npm
+    directory: /shell
+    schedule:
+      interval: weekly
+    groups:
+      npm-shell:
+        patterns: ['*']

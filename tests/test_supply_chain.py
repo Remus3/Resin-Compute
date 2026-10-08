@@ -1,0 +1,378 @@
+"""Supply-chain properties of the CI configuration (MAIN ORDER 0300, 2026-10-05).
+
+Pins, as text, the properties the OpenSSF Scorecard checks Pinned-Dependencies,
+Token-Permissions, Dependency-Update-Tool and SAST grade, so a regression is red
+here on the commit that makes it rather than a week later in a Scorecard run:
+
+1. Every `uses:` in every workflow names a full 40-hex commit SHA, followed by a
+   `# vX.Y.Z` comment naming the release tag the SHA was resolved from. A tag or
+   a branch is mutable; a SHA is not. The comment is what lets Dependabot's
+   github-actions entry keep the pin and its label current together.
+2. Every workflow sets a TOP-LEVEL `permissions:` block that grants nothing
+   beyond read, so a job that needs more must escalate at JOB level, where the
+   escalation is visible next to the job that uses it.
+3. `.github/dependabot.yml` exists, is version 2, and covers every ecosystem the
+   tree actually has: github-actions, pip at the root and npm at shell/.
+4. `requirements-dev.lock` carries a sha256 hash on every requirement, covers
+   every `==` pin in requirements-dev.txt at the SAME version, and every
+   workflow `pip install` runs with `--require-hashes` against it.
+5. A CodeQL workflow exists, and `security-events: write` is granted only at
+   job level.
+
+NO YAML LIBRARY, for the reason `tests/test_dev_pin_declaration.py` gives: CI
+installs ruff, pytest and mypy only, so a guard importing PyYAML would pass on
+the author's box and fail on the runner. These are line scanners over a small,
+regular subset of YAML; a shape they cannot read FAILS rather than passing.
+
+Every detector is paired with a NON-VACUITY arm that feeds it a planted bad
+input and asserts it fires, and every census arm carries a floor so an emptied
+directory cannot pass by grading nothing.
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
+DEPENDABOT = REPO_ROOT / ".github" / "dependabot.yml"
+REQUIREMENTS_DEV = REPO_ROOT / "requirements-dev.txt"
+LOCK = REPO_ROOT / "requirements-dev.lock"
+
+#: The `uses:` population measured when this module was written: 2 in ci.yml,
+#: 2 in docs-guards.yml, 3 in codeql.yml. A floor, not an equality - adding an
+#: action is fine; the count dropping under this means the scanner went blind.
+USES_FLOOR = 7
+
+_USES = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)(.*)$")
+_SHA_REF = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
+_VERSION_COMMENT = re.compile(r"^\s+#\s+v\d+(?:\.\d+){0,2}\s*$")
+_TOP_KEY = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):(.*)$")
+_PIP_INSTALL = re.compile(r"\bpip\d?\s+install\b")
+_REQ_HEAD = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s;\\]+)")
+_HASH = re.compile(r"--hash=sha256:[0-9a-f]{64}\b")
+
+#: Values a top-level permission scope may carry. Anything else - `write`, or
+#: an unrecognised shape - is graded as an escalation.
+_READ_ONLY_VALUES = frozenset({"read", "none"})
+
+
+def workflow_files() -> list[Path]:
+    return sorted(
+        p for p in WORKFLOWS_DIR.iterdir() if p.is_file() and p.suffix in (".yml", ".yaml")
+    )
+
+
+def _strip_comment(line: str) -> str:
+    """Drop a YAML comment. Workflows here never put `#` inside a quoted key."""
+    return re.sub(r"(^|\s)#.*$", "", line).rstrip()
+
+
+# --------------------------------------------------------------------------
+# Detectors. Each takes TEXT, so the non-vacuity arms can feed planted input.
+# --------------------------------------------------------------------------
+
+
+def unpinned_uses(text: str, source: str = "<text>") -> tuple[list[str], int]:
+    """Return (offending lines, census of `uses:` lines seen).
+
+    Local actions (`./path`) carry no remote ref and are exempt. `docker://`
+    references would need a digest pin; none exist here and one appearing is
+    graded as unpinned until this function is taught the digest form.
+    """
+    bad: list[str] = []
+    seen = 0
+    for lineno, raw in enumerate(text.splitlines(), 1):
+        match = _USES.match(raw)
+        if not match:
+            continue
+        seen += 1
+        ref, rest = match.group(1).strip("'\""), match.group(2)
+        if ref.startswith("./"):
+            continue
+        if not _SHA_REF.match(ref) or not _VERSION_COMMENT.match(rest):
+            bad.append(f"{source}:{lineno}: {raw.strip()}")
+    return bad, seen
+
+
+def top_level_permissions(text: str) -> dict[str, str] | None:
+    """Parse the column-0 `permissions:` block. None when it is absent.
+
+    Accepts the three spellings in use across the fleet: a mapping block
+    (`permissions:` then indented `scope: level` lines), the scalar
+    `read-all`, and the empty mapping `{}`. A scalar `write-all` is returned
+    as {"*": "write-all"} so the caller grades it as an escalation.
+    """
+    lines = text.splitlines()
+    for index, raw in enumerate(lines):
+        match = _TOP_KEY.match(raw)
+        if not match or match.group(1) != "permissions":
+            continue
+        value = _strip_comment(match.group(2)).strip()
+        if value == "{}":
+            return {}
+        if value:
+            return {"*": value}
+        scopes: dict[str, str] = {}
+        for body in lines[index + 1 :]:
+            if not body.strip() or body.lstrip().startswith("#"):
+                continue
+            if not body.startswith((" ", "\t")):
+                break
+            key, _, level = _strip_comment(body).strip().partition(":")
+            scopes[key.strip()] = level.strip()
+        return scopes
+    return None
+
+
+def permission_escalations(scopes: dict[str, str]) -> list[str]:
+    bad = []
+    for scope, level in scopes.items():
+        if scope == "*":
+            if level != "read-all":
+                bad.append(f"{scope}: {level}")
+        elif level not in _READ_ONLY_VALUES:
+            bad.append(f"{scope}: {level}")
+    return bad
+
+
+def unhashed_pip_installs(text: str, source: str = "<text>") -> tuple[list[str], int]:
+    """Every `pip install` line in a workflow that does not require hashes."""
+    bad: list[str] = []
+    seen = 0
+    for lineno, raw in enumerate(text.splitlines(), 1):
+        line = _strip_comment(raw)
+        if not _PIP_INSTALL.search(line):
+            continue
+        seen += 1
+        if "--require-hashes" not in line:
+            bad.append(f"{source}:{lineno}: {raw.strip()}")
+    return bad, seen
+
+
+def lock_entries(text: str) -> tuple[dict[str, str], list[str]]:
+    """Parse a hashed lock. Return ({name: version}, [names lacking a hash]).
+
+    A requirement is its head line plus every backslash-continued line after
+    it, which is the shape `uv pip compile --generate-hashes` and
+    `pip-compile --generate-hashes` both emit.
+    """
+    entries: dict[str, str] = {}
+    unhashed: list[str] = []
+    logical: list[str] = []
+    current = ""
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if not current and (not stripped or stripped.startswith("#")):
+            continue
+        current += " " + stripped.rstrip("\\")
+        if not stripped.endswith("\\"):
+            logical.append(current.strip())
+            current = ""
+    if current:
+        logical.append(current.strip())
+    for line in logical:
+        head = _REQ_HEAD.match(line)
+        if not head:
+            unhashed.append(line)
+            continue
+        name = head.group(1).lower()
+        entries[name] = head.group(2)
+        if not _HASH.search(line):
+            unhashed.append(name)
+    return entries, unhashed
+
+
+def dev_pins(text: str) -> dict[str, str]:
+    pins = {}
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        head = _REQ_HEAD.match(stripped)
+        if head:
+            pins[head.group(1).lower()] = head.group(2)
+    return pins
+
+
+def dependabot_entries(text: str) -> list[dict[str, str]]:
+    """One dict per `- package-ecosystem:` item, with its scalar keys and
+    flags for whether it carries a `schedule` and a `groups` block."""
+    items: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    for raw in text.splitlines():
+        line = _strip_comment(raw)
+        if not line.strip():
+            continue
+        m = re.match(r"^\s*-\s+package-ecosystem:\s*(\S+)", line)
+        if m:
+            current = {"package-ecosystem": m.group(1).strip("'\"")}
+            items.append(current)
+            continue
+        if current is None:
+            continue
+        m = re.match(r"^\s+(directory|interval|groups|schedule):\s*(.*)$", line)
+        if m:
+            current[m.group(1)] = m.group(2).strip().strip("'\"")
+    return items
+
+
+# --------------------------------------------------------------------------
+# Arms over the real tree.
+# --------------------------------------------------------------------------
+
+
+def test_every_uses_is_pinned_to_a_full_sha_with_a_version_comment():
+    workflows = workflow_files()
+    bad: list[str] = []
+    seen = 0
+    for path in workflows:
+        found, count = unpinned_uses(path.read_text(encoding="utf-8"), path.name)
+        bad += found
+        seen += count
+    assert workflows and seen >= USES_FLOOR and not bad, (
+        f"unpinned or unlabelled uses: {bad}; uses lines seen: {seen}"
+        f" (floor {USES_FLOOR}); workflows: {[p.name for p in workflows]}"
+    )
+
+
+def test_every_workflow_sets_a_read_only_top_level_permissions_block():
+    workflows = workflow_files()
+    problems: list[str] = []
+    for path in workflows:
+        scopes = top_level_permissions(path.read_text(encoding="utf-8"))
+        if scopes is None:
+            problems.append(f"{path.name}: no top-level permissions")
+            continue
+        problems += [f"{path.name}: {e}" for e in permission_escalations(scopes)]
+    assert workflows and not problems, problems
+
+
+def test_security_events_write_is_granted_only_at_job_level_in_codeql():
+    path = WORKFLOWS_DIR / "codeql.yml"
+    assert path.is_file(), "no CodeQL workflow at .github/workflows/codeql.yml"
+    text = path.read_text(encoding="utf-8")
+    assert "github/codeql-action/init@" in text and "github/codeql-action/analyze@" in text
+    top = top_level_permissions(text)
+    assert top is not None and "security-events" not in top, top
+    assert re.search(r"^ {4,}security-events:\s*write\s*$", text, re.M), (
+        "codeql.yml grants no job-level security-events: write, so analyze"
+        " cannot upload results"
+    )
+
+
+def test_dependabot_covers_every_ecosystem_present_weekly_and_grouped():
+    assert DEPENDABOT.is_file(), "no .github/dependabot.yml"
+    text = DEPENDABOT.read_text(encoding="utf-8")
+    assert re.search(r"^version:\s*2\s*$", text, re.M), "dependabot.yml is not version 2"
+    items = dependabot_entries(text)
+    pairs = {(i["package-ecosystem"], i.get("directory", "")) for i in items}
+    required = {("github-actions", "/"), ("pip", "/"), ("npm", "/shell")}
+    assert required <= pairs, f"missing: {sorted(required - pairs)}; found {sorted(pairs)}"
+    loose = [
+        i["package-ecosystem"]
+        for i in items
+        if i.get("interval") != "weekly" or "groups" not in i
+    ]
+    assert not loose, f"entries without a weekly schedule or a groups block: {loose}"
+
+
+def test_the_dev_lock_hashes_every_requirement_and_matches_every_dev_pin():
+    assert LOCK.is_file(), "no requirements-dev.lock"
+    entries, unhashed = lock_entries(LOCK.read_text(encoding="utf-8"))
+    pins = dev_pins(REQUIREMENTS_DEV.read_text(encoding="utf-8"))
+    drift = {n: (v, entries.get(n)) for n, v in pins.items() if entries.get(n) != v}
+    assert pins and len(entries) >= len(pins) and not unhashed and not drift, (
+        f"unhashed: {unhashed}; pin drift (dev pin, lock): {drift};"
+        f" lock entries: {len(entries)}; dev pins: {len(pins)}"
+    )
+
+
+def test_every_workflow_pip_install_requires_hashes():
+    bad: list[str] = []
+    seen = 0
+    for path in workflow_files():
+        found, count = unhashed_pip_installs(path.read_text(encoding="utf-8"), path.name)
+        bad += found
+        seen += count
+    assert seen >= 2 and not bad, f"unhashed pip installs: {bad}; pip installs seen: {seen}"
+
+
+# --------------------------------------------------------------------------
+# Non-vacuity: each detector fires on a planted defect and passes a good line.
+# --------------------------------------------------------------------------
+
+_GOOD_SHA = "0123456789abcdef0123456789abcdef01234567"
+
+
+def test_the_uses_detector_fires_on_tags_branches_short_shas_and_missing_comments():
+    planted = "\n".join(
+        [
+            "      - uses: actions/checkout@v6",
+            "      - uses: actions/checkout@main",
+            "      - uses: actions/checkout@0123456",
+            f"      - uses: actions/checkout@{_GOOD_SHA}",
+            f"      - uses: actions/checkout@{_GOOD_SHA} # pinned",
+        ]
+    )
+    bad, seen = unpinned_uses(planted)
+    assert seen == 5 and len(bad) == 5, bad
+    good = "\n".join(
+        [
+            f"      - uses: actions/checkout@{_GOOD_SHA} # v6.1.0",
+            f"        uses: github/codeql-action/init@{_GOOD_SHA} # v4.38.3",
+            "      - uses: ./local-action",
+        ]
+    )
+    assert unpinned_uses(good) == ([], 3)
+
+
+def test_the_permissions_detector_fires_on_absence_and_on_write():
+    assert top_level_permissions("on: push\njobs:\n  a:\n    permissions:\n      contents: read\n") is None
+    write = top_level_permissions("permissions:\n  contents: write\n  actions: read\njobs:\n")
+    assert permission_escalations(write or {}) == ["contents: write"]
+    assert permission_escalations(top_level_permissions("permissions: write-all\n") or {}) == [
+        "*: write-all"
+    ]
+    assert permission_escalations(top_level_permissions("permissions: read-all\n") or {"x": "y"}) == []
+    assert top_level_permissions("permissions: {}\n") == {}
+    assert top_level_permissions("permissions:\n  contents: read  # why\n\njobs:\n") == {
+        "contents": "read"
+    }
+
+
+def test_the_pip_detector_fires_on_an_unhashed_install_and_ignores_comments():
+    planted = "\n".join(
+        [
+            "          python -m pip install --upgrade pip",
+            "          pip install -r requirements-dev.txt",
+            "          # pip install -r commented-out.txt",
+            "          python -m pip install --require-hashes -r requirements-dev.lock",
+        ]
+    )
+    bad, seen = unhashed_pip_installs(planted)
+    assert seen == 3 and len(bad) == 2, bad
+
+
+def test_the_lock_parser_fires_on_a_missing_hash_and_on_version_drift():
+    sha = "a" * 64
+    lock = f"ruff==0.1.0 \\\n    --hash=sha256:{sha}\npytest==1.0\nmypy==2.0 ; sys_platform == 'win32' \\\n    --hash=sha256:{sha}\n"
+    entries, unhashed = lock_entries(lock)
+    assert entries == {"ruff": "0.1.0", "pytest": "1.0", "mypy": "2.0"}
+    assert unhashed == ["pytest"]
+    assert dev_pins("# c\nruff==0.2.0\n") != {n: entries[n] for n in ("ruff",)}
+
+
+def test_the_dependabot_parser_reads_ecosystem_directory_interval_and_groups():
+    text = (
+        "version: 2\nupdates:\n"
+        "  - package-ecosystem: pip\n    directory: /\n    schedule:\n"
+        "      interval: weekly\n    groups:\n      dev:\n        patterns: ['*']\n"
+        "  - package-ecosystem: npm\n    directory: /shell\n    schedule:\n"
+        "      interval: daily\n"
+    )
+    items = dependabot_entries(text)
+    assert [(i["package-ecosystem"], i["directory"], i["interval"], "groups" in i) for i in items] == [
+        ("pip", "/", "weekly", True),
+        ("npm", "/shell", "daily", False),
+    ]
