@@ -12,6 +12,62 @@ now.
 
 ---
 
+## 2026-10-08 - /done-only session, gates re-measured (session 61)
+
+No open item was acted on; every hand-off item is carried forward. The MAIN
+0839 FLEET-KIT v10 ORDER arrived and is filed untriaged as hand-off item 0d.
+- Gates at 1988b41, 2026-10-08, Python 3.14: licence 52; docs 42; qa 17
+  passed 2 skipped 3 noted; ruff clean; tests 4134 passed 6 skipped; pity_engine
+  80; node 52 pass 0 fail; dry run 0 pass 0 fail 6 skip; mypy 41 files clean
+  (advisory). The host scheduler probe (hand-off item 15) passed this run.
+- CI read at 1988b41: ci push run 37735387706 success, scheduled ci run
+  37800142367 success. This paperwork push is docs-only.
+
+## 2026-10-08 - E: move steps b and c: C: copy retired behind a junction, responder re-armed from E: (session 60)
+
+Hand-off item 0a. Step a: this session ran from `E:\Resin Compute`.
+- Step b. No file under the C: inbox was newer than 2026-10-08T00:13. No
+  process command line named the repo path. The C: copy was sent to the
+  Recycle Bin (VisualBasic FileSystem.DeleteDirectory, SendToRecycleBin), and
+  `mklink /J "C:\Resin Compute" "E:\Resin Compute"` was run. Read back:
+  LinkType Junction, Target `E:\Resin Compute`, and the hand-off file
+  resolves through it. This keeps the sibling roots maps delivering until
+  MAIN updates them.
+- Step c, which also renews item 0. `ops/install_responder_task.ps1` was run
+  with -TaskName RSC-InboxResponder and InstallRoot E: after a WhatIf pass.
+  A fresh gitignored agreement record was written, OPERATOR shape, expiring at
+  the window close. Read back by schtasks: Status Ready, Start In
+  `E:\Resin Compute`, window 2026-10-08T00:45:00 to 2026-11-07T00:45:00.
+  `python ops/check_task_liveness.py RSC-InboxResponder` read rc 0.
+  The first fire at 00:45 read back as progress rsc-responder "fire ended
+  empty", status done. `inbox_status.json` read state limit, 7 runs against a
+  cap of 3, frees at 09:36. Known trap: the PT43200M repeat may end about an
+  hour before EndBoundary because of the Nov 1 DST change.
+- core.hooksPath read the absolute `E:\Resin Compute\.githooks` at /done.
+  `python scripts/install_hooks.py` was re-run and the value read back as
+  `.githooks`. The cause is filed in ROADMAP.md.
+- Gates at 8a1907d plus paperwork, 2026-10-08, Python 3.14: licence 52;
+  docs 42; qa 17 passed 2 skipped 3 noted; ruff clean; tests 1 failed 4133
+  passed 6 skipped; pity_engine 80; node 52 pass 0 fail; dry run 0 pass
+  0 fail 6 skip; mypy 41 files clean; kit `8 []`.
+  - The one failure is the host-dependent
+    `tests/test_task_liveness.py::test_the_real_probe_answers_for_a_task_outside_the_root_task_path`
+    ("the scheduler refused the query"). It reproduced in a solo re-run, and
+    this session changed no code.
+  - The new sixth skip is `tests/test_responder_uniform_budget.py:705`: 8.3
+    names are disabled on E:. That is a property of the volume after the move.
+  - The paperwork push used RESIN_SKIP_PREPUSH=1 because the push is
+    docs-only, so CI is the only gate on it. Pushed 7f1915d, and origin/main
+    read back at 7f1915d. CI runs: ci 37734244001 and docs-guards
+    37734243906, both QUEUED when recorded. Read back at the second /done:
+    ci 37734244001 success. docs-guards 37734243906 was cancelled because
+    640bc0c superseded it, and docs-guards 37734264014 on 640bc0c succeeded.
+    ci 37734886978 on 1e03c24 (hand-off note of the v9 builder result)
+    succeeded.
+- Step d (kit v9) and MAIN ORDER 0230 (roster) were dispatched to builders in
+  worktrees and were still running at /done. Neither is merged. The hand-off
+  carries both.
+
 ## 2026-10-08 - Repo copied to E: and MIG-1 worktree prune (session 59)
 
 Operator order in chat. MIG-1 per MAIN 2354 ORDER item 5: `git worktree list`

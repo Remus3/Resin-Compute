@@ -11,10 +11,24 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **E: move follow-through (session 59).** Hand-off item 0a steps a-d. MIG-1
-  residues of the 14 pruned worktrees are kept at ops/runtime/mig1_residue/
-  (gitignored runtime artifact, one folder per worktree); review and discard
-  once item 0a closes.
+- **E: move follow-through (session 59).** Steps a-c DONE session 60 (see
+  `docs/LEDGER.md`): session started at E:, C: copy recycled and replaced by
+  a junction to E:, RSC-InboxResponder re-armed from E: with a new window.
+  Step d (vendor kit v9, ONE ANSWER to MAIN) is open: a builder branch was
+  in flight at session end, reporting to the gitignored runtime progress
+  file ops/loop/control/progress/rsc-v9.json; the MAIN 0230 roster builder
+  reports to ops/loop/control/progress/rsc-roster.json. MIG-1 residues of the 14 pruned worktrees are
+  kept at ops/runtime/mig1_residue/ (gitignored runtime artifact, one folder
+  per worktree); review and discard once item 0a closes.
+
+- **NEW 2026-10-08. MAIN 0839 ORDER FLEET-KIT v10 (to all six).** Arrived
+  session 61, not yet read or sha256-verified. Vendor it after (or together
+  with) the unmerged kit v9 branch; one ANSWER to MAIN covers v9 and v10.
+
+- **NEW 2026-10-08. core.hooksPath drifts to an absolute path.** Read
+  `E:\Resin Compute\.githooks` at session 60 /done (session 58 saw the same
+  on C:); `python scripts/install_hooks.py` restored `.githooks`. Cause
+  unknown - find what writes it (worktree creation, an agent, a hook).
 
 - **DONE 2026-10-07. MAIN 2155 C: PATH INVENTORY ANSWERED** (ANSWER 2225,
   1/1 reached) and the **per-sender cap no longer parks verified MAIN
@@ -27,11 +41,6 @@ version. What follows is everything the scaffold deliberately did not do.
   unanswered; if MAIN 1927's "v8 supersedes every older kit order" covers
   them, they need a verified MAIN note naming their stamps for
   SUPERSEDED_MAIN_STAMPS rather than an auto-reply each.
-
-- **NEW 2026-10-07. THE MOVE TO E: IS COMING** (MAIN 2155). Await MAIN's
-  runbook. Before re-arming RSC-InboxResponder at E:, accept the harness
-  trust dialog there (`workspace_trust` passes a missing key). Prune the 34
-  merged agent worktrees first (14 have residue to review).
 
 - **IMPLEMENTED, PENDING MERGE 2026-10-08. MAIN ORDER 0230 ROSTER CHANGE,
   refined by MAIN 2305 RULING (both verified MATCH).** LL retired as
