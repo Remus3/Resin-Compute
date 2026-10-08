@@ -175,7 +175,17 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
      8940-8959). IN FLIGHT at session 60 /done: builder in worktree
      .claude/worktrees/agent-a975dc7a0b2da117f (branch
      worktree-agent-a975dc7a0b2da117f), progress ops/loop/control/progress/rsc-roster.json. Same
-     verify/refute/merge path as 0a.d.
+     verify/refute/merge path as 0a.d. Builder FINISHED after /done (its
+     claims, UNVERIFIED): commit 03a14a7, both notes provenance MATCH,
+     tests 1 failed (item 15) 4151 passed 6 skipped. It ALREADY EDITED
+     the gitignored live roster ops/moon_sync_repos.json in the main
+     checkout (EW added, LL marked retired, root kept), and the backup is
+     in a scratchpad folder - read it back before merging. Also touched
+     tests/test_ports.py, tests/test_responder_audience.py,
+     tests/test_headless_env.py, tools/publish_next_session.py and its
+     test, docs/adr/ADR-004-port-block.md. Left for a joint round:
+     docs/CHANNEL.md, the carriers in tests/test_loop_concurrency.py, and
+     the CLAUDE.md snapshot line.
   2. MAIN ORDER 0300 SUPPLY-CHAIN HARDENING (sha256 MATCH, 50d24f11...):
      a dependabot config under .github (pip at root for both requirements files, npm at
      shell/, github-actions; weekly, one group each); SHA-pin the 4 uses:
