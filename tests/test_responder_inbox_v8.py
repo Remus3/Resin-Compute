@@ -345,7 +345,13 @@ def test_an_auto_reply_from_a_sibling_is_never_triaged(rsp, tmp_path, monkeypatc
     sessions = Sessions(rsp)
     _fire(rsp, tmp_path, monkeypatch, sessions)
     assert sessions.triage == [] and sessions.work == []
-    assert [r["verdict"] for r in _seen(rsp) if r["note"] == name] == ["auto-reply"]
+    # Kit v9 (MAIN 2354 ORDER) classifies `-from-XX-auto-reply-` itself as the
+    # AUTO-REPLY answer class, so the kit's own mechanical ack records it
+    # (verdict None) before this tree's `is_auto_reply` fallback is reached.
+    # Under v8 the fallback recorded verdict "auto-reply". The property - never
+    # triaged, never worked, marked seen once - is unchanged.
+    rows = [(r["action"], r["cls"], r["verdict"]) for r in _seen(rsp) if r["note"] == name]
+    assert rows == [(fi.ACK, "AUTO-REPLY", None)], rows
 
 
 def test_a_sibling_bounce_file_is_never_triaged(rsp, tmp_path, monkeypatch):

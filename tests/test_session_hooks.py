@@ -252,6 +252,14 @@ QUIET_SHAPE = re.compile(
     r")\Z"
 )
 
+#: What the kit v9 Stop hook (`ops/fleet_kit/fleet_done.py stop-hook`, MAIN
+#: 2354 ORDER of 2026-10-07) prints: NOTHING unless a validated marker exists,
+#: else ONE JSON line carrying only `terminalSequence` (STANDARD s5: silent by
+#: default, never additionalContext, never systemMessage). Whole-body anchored.
+#: Not fired by the SessionStart firing arm; graded on its own in
+#: `tests/test_fleet_kit_v9_adoption.py`.
+STOP_HOOK_SHAPE = re.compile(r'\A(?:|\{"terminalSequence": "[^"\n]*"\}\r?\n)\Z')
+
 #: The EXACT declared command -> the shape its stdout must carry.
 #:
 #: Keyed on the whole command rather than on a script basename, because two
@@ -283,6 +291,7 @@ EXPECTED_SHAPE = {
     ),
     'python "$CLAUDE_PROJECT_DIR/tools/caveman_default.py"': BANNER_SHAPE,
     'python "$CLAUDE_PROJECT_DIR/tools/session_checklist.py"': SESSION_COUNTER_SHAPE,
+    'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_done.py" stop-hook': STOP_HOOK_SHAPE,
 }
 
 #: sha256 of the `_BANNER` string literal in `tools/caveman_default.py`, and its
