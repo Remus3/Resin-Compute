@@ -1116,7 +1116,8 @@ def test_a_main_reply_limit_tick_is_a_limit_with_an_allowed_task_name(rsp, tmp_p
         {"version": 1, "replies": [{"to": "MAIN", "at": now - 60}] * rsp.MAX_REPLIES_PER_SENDER}
     ))
     inbox = tmp_path / "inbox"
-    _note(inbox, "2026-10-03-1700-from-MAIN-ORDER-x.md", "TO RSC. do it\n")
+    # Non-exempt class: an inbound ORDER/FIX/RULING passes the cap (`_cap_exempt`).
+    _note(inbox, "2026-10-03-1700-from-MAIN-CORRECTION-x.md", "TO RSC. do it\n")
     result = rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
     assert result["note"] is None, result
     status = _status(rsp)
@@ -1202,7 +1203,8 @@ def test_a_main_reply_limit_tick_names_when_the_oldest_reply_ages_out(rsp, tmp_p
     _seed_main_cap(rsp, [now - 60, oldest, now - 600])
     _seed_runs(rsp, [now - 120, now - 30])
     inbox = tmp_path / "inbox"
-    _note(inbox, "2026-10-03-1700-from-MAIN-ORDER-x.md", "TO RSC. do it\n")
+    # Non-exempt class: an inbound ORDER/FIX/RULING passes the cap (`_cap_exempt`).
+    _note(inbox, "2026-10-03-1700-from-MAIN-CORRECTION-x.md", "TO RSC. do it\n")
 
     rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
     status = _status(rsp)
@@ -1269,7 +1271,8 @@ def _limit_path_main(rsp, tmp_path):
     now = time.time()
     _seed_main_cap(rsp, [now - 10 * (i + 1) for i in range(rsp.MAX_REPLIES_PER_SENDER)])
     inbox = tmp_path / "inbox"
-    _note(inbox, "2026-10-03-1700-from-MAIN-ORDER-x.md", "TO RSC. do it\n")
+    # Non-exempt class: an inbound ORDER/FIX/RULING passes the cap (`_cap_exempt`).
+    _note(inbox, "2026-10-03-1700-from-MAIN-CORRECTION-x.md", "TO RSC. do it\n")
     rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
     return rsp.MAX_REPLIES_PER_SENDER, rsp.MAX_REPLIES_PER_SENDER, rsp.OUTBOUND_WINDOW_SECONDS
 
