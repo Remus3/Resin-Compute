@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-08 (session 60), gates measured at commit 8a1907d on main by the /done
+Stamped 2026-10-08 (session 61), gates measured at commit 1988b41 on main by the /done
 ritual; this paperwork commit landed after it. Everything below is a
 READING taken that day, not a promise about now. Re-measure before citing.
 
@@ -48,7 +48,17 @@ shared pytest temp dir: pass a private --basetemp whose PARENT EXISTS and
 which sits OUTSIDE the repo. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures.
 
-STATE OBSERVED 2026-10-08 AT 8a1907d (session 60 /done gate run, at E:)
+STATE OBSERVED 2026-10-08 AT 1988b41 (session 61 /done gate run, at E:)
+  Python 3.14: licence 52; docs 42; qa 17 passed 2 skipped 3 noted; ruff
+  clean; tests 4134 passed 6 skipped (item 15 PASSED this run); pity_engine
+  80; node 52 pass 0 fail; dry run 0 pass 0 fail 6 skip; mypy 41 files
+  clean. Session 61 was a /done-only session: no open item was acted on,
+  every item below is carried forward unchanged. CI at 1988b41: ci push
+  run 37735387706 success; scheduled ci 37800142367 success.
+  NEW UNTRIAGED: MAIN 2026-10-08-0839 ORDER to ALL SIX, FLEET-KIT v10
+  (subagent-first hook, headless and inbox fixes, ONE ANSWER) plus its
+  17-file payload dir. Not read, not verified by sha256 - see OPEN WORK 0d.
+PRIOR READING 2026-10-08 AT 8a1907d (session 60 /done gate run, at E:)
   Python 3.14: licence 52; docs 42; qa 17 passed 2 skipped 3 noted; ruff
   clean; tests 1 failed 4133 passed 6 skipped; pity_engine 80; node 52 pass
   0 fail; dry run 0 pass 0 fail 6 skip; mypy 41 files clean; kit 8 [].
@@ -154,6 +164,10 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
         (v9 fleet_inbox UP031+UP017, fleet_done UP031+UP017; report to
         MAIN). CLAUDE.md's 'Kit v8 ... UP031' line outside the block is
         now stale. Stop hook not verified live.
+  0d. MAIN 0839 ORDER FLEET-KIT v10 (arrived session 61, untouched): verify
+     sha256 against MAIN's outbox, read every section heading, then vendor
+     v10 ON TOP of the unmerged v9 builder branch (0a.d) - land v9 first or
+     fold both into one vendoring; one ANSWER to MAIN covers v9 and v10.
   0b. WATCH THE HELD MAIN BACKLOG DRAIN. Since a487d15 old MAIN ORDERs the
      cap held now get auto-replies (2251 ACKed MAIN 0020, kit v5). List the
      still-unanswered MAIN ORDER-named kit notes; if MAIN 1927's supersession
@@ -277,7 +291,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
      outside_the_root_task_path failed twice in session 58 and passed later;
      it FAILED in the session 60 /done gate AND a solo re-run ("the scheduler
      refused the query"), so it now blocks the pre-push hook; it probes a live foldered task on
-     this host. Host-dependent, not a code regression; watch it.
+     this host. Host-dependent, not a code regression; watch it. It PASSED in
+     the session 61 /done gate (4134 passed 6 skipped).
   16. Raise the _MIN_TRACKED_* floor literals (tests/test_line_endings.py,
      tests/test_machine_identity.py, tests/test_licence_posture.py) to the
      post-v8 tracked-path count before more test modules land.
@@ -389,4 +404,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   DELIVERED with the recipient copy hashed; under item 14 one batched note
   per destination, HOP line in the head, never answer an answer. Silence
   reads as DISSENT. CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 61
+SESSION: 62
