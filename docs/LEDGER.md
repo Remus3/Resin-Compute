@@ -12,6 +12,47 @@ now.
 
 ---
 
+## 2026-10-08 - Session 62 /done: worktree housekeeping, inbox watermark, gates
+
+- Worktrees: the four merged session-62 worktrees (agent-af2a0f85823855fa5,
+  rsc-roster-fix, agent-a975dc7a0b2da117f, agent-a1e9b30d680cc4883) each had
+  `git merge-base --is-ancestor <branch> main` true and an empty
+  `git status -s`; directories sent to the Recycle Bin
+  (Microsoft.VisualBasic DeleteDirectory, SendToRecycleBin), then
+  `git worktree prune`. Read back: each path absent, `git worktree list` 1
+  entry (main). Branches kept.
+- Inbox: session 62 triage (gitignored runtime file inbox_triage_s62.txt
+  under ops/runtime: 460 entries, 323 ingested, 5 equivalent, 125 n/a, 7
+  applicable-not-done, all handled except MAIN 0300 supply chain) covered
+  the listed batch; the only newer entries were our own sent 1425 and 1454.
+  The inbox watcher's mark mode was run; its listing read back `unread:
+  none`.
+- Hand-off items closed: 0a.d (kit v9 vendored), 0d (kit v10 vendored), 1
+  (roster 0230/2305) - see the entry below. Item 0b: the 1454 ANSWER asked
+  MAIN for the 2354 and 0020 stamps; awaiting reply.
+- Gates at 1caa1a9, 2026-10-08, Python 3.14: licence 52; docs 42; qa 17
+  passed 2 skipped 3 noted; ruff clean; tests 1 failed 4184 passed 6
+  skipped (the failure is
+  `tests/test_task_liveness.py::test_the_real_probe_answers_for_a_task_outside_the_root_task_path`,
+  "the scheduler refused the query" - the host-dependent hand-off item 15,
+  pre-existing, not this session's code); pity_engine 80; node 52 pass 0
+  fail; dry run 0 pass 0 fail 6 skip; mypy 41 files clean (advisory); kit
+  check `10 []`. Six skip reasons: no exec bit, live fetch opt-in, bare
+  python is 3.14, POSIX half, 8.3 names off on E:, denied dir still lists.
+- CI at 1caa1a9 (pushed with RESIN_SKIP_PREPUSH=1, docs-only, item 15
+  reproduced solo): docs-guards run 37837137253 success; no ci run (docs
+  only, paths-ignore). At fd4fb42: ci 37835448263 success, docs-guards
+  37835448162 success.
+- Read at /done: `ops/loop/control/inbox_status.json` state limit,
+  runs_in_window 6, runs_cap 3, cap_frees_at 22:51 - the cap-hold label
+  item on the roadmap. Hook mode file holds `log`.
+- This paperwork commit is docs-only and was pushed with
+  RESIN_SKIP_PREPUSH=1 (item 15 blocks the pre-push hook on this host), so
+  CI is its only gate; its docs-guards run was pending when this entry was
+  written - read it with `gh run list --branch main --limit 3`.
+
+---
+
 ## 2026-10-08 - Kit v9+v10 vendored, roster landed, ONE ANSWER to MAIN (session 62)
 
 MAIN 0839 (v10), 2354 (v9), 0230 and 2305 (roster). Provenance read back:
