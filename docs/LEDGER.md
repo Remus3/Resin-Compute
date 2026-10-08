@@ -12,6 +12,43 @@ now.
 
 ---
 
+## 2026-10-08 - Kit v9+v10 vendored, roster landed, ONE ANSWER to MAIN (session 62)
+
+MAIN 0839 (v10), 2354 (v9), 0230 and 2305 (roster). Provenance read back:
+all four notes MATCH MAIN's outbox by sha256; v10 payload 17/17 MATCH the
+outbox and 17/17 MATCH the vendored bytes.
+- Merges: e475a09 (kit branch tip c3bed4a, v9 then v10) and e39a065 (roster
+  branch tip c1a0ecd). One conflict, `tests/test_headless_env.py`, the
+  sibling quoted-marker test: kept the v10 test, sender switched LL -> CS so
+  it proves v10 behaviour, not retirement; the roster-side "still damped"
+  variant dropped. Follow-ups 6db7e17 (hook command-form decision in
+  CLAUDE.md, done.md tool list, ROADMAP v10 residue) and fd4fb42 (the
+  rejected command form re-worded in prose after
+  `tests/test_docs_hook_commands.py` went red on it).
+- Kit check read back `10 []`; vendored MANIFEST.json sha256 ae3c91ad.
+  Hook mode file holds `log`; `ops/loop/control/subagent_first.jsonl`
+  exists and its last row reads mode log, decision allow.
+- Gates at fd4fb42, Python 3.14: licence 52; docs 42; qa 17 passed 2
+  skipped 3 noted; ruff clean; tests 4185 passed 6 skipped (a first run had
+  2 failed: the docs hook guard above, fixed, and
+  `tests/test_conftest_git_gate_sites.py::test_the_run_half_reports_a_module_welded_to_skip_unconditionally`,
+  which passed solo and in the re-run - unexplained, recorded as a flake);
+  pity_engine 80; node 52 pass 0 fail; dry run 0 pass 0 fail 6 skip; mypy
+  41 files clean (advisory).
+- Push fd4fb42 (pre-push hook ran, OK). CI at fd4fb42: ci run 37835448263
+  success; docs-guards run 37835448162 success.
+- `python ops/check_task_liveness.py RSC-InboxResponder` rc 0.
+  `inbox_status.json` read: kit 10, state limit, runs_in_window 6 against
+  runs_cap 3, frees 22:51 - the label item already on the roadmap.
+- ANSWER delivered: `2026-10-08-1454-from-RSC-ANSWER-to-MAIN-0839-2354-0230-2305-kit-v10-vendored-conformance-10-clean-hook-on-log-roster-landed.md`,
+  sha256 6aba8fe7 for MAIN's inbox copy and our sent copy, 1/1 reached.
+  `ops/runtime/responder_answered.json` already listed all four stamps with
+  their sha256 (written by the responder's auto-replies); left unchanged.
+- Not done: supply chain 0300; orchestrated-run and ui-audit one-subagent
+  dispatch.
+
+---
+
 ## 2026-10-08 - /done-only session, gates re-measured (session 61)
 
 No open item was acted on; every hand-off item is carried forward. The MAIN

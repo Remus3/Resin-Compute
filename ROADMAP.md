@@ -28,9 +28,9 @@ version. What follows is everything the scaffold deliberately did not do.
   kept at ops/runtime/mig1_residue/ (gitignored runtime artifact, one folder
   per worktree); review and discard once item 0a closes.
 
-- **NEW 2026-10-08. MAIN 0839 ORDER FLEET-KIT v10 (to all six).** Arrived
-  session 61, not yet read or sha256-verified. Vendor it after (or together
-  with) the unmerged kit v9 branch; one ANSWER to MAIN covers v9 and v10.
+- **DONE 2026-10-08. MAIN 0839 FLEET-KIT v10 and 2354 v9 vendored**
+  (merge e475a09), roster 0230 + 2305 merged (e39a065), ONE ANSWER 1454
+  delivered 1/1. See `docs/LEDGER.md`. Residue is the item above.
 
 - **NEW 2026-10-08. core.hooksPath drifts to an absolute path.** Read
   `E:\Resin Compute\.githooks` at session 60 /done (session 58 saw the same
