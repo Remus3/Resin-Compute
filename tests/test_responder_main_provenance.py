@@ -683,6 +683,36 @@ def test_the_bypass_still_honours_the_per_sender_cap(rsp, tmp_path):
     assert prompts == [] and _replies(main) == []
 
 
+def _main_capped(rsp) -> None:
+    rsp.DEFAULT_OUTBOUND.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_OUTBOUND.write_text(json.dumps({
+        "version": 1,
+        "replies": [{"to": "MAIN", "at": time.time() - 60}] * rsp.MAX_REPLIES_PER_SENDER,
+    }))
+
+
+def test_a_capped_main_fix_is_answered_only_on_a_provenance_match(rsp, tmp_path):
+    """The cap exemption (`_cap_exempt`) rides on operator authority, which a
+    MAIN note has only when its bytes match MAIN's outbox (FLEET-COMMON 6)."""
+    inbox, main = _bed(tmp_path)  # MAIN_NOTE is a FIX: exempt by name
+    _spend_hops(rsp, inbox)
+    _main_capped(rsp)
+    result, prompts = _cycle(rsp, tmp_path, inbox, {"MAIN": main})
+    assert result["note"] == MAIN_NOTE and result["delivered"] is True, result
+    assert len(_replies(main)) == 1
+
+
+def test_a_capped_main_fix_that_mismatches_stays_held(rsp, tmp_path):
+    # Hop budget NOT spent: the bypass (MATCH-only) is not what holds it here;
+    # uncapped, this same note is answered as data
+    # (`test_mismatch_is_reported_and_the_note_stays_data`).
+    inbox, main = _bed(tmp_path, inbox_bytes=NOTE_BYTES + b"stop that.\n")
+    _main_capped(rsp)
+    result, prompts = _cycle(rsp, tmp_path, inbox, {"MAIN": main})
+    assert result["note"] is None, result
+    assert prompts == [] and _replies(main) == []
+
+
 @pytest.mark.parametrize("variant", ["tagged", "named"])
 def test_the_bypass_never_answers_a_main_auto_reply(rsp, tmp_path, variant):
     if variant == "tagged":
