@@ -98,7 +98,7 @@ _PAIRED = re.compile(
 # NOT here - a word-boundary IGNORECASE match on two letters false-positives
 # across a Python tree, and the neighbour-survival arm below pins that choice.
 _SOLO = re.compile(
-    r"clockspeed|lanternlight|amberstone|legionwallpaper|redmoon|substrate",
+    r"clockspeed|lanternlight|amberstone|legionwallpaper|redmoon|substrate|ebonwake|mistfall",
     re.IGNORECASE,
 )
 
@@ -234,6 +234,16 @@ def test_no_tracked_file_names_a_sibling_project():
         # escapes - added because the matcher was measured blind to it while
         # both shared re-pinned files already sit in the corpus.
         "the slot bucket is shared with Substrate as of 2026-09-20",
+        # The seventh fleet member, joined 2026-10-04 by MAIN 0230 ORDER
+        # (SHA-256 MATCH), codenamed Sibling-K by MAIN 2305 RULING. Its
+        # checkout path is the name itself, so this one needle covers both.
+        "ported from the Ebonwake tree on 2026-10-05",
+        "see C:/ebonwake/moon_sync_inbox for the note",
+        # The RETIRED member's internal name, named in the same ORDER. A
+        # retired sibling's name is still a leak, so retirement adds needles
+        # and removes none.
+        "the Mistfall internal build",
+        "lanternlight stays a needle after retirement",
     ],
 )
 def test_the_scan_fires_on_a_planted_offender(tmp_path: Path, planted: str):
@@ -270,6 +280,7 @@ def test_the_scan_does_not_flag_a_codenamed_neighbour(tmp_path: Path):
     """
     (tmp_path / "a.md").write_bytes(
         b"Sibling-A through Sibling-F, short codes sa sb sc sd se sf.\n"
+        b"Sibling-K and its short code sk, an ebony wake, a mist fall.\n"
         b"The RC_DATA_DIR prefix is this repository's own and is not a sibling.\n"
         b"A red herring, a legion of tests, and a moon phase are all fine.\n"
         b"Bare two-letter channel codes are NOT matched, on purpose: a word-\n"
@@ -419,7 +430,19 @@ _SHARED_DIR = REPO_ROOT / "ops" / "loop"
 
 # Uppercase channel codes only, on a SEPARATOR boundary rather than a word
 # boundary. RSC leads the alternation so the longer code wins.
-_CHANNEL_CODES = ("RSC", "RC", "CS", "LW", "LL", "SS", "RM", "DS")
+#
+# ROSTER CHANGE 2026-10-05 (MAIN 0230 ORDER, SHA-256 MATCH; codename Sibling-K
+# by MAIN 2305 RULING), covering BOTH needle lists in this module. In _SOLO,
+# `ebonwake` is the joiner, and its checkout path is the same word, so one
+# needle covers name and path; `mistfall` is the RETIRED member's internal name,
+# named in that ORDER. Both measured at 0 hits over the tracked corpus before
+# they went in. No owner-handle needle: neither list carries one, and the
+# joiner's owner is this repository's own. Here, EW joins (0 hits in the two
+# shared files, measured first). `lanternlight` and LL STAY in both lists - a
+# retired sibling's name is still a leak, so retirement removes no needle.
+# _SOLO keeps its old line count on purpose: CLAUDE.md cites the corpus
+# builder above by line number.
+_CHANNEL_CODES = ("RSC", "RC", "CS", "LW", "LL", "SS", "RM", "DS", "EW")
 
 # WHY NOT `\b`, WHICH IS WHAT THIS PATTERN USED UNTIL 2026-09-21. Python's `\b`
 # treats `_` as a WORD character, so `_RC_` and `OWNER_RC_NOTE` sit between two
@@ -695,6 +718,9 @@ def test_the_scoped_scan_covers_every_shared_loop_module_and_nothing_was_added()
         # is the CONTROL: without it a dead matcher and a fixed one read the
         # same, so it lives in this arm rather than in a separate one.
         (b"\n# re-pinned with LW on 2026-09-20\n", 1),
+        # The joiner's code (MAIN 0230 ORDER) and the retiree's, which stays.
+        (b"\n# re-pinned with EW on 2026-10-05\n", 1),
+        (b"\n# re-pinned with LL on 2026-09-20\n", 1),
         # ACCEPTED RESIDUALS, pinned as behaviour so a later widening has to
         # come here and change them on purpose rather than by accident.
         # Lowercase is the false-positive control - see the comment on

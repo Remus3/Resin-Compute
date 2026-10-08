@@ -1830,32 +1830,37 @@ def test_the_main_bypass_needs_both_readers(rsp, tmp_path):
 
 
 def test_a_sibling_quoting_a_marker_line_is_still_damped_by_the_kit(rsp, tmp_path):
-    """MEASURED FOR THE KIT v5 REPORT, not a property this tree wants: v4's
+    """The sender in this arm and the two below was LL until the MAIN 0230
+    roster ORDER retired it. A retired sender is dropped before damping is
+    reached, which would make the `== []` arms pass for the wrong reason, so
+    they use a LIVE sibling. They never recorded real LL behaviour.
+
+    MEASURED FOR THE KIT v5 REPORT, not a property this tree wants: v4's
     should_skip body-marker test damps a QUOTED marker line in a non-ORDER
     class. Only MAIN is exempted here; a sibling note stays damped. If v5
     narrows the test, this arm goes red and the note can be dropped."""
     inbox = tmp_path / "inbox"
-    _note(inbox, "2026-10-03-1404-from-LL-ANSWER-x.md", "# From LL - ANSWER\n\nRC wrote:\n> TERMINAL\n")
+    _note(inbox, "2026-10-03-1404-from-CS-ANSWER-x.md", "# From CS - ANSWER\n\nRC wrote:\n> TERMINAL\n")
     assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
 
 
 def test_a_title_class_never_overrides_a_terminal_name_token(rsp, tmp_path):
     """(b): the class that exempts a note is read from the FILENAME only. A
-    sibling title `# From LL - FIX` must not lift the TERMINAL-in-name loop
+    sibling title `# From CS - FIX` must not lift the TERMINAL-in-name loop
     breaker (MAIN 0845 floor)."""
     inbox = tmp_path / "inbox"
-    name = "2026-10-03-1405-from-LL-1205-TERMINAL.md"
-    _note(inbox, name, "# From LL - FIX\nTERMINAL, no reply wanted.\n")
-    assert kit.should_skip(name, rsp.SELF_CODE, "# From LL - FIX\n") is None, (
+    name = "2026-10-03-1405-from-CS-1205-TERMINAL.md"
+    _note(inbox, name, "# From CS - FIX\nTERMINAL, no reply wanted.\n")
+    assert kit.should_skip(name, rsp.SELF_CODE, "# From CS - FIX\n") is None, (
         "non-vacuity: the kit lets the title exempt it"
     )
-    assert rsp.is_terminal_note(name, "# From LL - FIX\n") is True
+    assert rsp.is_terminal_note(name, "# From CS - FIX\n") is True
     assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
 
 
 def test_a_filename_order_class_is_still_never_damped(rsp, tmp_path):
     """Neighbour for (b): an ORDER named so in the FILENAME is still exempt."""
     inbox = tmp_path / "inbox"
-    kept = _note(inbox, "2026-10-03-1406-from-LL-ORDER-no-reply-loops.md", "do it\n")
+    kept = _note(inbox, "2026-10-03-1406-from-CS-ORDER-no-reply-loops.md", "do it\n")
     assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
 
