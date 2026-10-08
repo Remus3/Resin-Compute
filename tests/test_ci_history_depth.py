@@ -51,6 +51,8 @@ TRAILER_SWEEP = REPO_ROOT / "tests" / "test_commit_trailers.py"
 
 _CHECKOUT = re.compile(r"^uses:\s*actions/checkout@", re.IGNORECASE)
 _FETCH_DEPTH = re.compile(r"^fetch-depth:\s*(\S+)")
+#: The SHA-pinned checkout ref with its `# vX.Y.Z` tag comment.
+_PINNED_CHECKOUT = re.compile(r"^uses:\s*actions/checkout@[0-9a-f]{40}\s+#\s+v\d+(?:\.\d+){0,2}$")
 
 #: A call whose FIRST argument is the literal `log`, in either shape this tree
 #: could plausibly use: a helper (`_git("log", ...)`) or an argv list
@@ -420,7 +422,12 @@ def test_the_parser_recovers_the_real_workflows_own_step():
     the shape separately for a readable next step.
     """
     steps = parse_checkout_steps(CI.read_text(encoding="utf-8"))
-    assert [s.ref for s in steps] == ["uses: actions/checkout@v6"], (
+    # The ref is SHA-pinned with its release tag as a trailing comment (MAIN
+    # ORDER 0300); tests/test_supply_chain.py owns that property. This arm
+    # pins only that the scanner SEES exactly one checkout step in ci.yml, so
+    # it matches the pinned shape rather than one literal SHA, and a Dependabot
+    # bump does not redden a guard about history depth.
+    assert len(steps) == 1 and _PINNED_CHECKOUT.match(steps[0].ref), (
         f"the scan read {[s.ref for s in steps]} out of ci.yml, which is not the single "
         f"checkout step this module was written against"
     )
