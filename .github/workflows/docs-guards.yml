@@ -96,7 +96,6 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-dev.txt
-            requirements-dev.lock
 
       - name: Install dev deps
         # Hash-pinned, same line and same reasons as ci.yml's install step.
@@ -104,7 +103,7 @@ jobs:
           # This job runs on the docs half of all commits, so it installs the
           # same small dev set the rest of the tree uses and nothing more. The
           # runtime is stdlib-only, so there is no second install to skip.
-          python -m pip install --require-hashes -r requirements-dev.lock -r requirements-dev.txt
+          python -m pip install --require-hashes -r requirements-dev.txt
 
       - name: ASCII hygiene over tracked .md
         # Runs FIRST because it is seconds long and it is the check most likely

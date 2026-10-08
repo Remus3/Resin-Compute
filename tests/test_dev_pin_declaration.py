@@ -1,11 +1,19 @@
-"""Every tool the CI gates invoke is pinned, with `==`, in requirements-dev.txt.
+"""Every tool the CI gates invoke is pinned, with `==`, in requirements-dev.in.
 
 WHAT THIS GUARD CLAIMS, and it is deliberately a claim about the DECLARATION.
 It reads the TEXT of every workflow file in `.github/workflows/`, ENUMERATED
 FROM DISK, derives - OPEN-ENDEDLY - the set of program names their `run:` blocks
 put in command position, and asserts that set is exactly the set of names
-`requirements-dev.txt` pins, and that every one of those pins is an `==` and not
+`requirements-dev.in` pins, and that every one of those pins is an `==` and not
 a floating specifier. That is the whole claim.
+
+THE DECLARATION IS requirements-dev.in (MAIN ORDER 0300). requirements-dev.txt
+is now pip-compile output from it - the hashed transitive closure CI installs
+with `--require-hashes` - so it names packages no gate invokes and cannot be
+the file graded here. The install arm below still looks for
+`-r requirements-dev.txt`, because that is the file CI actually installs;
+tests/test_supply_chain.py asserts every .in pin is in the .txt at the same
+version.
 
 THE WORKFLOW SET IS ENUMERATED, NOT NAMED. An earlier revision held `ci.yml` and
 `docs-guards.yml` as module constants. `.github/workflows/` holds exactly those
@@ -103,7 +111,7 @@ drift itself is REPORTED, not enforced, by `scripts/qa_companion.py`, which
 prints the installed-versus-declared row and never changes an exit code.
 
 WHAT THIS GUARD CANNOT CLAIM - the common-mode risk, stated rather than
-implied. It reads `requirements-dev.txt` as the truth about what CI installs,
+implied. It reads `requirements-dev.in` as the truth about what CI installs,
 and it establishes that the workflows install that file only by finding the
 `pip install -r requirements-dev.txt` TEXT in a `run:` block. It never observes
 a runner, never resolves a dependency, and knows nothing about a transitively
@@ -113,7 +121,7 @@ CI installs is this file" - is ever false, every arm below stays green while
 saying nothing. Do not read a pass here as a statement about the runner.
 
 NO YAML LIBRARY. PyYAML is installed on the author's box and is NOT in
-requirements-dev.txt, which pins ruff, pytest and mypy only. A guard importing
+requirements-dev.in, which pins ruff, pytest and mypy only. A guard importing
 it would pass here and fail on the runner, which is the reverse of useful. The
 same rule and the same line-scanner shape are in
 `tests/test_ci_history_depth.py`; this module follows it.
@@ -137,7 +145,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
-REQUIREMENTS_DEV = REPO_ROOT / "requirements-dev.txt"
+REQUIREMENTS_DEV = REPO_ROOT / "requirements-dev.in"
 
 #: The extensions GitHub Actions reads out of `.github/workflows/`. Anything
 #: else in that directory is not a workflow and is not graded.
@@ -145,7 +153,7 @@ WORKFLOW_SUFFIXES = (".yml", ".yaml")
 
 #: The tools whose absence from the pin file would let a release of that tool
 #: redden a commit that changed nothing. This is the anti-vacuity floor, and it
-#: is the set requirements-dev.txt's own header prose names. Retiring a tool is
+#: is the set requirements-dev.in's own header prose names. Retiring a tool is
 #: a legitimate edit, and it must update this constant IN THE SAME COMMIT - the
 #: failure message below says so, because a hardcoded floor that reddens without
 #: naming itself is a puzzle rather than a finding.
@@ -273,7 +281,7 @@ _SHELL_WORDS = frozenset(
 )
 
 #: `python -m <target>` where the target ships with the interpreter or with pip
-#: itself. These are not pinned in requirements-dev.txt and must not be demanded
+#: itself. These are not pinned in requirements-dev.in and must not be demanded
 #: of it. Same closed-list rule as `_SHELL_WORDS`.
 _STDLIB_MODULES = frozenset(
     {
@@ -705,7 +713,7 @@ def _declaration_report(
 
     The equality half and the floor half print two different things. Under the
     old single-sentence message a floor failure printed `gates invoke [a, b];
-    requirements-dev.txt pins [a, b]` - two IDENTICAL lists under an
+    requirements-dev.in pins [a, b]` - two IDENTICAL lists under an
     equality-shaped assert, with no mention of the floor and no hint that a
     deliberate retirement has to update a constant in this file.
     """
@@ -724,7 +732,7 @@ def _declaration_report(
             f" Invoked by a gate but not pinned: {sorted(invoked - pinned)}."
             f" Pinned but invoked by no gate: {sorted(pinned - invoked)}."
             " A name in the first list is either a tool needing an `==` pin in"
-            " requirements-dev.txt or an ordinary shell word needing to join"
+            " requirements-dev.in or an ordinary shell word needing to join"
             " _SHELL_WORDS in this file - the scanner treats unknown as tool"
             " deliberately."
         )
@@ -763,7 +771,7 @@ def test_no_pin_floats():
     """Every requirement is an exact `==`, and there are requirements to grade.
 
     Same welding. "No line floats" is trivially true of an empty file, and an
-    accidentally emptied requirements-dev.txt is exactly the edit that would
+    accidentally emptied requirements-dev.in is exactly the edit that would
     make the arm above meaningless too.
     """
     text = REQUIREMENTS_DEV.read_text(encoding="utf-8")
@@ -884,8 +892,8 @@ def test_a_python_running_workflow_without_the_pin_install_still_reds(tmp_path):
         "shell.yml": "jobs:\n  a:\n    steps:\n      - run: echo python is mentioned\n",
         "good.yml": (
             "jobs:\n  a:\n    steps:\n      - run: |\n"
-            "          python -m pip install --require-hashes -r requirements-dev.lock"
-            " -r requirements-dev.txt\n          ruff check .\n"
+            "          python -m pip install --require-hashes -r requirements-dev.txt\n"
+            "          ruff check .\n"
         ),
     }
     for name, body in planted.items():

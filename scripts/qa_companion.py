@@ -318,11 +318,14 @@ def check_dev_pin_drift(report: Report) -> None:
     import re
     from importlib.metadata import PackageNotFoundError, version
 
-    pin_file = REPO_ROOT / "requirements-dev.txt"
+    # The human `==` declaration. requirements-dev.txt is pip-compile output
+    # (hashed closure, MAIN ORDER 0300) and its continuation lines would not
+    # match the `name==version` row shape below.
+    pin_file = REPO_ROOT / "requirements-dev.in"
     try:
         text = pin_file.read_text(encoding="utf-8")
     except OSError as exc:
-        report.add(NOTE, "dev pin drift", f"requirements-dev.txt unreadable ({exc.__class__.__name__})")
+        report.add(NOTE, "dev pin drift", f"requirements-dev.in unreadable ({exc.__class__.__name__})")
         return
 
     pinned_rows = []
@@ -335,7 +338,7 @@ def check_dev_pin_drift(report: Report) -> None:
             pinned_rows.append((match.group(1), match.group(2)))
 
     if not pinned_rows:
-        report.add(NOTE, "dev pin drift", "requirements-dev.txt declares no == pins, so there is nothing to compare")
+        report.add(NOTE, "dev pin drift", "requirements-dev.in declares no == pins, so there is nothing to compare")
         return
 
     for name, pinned in pinned_rows:
