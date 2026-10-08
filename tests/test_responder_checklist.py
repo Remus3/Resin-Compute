@@ -198,9 +198,9 @@ def test_the_progress_lock_is_released_after_a_crash(rsp, tmp_path, monkeypatch)
     monkeypatch.setattr(rsp, "_run_once", _crash)
     with pytest.raises(RuntimeError):
         rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
-    fd = rsp._acquire_run_lock(rsp.progress_lock_path())
+    fd = rsp._acquire_os_lock(rsp.progress_lock_path())
     assert fd is not None, "the progress lock survived the crash"
-    rsp._release_run_lock(fd)
+    rsp._release_os_lock(fd)
 
 
 def test_a_crashing_fire_writes_failed_and_still_re_raises(rsp, tmp_path, monkeypatch):

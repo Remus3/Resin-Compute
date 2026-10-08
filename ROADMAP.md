@@ -14,9 +14,9 @@ version. What follows is everything the scaffold deliberately did not do.
 - **NEW 2026-10-08. Kit v10 residue (session 62 merge).** (a) The
   `orchestrated-run.md` and `ui-audit.md` skills still need kit v10 item-4
   one-subagent dispatch: the main thread launches ONE sub-agent that runs the
-  skill, as `.claude/commands/done.md` now does. (b) Open question: does the
-  responder's own budget ledger retire now that kit v10 frees dead-holder
-  locks? Answer it before touching `tools/moon_sync_responder.py` budget code.
+  skill, as `.claude/commands/done.md` now does. (b) ANSWERED session 63:
+  yes, the responder's run ledger is retired (ruling 0f, see the amended
+  "/120 COUNTER" entry below and `docs/LEDGER.md`).
   (c) Kit v10 still fails ruff on its own bytes: fleet_inbox UP017,
   fleet_done UP017 and UP032, fleet_subagent_first BLE001 - per-file ignored
   in `ruff.toml`, reported to MAIN in the 1454 ANSWER; drop each ignore when
@@ -82,16 +82,18 @@ version. What follows is everything the scaffold deliberately did not do.
   14), responder flipped live at bed3725.** See `docs/LEDGER.md`,
   `tests/test_fleet_kit.py`, `tests/test_responder_inbox_v8.py`.
 
-- **NEW 2026-10-05. Item-14 residuals from the round-5 refuter (MINOR,
-  filed not fixed).** (1) With MAIN's inbox unwritable AND the work-attempts
-  record unwritable at once, a MAIN note is retried every fire up to the
-  120/day run budget (bounded, not parked, by design). (2) The triage-lane
-  `_release_outbound` call has no test that fails on its deletion.
-  (3) `_safe_note_label` is redundant behind `_log_safe`. (4)
-  `_release_outbound` and `record_outbound` read-modify-write without a
-  lock (scheduled-task IgnoreNew keeps fires from overlapping). Also: the
-  kit `fleet_inbox.scan` keys seen-notes by name only, so a re-sent note
-  under a seen name is hidden silently (kit, reported to MAIN).
+- **DONE 2026-10-08 (session 63). Item-14 residuals (1)-(4) from the
+  round-5 refuter.** (1) The MAIN retry loop's bound is now the kit's
+  120-run budget alone (`test_a_full_legacy_run_record_no_longer_refuses_a_spawn`).
+  (2) Pinned: `test_r5_minor2_*` in `tests/test_responder_inbox_v8.py`,
+  mutation-checked (deleting the triage-lane release turns it red).
+  (3) `_safe_note_label` removed; `_log_safe` now also replaces non-ASCII,
+  which had silently dropped whole log lines. (4) `record_outbound` and
+  `_release_outbound` run under an OS lock beside the outbound record
+  (`outbound_lock_path`); measured before: 4 contending interpreters, 83
+  reservations reported, 27 rows survived. See `docs/LEDGER.md`. STILL
+  OPEN: the kit `fleet_inbox.scan` keys seen-notes by name only, so a
+  re-sent note under a seen name is hidden silently (kit, reported to MAIN).
 
 - **DONE 2026-10-07. MAIN 1927 FIX: superseded MAIN orders get no reply.**
   `tools/moon_sync_responder.py` `SUPERSEDED_MAIN_STAMPS`, pinned by
@@ -145,8 +147,30 @@ version. What follows is everything the scaffold deliberately did not do.
   means git calls on a five-minute timer that ADR-011 rejected for cost.
   Needs its own adjudication before any code.
 
-- **DECIDED 2026-10-03. THE /120 COUNTER: TWO LEDGERS STAY, THE BINDING ONE
-  REPORTS.** Status schema 1 is unchanged - no new field pair. Its
+- **AMENDED 2026-10-08 (session 63, adjudicated ruling 0f, DECISION C):
+  THE RESPONDER RUN LEDGER IS RETIRED; ONE RUN LEDGER, THE KIT'S.** The
+  REVERSE IF below fired: kit v10's `RunBudget._lock` is an OS byte-range
+  lock on a never-unlinked file that a dead holder frees at once
+  (`ops/fleet_kit/fleet_headless.py` `_lock`), and `kit.spawn` counts every
+  start under it. Removed from `tools/moon_sync_responder.py`:
+  `MAX_RUNS_PER_DAY`, `RUNS_WINDOW_SECONDS`, the three `RUN_*_REASON`
+  strings, `_run_rows`, `run_lock_path`, `reserve_run`, `RunLockBusy`,
+  `RunBudgetSpent` (now `NoSessionStarted`), `CAP_RUNS`,
+  `_binding_run_budget`, and the `run-budget` termination; the OS-lock
+  helpers survive as `_acquire_os_lock`/`_release_os_lock` (progress lock,
+  outbound lock). The kit's "budget lock busy" maps to `KitBudgetLockBusy`
+  (`run-locked`, Idle). The status counts from the kit ledger by default and
+  from MAIN's reply ledger only while that cap HOLDS a note. KEPT:
+  `DEFAULT_RUNS` as a path anchor (`halt_sentinel`, `_kit_root`, the
+  progress lock derive from it), the per-sender outbound cap, `MAX_HOPS`.
+  Rejected: (A) retire every responder bound - loses the per-sender loop
+  breaker, the kit OutboundCap being per tree; (B) keep both - the
+  responder counted before `kit.spawn`, so a failed spawn cost a responder
+  run and no kit run, and the two drifted. Reversed by: a kit version
+  dropping the OS-held lock, or the kit not counting every spawn in this
+  tree. The text below is the 2026-10-03 decision, kept as history.
+- **DECIDED 2026-10-03 (SUPERSEDED 2026-10-08, see above). THE /120 COUNTER:
+  TWO LEDGERS STAY, THE BINDING ONE REPORTS.** Status schema 1 is unchanged - no new field pair. Its
   `runs_in_window`/`runs_cap`/`window_s`/`cap_frees_at` always come from ONE
   ledger, the one that binds, via `_status_budget` in
   `tools/moon_sync_responder.py`: no cap binding, or the responder's own run
@@ -6608,7 +6632,9 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Next
 
-- **Responder tick label on a cap hold.** `_write_tick_status` in `tools/moon_sync_responder.py` reports state `limit` / `Turn Limit Reached` whenever MAIN is at `MAX_REPLIES_PER_SENDER` and the fire took no note, even with nothing held, while the fire log says `fire ended empty`; the label strings are pinned in `tests/test_headless_env.py`, so the fix (label only when a non-exempt MAIN note is actually held) needs that file on its write-list.
+- **DONE 2026-10-08 (session 63), see `docs/LEDGER.md`: the label now
+  reads `limit` only when `_run_once`'s `cap_held` names MAIN.** Original
+  entry: **Responder tick label on a cap hold.** `_write_tick_status` in `tools/moon_sync_responder.py` reports state `limit` / `Turn Limit Reached` whenever MAIN is at `MAX_REPLIES_PER_SENDER` and the fire took no note, even with nothing held, while the fire log says `fire ended empty`; the label strings are pinned in `tests/test_headless_env.py`, so the fix (label only when a non-exempt MAIN note is actually held) needs that file on its write-list.
 - **Artifact scoring.** `MappedArtifact` parses cleanly but nothing scores a
   substat roll. Needs a stated scoring model before implementation, not after.
 - **Banner calendar.** The forecaster answers "given N pulls" but not "by when",
