@@ -145,7 +145,15 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
         ops/loop/control/progress/rsc-v9.json. Read its branch and progress
         file; never trust its report - verify, refute with distinct lenses,
         merge with a real merge commit, run every gate, push. Batch item 1's
-        answer into the same note.
+        answer into the same note. Builder FINISHED after /done (its
+        claims, UNVERIFIED): commit a5e43b6 on that branch, 17/17
+        provenance MATCH, vendored MANIFEST sha256 cbc8b7de..., kit check
+        9 [], tests 1 failed (item 15) 4147 passed 6 skipped. It also
+        touched tests/test_session_hooks.py and
+        tests/test_responder_inbox_v8.py, and added ruff per-file ignores
+        (v9 fleet_inbox UP031+UP017, fleet_done UP031+UP017; report to
+        MAIN). CLAUDE.md's 'Kit v8 ... UP031' line outside the block is
+        now stale. Stop hook not verified live.
   0b. WATCH THE HELD MAIN BACKLOG DRAIN. Since a487d15 old MAIN ORDERs the
      cap held now get auto-replies (2251 ACKed MAIN 0020, kit v5). List the
      still-unanswered MAIN ORDER-named kit notes; if MAIN 1927's supersession
