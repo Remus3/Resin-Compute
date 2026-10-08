@@ -550,3 +550,155 @@ def test_r5_a_limit_phrase_on_a_clean_long_exit_still_backs_off(rsp, routed, mon
     monkeypatch.setattr(subprocess, "run", _Run(text, returncode=0))
     with pytest.raises(rsp.UsageLimited):
         rsp._spawn_headless("a prompt", rsp.Bounds())
+
+
+# ---------------------------------------------------------------------------
+# Inbound ORDER / FIX / RULING pass the local per-sender reply hold (FLEET-COMMON
+# 14 hard constraint: no note waits on a human). Not 14c, which is outbound.
+# ---------------------------------------------------------------------------
+
+
+def _main_at_cap(rsp, now: float) -> None:
+    for i in range(rsp.MAX_REPLIES_PER_SENDER):
+        assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, rsp.MAIN_CODE, now - 60 * (i + 1), True)
+
+
+def test_cap_exempt_a_capped_sender_still_has_its_order_picked(rsp, tmp_path):
+    """A MAIN ORDER is never held behind the per-sender reply cap."""
+    now = time.time()
+    _main_at_cap(rsp, now)
+    capped = rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, now)
+    assert rsp.MAIN_CODE in capped
+    inbox = tmp_path / "inbox"
+    order = _note(inbox, "2026-10-07-1000-from-MAIN-ORDER-to-RSC-adopt-v9.md")
+    answer = _note(inbox, "2026-10-07-1001-from-MAIN-ANSWER-to-RSC-re-question.md")
+    picked = [p.name for p in rsp.pending(inbox, rsp.OPTED_IN, set(), capped=capped)]
+    assert order.name in picked, picked
+    # Non-vacuity: the cap still holds a non-exempt class from the same sender.
+    assert answer.name not in picked, picked
+    # And without the cap the ANSWER is eligible, so the exclusion is the cap's.
+    assert answer.name in [p.name for p in rsp.pending(inbox, rsp.OPTED_IN, set())]
+
+
+@pytest.mark.parametrize("cls", ["ORDER", "FIX", "RULING"])
+def test_cap_exempt_every_exempt_class_passes_the_cap(rsp, tmp_path, cls):
+    now = time.time()
+    _main_at_cap(rsp, now)
+    inbox = tmp_path / "inbox"
+    note = _note(inbox, f"2026-10-07-1000-from-MAIN-{cls}-to-RSC-x.md")
+    capped = rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, now)
+    assert note.name in [p.name for p in rsp.pending(inbox, rsp.OPTED_IN, set(), capped=capped)]
+
+
+def test_cap_exempt_reservation_passes_an_order_and_refuses_an_answer_at_cap(rsp):
+    now = time.time()
+    _main_at_cap(rsp, now)
+    before = rsp.DEFAULT_OUTBOUND.read_bytes()
+    assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, rsp.MAIN_CODE, now, True) is False
+    assert rsp.DEFAULT_OUTBOUND.read_bytes() == before
+    assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, rsp.MAIN_CODE, now, True, exempt=True) is True
+
+
+def test_cap_exempt_reserve_targets_reads_the_class_from_the_note_name(rsp, tmp_path):
+    now = time.time()
+    _main_at_cap(rsp, now)
+    inbox = tmp_path / "inbox"
+    dest = tmp_path / "main"
+    order = _note(inbox, "2026-10-07-1000-from-MAIN-ORDER-to-RSC-x.md")
+    answer = _note(inbox, "2026-10-07-1001-from-MAIN-ANSWER-to-RSC-y.md")
+    targets, own, reasons = rsp._reserve_targets(rsp.DEFAULT_OUTBOUND, answer, [dest], inbox, now)
+    assert (targets, own, reasons) == ([], [], [rsp.OUTBOUND_UNRESERVED_REASON])
+    targets, own, reasons = rsp._reserve_targets(
+        rsp.DEFAULT_OUTBOUND, order, [dest], inbox, now, verified=True
+    )
+    assert targets == [dest / "moon_sync_inbox"] and own == [inbox] and reasons == []
+
+
+#: Adversary on 4cdef6f: the case-blind sender reader sees MAIN at `from-main-`
+#: while the kit's upper-case class reader skips it and finds `ORDER` later on.
+SPLIT_PARSE = "2026-10-07-1000-from-main-ANSWER-from-LW-ORDER-y.md"
+
+
+def test_cap_exempt_split_parse_name_stays_held_in_pending(rsp, tmp_path):
+    now = time.time()
+    _main_at_cap(rsp, now)
+    inbox = tmp_path / "inbox"
+    note = _note(inbox, SPLIT_PARSE)
+    assert rsp.sender_of(note.name) == rsp.MAIN_CODE
+    capped = rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, now)
+    assert note.name not in [p.name for p in rsp.pending(inbox, rsp.OPTED_IN, set(), capped=capped)]
+    # Non-vacuity: uncapped it is eligible, so the exclusion is the cap's.
+    assert note.name in [p.name for p in rsp.pending(inbox, rsp.OPTED_IN, set())]
+
+
+def test_cap_exempt_split_parse_name_stays_held_in_reserve_targets(rsp, tmp_path):
+    now = time.time()
+    _main_at_cap(rsp, now)
+    inbox = tmp_path / "inbox"
+    note = _note(inbox, SPLIT_PARSE)
+    before = rsp.DEFAULT_OUTBOUND.read_bytes()
+    targets, own, reasons = rsp._reserve_targets(rsp.DEFAULT_OUTBOUND, note, [tmp_path / "m"], inbox, now)
+    assert (targets, own, reasons) == ([], [], [rsp.OUTBOUND_UNRESERVED_REASON])
+    assert rsp.DEFAULT_OUTBOUND.read_bytes() == before
+
+
+def test_cap_exempt_class_is_read_at_the_sender_the_cap_counts(rsp):
+    assert rsp._cap_exempt(SPLIT_PARSE) is False
+    assert rsp._cap_exempt("2026-10-07-1000-from-main-ORDER-to-RSC-x.md") is True
+    assert rsp._cap_exempt("2026-10-07-1000-from-MAIN-FIX-to-RSC-x.md") is True
+    assert rsp._cap_exempt("2026-10-07-1000-from-MAIN-ANSWER-ORDER-x.md") is False
+    assert rsp._cap_exempt("no-sender-ORDER.md") is False
+
+
+#: Adversary on a640bf8: the exemption is MAIN's only (operator authority,
+#: FLEET-COMMON 6); a sibling's ORDER/FIX/RULING stays behind loop breaker (b).
+SIBLING_EXEMPT_CLASS = [
+    ("LW", "2026-10-07-1000-a-from-LW-ORDER-x.md"),
+    ("SS", "2026-10-07-1000-a-from-SS-FIX-x.md"),
+    ("CS", "2026-10-07-1000-a-from-CS-RULING-x.md"),
+]
+
+
+def _sender_at_cap(rsp, code: str, now: float) -> None:
+    for i in range(rsp.MAX_REPLIES_PER_SENDER):
+        assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, code, now - 60 * (i + 1), True)
+
+
+@pytest.mark.parametrize(("code", "name"), SIBLING_EXEMPT_CLASS)
+def test_cap_exempt_a_sibling_order_class_stays_held(rsp, tmp_path, code, name):
+    now = time.time()
+    _sender_at_cap(rsp, code, now)
+    inbox = tmp_path / "inbox"
+    note = _note(inbox, name)
+    assert rsp._cap_exempt(name) is False
+    capped = rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, now)
+    assert code in capped
+    assert note.name not in [p.name for p in rsp.pending(inbox, rsp.OPTED_IN, set(), capped=capped)]
+    # Non-vacuity: uncapped it is eligible, so the exclusion is the cap's.
+    assert note.name in [p.name for p in rsp.pending(inbox, rsp.OPTED_IN, set())]
+    before = rsp.DEFAULT_OUTBOUND.read_bytes()
+    for verified in (False, True):
+        out = rsp._reserve_targets(
+            rsp.DEFAULT_OUTBOUND, note, [tmp_path / "d"], inbox, now, verified=verified
+        )
+        assert out == ([], [], [rsp.OUTBOUND_UNRESERVED_REASON])
+    assert rsp.DEFAULT_OUTBOUND.read_bytes() == before
+
+
+def test_cap_exempt_main_order_is_still_exempt_and_needs_a_match(rsp, tmp_path):
+    now = time.time()
+    _main_at_cap(rsp, now)
+    inbox = tmp_path / "inbox"
+    order = _note(inbox, "2026-10-07-1000-from-MAIN-ORDER-to-RSC-x.md")
+    assert rsp._cap_exempt(order.name) is True
+    capped = rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, now)
+    assert order.name in [p.name for p in rsp.pending(inbox, rsp.OPTED_IN, set(), capped=capped)]
+    # An UNVERIFIED MAIN name is data, not authority: the reservation refuses.
+    before = rsp.DEFAULT_OUTBOUND.read_bytes()
+    out = rsp._reserve_targets(rsp.DEFAULT_OUTBOUND, order, [tmp_path / "d"], inbox, now)
+    assert out == ([], [], [rsp.OUTBOUND_UNRESERVED_REASON])
+    assert rsp.DEFAULT_OUTBOUND.read_bytes() == before
+    out = rsp._reserve_targets(
+        rsp.DEFAULT_OUTBOUND, order, [tmp_path / "d"], inbox, now, verified=True
+    )
+    assert out == ([tmp_path / "d" / "moon_sync_inbox"], [inbox], [])

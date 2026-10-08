@@ -1319,7 +1319,11 @@ def pending(
                 continue
         # LOOP BREAKER (b): a sender already sent `MAX_REPLIES_PER_SENDER`
         # replies in the rolling day is not answered again until one ages out.
-        if code in (capped or set()):
+        # EXCEPT an ORDER, FIX or RULING (`kit.NEVER_DAMP`; see `_cap_exempt`
+        # for the basis, the FLEET-COMMON 14 hard constraint that no note waits
+        # on a human): holding one up to 24h behind a local loop breaker is the
+        # defect this closes. `record_outbound` re-checks the same way.
+        if code in (capped or set()) and not _cap_exempt(child.name):
             continue
         # LOOP BREAKER (a): never auto-answer an auto-reply, from any tree.
         # Also this tree's OWN notes: `code == SELF_CODE` above for a from-RSC
@@ -1400,6 +1404,38 @@ def is_terminal_note(name: str, text: str) -> bool:
     if kit.note_class(name) in kit.NEVER_DAMP:
         return False
     return _TERMINAL_NAME.search(name) is not None or _TERMINAL_BODY.search(text) is not None
+
+
+#: The class word right after the sender `_SENDER` matched, case-blind as
+#: `sender_of` is.
+_CLASS_AFTER_SENDER = re.compile(r"[A-Za-z]+")
+
+
+def _cap_exempt(name: str) -> bool:
+    """Whether an INBOUND note bypasses the local `MAX_REPLIES_PER_SENDER` hold.
+
+    WHY: the FLEET-COMMON 14 hard constraint - inbox handling stays automatic
+    and nothing may make a note wait for a human. An ORDER, FIX or RULING
+    (`kit.NEVER_DAMP`) carries operator authority from MAIN (FLEET-COMMON 6)
+    and escalates to work under 14b, so a local per-sender loop breaker must
+    not park it for 24h. NOT 14c: 14c exempts the OUTBOUND note's class, and a
+    reply is never an ORDER; the 6/day outbound accounting is untouched.
+
+    ONE PARSE (adversary on 4cdef6f). The class is the word right after the
+    SAME `_SENDER` match `sender_of` reads, so the cap's sender and the
+    exemption's class can never come from two different places in the name.
+    `kit.note_class` reads upper-case senders only, so for
+    `x-from-main-ANSWER-from-LW-ORDER-y` it skipped MAIN and returned ORDER.
+    The class comes from the FILENAME only, as in `is_terminal_note`.
+    """
+    found = _SENDER.search(name)
+    # MAIN ONLY (adversary on a640bf8; ruled). Only MAIN carries operator
+    # authority, and loop breaker (b) exists to stop sibling-to-sibling loops,
+    # so a sibling's ORDER/FIX/RULING stays capped. Same single parse.
+    if found is None or found.group(1).upper() != MAIN_CODE:
+        return False
+    word = _CLASS_AFTER_SENDER.match(name, found.end())
+    return word is not None and word.group(0).upper() in kit.NEVER_DAMP
 
 
 def provenance_map(queue: list[Path], roots: dict[str, Path]) -> dict[str, Provenance]:
@@ -3712,13 +3748,18 @@ def senders_at_cap(path: Path, now: float) -> set[str]:
     return {code for code, n in counts.items() if n >= MAX_REPLIES_PER_SENDER}
 
 
-def record_outbound(path: Path, to: str, now: float, delivered: bool) -> bool:
+def record_outbound(
+    path: Path, to: str, now: float, delivered: bool, exempt: bool = False
+) -> bool:
     """RESERVE one reply to `to` in the durable record. True only if it landed.
 
     Called BEFORE the delivery, so the row exists before any byte leaves this
     repo; a reply whose row could not be written is not sent. `delivered=False`
     records nothing. A corrupt record is never overwritten here - that would
     erase the very count the cap reads - so it refuses and stays capped.
+
+    `exempt` (see `_cap_exempt` for the basis) skips ONLY the count check:
+    the row is still written, and a corrupt record still refuses.
     """
     if not delivered:
         return False
@@ -3730,13 +3771,14 @@ def record_outbound(path: Path, to: str, now: float, delivered: bool) -> bool:
     rows = _outbound_rows(path, now)
     if rows is None or not _ensure_parent(path):
         return False
-    if sum(1 for r in rows if r["to"] == to) >= MAX_REPLIES_PER_SENDER:
+    if not exempt and sum(1 for r in rows if r["to"] == to) >= MAX_REPLIES_PER_SENDER:
         return False
     return atomic_write_json(path, {"version": 1, "replies": [*rows, {"to": to, "at": now}]})
 
 
 def _reserve_targets(
-    path: Path, note: Path, dests: list[Path], inbox: Path, now: float
+    path: Path, note: Path, dests: list[Path], inbox: Path, now: float,
+    verified: bool = False,
 ) -> tuple[list[Path], list[Path], list[str]]:
     """(sibling inboxes, own-copy inboxes, reasons) for one reply.
 
@@ -3744,8 +3786,13 @@ def _reserve_targets(
     lists are EMPTY, so `deliver` writes nothing and the cycle reports the
     reply undelivered with the reason. Kept out of `_run_once` so the cycle
     gains no branch.
+
+    `verified`: the note's MAIN provenance verdict is MATCH. The cap exemption
+    rides on operator authority, which an unverified MAIN name does not carry
+    (FLEET-COMMON 6), so `_cap_exempt` counts only with it. Default False.
     """
-    if record_outbound(path, sender_of(note.name) or "", now, True):
+    exempt = verified and _cap_exempt(note.name)
+    if record_outbound(path, sender_of(note.name) or "", now, True, exempt=exempt):
         return [d / "moon_sync_inbox" for d in dests], [inbox], []
     _log_fail_closed(note.name, "outbound-unreserved-note-dropped")
     return [], [], [OUTBOUND_UNRESERVED_REASON]
@@ -4303,13 +4350,14 @@ def _run_once(
     # MAIN FIRST, as ORDERING ONLY: a MATCH-verified MAIN note is answered
     # before older mail, and no gate is skipped for it.
     answered = _answered(DEFAULT_ANSWERED)
+    capped = senders_at_cap(DEFAULT_OUTBOUND, started)
     candidates = pending(
         inbox,
         OPTED_IN,
         answered,
         since=bounds.window_opens,
         deprioritise=bounced,
-        capped=senders_at_cap(DEFAULT_OUTBOUND, started),
+        capped=capped,
     )
     # ITEM 14: only the work lane's notes reach a session from here.
     candidates = _work_lane_only(candidates, only)
@@ -4317,6 +4365,10 @@ def _run_once(
     # the cycle: ordering, the bypass, the reply line and the prompt body all
     # read this map.
     verdicts = provenance_map(candidates, roots)
+    # THE CAP EXEMPTION NEEDS A MATCH: `pending` lets a capped MAIN ORDER/FIX/
+    # RULING through by NAME; only a MATCH verdict carries the authority the
+    # exemption rests on. `_reserve_targets` re-checks the same way.
+    candidates = [c for c in candidates if sender_of(c.name) not in capped or _verified(c, verdicts)]
     # RE-DROPS KEYED BY CONTENT HASH (S3 residual b): bytes already answered or
     # held under another name are not picked again, whatever their mtime.
     backfill_answered_hashes(DEFAULT_ANSWERED, inbox, roots)
@@ -4543,7 +4595,7 @@ def _run_once(
         # first; if it cannot be, both target lists come back empty, nothing is
         # written anywhere, and the reason rides on the result.
         targets, own_copy, reserve_reasons = _reserve_targets(
-            DEFAULT_OUTBOUND, note, dests, inbox, started
+            DEFAULT_OUTBOUND, note, dests, inbox, started, _verified(note, verdicts)
         )
         result["reasons"] = reserve_reasons
         written = deliver(draft, reply_name, targets, source=source)
