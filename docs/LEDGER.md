@@ -12,6 +12,44 @@ now.
 
 ---
 
+## 2026-10-07 - Responder: verified MAIN ORDER/FIX/RULING bypass the per-sender reply cap
+
+Defect (diagnosed read-only): `pending()` in `tools/moon_sync_responder.py`
+dropped every note from a sender at `MAX_REPLIES_PER_SENDER` (3 per rolling
+24 h) before looking at its class. MAIN held 3 rows (auto-replies to
+superseded kit orders), so MAIN's 2155 ORDER was parked; the fire log read
+`triage-work` then `empty`. Same refusal in the `record_outbound` re-check.
+- Fix, merged at a487d15 (slice commits 4cdef6f, a640bf8, 0bc14ad): the cap
+  is bypassed only when ONE parse of the filename gives sender MAIN and class
+  ORDER, FIX or RULING AND the note's provenance is MATCH against MAIN's
+  outbox. The exemption flows through `pending()` and `_reserve_targets` /
+  `record_outbound(..., exempt=...)`. The 6/day outbound accounting is
+  unchanged.
+- Basis: the item-14 hard constraint "nothing may make a note wait" plus
+  FLEET-COMMON 6 and 14b. NOT 14c, which exempts the OUTBOUND class
+  (4cdef6f's message cites 14c in error; a640bf8 corrects it).
+- Ruling: MAIN only. Alternative rejected: every sender's ORDER/FIX/RULING
+  (reopens the sibling loop breaker). Reversed by: a MAIN ruling, or a
+  sibling ORDER parked over 24 h in a way that blocks real work.
+- Adversary passes: round 1 REFUTED (split parse let
+  `x-from-main-ANSWER-from-LW-ORDER-y.md` past the cap; 14c misread), round 2
+  REFUTED (siblings exempt), round 3 (provenance, behaviour diff) NOT
+  REFUTED. Residual: an unverified capped MAIN ORDER is now hashed each fire
+  before it is dropped (cost only).
+- Tests: `tests/test_responder_loop_breakers.py` (cap-exemption cases); 4
+  existing tests in `tests/test_headless_env.py` and
+  `tests/test_responder_main_provenance.py` retargeted to a non-exempt
+  CORRECTION note.
+- Gate at a487d15, measured 2026-10-07 by /done (Python 3.14): licence 52;
+  docs 42; qa 17 passed 2 skipped 3 noted; ruff clean; tests 4135 passed 5
+  skipped; pity_engine 80; node 52 pass 0 fail; dry run 0 pass 0 fail 6
+  skip; mypy 41 files clean.
+- Observed after the merge: the live responder sent auto-reply 2251 (an ACK)
+  to MAIN 2026-10-04 0020 ORDER, which the cap had been holding. The held
+  MAIN backlog now drains, bounded by the 6/day outbound cap.
+- `core.hooksPath` read back as an absolute path at /done; re-ran
+  `scripts/install_hooks.py`, read back `.githooks`.
+
 ## 2026-10-07 - MAIN 2155 ORDER: C: path inventory before the move to E:, answered
 
 MAIN 2026-10-07 2155 ORDER (operator authority), INVENTORY ONLY. Provenance

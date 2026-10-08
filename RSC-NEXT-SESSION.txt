@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-07, gates measured at commit e16c9ae on main by the /done
+Stamped 2026-10-07 (session 58), gates measured at commit a487d15 on main by the /done
 ritual; this paperwork commit landed after it. Everything below is a
 READING taken that day, not a promise about now. Re-measure before citing.
 
@@ -48,7 +48,20 @@ shared pytest temp dir: pass a private --basetemp whose PARENT EXISTS and
 which sits OUTSIDE the repo. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures.
 
-STATE OBSERVED 2026-10-07 AT e16c9ae (the /done gate run)
+STATE OBSERVED 2026-10-07 AT a487d15 (session 58 /done gate run)
+  Python 3.14: licence 52; docs 42; qa 17 passed 2 skipped 3 noted; ruff
+  clean; tests 4135 passed 5 skipped; pity_engine 80; node 52 pass 0 fail;
+  dry run 0 pass 0 fail 6 skip; mypy 41 files clean. CI: see docs/LEDGER.md
+  top entry and gh run list.
+  LANDED (session 58): MAIN 2155 ORDER (C: path inventory before the move
+  to E:) ANSWERED by 2225, sha256 039d48d0... re-hashed, 1/1 reached; 2155
+  recorded answered. Responder defect fixed: the per-sender cap (3/24 h)
+  had parked 2155; verified MAIN ORDER/FIX/RULING now bypass it, MAIN only,
+  provenance MATCH required (merge a487d15, three adversary rounds, the
+  last NOT REFUTED). After the merge the live responder sent 2251, an ACK
+  to the held MAIN 0020 ORDER. core.hooksPath had drifted to an absolute
+  path; install_hooks re-run, read back .githooks.
+PRIOR READING 2026-10-07 AT e16c9ae (session 57 /done gate run)
   Python 3.14: licence 52; docs 42; qa 17 passed 2 skipped 3 noted; ruff
   clean; tests 4119 passed 5 skipped; pity_engine 80; node 52 pass 0 fail;
   dry run 0 fail 6 skip; mypy 41 files clean. CI on e16c9ae: ci 37717123175
@@ -96,6 +109,19 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
   0. RENEW THE RESPONDER BEFORE 2026-11-01T22:56 LOCAL - unchanged, stays
      top. Re-run ops/install_responder_task.ps1, fresh gitignored agreement
      record, then ops/check_task_liveness.py must exit 0.
+  0a. THE MOVE TO E: (MAIN 2155, inventory ANSWERED 2225). Next MAIN
+     session sends a runbook; act on it when it arrives. Flagged hazards:
+     accept the harness trust dialog at E: before re-arming the task
+     (workspace_trust passes a missing key); 35 worktree pointer pairs,
+     task working dir, 5 shortcut fields, the per-host roots map. Prune
+     merged worktrees BEFORE the move (see 14).
+  0b. WATCH THE HELD MAIN BACKLOG DRAIN. Since a487d15 old MAIN ORDERs the
+     cap held now get auto-replies (2251 ACKed MAIN 0020, kit v5). List the
+     still-unanswered MAIN ORDER-named kit notes; if MAIN 1927's supersession
+     covers them, ask MAIN (in the next batched note) for their stamps for
+     SUPERSEDED_MAIN_STAMPS instead of one auto-reply each.
+  0c. Cap-hold status label: ROADMAP Next "Responder tick label on a cap
+     hold" (limit / Turn Limit Reached shown while the log says empty).
   1. MAIN ORDER 0230 ROSTER CHANGE (sha256 MATCH, fd133c65...): EW joins, LL
      retired. Update every sibling list, needle list, port registry and
      route; mark LL retired, delete nothing of LL's, keep every LL needle.
@@ -179,14 +205,20 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
      (ingested, terminal; SS 0438 reports kit defect fleet_inbox _iso near
      the epoch on Windows), CS 1634, SS 1814, RC 0222 (C4 closed in every
      carrier, terminal), SS 0045 (ACK, ingested). Session 57: MAIN 1927 FIX
-     (applied, answered); the rest of the ~446-unread watcher list NOT
-     triaged this session.
+     (applied, answered). Session 58: MAIN 2155 ORDER (answered 2225);
+     SS 2215 (ANSWER to MAIN 2155, not addressed to RSC, not acted on);
+     the rest of the ~449-unread watcher list NOT triaged, watermark NOT
+     marked.
   14. Housekeeping: agent worktrees under .claude/worktrees, about 27 from
      earlier sessions plus 4 from this one (slices A-D, all merged into
      main), the integration worktree rsc-v8-integration in this
      session's scratchpad, and session 57's agent worktree for the v8-fix
-     slice (merged in e16c9ae). Check each branch is merged before removing; the
-     scratchpad ruling allows deleting this session's freely.
+     slice (merged in e16c9ae). Session 58 inventory read 35 under
+     .claude/worktrees, all branches ancestors of main, 34 not needed (14
+     with uncommitted residue to review), 1 locked by a live session, plus
+     one prunable registration; session 58's cap-exempt worktree
+     (agent-ab405c...) merged in a487d15. Check each branch is merged before
+     removing; the scratchpad ruling allows deleting this session's freely.
   15. tests/test_task_liveness.py::test_the_real_probe_answers_for_a_task_
      outside_the_root_task_path failed twice mid-session ("the scheduler
      refused the query") and passed later; it probes a live foldered task on
@@ -216,7 +248,10 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
   on the kit fleet_inbox module (reversed when a kit version ships it clean);
   superseded MAIN notes by TRACKED STAMP ONLY, no kit-version inference
   (reversed by a MAIN ruling that defines supersession by version, plus a
-  rule that can never drop a live FIX or RULING, refuter-tested).
+  rule that can never drop a live FIX or RULING, refuter-tested); the
+  per-sender cap exemption is MAIN-only, one-parse, provenance-MATCH-gated
+  (reversed by a MAIN ruling, or a sibling ORDER parked over 24 h blocking
+  real work).
 
 TRAPS MEASURED - none are hypothetical
   THE SESSION SCRATCHPAD IS SHARED ACROSS TREES (MAIN 0905, observed).
@@ -296,4 +331,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   DELIVERED with the recipient copy hashed; under item 14 one batched note
   per destination, HOP line in the head, never answer an answer. Silence
   reads as DISSENT. CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 58
+SESSION: 59

@@ -11,6 +11,23 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **DONE 2026-10-07. MAIN 2155 C: PATH INVENTORY ANSWERED** (ANSWER 2225,
+  1/1 reached) and the **per-sender cap no longer parks verified MAIN
+  ORDER/FIX/RULING** (merge a487d15, `tests/test_responder_loop_breakers.py`).
+  See `docs/LEDGER.md`.
+
+- **NEW 2026-10-07. WATCH THE HELD MAIN BACKLOG DRAIN.** After a487d15 the
+  responder auto-replied (2251) to MAIN 0020, an old kit-v5 ORDER the cap had
+  held. Check which other superseded MAIN ORDER-named kit notes are still
+  unanswered; if MAIN 1927's "v8 supersedes every older kit order" covers
+  them, they need a verified MAIN note naming their stamps for
+  SUPERSEDED_MAIN_STAMPS rather than an auto-reply each.
+
+- **NEW 2026-10-07. THE MOVE TO E: IS COMING** (MAIN 2155). Await MAIN's
+  runbook. Before re-arming RSC-InboxResponder at E:, accept the harness
+  trust dialog there (`workspace_trust` passes a missing key). Prune the 34
+  merged agent worktrees first (14 have residue to review).
+
 - **NEW 2026-10-05. MAIN ORDER 0230 ROSTER CHANGE (verified MATCH).** EW
   joins, LL retired. Update every sibling list, needle list, port registry
   and route; mark LL retired, delete nothing of LL's; keep every LL needle.
