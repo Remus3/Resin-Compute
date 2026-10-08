@@ -46,7 +46,9 @@ Hand-off item 0a. Step a: this session ran from `E:\Resin Compute`.
   - The new sixth skip is `tests/test_responder_uniform_budget.py:705`: 8.3
     names are disabled on E:. That is a property of the volume after the move.
   - The paperwork push used RESIN_SKIP_PREPUSH=1 because the push is
-    docs-only, so CI is the only gate on it.
+    docs-only, so CI is the only gate on it. Pushed 7f1915d, and origin/main
+    read back at 7f1915d. CI runs: ci 37734244001 and docs-guards
+    37734243906, both QUEUED when recorded. The next session reads the result.
 - Step d (kit v9) and MAIN ORDER 0230 (roster) were dispatched to builders in
   worktrees and were still running at /done. Neither is merged. The hand-off
   carries both.
