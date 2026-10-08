@@ -16,7 +16,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 RESPONDER_PATH = ROOT / "tools" / "moon_sync_responder.py"
 
-PARTICIPANTS = ("CS", "LL", "LW", "MAIN", "RC", "SS")
+#: The LIVE audience. MAIN 0230 ORDER of 2026-10-05 (SHA-256 MATCH), refined by
+#: the MAIN 2305 RULING of 2026-10-07: EW joined, LL retired. LL is NOT deleted -
+#: it moves to `RETIRED`, which every send path consults.
+PARTICIPANTS = ("CS", "EW", "LW", "MAIN", "RC", "SS")
+
+#: Retired participants. Kept on record, never answered, never routed to.
+RETIRED = ("LL",)
 
 
 @pytest.fixture()
@@ -70,3 +76,28 @@ def test_the_self_filter_fires_on_a_listed_foreign_code(rsp, tmp_path):
     """Non-vacuity: the same inbox shape IS picked when the code is foreign."""
     inbox = _inbox(tmp_path, ("SS",))
     assert len(rsp.pending(inbox, ("SS",), set())) == 1
+
+
+def test_the_retired_set_is_exactly_ll_and_disjoint_from_the_live_audience(rsp):
+    assert tuple(rsp.RETIRED) == RETIRED
+    assert not set(rsp.RETIRED) & set(rsp.OPTED_IN), "a retired code is still answered"
+
+
+def test_ew_is_pending_and_ll_is_not(rsp, tmp_path):
+    """Both halves in one inbox: the joiner is answered, the retiree is not."""
+    inbox = _inbox(tmp_path, ("EW", "LL"))
+    assert _senders(rsp, inbox) == {"EW"}
+
+
+def test_a_retired_sender_gets_no_destination_even_with_a_root(rsp, tmp_path):
+    """The send-path gate, independent of `pending`.
+
+    The per-host roster keeps LL's root on purpose (delete nothing), so the
+    roots map CAN resolve LL. `destinations_for` must still refuse it.
+    """
+    roots = {"LL": tmp_path / "ll", "EW": tmp_path / "ew"}
+    ll_note = tmp_path / "2026-10-08-0100-from-LL-question.md"
+    ew_note = tmp_path / "2026-10-08-0101-from-EW-question.md"
+    assert rsp.destinations_for(ll_note, roots) == []
+    # Non-vacuity: the same shape with a live code DOES route.
+    assert rsp.destinations_for(ew_note, roots) == [tmp_path / "ew"]

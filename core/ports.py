@@ -1,7 +1,8 @@
 """The single owner of every TCP port number this repository binds.
 
-WHY THIS FILE EXISTS. Seven projects share one Windows box and every one of them
-runs concurrently. Until a project can answer "which ports are mine" without
+WHY THIS FILE EXISTS. Eight projects hold a block in this registry - this one,
+one archived and one retired among the other seven - and the live ones share one
+Windows box and run concurrently. Until a project can answer "which ports are mine" without
 grepping its own bind sites, it cannot prove it does not contend with a sibling,
 and the failure mode is not a clean error - it is one process silently winning a
 bind and another degrading in a way nobody attributes to a port for hours.
@@ -65,7 +66,7 @@ number and is not one: `range(8770, 8790)` is Sibling-B's block and it stops at
 """
 
 # Sibling blocks, carried so this tree can prove disjointness without reading
-# six other repositories. Operator-declared 2026-08-29, verified against source
+# seven other repositories. Operator-declared 2026-08-29, verified against source
 # on 2026-09-06 rather than against a live port scan.
 #
 # LISTING A SIBLING IS NOT A LICENCE TO BIND IN ITS RANGE, and it is not a claim
@@ -79,12 +80,18 @@ number and is not one: `range(8770, 8790)` is Sibling-B's block and it stops at
 # The codenames are deliberately opaque and this file does not resolve them. The
 # per-host map lives in the GITIGNORED `ops/moon_sync_repos.json`; a reader on a
 # machine that has one resolves a letter there, and nothing tracked here does.
+#
+# RETIRED IS A FLAG, NOT A REMOVAL. MAIN 0230 ORDER of 2026-10-05, refined by the
+# MAIN 2305 RULING of 2026-10-07 (both SHA-256 verified): Sibling-D is retired
+# and its block STAYS RESERVED - not freed, not reallocated; reassignment is an
+# operator act. Sibling-K joined on the same order with 8940-8959.
 SB_BLOCK = range(8770, 8790)
-SD_BLOCK = range(8810, 8820)
+SD_BLOCK = range(8810, 8820)  # RETIRED 2026-10-04 - still reserved, never reallocated
 SF_BLOCK = range(8860, 8880)
 SC_BLOCK = range(8888, 8896)
 SE_BLOCK = range(8900, 8920)
 SA_BLOCK = range(8920, 8940)
+SK_BLOCK = range(8940, 8960)
 
 BLOCKS = {
     "rsc": RSC_BLOCK,
@@ -94,10 +101,11 @@ BLOCKS = {
     "sc": SC_BLOCK,
     "se": SE_BLOCK,
     "sa": SA_BLOCK,
+    "sk": SK_BLOCK,
 }
 """Every project's reserved range, keyed by short name.
 
-`rsc` is THIS repository. The other six are siblings under opaque codenames; see
+`rsc` is THIS repository. The other seven are siblings under opaque codenames; see
 the note above the block constants for where a letter is resolved. Sibling-C
 carries two project names in this tree's history, the second a rename of the
 first, and both collapse to the one codename - so do not read them as two.
@@ -112,6 +120,11 @@ The vendor is not named. It was, and naming it identified Sibling-C directly,
 because that vendor's name is also the first word of the project's name. A
 residual inference channel is not less of one for being a fact about a port.
 """
+
+RETIRED = frozenset({"sd"})
+"""Short names of blocks whose holder is retired. Each STAYS in `BLOCKS`, so
+`block_for` still answers for it and nothing here can allocate inside it; the
+flag records status only. `tests/test_ports.py` pins that it is a subset."""
 
 ALL = frozenset({ENGINE, DASHBOARD})
 """Every port THIS repository binds. Nothing else may be added without a block

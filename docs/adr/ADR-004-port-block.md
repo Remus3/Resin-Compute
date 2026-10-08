@@ -6,9 +6,14 @@
 
 ## Context
 
-Seven projects now share the Legion box and all of them run concurrently. A
-machine-wide block registry has existed since 2026-08-29, operator-declared, with
-one contiguous block per project:
+Seven projects shared the Legion box when this ADR was written, all running
+concurrently. Since the 2026-10-05 roster change `core/ports.py` `BLOCKS` holds
+EIGHT blocks - ResinCompute plus seven siblings, one of them archived
+(Sibling-B) and one retired (Sibling-D), so SIX belong to live projects, the
+count the `core/ports.py` module docstring gives. Sibling-K joined on that
+change; the archived and the retired block both stay reserved. A machine-wide
+block registry has existed since 2026-08-29, operator-declared, with one
+contiguous block per project:
 
 | Code | Project | Block |
 |---|---|---|
@@ -18,6 +23,16 @@ one contiguous block per project:
 | SC | Sibling-C | 8888-8895 plus 2999 |
 | SE | Sibling-E | 8900-8919 |
 | SA | Sibling-A | 8920-8939 |
+
+ROSTER CHANGE 2026-10-05, recorded beside the table and not by rewriting it
+(MAIN 0230 ORDER, codename by MAIN 2305 RULING of 2026-10-07, both SHA-256
+verified): Sibling-D is RETIRED and its 8810-8819 block stays reserved - not
+freed, not reallocated. Sibling-K joined with the block below. `core/ports.py`
+carries both as `SD_BLOCK` (flagged in `RETIRED`) and `SK_BLOCK`.
+
+| Code | Project | Block |
+|---|---|---|
+| SK | Sibling-K | 8940-8959 |
 
 ResinCompute was scaffolded after that registry was drawn and was never given a
 block. It picked `:8870` for PityEngine by mirroring Sibling-F's `:8860` and

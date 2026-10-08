@@ -152,7 +152,18 @@ SELF_CODE = "RSC"
 #: whole channel inbox. Never `SELF_CODE`: `pending` also drops it, so a
 #: self-reply loop is impossible twice over. Hop budget, window and every other
 #: halt are unchanged - this widens the audience and lifts no bound.
-OPTED_IN: tuple[str, ...] = ("CS", "LL", "LW", "MAIN", "RC", "SS")
+#:
+#: ROSTER CHANGE, MAIN 0230 ORDER of 2026-10-05 refined by the MAIN 2305 RULING
+#: of 2026-10-07 (both SHA-256 MATCH): EW joined, LL retired. LL left this LIVE
+#: set and moved to `RETIRED`; nothing of LL's was deleted.
+OPTED_IN: tuple[str, ...] = ("CS", "EW", "LW", "MAIN", "RC", "SS")
+
+#: Retired participants. Kept on record (the per-host roster keeps the root,
+#: past notes and fixtures stay as written) but never answered and never routed
+#: to: `pending` drops them because they are not in `OPTED_IN`, and
+#: `destinations_for` refuses them even when the roots map resolves one, so no
+#: send path and no headless spawn can reach a retired tree.
+RETIRED: tuple[str, ...] = ("LL",)
 
 #: M5. Every responder-authored note carries this on its own line, so the
 #: transcript separates cleanly from human traffic after the trial and so the
@@ -1696,7 +1707,7 @@ def destinations_for(note: Path, roots: dict[str, Path]) -> list[Path]:
     step and not only the answer step.
     """
     code = sender_of(note.name)
-    if code is None or code == SELF_CODE:
+    if code is None or code == SELF_CODE or code in RETIRED:
         return []
     root = roots.get(code)
     return [] if root is None else [root]

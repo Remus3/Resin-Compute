@@ -86,6 +86,39 @@ def test_sibling_f_block_still_contains_the_port_this_project_abandoned():
     assert not ports.is_ours(8870)
 
 
+def test_the_joiner_block_is_registered_under_its_ruled_codename():
+    """MAIN 0230 ORDER of 2026-10-05, codename ruled by MAIN 2305 RULING of
+    2026-10-07 (both SHA-256 MATCH): the joiner's block is 8940-8959, keyed sk."""
+    assert ports.SK_BLOCK == range(8940, 8960)
+    assert ports.BLOCKS["sk"] is ports.SK_BLOCK
+    assert ports.block_for(8940) == "sk"
+    assert ports.block_for(8959) == "sk"
+    assert ports.block_for(8960) is None
+
+
+def test_a_retired_block_stays_reserved_and_is_not_freed():
+    """Retirement is a flag, not a removal: the block still answers block_for,
+    so nothing here can allocate inside it. Reassignment is an operator act."""
+    assert ports.RETIRED == frozenset({"sd"})
+    assert ports.RETIRED <= set(ports.BLOCKS), "a retired block was dropped from BLOCKS"
+    assert ports.SD_BLOCK == range(8810, 8820)
+    assert ports.block_for(8810) == "sd"
+    assert "rsc" not in ports.RETIRED
+
+
+_COUNT_WORDS = {6: "Six", 7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten"}
+
+
+def test_the_docstring_counts_match_the_registry():
+    """Recounted per the 2305 RULING: every block holder counts, retired or
+    archived included, since each still holds its range."""
+    doc = ports.__doc__ or ""
+    holders = len(ports.BLOCKS)
+    assert f"{_COUNT_WORDS[holders]} projects hold a block" in doc, doc[:300]
+    source = Path(ports.__file__).read_text(encoding="utf-8")
+    assert f"{_COUNT_WORDS[holders - 1].lower()} other repositories" in source
+
+
 def test_block_for_returns_none_outside_every_block():
     assert ports.block_for(80) is None
     assert ports.block_for(8880) is None

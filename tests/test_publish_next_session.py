@@ -11,8 +11,9 @@ or it refuses. There is no code path that can write a hand-retyped copy.
 
 THREE ARMS ARE ABOUT SAFETY RATHER THAN BEHAVIOUR:
 
-- **The Desktop is SHARED with five sibling projects.** `CS-`, `LL-`, `LW-`,
-  `RC-` and `RM-` prefixed hand-offs live beside ours. The target basename is a
+- **The Desktop is SHARED with sibling projects.** `CS-`, `EW-`, `LL-`, `LW-`,
+  `RC-` and `RM-` prefixed hand-offs live beside ours (`LL-` retired 2026-10-04,
+  its file kept; `EW-` joined the same day). The target basename is a
   module constant and no function takes a filename parameter, so a path bug
   cannot reach a neighbour's file. That is asserted against the signatures
   rather than against a remembered list of call sites.
@@ -43,7 +44,8 @@ FENCE = "`" * 3
 # be any of them, and must not be confusable with one at a glance.
 SIBLING_TARGETS = (
     "CS-NEXT-SESSION.txt",
-    "LL-NEXT-SESSION.txt",
+    "EW-NEXT-SESSION.txt",  # joined 2026-10-04 (MAIN 0230 ORDER)
+    "LL-NEXT-SESSION.txt",  # retired 2026-10-04, still on the Desktop
     "LW-NEXT-SESSION.txt",
     "RC-NEXT-SESSION.txt",
     "RM-NEXT-SESSION.txt",
