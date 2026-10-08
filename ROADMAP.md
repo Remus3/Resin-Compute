@@ -11,6 +11,16 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-08. Session 63 supply-chain residue.** (a)
+  `requirements-dev.txt` was compiled on Windows and lists colorama
+  unconditionally; the first Dependabot Linux recompile drops it, and Windows
+  dev installs would then need `requirements-dev.in`. Fix: recompile with a
+  platform marker or a universal resolver, and update the README and
+  CONTRIBUTING install lines. (b) The post-push OpenSSF Scorecard run is
+  still pending; the baseline was 4.7 at d6bce85. (c) The kit refusals
+  "budget lock unopenable" and "budget write failed" map to
+  KitRunBudgetSpent through a substring match on "budget"; give them a
+  distinct termination.
 - **NEW 2026-10-08. Kit v10 residue (session 62 merge).** (a) The
   `orchestrated-run.md` and `ui-audit.md` skills still need kit v10 item-4
   one-subagent dispatch: the main thread launches ONE sub-agent that runs the
