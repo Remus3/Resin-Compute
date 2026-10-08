@@ -169,10 +169,32 @@ failure. `--check` reports drift and writes nothing. Any other refusal is the
 failure line - fix `RSC-NEXT-SESSION.txt` and re-run. Never hand-write anything
 onto the Desktop.
 
-## 10. The one line
+## 10. The done marker, then the one line
 
-Print exactly `Done ritual complete, safe to clear`, or the one line naming the
-failure that stopped the ritual. Nothing before it, nothing after it. Never
+The LAST act of the ritual (FLEET-KIT v9, FLEET-COMMON item 15, MAIN 2354
+ORDER of 2026-10-07). Only after the commit and the hand-off have been READ
+BACK, write the marker, with n the counter the CURRENT session ran under (the
+value read in section 7, not the n+1 just written):
+
+```
+python ops/fleet_kit/fleet_done.py mark --session <n> --status done
+```
+
+If any section stopped the ritual, still write the marker, naming the step:
+
+```
+python ops/fleet_kit/fleet_done.py mark --session <n> --status failed --reason "<step>"
+```
+
+The kit reads HEAD and hashes `RSC-NEXT-SESSION.txt` itself and writes its session_done marker under the
+MAIN checkout's loop control directory (gitignored runtime state). Its
+stdout line is NOT chat: it is the marker's receipt and is not repeated. The
+project Stop hook (`fleet_done.py stop-hook` in `.claude/settings.json`) then
+sets the tab title; any later commit or hand-off edit invalidates the marker,
+which is correct.
+
+Then print exactly `Done ritual complete, safe to clear`, or the one line
+naming the failure that stopped the ritual. Nothing before it, nothing after it. Never
 print the hand-off or a next-session prompt into chat; the operator opens
 `RSC-NEXT-SESSION.txt` and types only "continue", "/done" or "/clear".
 

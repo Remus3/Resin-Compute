@@ -67,11 +67,15 @@ exclude = [
 "ops/supervisor.py" = ["BLE001"]
 # Tests assert on constants that read as magic numbers by design.
 "tests/*.py" = ["B011"]
-# Kit v8 fleet_inbox.py fails UP031 (8 printf-style formats, measured
-# 2026-10-05). Kit bytes are never patched; this one rule on this one kit file
-# is ignored instead of excluding the whole kit dir, and the defect is reported
-# to MAIN. Remove when a kit version ships the file clean.
-"ops/fleet_kit/fleet_inbox.py" = ["UP031"]
+# Kit v8 fleet_inbox.py failed UP031 (8 printf-style formats, measured
+# 2026-10-05). Kit v9 (measured 2026-10-08) still fails UP031 x8 there and adds
+# UP017 x1 (`datetime.timezone.utc` in its epoch-safe _local_day); the new kit
+# v9 fleet_done.py fails UP031 x11 and UP017 x1. Kit bytes are never patched;
+# only the failing rules on only the failing kit files are ignored instead of
+# excluding the whole kit dir, and the defect is reported to MAIN. Remove an
+# entry when a kit version ships that file clean.
+"ops/fleet_kit/fleet_inbox.py" = ["UP031", "UP017"]
+"ops/fleet_kit/fleet_done.py" = ["UP031", "UP017"]
 "agents/pity_engine/tests/*.py" = ["B011"]
 
 [lint.isort]
