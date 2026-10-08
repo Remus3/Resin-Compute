@@ -444,7 +444,7 @@ def test_no_forbidden_upstream_is_declared_as_a_dependency(forbidden: str):
     not dissolve the one that mattered - both wrap HoYoverse game data, which no
     outbound licence of ours can grant rights over. So the refusal stands, and
     this arm must not be relaxed on the strength of ADR-006 alone."""
-    for name in ("requirements.txt", "requirements-dev.txt"):
+    for name in ("requirements.txt", "requirements-dev.in", "requirements-dev.txt"):
         text = (REPO_ROOT / name).read_text(encoding="utf-8").lower()
         declared = [
             line.strip()
