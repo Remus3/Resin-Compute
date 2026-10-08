@@ -1015,3 +1015,156 @@ def test_r2_d5_the_suite_off_value_is_honoured_only_under_pytest(rsp, tmp_path, 
     rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
     lines = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines()
     assert any(ln.endswith("\tfail-closed:inbox-triage-off") for ln in lines), lines
+
+
+# ---------------------------------------------------------------- MAIN 1927 FIX: superseded MAIN orders
+#
+# MAIN 2026-10-07 1927 FIX (SHA-256 verified): kit v8 supersedes every older
+# MAIN kit ORDER and the 2026-10-03 notes it names; a superseded MAIN note gets
+# NO reply (FLEET-COMMON 14b, 14d) and is mechanically acked. Conservative: a
+# MAIN note that is not superseded still reaches the work lane.
+
+FIX_1927_STAMPS = {
+    "2026-10-03-0955", "2026-10-03-1014", "2026-10-03-1016", "2026-10-03-1204",
+    "2026-10-04-2237", "2026-10-05-0215", "2026-10-03-0915", "2026-10-03-0925",
+    "2026-10-03-1029", "2026-10-03-1325", "2026-10-03-0845", "2026-10-03-0850",
+    "2026-10-03-0855", "2026-10-03-0912",
+}
+
+
+def _manifest(rsp, tmp_path, monkeypatch, version) -> None:
+    path = tmp_path / "kit" / "MANIFEST.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"version": version}), encoding="ascii")
+    # raising=False: the module no longer reads a manifest (refutation round
+    # 2). The fixture still plants one, so a reintroduced manifest-driven
+    # inference under this name is exercised by the arms that must survive.
+    monkeypatch.setattr(rsp, "KIT_MANIFEST", path, raising=False)
+
+
+def _triage_only(rsp, tmp_path):
+    _agree(rsp)
+    return rsp._inbox_triage(tmp_path / "inbox", {"RC": tmp_path / "rc"}, rsp.Bounds(armed=True),
+                             Sessions(rsp).triage_spawn, time.time(), "run_once")
+
+
+def _last(rsp, name):
+    rows = [r for r in _seen(rsp) if r["note"] == name]
+    return rows[-1] if rows else None
+
+
+def test_fix1927_the_superseded_stamp_set_is_exactly_the_fix_section_2_list(rsp):
+    assert set(rsp.SUPERSEDED_MAIN_STAMPS) == FIX_1927_STAMPS
+
+
+def test_fix1927_a_listed_main_order_is_acked_terminal_and_never_worked(rsp, tmp_path, monkeypatch):
+    _manifest(rsp, tmp_path, monkeypatch, 8)
+    name = "2026-10-03-0915-from-MAIN-ORDER-lane-widget-redesign-to-RC.md"
+    _note(tmp_path / "inbox", name, "# From MAIN - ORDER\n\nTO ALL.\n\ndo the widget\n")
+    only = _triage_only(rsp, tmp_path)
+    row = _last(rsp, name)
+    assert row is not None and row["action"] == "skip" and row["verdict"] == "terminal-superseded", row
+    assert only is not None and name not in only
+
+
+def test_fix1927_a_listed_main_order_gets_no_session_on_a_full_fire(rsp, tmp_path, monkeypatch):
+    _manifest(rsp, tmp_path, monkeypatch, 8)
+    name = "2026-10-03-1325-from-MAIN-FIX-to-RSC-C4-row-CLOSED.md"
+    _note(tmp_path / "inbox", name, "# From MAIN - FIX\n\nTO RSC.\n\nfix it\n")
+    sessions = Sessions(rsp)
+    _fire(rsp, tmp_path, monkeypatch, sessions)
+    assert sessions.work == [] and sessions.triage == []
+    assert _sent(tmp_path) == []
+
+
+def test_fix1927_an_unlisted_older_kit_order_is_never_inferred_superseded(rsp, tmp_path, monkeypatch):
+    # Refutation round 2: no kit-version inference. Even an adoption-shaped
+    # order for an older kit, with a later one vendored and in the inbox,
+    # still reaches the work lane unless its stamp is listed.
+    _manifest(rsp, tmp_path, monkeypatch, 9)
+    old = "2026-11-01-0100-from-MAIN-ORDER-ALL-FLEET-KIT-v8-supersedes-v7.md"
+    new = "2026-11-02-0100-from-MAIN-ORDER-ALL-FLEET-KIT-v9-supersedes-v8.md"
+    _note(tmp_path / "inbox", old, "# From MAIN - ORDER\n\nadopt v8\n", age=60)
+    _note(tmp_path / "inbox", new, "# From MAIN - ORDER\n\nadopt v9\n")
+    only = _triage_only(rsp, tmp_path)
+    assert only is not None and {old, new} <= only
+    assert rsp.superseded_main(old) is False
+
+
+def test_fix1927_an_unlisted_main_order_still_reaches_the_work_lane(rsp, tmp_path, monkeypatch):
+    _manifest(rsp, tmp_path, monkeypatch, 8)
+    live = "2026-10-05-0230-from-MAIN-ORDER-to-RSC-ROSTER-CHANGE-EW-joins.md"
+    designs = "2026-10-04-0020-from-MAIN-ORDER-ALL-fleet-ops-designs-filed-v5-will-carry-watcher.md"
+    _note(tmp_path / "inbox", live, "# From MAIN - ORDER\n\nroster\n", age=60)
+    _note(tmp_path / "inbox", designs, "# From MAIN - ORDER\n\ndesigns\n")
+    _note(tmp_path / "inbox", "2026-10-05-0310-from-MAIN-ORDER-to-RSC-FLEET-KIT-v8-INBOX-COST.md", "v8\n")
+    only = _triage_only(rsp, tmp_path)
+    assert only is not None and live in only and designs in only
+
+
+def test_fix1927_a_sibling_name_sharing_a_listed_stamp_is_not_main_superseded(rsp, tmp_path):
+    assert rsp.superseded_main("2026-10-03-0915-from-RC-ORDER-something.md") is False
+    assert rsp.superseded_main("2026-10-03-0915-from-MAIN-ORDER-lane.md") is True
+
+
+def test_fix1927_a_note_already_seen_as_work_is_backfilled_terminal(rsp, tmp_path, monkeypatch):
+    _manifest(rsp, tmp_path, monkeypatch, 8)
+    name = "2026-10-05-0215-from-MAIN-ORDER-to-RSC-FLEET-KIT-v7-session-checklist.md"
+    path = _note(tmp_path / "inbox", name, "# From MAIN - ORDER\n\nv7\n")
+    root = rsp._kit_root()
+    fi.mark_seen(root, path, fi.Decision(fi.WORK, "ORDER", "MAIN", "MAIN to the work lane", 1), None)
+    only = _triage_only(rsp, tmp_path)
+    assert only is not None and name not in only
+    assert _last(rsp, name)["verdict"] == "terminal-superseded"
+    rows_before = len(_seen(rsp))
+    _triage_only(rsp, tmp_path)
+    # Backfilled ONCE: the next fire writes no further line for it.
+    assert len(_seen(rsp)) == rows_before
+
+
+def test_fix1927_r2_a_live_main_fix_naming_an_older_kit_is_never_dropped(rsp, tmp_path, monkeypatch):
+    # Refutation round 2, item 1: a NEW MAIN FIX naming FLEET-KIT-v7, with the
+    # v8 adoption order in the inbox and v8 vendored, must still be worked.
+    _manifest(rsp, tmp_path, monkeypatch, 8)
+    live = "2026-10-08-0900-from-MAIN-FIX-to-RSC-FLEET-KIT-v7-checklist-box-defect-apply-now.md"
+    _note(tmp_path / "inbox", "2026-10-05-0310-from-MAIN-ORDER-to-RSC-FLEET-KIT-v8-INBOX-COST.md",
+          "# From MAIN - ORDER\n\nv8\n", age=60)
+    _note(tmp_path / "inbox", live, "# From MAIN - FIX\n\nTO RSC.\n\napply now\n")
+    assert rsp.superseded_main(live) is False
+    only = _triage_only(rsp, tmp_path)
+    assert only is not None and live in only
+    path = tmp_path / "inbox" / live
+    assert rsp._work_lane_only([path], None) == [path]
+
+
+def test_fix1927_r2_a_migration_order_naming_two_kits_is_never_dropped(rsp, tmp_path, monkeypatch):
+    # Refutation round 2, item 2: the first vN in a name is not its subject.
+    _manifest(rsp, tmp_path, monkeypatch, 9)
+    live = "2026-11-03-0100-from-MAIN-ORDER-ALL-FLEET-KIT-v8-to-v9-migration-steps.md"
+    _note(tmp_path / "inbox", "2026-11-02-0100-from-MAIN-ORDER-to-RSC-FLEET-KIT-v9-supersedes-v8.md",
+          "# From MAIN - ORDER\n\nv9\n", age=60)
+    _note(tmp_path / "inbox", live, "# From MAIN - ORDER\n\nsteps\n")
+    assert rsp.superseded_main(live) is False
+    only = _triage_only(rsp, tmp_path)
+    assert only is not None and live in only
+
+
+def test_fix1927_r2_a_queued_work_row_survives_a_manifest_bump(rsp, tmp_path, monkeypatch):
+    # Refutation round 2, item 3: the backfill pass never pulls an unlisted
+    # MAIN note out of the work set, whatever the manifest says.
+    _manifest(rsp, tmp_path, monkeypatch, 9)
+    live = "2026-10-08-0900-from-MAIN-FIX-to-RSC-FLEET-KIT-v8-apply-now.md"
+    path = _note(tmp_path / "inbox", live, "# From MAIN - FIX\n\nfix\n")
+    _note(tmp_path / "inbox", "2026-11-02-0100-from-MAIN-ORDER-to-RSC-FLEET-KIT-v9-supersedes-v8.md",
+          "# From MAIN - ORDER\n\nv9\n")
+    fi.mark_seen(rsp._kit_root(), path, fi.Decision(fi.WORK, "FIX", "MAIN", "MAIN to the work lane", 1), None)
+    only = _triage_only(rsp, tmp_path)
+    assert only is not None and live in only
+    assert _last(rsp, live)["action"] == "work"
+
+
+def test_fix1927_the_legacy_path_drops_a_superseded_main_candidate(rsp, tmp_path):
+    inbox = tmp_path / "inbox"
+    dead = _note(inbox, "2026-10-03-0912-from-MAIN-ORDER-ALL-cut-overhead.md")
+    live = _note(inbox, "2026-10-05-0230-from-MAIN-ORDER-to-RSC-ROSTER.md")
+    assert rsp._work_lane_only([dead, live], None) == [live]

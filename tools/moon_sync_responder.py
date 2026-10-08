@@ -5017,10 +5017,61 @@ def _hop_stamp(draft: str, hop_n: int | None, bounds: Bounds) -> str:
 
 
 def _work_lane_only(candidates: list[Path], only: set[str] | None) -> list[Path]:
-    """The candidates the work lane may take; all of them when `only` is None."""
+    """The candidates the work lane may take; with `only` None, every candidate
+    but a SUPERSEDED MAIN note (MAIN 1927 FIX), so the kill switch's legacy
+    path cannot re-answer a closed order either. Nothing is written here."""
     if only is None:
-        return candidates
+        return [c for c in candidates if not superseded_main(c.name)]
     return [c for c in candidates if c.name in only]
+
+
+# ---------------------------------------------------------------- superseded MAIN notes
+#
+# MAIN 2026-10-07 1927 FIX (SHA-256 verified, operator authority): kit v8 (MAIN
+# 2026-10-05 0310 ORDER) supersedes every older MAIN kit ORDER and the
+# 2026-10-03 notes the FIX names. A superseded MAIN note gets NO reply
+# (FLEET-COMMON 14b: no reply to TERMINAL; 14d: never answer an answer) and is
+# mechanically acked - one seen-ledger line, verdict `terminal-superseded`.
+#
+# TRACKED STAMPS ONLY, NO INFERENCE (refutation round 2, adjudicated). A
+# general "FLEET-KIT vN is superseded by a later vM" rule was built and
+# REFUTED: it dropped a live MAIN FIX naming an older kit and a migration
+# order naming two kits, and its backfill pulled queued live FIXes out after
+# a manifest bump. The adjudicated narrow shape (ORDER class, adoption-order
+# name, one kit number, stamp earlier than a later adoption order) would match
+# none of MAIN's real v6, v7 or v8 order names, so it was deleted rather than
+# kept as dead risk. Inbox handling stays automatic: a MAIN note not listed
+# here always reaches the work lane. A later supersession is a new MAIN
+# ruling, which adds its stamps here. Reversed by: a MAIN ruling.
+
+#: `YYYY-MM-DD-HHMM` stamps of MAIN notes the 1927 FIX section 2 closed.
+SUPERSEDED_MAIN_STAMPS: frozenset[str] = frozenset({
+    "2026-10-03-0955",  # FLEET-KIT v1 ORDER
+    "2026-10-03-1014",  # v2
+    "2026-10-03-1016",  # v3
+    "2026-10-03-1204",  # v4
+    "2026-10-04-2237",  # v6
+    "2026-10-05-0215",  # v7
+    "2026-10-03-0915",
+    "2026-10-03-0925",
+    "2026-10-03-1029",
+    "2026-10-03-1325",
+    "2026-10-03-0845",  # already auto-answered
+    "2026-10-03-0850",
+    "2026-10-03-0855",
+    "2026-10-03-0912",
+})
+
+#: Seen-ledger verdict of a superseded MAIN note.
+SUPERSEDED_VERDICT = "terminal-superseded"
+
+
+def superseded_main(name: str) -> bool:
+    """Whether `name` is a MAIN note (by both readers) whose stamp the 1927 FIX
+    closed. Nothing else is ever inferred superseded."""
+    if not _is_main(name):
+        return False
+    return any(name.startswith(f"{stamp}-from-{MAIN_CODE}-") for stamp in SUPERSEDED_MAIN_STAMPS)
 
 
 def _work_bounds(bounds: Bounds | None, only: set[str] | None) -> Bounds | None:
@@ -5324,7 +5375,10 @@ def _inbox_triage(
             mark(path, d, "before-window")
             continue
         if _is_main(name) and name.lower().endswith(".md"):
-            if is_terminal_note(name, ""):
+            if superseded_main(name):
+                mark(path, _decision(inbox_kit.SKIP, d, "superseded MAIN note (MAIN 1927 FIX)"),
+                     SUPERSEDED_VERDICT)
+            elif is_terminal_note(name, ""):
                 mark(path, _decision(inbox_kit.SKIP, d, "terminal"), "terminal")
             else:
                 mark(path, _decision(inbox_kit.WORK, d, "MAIN to the work lane"), None)
@@ -5407,6 +5461,15 @@ def _inbox_triage(
         n for n, r in last.items()
         if r.get("action") == inbox_kit.WORK and r.get("verdict") in WORK_VERDICTS
     }
+    # BACKFILL (MAIN 1927 FIX): a LISTED-stamp note seen as work before the
+    # rule existed is acked ONCE here - its new last row is a skip - and leaves
+    # the work set this same fire. No unlisted note is ever touched here.
+    for n in sorted(pool):
+        if superseded_main(n):
+            pool.discard(n)
+            base = inbox_kit.classify(n, SELF_CODE, _note_head(inbox / n))
+            mark(inbox / n, _decision(inbox_kit.SKIP, base, "superseded MAIN note (MAIN 1927 FIX)"),
+                 SUPERSEDED_VERDICT)
     try:
         sibling_room = bool(cap.allow(REPLY_CLASS))
     except (OSError, ValueError):
