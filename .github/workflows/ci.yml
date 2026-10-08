@@ -69,7 +69,10 @@ jobs:
     steps:
       # Action majors match Sibling-C's, which is the tree these
       # workflows are ported from and the one where they are proven green.
-      - uses: actions/checkout@v6
+      # SHA-pinned (MAIN ORDER 0300): a tag is mutable, a commit is not. The
+      # trailing comment names the release tag the SHA was resolved from, and
+      # Dependabot's github-actions entry bumps both together.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           # FULL HISTORY, and it is now load-bearing. That guard the previous
           # comment here anticipated has arrived: tests/test_commit_trailers.py
@@ -103,7 +106,7 @@ jobs:
           # true reason, not residue of this change.
           fetch-depth: 0
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           # 3.11 is the pin. ruff.toml targets py311 and mypy.ini declares
           # python_version 3.11; running CI on anything else would validate a
@@ -116,15 +119,25 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-dev.txt
+            requirements-dev.lock
 
       - name: Install dev deps
+        # HASH-PINNED (MAIN ORDER 0300). requirements-dev.lock carries a sha256
+        # for every distribution in the closure; --require-hashes makes pip
+        # refuse anything unhashed or mismatched. requirements-dev.txt rides
+        # along on the same line so tests/test_dev_pin_declaration.py still
+        # sees the declared file installed - every name in it is also in the
+        # lock at the same version (tests/test_supply_chain.py), so it adds no
+        # unhashed requirement. No `pip install --upgrade pip`: that line could
+        # not carry a hash, and the runner's bundled pip is sufficient.
+        #
+        # requirements.txt is deliberately EMPTY - the runtime is stdlib-only
+        # (see that file). Installing it anyway, also under --require-hashes, is
+        # the cheap way to notice the day that stops being true: a pin added
+        # there without a hash fails this step.
         run: |
-          python -m pip install --upgrade pip
-          # requirements.txt is deliberately EMPTY - the runtime is stdlib-only
-          # (see that file). Installing it anyway is the cheap way to notice
-          # the day that stops being true.
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          python -m pip install --require-hashes -r requirements.txt
+          python -m pip install --require-hashes -r requirements-dev.lock -r requirements-dev.txt
 
       - name: ruff lint
         run: ruff check .
