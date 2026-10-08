@@ -1319,7 +1319,11 @@ def pending(
                 continue
         # LOOP BREAKER (b): a sender already sent `MAX_REPLIES_PER_SENDER`
         # replies in the rolling day is not answered again until one ages out.
-        if code in (capped or set()):
+        # EXCEPT an ORDER, FIX or RULING (FLEET-COMMON 14c; `kit.NEVER_DAMP`,
+        # read from the kit, class from the FILENAME only as in
+        # `is_terminal_note`): holding one up to 24h behind the cap is the
+        # defect this exemption closes. `record_outbound` re-checks the same way.
+        if code in (capped or set()) and not _cap_exempt(child.name):
             continue
         # LOOP BREAKER (a): never auto-answer an auto-reply, from any tree.
         # Also this tree's OWN notes: `code == SELF_CODE` above for a from-RSC
@@ -1400,6 +1404,17 @@ def is_terminal_note(name: str, text: str) -> bool:
     if kit.note_class(name) in kit.NEVER_DAMP:
         return False
     return _TERMINAL_NAME.search(name) is not None or _TERMINAL_BODY.search(text) is not None
+
+
+def _cap_exempt(name: str) -> bool:
+    """Whether a note bypasses `MAX_REPLIES_PER_SENDER` (FLEET-COMMON 14c).
+
+    ORDER, FIX and RULING (`kit.NEVER_DAMP`) are exempt from the outbound cap.
+    The class comes from the FILENAME only, for the reason `is_terminal_note`
+    gives: a title line is sender-controlled text. The reply still writes its
+    outbound row, so it still counts against the cap for every OTHER class.
+    """
+    return kit.note_class(name) in kit.NEVER_DAMP
 
 
 def provenance_map(queue: list[Path], roots: dict[str, Path]) -> dict[str, Provenance]:
@@ -3712,13 +3727,18 @@ def senders_at_cap(path: Path, now: float) -> set[str]:
     return {code for code, n in counts.items() if n >= MAX_REPLIES_PER_SENDER}
 
 
-def record_outbound(path: Path, to: str, now: float, delivered: bool) -> bool:
+def record_outbound(
+    path: Path, to: str, now: float, delivered: bool, exempt: bool = False
+) -> bool:
     """RESERVE one reply to `to` in the durable record. True only if it landed.
 
     Called BEFORE the delivery, so the row exists before any byte leaves this
     repo; a reply whose row could not be written is not sent. `delivered=False`
     records nothing. A corrupt record is never overwritten here - that would
     erase the very count the cap reads - so it refuses and stays capped.
+
+    `exempt` (FLEET-COMMON 14c; see `_cap_exempt`) skips ONLY the count check:
+    the row is still written, and a corrupt record still refuses.
     """
     if not delivered:
         return False
@@ -3730,7 +3750,7 @@ def record_outbound(path: Path, to: str, now: float, delivered: bool) -> bool:
     rows = _outbound_rows(path, now)
     if rows is None or not _ensure_parent(path):
         return False
-    if sum(1 for r in rows if r["to"] == to) >= MAX_REPLIES_PER_SENDER:
+    if not exempt and sum(1 for r in rows if r["to"] == to) >= MAX_REPLIES_PER_SENDER:
         return False
     return atomic_write_json(path, {"version": 1, "replies": [*rows, {"to": to, "at": now}]})
 
@@ -3745,7 +3765,9 @@ def _reserve_targets(
     reply undelivered with the reason. Kept out of `_run_once` so the cycle
     gains no branch.
     """
-    if record_outbound(path, sender_of(note.name) or "", now, True):
+    if record_outbound(
+        path, sender_of(note.name) or "", now, True, exempt=_cap_exempt(note.name)
+    ):
         return [d / "moon_sync_inbox" for d in dests], [inbox], []
     _log_fail_closed(note.name, "outbound-unreserved-note-dropped")
     return [], [], [OUTBOUND_UNRESERVED_REASON]

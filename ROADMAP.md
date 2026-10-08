@@ -6556,6 +6556,7 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Next
 
+- **Responder tick label on a cap hold.** `_write_tick_status` in `tools/moon_sync_responder.py` reports state `limit` / `Turn Limit Reached` whenever MAIN is at `MAX_REPLIES_PER_SENDER` and the fire took no note, even with nothing held, while the fire log says `fire ended empty`; the label strings are pinned in `tests/test_headless_env.py`, so the fix (label only when a non-exempt MAIN note is actually held) needs that file on its write-list.
 - **Artifact scoring.** `MappedArtifact` parses cleanly but nothing scores a
   substat roll. Needs a stated scoring model before implementation, not after.
 - **Banner calendar.** The forecaster answers "given N pulls" but not "by when",
