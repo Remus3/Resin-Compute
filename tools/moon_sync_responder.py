@@ -1429,7 +1429,10 @@ def _cap_exempt(name: str) -> bool:
     The class comes from the FILENAME only, as in `is_terminal_note`.
     """
     found = _SENDER.search(name)
-    if found is None:
+    # MAIN ONLY (adversary on a640bf8; ruled). Only MAIN carries operator
+    # authority, and loop breaker (b) exists to stop sibling-to-sibling loops,
+    # so a sibling's ORDER/FIX/RULING stays capped. Same single parse.
+    if found is None or found.group(1).upper() != MAIN_CODE:
         return False
     word = _CLASS_AFTER_SENDER.match(name, found.end())
     return word is not None and word.group(0).upper() in kit.NEVER_DAMP
@@ -3774,7 +3777,8 @@ def record_outbound(
 
 
 def _reserve_targets(
-    path: Path, note: Path, dests: list[Path], inbox: Path, now: float
+    path: Path, note: Path, dests: list[Path], inbox: Path, now: float,
+    verified: bool = False,
 ) -> tuple[list[Path], list[Path], list[str]]:
     """(sibling inboxes, own-copy inboxes, reasons) for one reply.
 
@@ -3782,10 +3786,13 @@ def _reserve_targets(
     lists are EMPTY, so `deliver` writes nothing and the cycle reports the
     reply undelivered with the reason. Kept out of `_run_once` so the cycle
     gains no branch.
+
+    `verified`: the note's MAIN provenance verdict is MATCH. The cap exemption
+    rides on operator authority, which an unverified MAIN name does not carry
+    (FLEET-COMMON 6), so `_cap_exempt` counts only with it. Default False.
     """
-    if record_outbound(
-        path, sender_of(note.name) or "", now, True, exempt=_cap_exempt(note.name)
-    ):
+    exempt = verified and _cap_exempt(note.name)
+    if record_outbound(path, sender_of(note.name) or "", now, True, exempt=exempt):
         return [d / "moon_sync_inbox" for d in dests], [inbox], []
     _log_fail_closed(note.name, "outbound-unreserved-note-dropped")
     return [], [], [OUTBOUND_UNRESERVED_REASON]
@@ -4343,13 +4350,14 @@ def _run_once(
     # MAIN FIRST, as ORDERING ONLY: a MATCH-verified MAIN note is answered
     # before older mail, and no gate is skipped for it.
     answered = _answered(DEFAULT_ANSWERED)
+    capped = senders_at_cap(DEFAULT_OUTBOUND, started)
     candidates = pending(
         inbox,
         OPTED_IN,
         answered,
         since=bounds.window_opens,
         deprioritise=bounced,
-        capped=senders_at_cap(DEFAULT_OUTBOUND, started),
+        capped=capped,
     )
     # ITEM 14: only the work lane's notes reach a session from here.
     candidates = _work_lane_only(candidates, only)
@@ -4357,6 +4365,10 @@ def _run_once(
     # the cycle: ordering, the bypass, the reply line and the prompt body all
     # read this map.
     verdicts = provenance_map(candidates, roots)
+    # THE CAP EXEMPTION NEEDS A MATCH: `pending` lets a capped MAIN ORDER/FIX/
+    # RULING through by NAME; only a MATCH verdict carries the authority the
+    # exemption rests on. `_reserve_targets` re-checks the same way.
+    candidates = [c for c in candidates if sender_of(c.name) not in capped or _verified(c, verdicts)]
     # RE-DROPS KEYED BY CONTENT HASH (S3 residual b): bytes already answered or
     # held under another name are not picked again, whatever their mtime.
     backfill_answered_hashes(DEFAULT_ANSWERED, inbox, roots)
@@ -4583,7 +4595,7 @@ def _run_once(
         # first; if it cannot be, both target lists come back empty, nothing is
         # written anywhere, and the reason rides on the result.
         targets, own_copy, reserve_reasons = _reserve_targets(
-            DEFAULT_OUTBOUND, note, dests, inbox, started
+            DEFAULT_OUTBOUND, note, dests, inbox, started, _verified(note, verdicts)
         )
         result["reasons"] = reserve_reasons
         written = deliver(draft, reply_name, targets, source=source)
