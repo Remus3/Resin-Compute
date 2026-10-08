@@ -42,12 +42,13 @@ version. What follows is everything the scaffold deliberately did not do.
   them, they need a verified MAIN note naming their stamps for
   SUPERSEDED_MAIN_STAMPS rather than an auto-reply each.
 
-- **NEW 2026-10-05. MAIN ORDER 0230 ROSTER CHANGE (verified MATCH).** EW
-  joins, LL retired. Update every sibling list, needle list, port registry
-  and route; mark LL retired, delete nothing of LL's; keep every LL needle.
-  MAIN's floor list: the gitignored repos roster, `tools/moon_sync_responder.py`
-  OPTED_IN, `tests/test_no_sibling_names.py`, `core/ports.py`,
-  `tests/test_responder_main_provenance.py`, this file. Answer MAIN with one
+- **IMPLEMENTED, PENDING MERGE 2026-10-08. MAIN ORDER 0230 ROSTER CHANGE,
+  refined by MAIN 2305 RULING (both verified MATCH).** LL retired as
+  Sibling-D (block 8810-8819 kept reserved, nothing deleted, every LL needle
+  kept); EW joined as Sibling-K with ports 8940-8959 (`SK_BLOCK` in
+  `core/ports.py`). Lists, needles, port registry and route landed on the
+  roster branch (03a14a7) plus the refuter fixes; the gitignored per-host
+  roster carries EW's real root. Remaining after merge: answer MAIN with one
   ANSWER note (HOP 2), one line per file.
 
 - **NEW 2026-10-05. MAIN ORDER 0300 SUPPLY-CHAIN HARDENING (verified
