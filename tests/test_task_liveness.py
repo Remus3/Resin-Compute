@@ -2310,16 +2310,21 @@ def _real_task_names() -> _TaskPick:
         " | ConvertTo-Json -Compress"
     )
     try:
-        done = subprocess.run(
-            [exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
-        )
+        done = _run_read_only_enumeration(exe, script, 120)
     except (OSError, subprocess.SubprocessError) as exc:
         return _TaskPick("FAILED", None, None, None, f"could not be launched: {type(exc).__name__}")
     return _classify_task_pick(done.returncode, done.stdout)
+
+
+def _run_read_only_enumeration(exe: str, script: str, timeout: int) -> subprocess.CompletedProcess:
+    """The one launch site for the read-only scheduler enumerations in this module."""
+    return subprocess.run(
+        [exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
 
 
 def _classify_task_pick(returncode: int, stdout: str) -> _TaskPick:
@@ -3160,3 +3165,97 @@ def test_a_control_a_zero_exit_with_a_payload_is_unaffected(monkeypatch):
     payload = {"exists": True, "task_name": "ResinCompute-Responder", "triggers": []}
     got = _collect_facts_over_a_stubbed_launcher(monkeypatch, 0, stdout=json.dumps(payload))
     assert got == payload, f"a zero exit with a real payload must be returned verbatim, got {got!r}"
+
+
+# --- LastTaskResult is a UInt32, and [int] overflows on every failure HRESULT --
+#
+# Hand-off item 15 (sessions 58, 60, 62): the foldered real-probe arm above
+# failed with "the scheduler refused the query" and was filed as host-dependent.
+# It was not. Get-ScheduledTaskInfo returns LastTaskResult as System.UInt32
+# (measured 2026-10-08 under powershell.exe 5.1), and a failed last run stores
+# an HRESULT such as 0x800710E0 (2147946720) or 0xFFFFFFFD (4294967293). The
+# probe cast it with [int], a 32-bit Int32, which throws "Value was either too
+# large or too small for an Int32"; under $ErrorActionPreference='Stop' the
+# script exits non-zero and collect_facts reports a refusal. The foldered arm's
+# subject is whichever task enumerates first, so it went red exactly when that
+# task's last run had failed and green when it had not. Measured 2026-10-08: 13
+# of 276 tasks on this host carried such a result.
+#
+# The cast must be one that holds the whole UInt32 range: [int64] or [uint32].
+
+_LAST_RESULT_CAST_RE = re.compile(r"\[(\w+)\]\s*\$i\.LastTaskResult", re.IGNORECASE)
+_WIDE_ENOUGH_CASTS = frozenset({"int64", "long", "uint32", "uint64"})
+
+
+def _last_result_casts(script: str) -> list[str]:
+    return [m.group(1).lower() for m in _LAST_RESULT_CAST_RE.finditer(script)]
+
+
+def test_the_probe_casts_last_task_result_to_a_type_that_holds_a_uint32():
+    casts = _last_result_casts(liveness._PS_TEMPLATE)
+    assert casts, "the probe must cast $i.LastTaskResult explicitly, so its JSON type is fixed"
+    narrow = [c for c in casts if c not in _WIDE_ENOUGH_CASTS]
+    assert not narrow, (
+        f"LastTaskResult is a UInt32 and a failure HRESULT exceeds Int32.MaxValue; the cast(s) {narrow} "
+        "throw on it and the probe then reports a refusal for a task it could read"
+    )
+
+
+def test_a_the_cast_detector_fires_on_the_32_bit_cast_it_replaced():
+    """Non-vacuity: the pre-fix line is caught, a wide cast is not."""
+    assert _last_result_casts("last_task_result = [int]$i.LastTaskResult") == ["int"]
+    assert "int" not in _WIDE_ENOUGH_CASTS
+    assert _last_result_casts("last_task_result = [int64]$i.LastTaskResult") == ["int64"]
+
+
+def _a_task_whose_last_result_exceeds_int32() -> tuple[str, str | None, str | None, int | None]:
+    """(status, name, path, result) for one uniquely named task whose result overflows Int32.
+
+    Same status discipline as _real_task_names: FAILED must fail, only NONE may skip.
+    """
+    exe = liveness._powershell_executable()
+    script = (
+        "$ErrorActionPreference='Stop';"
+        "$all = @(Get-ScheduledTask);"
+        "$u = $all | Group-Object TaskName | Where-Object { $_.Count -eq 1 } |"
+        " ForEach-Object { $_.Group[0] };"
+        "$hit = $null; $res = $null;"
+        "foreach ($t in $u) {"
+        " if ($t.TaskName -notmatch '^[A-Za-z0-9 ._-]{1,200}$') { continue };"
+        " $i = Get-ScheduledTaskInfo -InputObject $t;"
+        " if ([uint64]$i.LastTaskResult -gt 2147483647) { $hit = $t; $res = [uint64]$i.LastTaskResult; break } };"
+        "[pscustomobject]@{ total = $all.Count; name = [string]$hit.TaskName;"
+        " path = [string]$hit.TaskPath; result = $res } | ConvertTo-Json -Compress"
+    )
+    try:
+        done = _run_read_only_enumeration(exe, script, 180)
+    except (OSError, subprocess.SubprocessError):
+        return "FAILED", None, None, None
+    if done.returncode != 0 or not done.stdout.strip():
+        return "FAILED", None, None, None
+    try:
+        got = json.loads(done.stdout.strip())
+    except ValueError:
+        return "FAILED", None, None, None
+    if not isinstance(got, dict) or int(got.get("total") or 0) < _MIN_ENUMERATED_TASKS:
+        return "FAILED", None, None, None
+    if not got.get("name"):
+        return "NONE", None, None, None
+    return "RAN", got["name"], got.get("path") or None, int(got["result"])
+
+
+@_WINDOWS_ONLY
+def test_the_real_probe_reads_a_task_whose_last_result_exceeds_int32():
+    status, name, path, expected = _a_task_whose_last_result_exceeds_int32()
+    assert status != "FAILED", "the enumeration this arm selects its subject from did not run"
+    if status == "NONE":
+        pytest.skip(
+            "no uniquely named task on this machine has a LastTaskResult above Int32.MaxValue, "
+            "so the overflow cannot be exercised live; the static cast arm still runs"
+        )
+    assert name is not None
+    payload = liveness.collect_facts(name, task_path=path or "")
+    assert payload.get("exists") is True
+    assert payload.get("last_task_result") == expected, (
+        f"{name} last result must survive the probe unwrapped, got {payload.get('last_task_result')!r}"
+    )
