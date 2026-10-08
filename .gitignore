@@ -131,3 +131,9 @@ ops/loop/control/
 # two paths stay ignored if that rule is ever narrowed.
 ops/loop/control/session_done.json
 ops/loop/control/session_done.seen
+# FLEET-KIT v10 SUBAGENT-FIRST hook mode file and decision log (MAIN 0839
+# ORDER s3.3). Covered by the directory rule above; named so they stay
+# ignored if that rule is ever narrowed. The mode file is per-checkout
+# runtime state: the merger writes `log` in the main checkout.
+ops/loop/control/subagent_first.mode
+ops/loop/control/subagent_first.jsonl

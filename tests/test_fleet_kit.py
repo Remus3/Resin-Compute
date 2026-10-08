@@ -108,15 +108,18 @@ def test_a_mutated_claude_md_is_reported(tmp_path, old, new, expected):
     assert expected in KIT.conformance(root)
 
 
-#: The files kit v9 pins, per the MAIN 2354 ORDER of 2026-10-07, sorted as
+#: The files kit v10 pins, per the MAIN 0839 ORDER of 2026-10-08, sorted as
 #: `sorted()` orders them. v4 added LICENSE and NOTICE (Apache-2.0, holder the
 #: operator); v5 added fleet_watch.py, fleet_secrets.py and the two token
 #: files; v6 added fleet_lanes.py; v7 added fleet_checklist.py; v8 added
 #: fleet_inbox.py; v9 added fleet_done.py, fleet_statusline.js,
 #: fleet_subagent_status.js and cli_display.json, and changed FLEET-COMMON.md
 #: (item 15), the token files, fleet_headless.py, fleet_inbox.py and
-#: fleet_checklist.py besides.
-V9_PINNED_FILES = (
+#: fleet_checklist.py besides; v10 added fleet_subagent_first.py and changed
+#: FLEET-COMMON.md (the banner), NOTICE, cli_display.json, fleet_checklist.py,
+#: fleet_done.py, fleet_headless.py, fleet_inbox.py, fleet_lanes.py and
+#: fleet_watch.py besides.
+V10_PINNED_FILES = (
     "FLEET-COMMON.md",
     "LICENSE",
     "NOTICE",
@@ -128,6 +131,7 @@ V9_PINNED_FILES = (
     "fleet_lanes.py",
     "fleet_secrets.py",
     "fleet_statusline.js",
+    "fleet_subagent_first.py",
     "fleet_subagent_status.js",
     "fleet_watch.py",
     "tokens.css",
@@ -136,20 +140,20 @@ V9_PINNED_FILES = (
 
 #: MANIFEST.json is not in its own `files` map, so conformance() cannot notice
 #: a file and the manifest edited TOGETHER (its own docstring says MAIN's drift
-#: sweep catches that). Pinning the manifest's digest here, as the MAIN 2354
+#: sweep catches that). Pinning the manifest's digest here, as the MAIN 0839
 #: ORDER section 1 states it, closes that gap inside this tree.
-V9_MANIFEST_SHA256 = "cbc8b7dea0aa153833ec4a4540a0938d44bc1e04e9cde4cb9175f1182321919f"
+V10_MANIFEST_SHA256 = "ae3c91adc278490f4c6d298493b9d372827ad43c2d94b11be7c5a81935f6aecc"
 
 
-def test_the_vendored_kit_is_v9_and_pins_its_licence_files():
-    """The ORDER adopted is v9; a v10 drop must update this arm deliberately."""
+def test_the_vendored_kit_is_v10_and_pins_its_licence_files():
+    """The ORDER adopted is v10; a v11 drop must update this arm deliberately."""
     raw = (KIT_DIR / "MANIFEST.json").read_bytes()
     manifest = json.loads(raw.decode("ascii"))
-    assert KIT.KIT_VERSION == 9
-    assert manifest["version"] == 9
-    assert tuple(sorted(manifest["files"])) == V9_PINNED_FILES
-    assert hashlib.sha256(raw).hexdigest() == V9_MANIFEST_SHA256, (
-        "ops/fleet_kit/MANIFEST.json is not MAIN's v9 manifest byte-for-byte"
+    assert KIT.KIT_VERSION == 10
+    assert manifest["version"] == 10
+    assert tuple(sorted(manifest["files"])) == V10_PINNED_FILES
+    assert hashlib.sha256(raw).hexdigest() == V10_MANIFEST_SHA256, (
+        "ops/fleet_kit/MANIFEST.json is not MAIN's v10 manifest byte-for-byte"
     )
 
 
@@ -160,10 +164,10 @@ def test_the_kit_directory_holds_only_the_pinned_files():
     present = sorted(
         p.name for p in KIT_DIR.iterdir() if p.name != "__pycache__"
     )
-    assert tuple(present) == tuple(sorted((*V9_PINNED_FILES, "MANIFEST.json")))
+    assert tuple(present) == tuple(sorted((*V10_PINNED_FILES, "MANIFEST.json")))
 
 
-@pytest.mark.parametrize("name", V9_PINNED_FILES)
+@pytest.mark.parametrize("name", V10_PINNED_FILES)
 def test_an_edited_kit_file_is_reported(tmp_path, name):
     root = _scratch_copy(tmp_path)
     target = root / "ops" / "fleet_kit" / name
@@ -183,9 +187,9 @@ def test_a_manifest_version_mismatch_is_reported(tmp_path):
     root = _scratch_copy(tmp_path)
     path = root / "ops" / "fleet_kit" / "MANIFEST.json"
     data = path.read_bytes()
-    assert b'"version": 9' in data, "mutation target absent - this mutant would be a no-op"
-    path.write_bytes(data.replace(b'"version": 9', b'"version": 8', 1))
-    assert "manifest v8 != kit v9" in KIT.conformance(root)
+    assert b'"version": 10' in data, "mutation target absent - this mutant would be a no-op"
+    path.write_bytes(data.replace(b'"version": 10', b'"version": 9', 1))
+    assert "manifest v9 != kit v10" in KIT.conformance(root)
 
 
 #: U+2610 as UTF-8, built from the code point so this file stays 7-bit.
