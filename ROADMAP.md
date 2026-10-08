@@ -21,6 +21,10 @@ version. What follows is everything the scaffold deliberately did not do.
   kept at ops/runtime/mig1_residue/ (gitignored runtime artifact, one folder
   per worktree); review and discard once item 0a closes.
 
+- **NEW 2026-10-08. MAIN 0839 ORDER FLEET-KIT v10 (to all six).** Arrived
+  session 61, not yet read or sha256-verified. Vendor it after (or together
+  with) the unmerged kit v9 branch; one ANSWER to MAIN covers v9 and v10.
+
 - **NEW 2026-10-08. core.hooksPath drifts to an absolute path.** Read
   `E:\Resin Compute\.githooks` at session 60 /done (session 58 saw the same
   on C:); `python scripts/install_hooks.py` restored `.githooks`. Cause

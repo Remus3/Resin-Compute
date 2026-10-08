@@ -12,6 +12,17 @@ now.
 
 ---
 
+## 2026-10-08 - /done-only session, gates re-measured (session 61)
+
+No open item was acted on; every hand-off item is carried forward. The MAIN
+0839 FLEET-KIT v10 ORDER arrived and is filed untriaged as hand-off item 0d.
+- Gates at 1988b41, 2026-10-08, Python 3.14: licence 52; docs 42; qa 17
+  passed 2 skipped 3 noted; ruff clean; tests 4134 passed 6 skipped; pity_engine
+  80; node 52 pass 0 fail; dry run 0 pass 0 fail 6 skip; mypy 41 files clean
+  (advisory). The host scheduler probe (hand-off item 15) passed this run.
+- CI read at 1988b41: ci push run 37735387706 success, scheduled ci run
+  37800142367 success. This paperwork push is docs-only.
+
 ## 2026-10-08 - E: move steps b and c: C: copy retired behind a junction, responder re-armed from E: (session 60)
 
 Hand-off item 0a. Step a: this session ran from `E:\Resin Compute`.
