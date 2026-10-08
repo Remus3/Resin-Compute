@@ -30,8 +30,9 @@ this ritual.
 **THE MAIN SESSION DISPATCHES THE WHOLE RITUAL TO ONE SUB-AGENT** (FLEET-KIT
 v10, MAIN 0839 ORDER of 2026-10-08, section 3 item 4). The main session runs
 no section itself: under the kit's SUBAGENT-FIRST PreToolUse hook every Bash,
-PowerShell, Read, Edit, Write, Grep and Glob call in the main thread is denied
-(or, in log mode, logged as would-deny). It launches ONE sub-agent, in the
+PowerShell, Read, Edit, Write, Grep, Glob, NotebookEdit and MultiEdit call in
+the main thread is denied (or, in log mode, logged as would-deny). It
+launches ONE sub-agent, in the
 foreground, whose prompt is this file's sections in order plus the session
 topic, the session counter `n` and the list of checklist tasks the session
 printed (the sub-agent cannot see the main thread's context, so the pre-flight
