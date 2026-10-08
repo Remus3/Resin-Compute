@@ -641,7 +641,7 @@ foreach ($tr in @($t.Triggers | Where-Object {{ $null -ne $_ }})) {{
     state = [string]$t.State
     next_run_time = $next
     last_run_time = $last
-    last_task_result = [int]$i.LastTaskResult
+    last_task_result = [int64]$i.LastTaskResult
     triggers = @($trigs)
 }} | ConvertTo-Json -Depth 5 -Compress
 """
