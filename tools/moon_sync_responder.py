@@ -1319,10 +1319,10 @@ def pending(
                 continue
         # LOOP BREAKER (b): a sender already sent `MAX_REPLIES_PER_SENDER`
         # replies in the rolling day is not answered again until one ages out.
-        # EXCEPT an ORDER, FIX or RULING (FLEET-COMMON 14c; `kit.NEVER_DAMP`,
-        # read from the kit, class from the FILENAME only as in
-        # `is_terminal_note`): holding one up to 24h behind the cap is the
-        # defect this exemption closes. `record_outbound` re-checks the same way.
+        # EXCEPT an ORDER, FIX or RULING (`kit.NEVER_DAMP`; see `_cap_exempt`
+        # for the basis, the FLEET-COMMON 14 hard constraint that no note waits
+        # on a human): holding one up to 24h behind a local loop breaker is the
+        # defect this closes. `record_outbound` re-checks the same way.
         if code in (capped or set()) and not _cap_exempt(child.name):
             continue
         # LOOP BREAKER (a): never auto-answer an auto-reply, from any tree.
@@ -1406,15 +1406,33 @@ def is_terminal_note(name: str, text: str) -> bool:
     return _TERMINAL_NAME.search(name) is not None or _TERMINAL_BODY.search(text) is not None
 
 
-def _cap_exempt(name: str) -> bool:
-    """Whether a note bypasses `MAX_REPLIES_PER_SENDER` (FLEET-COMMON 14c).
+#: The class word right after the sender `_SENDER` matched, case-blind as
+#: `sender_of` is.
+_CLASS_AFTER_SENDER = re.compile(r"[A-Za-z]+")
 
-    ORDER, FIX and RULING (`kit.NEVER_DAMP`) are exempt from the outbound cap.
-    The class comes from the FILENAME only, for the reason `is_terminal_note`
-    gives: a title line is sender-controlled text. The reply still writes its
-    outbound row, so it still counts against the cap for every OTHER class.
+
+def _cap_exempt(name: str) -> bool:
+    """Whether an INBOUND note bypasses the local `MAX_REPLIES_PER_SENDER` hold.
+
+    WHY: the FLEET-COMMON 14 hard constraint - inbox handling stays automatic
+    and nothing may make a note wait for a human. An ORDER, FIX or RULING
+    (`kit.NEVER_DAMP`) carries operator authority from MAIN (FLEET-COMMON 6)
+    and escalates to work under 14b, so a local per-sender loop breaker must
+    not park it for 24h. NOT 14c: 14c exempts the OUTBOUND note's class, and a
+    reply is never an ORDER; the 6/day outbound accounting is untouched.
+
+    ONE PARSE (adversary on 4cdef6f). The class is the word right after the
+    SAME `_SENDER` match `sender_of` reads, so the cap's sender and the
+    exemption's class can never come from two different places in the name.
+    `kit.note_class` reads upper-case senders only, so for
+    `x-from-main-ANSWER-from-LW-ORDER-y` it skipped MAIN and returned ORDER.
+    The class comes from the FILENAME only, as in `is_terminal_note`.
     """
-    return kit.note_class(name) in kit.NEVER_DAMP
+    found = _SENDER.search(name)
+    if found is None:
+        return False
+    word = _CLASS_AFTER_SENDER.match(name, found.end())
+    return word is not None and word.group(0).upper() in kit.NEVER_DAMP
 
 
 def provenance_map(queue: list[Path], roots: dict[str, Path]) -> dict[str, Provenance]:
@@ -3737,7 +3755,7 @@ def record_outbound(
     records nothing. A corrupt record is never overwritten here - that would
     erase the very count the cap reads - so it refuses and stays capped.
 
-    `exempt` (FLEET-COMMON 14c; see `_cap_exempt`) skips ONLY the count check:
+    `exempt` (see `_cap_exempt` for the basis) skips ONLY the count check:
     the row is still written, and a corrupt record still refuses.
     """
     if not delivered:

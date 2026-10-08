@@ -665,8 +665,8 @@ def test_a_spent_budget_refuses_another_sender(rsp, tmp_path):
 
 
 def test_the_bypass_still_honours_the_per_sender_cap(rsp, tmp_path):
-    # A NON-EXEMPT class: an ORDER, FIX or RULING passes the cap (FLEET-COMMON
-    # 14c), so `MAIN_NOTE` (a FIX) is not this arm's subject.
+    # A NON-EXEMPT class: an ORDER, FIX or RULING passes the cap (`_cap_exempt`),
+    # so `MAIN_NOTE` (a FIX) is not this arm's subject.
     inbox, main = _bed(tmp_path, name="2026-10-03-0830-from-MAIN-CORRECTION-ALL-verify-provenance.md")
     _spend_hops(rsp, inbox)
     import time
