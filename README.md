@@ -87,7 +87,7 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8790/forecast `
 The engine (8790) and the dashboard (8791, `python -m surface`) bind to
 `127.0.0.1` and **do not authenticate** - do not expose them to a network you do
 not control. Any path works for the checkout, spaces included: the canonical
-one here is `C:\Resin Compute`. Bootstrap, the headless lane, the supervisor
+one here is `E:\Resin Compute`. Bootstrap, the headless lane, the supervisor
 and everything else: [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 
 ## Example output

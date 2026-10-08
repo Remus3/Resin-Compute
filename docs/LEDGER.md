@@ -12,6 +12,21 @@ now.
 
 ---
 
+## 2026-10-08 - Repo copied to E: and MIG-1 worktree prune (session 59)
+
+Operator order in chat. MIG-1 per MAIN 2354 ORDER item 5: `git worktree list`
+read 36 lines with 1 prunable before, 1 line after. The 34 agent worktree
+directories went to the Recycle Bin; the 14 with uncommitted residue were
+archived first to a gitignored runtime folder named in ROADMAP.md (one
+folder per worktree holding a tracked diff, an untracked tar and its HEAD). Every pruned
+branch was an ancestor of main; branches kept. The repo was then copied with
+robocopy to `E:\Resin Compute` (4579 files, 0 failed), `git fsck` clean there,
+README, docs/OPERATIONS.md and tests/test_machine_identity.py moved to the E:
+canonical path in one commit. The C: checkout stays until the hand-off item
+0a steps retire it; the responder task is disabled until re-armed from E:.
+Measured 2026-10-08 at E: under Python 3.14 before this entry: pity_engine 80
+passed, ruff clean; tests red only on this undocumented residue path.
+
 ## 2026-10-07 - Responder: verified MAIN ORDER/FIX/RULING bypass the per-sender reply cap
 
 Defect (diagnosed read-only): `pending()` in `tools/moon_sync_responder.py`

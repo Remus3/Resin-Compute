@@ -109,12 +109,29 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
   0. RENEW THE RESPONDER BEFORE 2026-11-01T22:56 LOCAL - unchanged, stays
      top. Re-run ops/install_responder_task.ps1, fresh gitignored agreement
      record, then ops/check_task_liveness.py must exit 0.
-  0a. THE MOVE TO E: (MAIN 2155, inventory ANSWERED 2225). Next MAIN
-     session sends a runbook; act on it when it arrives. Flagged hazards:
-     accept the harness trust dialog at E: before re-arming the task
-     (workspace_trust passes a missing key); 35 worktree pointer pairs,
-     task working dir, 5 shortcut fields, the per-host roots map. Prune
-     merged worktrees BEFORE the move (see 14).
+  0a. THE MOVE TO E: - COPY DONE session 59 (operator order in chat
+     2026-10-08). E:\Resin Compute is now canonical; C:\Resin Compute is a
+     STALE copy left in place only because session 59 ran from it.
+     Read back: robocopy 4579 files 0 failed; git fsck clean at E:;
+     core.hooksPath .githooks (relative); 3 Desktop .lnk read back at E:;
+     harness memory copied to projects/E--Resin-Compute (76 files);
+     RSC-InboxResponder task DISABLED (schtasks Status Disabled).
+     MIG-1 done: git worktree list 36 lines (1 prunable) -> 1; 34 worktree
+     dirs to Recycle Bin; 14 residues archived first to
+     ops/runtime/mig1_residue/<wt>/ (tracked.diff, untracked.tar, HEAD).
+     REMAINING, in order:
+     a. Operator: start claude at E:\Resin Compute and accept the trust
+        dialog (workspace_trust passes a missing key - do not skip).
+     b. Copy any notes that landed in C:\Resin Compute\moon_sync_inbox
+        after 2026-10-08T00:13 into E:, then send C:\Resin Compute to the
+        Recycle Bin and create a junction C:\Resin Compute -> E:\Resin
+        Compute so sibling roots maps keep delivering until MAIN updates.
+     c. Re-arm the responder from E: (ops/install_responder_task.ps1, fresh
+        agreement record, ops/check_task_liveness.py exit 0) - also covers
+        item 0's renewal; read back Start In = E:\Resin Compute.
+     d. Vendor kit v9 (MAIN 2354 ORDER items 1-4), then ONE ANSWER to MAIN
+        (HOP 2): vendoring commit, MANIFEST sha256, conformance, prune counts
+        36/1 prunable -> 1, and that RSC now lives at E: (MAIN's roots map).
   0b. WATCH THE HELD MAIN BACKLOG DRAIN. Since a487d15 old MAIN ORDERs the
      cap held now get auto-replies (2251 ACKed MAIN 0020, kit v5). List the
      still-unanswered MAIN ORDER-named kit notes; if MAIN 1927's supersession
@@ -331,4 +348,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   DELIVERED with the recipient copy hashed; under item 14 one batched note
   per destination, HOP line in the head, never answer an answer. Silence
   reads as DISSENT. CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 59
+SESSION: 60

@@ -21,7 +21,7 @@ leaves the machine.
 
 ## A path with a space in it is supported and tested
 
-Clone anywhere. `C:\Resin Compute` is itself a working checkout, exercised with
+Clone anywhere. `E:\Resin Compute` is itself a working checkout, exercised with
 ruff, both suites, the headless smoke test and the supervisor dry-run. Four
 pieces make that work, so do not "simplify" them:
 
