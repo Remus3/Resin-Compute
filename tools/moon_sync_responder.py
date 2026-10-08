@@ -5021,7 +5021,7 @@ def _work_lane_only(candidates: list[Path], only: set[str] | None) -> list[Path]
     but a SUPERSEDED MAIN note (MAIN 1927 FIX), so the kill switch's legacy
     path cannot re-answer a closed order either. Nothing is written here."""
     if only is None:
-        return [c for c in candidates if not superseded_main(c.name, c.parent)]
+        return [c for c in candidates if not superseded_main(c.name)]
     return [c for c in candidates if c.name in only]
 
 
@@ -5033,14 +5033,16 @@ def _work_lane_only(candidates: list[Path], only: set[str] | None) -> list[Path]
 # (FLEET-COMMON 14b: no reply to TERMINAL; 14d: never answer an answer) and is
 # mechanically acked - one seen-ledger line, verdict `terminal-superseded`.
 #
-# CONSERVATIVE BY CONSTRUCTION: inbox handling stays automatic and no note may
-# wait for a human, so a MAIN note is suppressed only when (1) its stamp is in
-# the tracked set below, copied from the FIX section 2, or (2) it announces
-# FLEET-KIT vN by name AND the tree VENDORS a later kit (MANIFEST version > N)
-# AND the inbox holds a MAIN note announcing some vM with N < M <= vendored.
-# Both halves of (2) are required: an inbox announcement alone could name a
-# kit this tree has not adopted, and a manifest bump alone has no MAIN order
-# behind it. Any read failure suppresses nothing. Reversed by: a MAIN ruling.
+# TRACKED STAMPS ONLY, NO INFERENCE (refutation round 2, adjudicated). A
+# general "FLEET-KIT vN is superseded by a later vM" rule was built and
+# REFUTED: it dropped a live MAIN FIX naming an older kit and a migration
+# order naming two kits, and its backfill pulled queued live FIXes out after
+# a manifest bump. The adjudicated narrow shape (ORDER class, adoption-order
+# name, one kit number, stamp earlier than a later adoption order) would match
+# none of MAIN's real v6, v7 or v8 order names, so it was deleted rather than
+# kept as dead risk. Inbox handling stays automatic: a MAIN note not listed
+# here always reaches the work lane. A later supersession is a new MAIN
+# ruling, which adds its stamps here. Reversed by: a MAIN ruling.
 
 #: `YYYY-MM-DD-HHMM` stamps of MAIN notes the 1927 FIX section 2 closed.
 SUPERSEDED_MAIN_STAMPS: frozenset[str] = frozenset({
@@ -5060,63 +5062,16 @@ SUPERSEDED_MAIN_STAMPS: frozenset[str] = frozenset({
     "2026-10-03-0912",
 })
 
-#: The vendored kit's manifest; its integer `version` is the adopted kit.
-KIT_MANIFEST = REPO_ROOT / "ops" / "fleet_kit" / "MANIFEST.json"
-
-#: A note NAME announcing a kit version; the first match is the announced one
-#: (`FLEET-KIT-v2-supersedes-v1` announces v2). A bare `v5` is not a match.
-_KIT_ANNOUNCE = re.compile(r"(?<![A-Za-z0-9])FLEET-KIT-v(\d+)(?![0-9])")
-
 #: Seen-ledger verdict of a superseded MAIN note.
 SUPERSEDED_VERDICT = "terminal-superseded"
 
 
-def _announced_kit(name: str) -> int | None:
-    match = _KIT_ANNOUNCE.search(name)
-    return int(match.group(1)) if match else None
-
-
-def _vendored_kit_version() -> int | None:
-    """The vendored kit version, or None when the manifest cannot be read."""
-    try:
-        doc = json.loads(KIT_MANIFEST.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    version = doc.get("version") if isinstance(doc, dict) else None
-    return version if isinstance(version, int) and not isinstance(version, bool) else None
-
-
-def _main_kit_announcements(inbox: Path) -> set[int]:
-    """Kit versions announced by MAIN note names in `inbox`; empty on error."""
-    try:
-        names = [p.name for p in inbox.iterdir() if p.is_file()]
-    except OSError:
-        return set()
-    out: set[int] = set()
-    for name in names:
-        n = _announced_kit(name)
-        if n is not None and name.lower().endswith(".md") and _is_main(name):
-            out.add(n)
-    return out
-
-
-def superseded_main(
-    name: str, inbox: Path, announced: set[int] | None = None, vendored: int | None = -1
-) -> bool:
-    """Whether `name` is a MAIN note superseded per the 1927 FIX rule above.
-    `announced` / `vendored` may be passed precomputed for one fire."""
+def superseded_main(name: str) -> bool:
+    """Whether `name` is a MAIN note (by both readers) whose stamp the 1927 FIX
+    closed. Nothing else is ever inferred superseded."""
     if not _is_main(name):
         return False
-    if any(name.startswith(f"{stamp}-from-{MAIN_CODE}-") for stamp in SUPERSEDED_MAIN_STAMPS):
-        return True
-    n = _announced_kit(name)
-    if n is None:
-        return False
-    v = _vendored_kit_version() if vendored == -1 else vendored
-    if v is None or v <= n:
-        return False
-    seen_versions = _main_kit_announcements(inbox) if announced is None else announced
-    return any(n < m <= v for m in seen_versions)
+    return any(name.startswith(f"{stamp}-from-{MAIN_CODE}-") for stamp in SUPERSEDED_MAIN_STAMPS)
 
 
 def _work_bounds(bounds: Bounds | None, only: set[str] | None) -> Bounds | None:
@@ -5400,8 +5355,6 @@ def _inbox_triage(
     work_now: set[str] = set()
     planned: set[str] = set()
     answers: dict[str, list[tuple[Path, str, Any]]] = {}
-    kit_announced = _main_kit_announcements(inbox)
-    kit_vendored = _vendored_kit_version()
 
     def mark(path: Path, decision: Any, verdict: str | None) -> None:
         nonlocal ledger_ok, budget
@@ -5422,7 +5375,7 @@ def _inbox_triage(
             mark(path, d, "before-window")
             continue
         if _is_main(name) and name.lower().endswith(".md"):
-            if superseded_main(name, inbox, kit_announced, kit_vendored):
+            if superseded_main(name):
                 mark(path, _decision(inbox_kit.SKIP, d, "superseded MAIN note (MAIN 1927 FIX)"),
                      SUPERSEDED_VERDICT)
             elif is_terminal_note(name, ""):
@@ -5508,11 +5461,11 @@ def _inbox_triage(
         n for n, r in last.items()
         if r.get("action") == inbox_kit.WORK and r.get("verdict") in WORK_VERDICTS
     }
-    # BACKFILL (MAIN 1927 FIX): a note seen as work before the superseded rule
-    # existed, or before its superseding kit landed, is acked ONCE here - its
-    # new last row is a skip - and leaves the work set this same fire.
+    # BACKFILL (MAIN 1927 FIX): a LISTED-stamp note seen as work before the
+    # rule existed is acked ONCE here - its new last row is a skip - and leaves
+    # the work set this same fire. No unlisted note is ever touched here.
     for n in sorted(pool):
-        if superseded_main(n, inbox, kit_announced, kit_vendored):
+        if superseded_main(n):
             pool.discard(n)
             base = inbox_kit.classify(n, SELF_CODE, _note_head(inbox / n))
             mark(inbox / n, _decision(inbox_kit.SKIP, base, "superseded MAIN note (MAIN 1927 FIX)"),

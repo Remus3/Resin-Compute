@@ -21,18 +21,24 @@ supersession test.
 - Code, `tools/moon_sync_responder.py`: `superseded_main()` and the tracked
   `SUPERSEDED_MAIN_STAMPS` (the 14 stamps of FIX section 2). A superseded
   MAIN note is acked with one seen-ledger line, action skip, verdict
-  `terminal-superseded`, and no session. General rule, the safer of the two
-  offered: a MAIN note announcing FLEET-KIT vN is superseded only when the
-  vendored manifest version V > N AND the inbox holds a MAIN note announcing
-  some vM with N < M <= V; any read failure suppresses nothing. Notes already
-  seen as work are backfilled once and leave the work set the same fire; the
-  triage-off legacy path drops them too. Unlisted MAIN orders (0230 roster,
+  `terminal-superseded`, and no session. Listed-stamp notes already seen as
+  work are backfilled once and leave the work set the same fire; the
+  triage-off legacy path drops them too. Unlisted MAIN notes (0230 roster,
   0300 supply chain, 0020 designs) still reach the work lane, pinned by arm.
+- NO KIT-VERSION INFERENCE. A first cut (f610a34) also inferred "FLEET-KIT
+  vN superseded by a vendored, announced vM > N". The adversary REFUTED it
+  (correctness lens): it dropped a live MAIN FIX naming an older kit and a
+  `v8-to-v9` migration order, and its backfill pulled queued live FIXes out
+  after a manifest bump. The adjudicated narrow shape would match none of
+  MAIN's real v6/v7/v8 order names, so the inference was deleted and only
+  the tracked stamp list remains; arms pin both refutation names as live.
 - Data: 15 lines appended to the live seen ledger via `fleet_inbox.mark_seen`
   (609 -> 624 lines, read back 2026-10-07): the 14 FIX notes as
   `terminal-superseded`, the 1927 FIX itself as `handled-by-session`.
-- Suites 2026-10-07 on host python 3.14: tests 4113 passed 11 skipped;
-  agents/pity_engine 80 passed; ruff clean; mypy clean.
+- Suites 2026-10-07 on host python 3.14, after the round-2 fix: tests 4113
+  passed 11 skipped (host-reason skips: no POSIX sh, no exec bit, network
+  opt-in, bare python already pinned, POSIX-only guard); agents/pity_engine
+  80 passed; ruff clean; mypy clean.
 
 ## 2026-10-05 - FLEET-KIT v8 adopted (v6 lanes, v7 item 13, v8 item 14); responder flipped live
 
