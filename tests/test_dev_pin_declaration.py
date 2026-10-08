@@ -774,6 +774,67 @@ def test_no_pin_floats():
     )
 
 
+_SETUP_PYTHON = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?actions/setup-python@")
+
+#: Command words that run the Python toolchain itself, as opposed to a tool.
+_PYTHON_COMMANDS = _PYTHON | {"pip", "pip3"}
+
+
+def runs_python(text: str, *, source: str = "<planted>") -> bool:
+    """Whether a workflow runs Python, and so must install the pin file.
+
+    THE PREDICATE, decided rather than guessed (MAIN ORDER 0300 added
+    codeql.yml, the first workflow here with no Python step at all). A
+    workflow runs Python when ANY of these holds:
+
+    1. it has an `actions/setup-python` step - it provisions an interpreter,
+       so whatever runs next runs on it;
+    2. a `run:` block puts `python`, `python3`, `pip` or `pip3` in command
+       position, after any assignments or shell keywords - the same
+       command-position reading `_classify` uses, so a `python` that is only
+       an argument or a word of prose does not count;
+    3. `invoked_tools` credits it with any tool at all. That clause is the one
+       that keeps the arm honest: a workflow that runs `ruff check .` with no
+       setup-python and no pip line is EXACTLY the unpinned-tool risk, and it
+       must not slip out of the census by never naming python.
+
+    A workflow with none of the three - `uses:`-only steps such as CodeQL's
+    init and analyze, or run blocks of pure shell words - runs no pinned tool,
+    so the pin file is nothing to it. No workflow is exempted by NAME.
+    """
+    if any(_SETUP_PYTHON.match(line) for line in text.splitlines()):
+        return True
+    for command in iter_command_lines(text, source=source):
+        for segment in _split_segments(command):
+            words = _split_words(segment)
+            index = 0
+            while index < len(words) and (
+                _ASSIGNMENT.match(words[index]) or words[index] in _KEYWORDS
+            ):
+                index += 1
+            if index < len(words) and words[index] in _PYTHON_COMMANDS:
+                return True
+    return bool(invoked_tools(text, source=source))
+
+
+def workflows_missing_the_pin_install(paths: list[Path]) -> tuple[list[str], list[str]]:
+    """(graded python-running workflows, those among them never installing
+    requirements-dev.txt)."""
+    graded: list[str] = []
+    missing: list[str] = []
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        if not runs_python(text, source=path.name):
+            continue
+        graded.append(path.name)
+        if not any(
+            _PIP_INSTALL_DEV.search(command)
+            for command in iter_command_lines(text, source=path.name)
+        ):
+            missing.append(path.name)
+    return graded, missing
+
+
 def test_every_workflow_installs_the_pin_file_it_is_being_graded_against():
     """The premise of every arm above, asserted as far as text can assert it.
 
@@ -788,23 +849,50 @@ def test_every_workflow_installs_the_pin_file_it_is_being_graded_against():
     The census is welded in for the same reason as above: "no workflow is
     missing the install" is trivially true of no workflows, and this arm used to
     iterate two hardcoded filenames that could not have gone empty.
+
+    GRADED: every workflow that `runs_python` - see that function for the
+    predicate. A workflow running no Python and no tool (codeql.yml) has no
+    use for the pin file. The census floor is on the GRADED set, so a
+    predicate that stopped matching cannot pass by grading nothing.
     """
     workflows = workflow_files()
-    missing = [
-        path.name
-        for path in workflows
-        if not any(
-            _PIP_INSTALL_DEV.search(command)
-            for command in iter_command_lines(
-                path.read_text(encoding="utf-8"), source=path.name
-            )
-        )
-    ]
-    assert not missing and workflows, (
-        f"workflows that never install requirements-dev.txt: {missing};"
-        f" workflows enumerated from {WORKFLOWS_DIR}:"
-        f" {[path.name for path in workflows]}"
+    graded, missing = workflows_missing_the_pin_install(workflows)
+    assert not missing and graded, (
+        f"python-running workflows that never install requirements-dev.txt:"
+        f" {missing}; graded: {graded}; workflows enumerated from"
+        f" {WORKFLOWS_DIR}: {[path.name for path in workflows]}"
     )
+
+
+def test_a_python_running_workflow_without_the_pin_install_still_reds(tmp_path):
+    """NON-VACUITY for the narrowed arm: each predicate clause grades.
+
+    Three planted workflows run Python by a different clause each and none
+    installs the pin file - all three must be reported. Two more run none:
+    a CodeQL-shaped `uses:`-only file and a pure-shell one, which must be
+    left out of the graded set. The installed one passes.
+    """
+    sha = "0" * 40
+    planted = {
+        "setup.yml": f"jobs:\n  a:\n    steps:\n      - uses: actions/setup-python@{sha} # v6\n",
+        "bare.yml": "jobs:\n  a:\n    steps:\n      - run: python -m pytest tests\n",
+        "tool.yml": "jobs:\n  a:\n    steps:\n      - run: ruff check .\n",
+        "codeql.yml": (
+            f"jobs:\n  a:\n    steps:\n      - uses: actions/checkout@{sha} # v6\n"
+            f"      - uses: github/codeql-action/init@{sha} # v4\n"
+        ),
+        "shell.yml": "jobs:\n  a:\n    steps:\n      - run: echo python is mentioned\n",
+        "good.yml": (
+            "jobs:\n  a:\n    steps:\n      - run: |\n"
+            "          python -m pip install --require-hashes -r requirements-dev.lock"
+            " -r requirements-dev.txt\n          ruff check .\n"
+        ),
+    }
+    for name, body in planted.items():
+        (tmp_path / name).write_bytes(body.encode("ascii"))
+    graded, missing = workflows_missing_the_pin_install(workflow_files(tmp_path))
+    assert sorted(graded) == ["bare.yml", "good.yml", "setup.yml", "tool.yml"]
+    assert sorted(missing) == ["bare.yml", "setup.yml", "tool.yml"]
 
 
 def test_the_command_scanner_reads_invocations_and_not_labels_or_prose():
