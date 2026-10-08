@@ -1779,16 +1779,18 @@ def test_the_kit_is_handed_stdin_and_the_spawn_cwd(rsp, routed, monkeypatch):
     assert "p" not in run.args
 
 
-def test_v4_budget_still_lacks_dead_holder_release_so_the_responders_is_kept(tmp_path):
-    """MEASURED, the reason the responder's own budget is KEPT: a lock FILE a
-    dead holder left behind blocks every v4 start until the stale-steal, where
-    the responder's OS lock frees at once (tests/test_responder_uniform_budget.py).
-    If a kit version releases a dead holder's lock at once, this goes red."""
+def test_v10_budget_releases_a_dead_holders_lock_at_once(tmp_path):
+    """MEASURED. Kit v4 to v9 blocked every start on a lock FILE a dead holder
+    left behind until the stale-steal, which is why the responder KEPT its own
+    OS-lock budget (tests/test_responder_uniform_budget.py). Kit v10 (MAIN 0839
+    ORDER s2: "budget lock is an OS lock, never unlinked, freed at once when
+    its holder dies") closes that, so a leftover lock file no longer refuses a
+    start - and the file is not unlinked. Whether the responder's own budget
+    can now be retired is a separate, unmade decision (ROADMAP)."""
     budget = kit.RunBudget(tmp_path / "budget.json", lock_wait=0.2, lock_stale=3600.0)
     lock = tmp_path / "budget.json.lock"
     lock.write_text("left by a dead process\n")
-    with pytest.raises(kit.Refused):
-        budget.start()
+    assert budget.start() is True
     assert lock.exists()
 
 
@@ -1815,8 +1817,12 @@ MAIN_QUOTING_PROBES = [
 def test_a_main_note_quoting_a_marker_line_is_answered(rsp, tmp_path, name, body):
     inbox = tmp_path / "inbox"
     kept = _note(inbox, name, body)
-    assert kit.should_skip(name, rsp.SELF_CODE, body[: rsp.NOTE_HEAD_CHARS]) == "terminal", (
-        "non-vacuity: kit v4's marker test would silence this MAIN note"
+    # Kit v10 (MAIN 0839 ORDER s2) no longer treats a block-quoted `> TERMINAL`
+    # as a marker, so for the `quote` probe the kit itself no longer damps and
+    # the non-vacuity premise is gone; the two bare-line probes still are.
+    expected = None if body.count("\n> TERMINAL\n") else "terminal"
+    assert kit.should_skip(name, rsp.SELF_CODE, body[: rsp.NOTE_HEAD_CHARS]) == expected, (
+        "non-vacuity: the kit's marker test would silence this MAIN note"
     )
     assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
 
@@ -1829,14 +1835,18 @@ def test_the_main_bypass_needs_both_readers(rsp, tmp_path):
     assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
 
 
-def test_a_sibling_quoting_a_marker_line_is_still_damped_by_the_kit(rsp, tmp_path):
-    """MEASURED FOR THE KIT v5 REPORT, not a property this tree wants: v4's
-    should_skip body-marker test damps a QUOTED marker line in a non-ORDER
-    class. Only MAIN is exempted here; a sibling note stays damped. If v5
-    narrows the test, this arm goes red and the note can be dropped."""
+def test_a_sibling_quoting_a_marker_line_is_no_longer_damped_by_the_kit(rsp, tmp_path):
+    """Kit v4 to v9 damped a QUOTED marker line in a sibling's non-ORDER note
+    (measured for the kit v5 report, never a property this tree wanted). Kit
+    v10 (MAIN 0839 ORDER s2: "a block-quoted marker line is not a marker")
+    narrowed it, so the quoted note is now offered. The neighbour survives: a
+    sibling note whose own line is a bare `TERMINAL` is still damped."""
     inbox = tmp_path / "inbox"
-    _note(inbox, "2026-10-03-1404-from-LL-ANSWER-x.md", "# From LL - ANSWER\n\nRC wrote:\n> TERMINAL\n")
-    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == []
+    quoted = _note(inbox, "2026-10-03-1404-from-LL-ANSWER-x.md", "# From LL - ANSWER\n\nRC wrote:\n> TERMINAL\n")
+    assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [quoted]
+    bare_inbox = tmp_path / "bare"
+    _note(bare_inbox, "2026-10-03-1405-from-LL-ANSWER-y.md", "# From LL - ANSWER\n\nTERMINAL\n")
+    assert rsp.pending(bare_inbox, rsp.OPTED_IN, set()) == []
 
 
 def test_a_title_class_never_overrides_a_terminal_name_token(rsp, tmp_path):
