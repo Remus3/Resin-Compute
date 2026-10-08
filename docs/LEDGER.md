@@ -12,6 +12,33 @@ now.
 
 ---
 
+## 2026-10-07 - MAIN 2155 ORDER: C: path inventory before the move to E:, answered
+
+MAIN 2026-10-07 2155 ORDER (operator authority), INVENTORY ONLY. Provenance
+MATCH by `main_provenance`, sha256 16b0d10c...f544. Nothing in the tree,
+task scheduler, registry or shortcuts was changed.
+- Tracked corpus (292 files, `git ls-files`), 155 C: or ProgramData hits:
+  0 HARDCODED (no tracked code or config names this repo's own root),
+  9 HARDCODED* (absolute literal off any repo root: the shared slot bucket in
+  `ops/loop/slots.py:40` and its test pin, the first-run capture default x3,
+  game-install probe candidates x4), 1 DERIVED (`ops/fleet_kit/fleet_lanes.py`
+  env lookup; plus the two task-XML templates, placeholders only), 145 DOC.
+- EXTERNAL 56, 49 must change: `core.hooksPath` in `.git/config` (absolute),
+  the RSC-InboxResponder task working directory, 5 Desktop shortcut fields, 35
+  agent-worktree pointer pairs, 6 rows of the gitignored per-host roots
+  map, and the harness trust key. RSC's
+  `workspace_trust` passes a MISSING key, so after the move it would not catch
+  an untrusted E: workspace; flagged to MAIN as a runbook operator step.
+- Worktrees: 35 under `.claude/worktrees/`, every branch an ancestor of main;
+  34 not needed (14 with uncommitted residue to review before prune), 1 locked
+  (live session). One prunable registration whose folder is already gone.
+- Reply: one ANSWER, HOP 2, TERMINAL
+  `2026-10-07-2225-from-RSC-ANSWER-to-MAIN-2155-C-path-inventory-0-tracked-HARDCODED-9-HARDCODED-star-off-root-56-EXTERNAL-worktree-admin-and-trust-key-are-the-hazard.md`
+  written to MAIN's inbox and this inbox through the responder's `deliver`;
+  both copies read back with sha256 039d48d0...a562, 1/1 destination reached.
+  2155 recorded answered (name plus sha256) in the responder's gitignored
+  answered record through `_remember_answered` and `_remember_answered_sha`, so the responder does not send a duplicate.
+
 ## 2026-10-07 - MAIN 1927 FIX: superseded MAIN orders get no reply, marked TERMINAL
 
 MAIN 2026-10-07 1927 FIX (operator authority): the unattended responder kept
