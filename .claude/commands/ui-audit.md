@@ -24,6 +24,26 @@ Three rules govern when and by whom this runs, and none of them is negotiable:
   prompt-level property: it comes from the producer not grading its own work,
   not from a second opinion of any kind.
 
+**THE MAIN SESSION DISPATCHES THE WHOLE AUDIT TO ONE SUB-AGENT** (FLEET-KIT
+v10, MAIN 0839 ORDER of 2026-10-08, section 3 item 4; the same shape as
+`.claude/commands/done.md`). The caller is the main session, and it runs no
+phase itself: under the kit's SUBAGENT-FIRST
+PreToolUse hook every Bash, PowerShell, Read, Edit, Write, Grep, Glob,
+NotebookEdit and MultiEdit call in the main thread is denied (or, in log mode,
+logged as would-deny). It launches ONE sub-agent, the `ui-auditor` from
+`.claude/agents/`, in the foreground because the commit waits on the verdict,
+whose prompt is this file's phases in order plus the surface under audit, the
+files the slice changed, what the change was SUPPOSED to do, and the
+progress-file path (the sub-agent cannot see its caller's context, so those
+inputs travel in its prompt). The sub-agent runs every phase below and ends
+its reply with exactly one final line: `AUDIT: PASS`, or
+`AUDIT: BLOCKED - <n> MUST-FIX open`. The main session relays only that final
+line, byte-exact, plus one line for each MUST-FIX that needs a ruling, and
+never re-prints the phases. A sub-agent that returns no such line is a
+failure treated as BLOCKED: the caller relays one line saying the audit
+sub-agent returned no verdict, the commit and the merge wait, and it does not
+retry. It never synthesises a verdict line the auditor did not print.
+
 ## The shape, and what was deliberately not ported
 
 This is Sibling-A's 5-phase audit and Sibling-C's lane-4 ritual adapted to
