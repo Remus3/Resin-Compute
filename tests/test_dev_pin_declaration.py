@@ -1,11 +1,19 @@
-"""Every tool the CI gates invoke is pinned, with `==`, in requirements-dev.txt.
+"""Every tool the CI gates invoke is pinned, with `==`, in requirements-dev.in.
 
 WHAT THIS GUARD CLAIMS, and it is deliberately a claim about the DECLARATION.
 It reads the TEXT of every workflow file in `.github/workflows/`, ENUMERATED
 FROM DISK, derives - OPEN-ENDEDLY - the set of program names their `run:` blocks
 put in command position, and asserts that set is exactly the set of names
-`requirements-dev.txt` pins, and that every one of those pins is an `==` and not
+`requirements-dev.in` pins, and that every one of those pins is an `==` and not
 a floating specifier. That is the whole claim.
+
+THE DECLARATION IS requirements-dev.in (MAIN ORDER 0300). requirements-dev.txt
+is now pip-compile output from it - the hashed transitive closure CI installs
+with `--require-hashes` - so it names packages no gate invokes and cannot be
+the file graded here. The install arm below still looks for
+`-r requirements-dev.txt`, because that is the file CI actually installs;
+tests/test_supply_chain.py asserts every .in pin is in the .txt at the same
+version.
 
 THE WORKFLOW SET IS ENUMERATED, NOT NAMED. An earlier revision held `ci.yml` and
 `docs-guards.yml` as module constants. `.github/workflows/` holds exactly those
@@ -103,7 +111,7 @@ drift itself is REPORTED, not enforced, by `scripts/qa_companion.py`, which
 prints the installed-versus-declared row and never changes an exit code.
 
 WHAT THIS GUARD CANNOT CLAIM - the common-mode risk, stated rather than
-implied. It reads `requirements-dev.txt` as the truth about what CI installs,
+implied. It reads `requirements-dev.in` as the truth about what CI installs,
 and it establishes that the workflows install that file only by finding the
 `pip install -r requirements-dev.txt` TEXT in a `run:` block. It never observes
 a runner, never resolves a dependency, and knows nothing about a transitively
@@ -113,7 +121,7 @@ CI installs is this file" - is ever false, every arm below stays green while
 saying nothing. Do not read a pass here as a statement about the runner.
 
 NO YAML LIBRARY. PyYAML is installed on the author's box and is NOT in
-requirements-dev.txt, which pins ruff, pytest and mypy only. A guard importing
+requirements-dev.in, which pins ruff, pytest and mypy only. A guard importing
 it would pass here and fail on the runner, which is the reverse of useful. The
 same rule and the same line-scanner shape are in
 `tests/test_ci_history_depth.py`; this module follows it.
@@ -137,7 +145,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
-REQUIREMENTS_DEV = REPO_ROOT / "requirements-dev.txt"
+REQUIREMENTS_DEV = REPO_ROOT / "requirements-dev.in"
 
 #: The extensions GitHub Actions reads out of `.github/workflows/`. Anything
 #: else in that directory is not a workflow and is not graded.
@@ -145,7 +153,7 @@ WORKFLOW_SUFFIXES = (".yml", ".yaml")
 
 #: The tools whose absence from the pin file would let a release of that tool
 #: redden a commit that changed nothing. This is the anti-vacuity floor, and it
-#: is the set requirements-dev.txt's own header prose names. Retiring a tool is
+#: is the set requirements-dev.in's own header prose names. Retiring a tool is
 #: a legitimate edit, and it must update this constant IN THE SAME COMMIT - the
 #: failure message below says so, because a hardcoded floor that reddens without
 #: naming itself is a puzzle rather than a finding.
@@ -273,7 +281,7 @@ _SHELL_WORDS = frozenset(
 )
 
 #: `python -m <target>` where the target ships with the interpreter or with pip
-#: itself. These are not pinned in requirements-dev.txt and must not be demanded
+#: itself. These are not pinned in requirements-dev.in and must not be demanded
 #: of it. Same closed-list rule as `_SHELL_WORDS`.
 _STDLIB_MODULES = frozenset(
     {
@@ -705,7 +713,7 @@ def _declaration_report(
 
     The equality half and the floor half print two different things. Under the
     old single-sentence message a floor failure printed `gates invoke [a, b];
-    requirements-dev.txt pins [a, b]` - two IDENTICAL lists under an
+    requirements-dev.in pins [a, b]` - two IDENTICAL lists under an
     equality-shaped assert, with no mention of the floor and no hint that a
     deliberate retirement has to update a constant in this file.
     """
@@ -724,7 +732,7 @@ def _declaration_report(
             f" Invoked by a gate but not pinned: {sorted(invoked - pinned)}."
             f" Pinned but invoked by no gate: {sorted(pinned - invoked)}."
             " A name in the first list is either a tool needing an `==` pin in"
-            " requirements-dev.txt or an ordinary shell word needing to join"
+            " requirements-dev.in or an ordinary shell word needing to join"
             " _SHELL_WORDS in this file - the scanner treats unknown as tool"
             " deliberately."
         )
@@ -763,7 +771,7 @@ def test_no_pin_floats():
     """Every requirement is an exact `==`, and there are requirements to grade.
 
     Same welding. "No line floats" is trivially true of an empty file, and an
-    accidentally emptied requirements-dev.txt is exactly the edit that would
+    accidentally emptied requirements-dev.in is exactly the edit that would
     make the arm above meaningless too.
     """
     text = REQUIREMENTS_DEV.read_text(encoding="utf-8")
@@ -772,6 +780,67 @@ def test_no_pin_floats():
         f"floating: {floating}; total requirement lines:"
         f" {len(requirement_lines(text))}"
     )
+
+
+_SETUP_PYTHON = re.compile(r"^\s*(?:-\s+)?uses:\s*['\"]?actions/setup-python@")
+
+#: Command words that run the Python toolchain itself, as opposed to a tool.
+_PYTHON_COMMANDS = _PYTHON | {"pip", "pip3"}
+
+
+def runs_python(text: str, *, source: str = "<planted>") -> bool:
+    """Whether a workflow runs Python, and so must install the pin file.
+
+    THE PREDICATE, decided rather than guessed (MAIN ORDER 0300 added
+    codeql.yml, the first workflow here with no Python step at all). A
+    workflow runs Python when ANY of these holds:
+
+    1. it has an `actions/setup-python` step - it provisions an interpreter,
+       so whatever runs next runs on it;
+    2. a `run:` block puts `python`, `python3`, `pip` or `pip3` in command
+       position, after any assignments or shell keywords - the same
+       command-position reading `_classify` uses, so a `python` that is only
+       an argument or a word of prose does not count;
+    3. `invoked_tools` credits it with any tool at all. That clause is the one
+       that keeps the arm honest: a workflow that runs `ruff check .` with no
+       setup-python and no pip line is EXACTLY the unpinned-tool risk, and it
+       must not slip out of the census by never naming python.
+
+    A workflow with none of the three - `uses:`-only steps such as CodeQL's
+    init and analyze, or run blocks of pure shell words - runs no pinned tool,
+    so the pin file is nothing to it. No workflow is exempted by NAME.
+    """
+    if any(_SETUP_PYTHON.match(line) for line in text.splitlines()):
+        return True
+    for command in iter_command_lines(text, source=source):
+        for segment in _split_segments(command):
+            words = _split_words(segment)
+            index = 0
+            while index < len(words) and (
+                _ASSIGNMENT.match(words[index]) or words[index] in _KEYWORDS
+            ):
+                index += 1
+            if index < len(words) and words[index] in _PYTHON_COMMANDS:
+                return True
+    return bool(invoked_tools(text, source=source))
+
+
+def workflows_missing_the_pin_install(paths: list[Path]) -> tuple[list[str], list[str]]:
+    """(graded python-running workflows, those among them never installing
+    requirements-dev.txt)."""
+    graded: list[str] = []
+    missing: list[str] = []
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        if not runs_python(text, source=path.name):
+            continue
+        graded.append(path.name)
+        if not any(
+            _PIP_INSTALL_DEV.search(command)
+            for command in iter_command_lines(text, source=path.name)
+        ):
+            missing.append(path.name)
+    return graded, missing
 
 
 def test_every_workflow_installs_the_pin_file_it_is_being_graded_against():
@@ -788,23 +857,50 @@ def test_every_workflow_installs_the_pin_file_it_is_being_graded_against():
     The census is welded in for the same reason as above: "no workflow is
     missing the install" is trivially true of no workflows, and this arm used to
     iterate two hardcoded filenames that could not have gone empty.
+
+    GRADED: every workflow that `runs_python` - see that function for the
+    predicate. A workflow running no Python and no tool (codeql.yml) has no
+    use for the pin file. The census floor is on the GRADED set, so a
+    predicate that stopped matching cannot pass by grading nothing.
     """
     workflows = workflow_files()
-    missing = [
-        path.name
-        for path in workflows
-        if not any(
-            _PIP_INSTALL_DEV.search(command)
-            for command in iter_command_lines(
-                path.read_text(encoding="utf-8"), source=path.name
-            )
-        )
-    ]
-    assert not missing and workflows, (
-        f"workflows that never install requirements-dev.txt: {missing};"
-        f" workflows enumerated from {WORKFLOWS_DIR}:"
-        f" {[path.name for path in workflows]}"
+    graded, missing = workflows_missing_the_pin_install(workflows)
+    assert not missing and graded, (
+        f"python-running workflows that never install requirements-dev.txt:"
+        f" {missing}; graded: {graded}; workflows enumerated from"
+        f" {WORKFLOWS_DIR}: {[path.name for path in workflows]}"
     )
+
+
+def test_a_python_running_workflow_without_the_pin_install_still_reds(tmp_path):
+    """NON-VACUITY for the narrowed arm: each predicate clause grades.
+
+    Three planted workflows run Python by a different clause each and none
+    installs the pin file - all three must be reported. Two more run none:
+    a CodeQL-shaped `uses:`-only file and a pure-shell one, which must be
+    left out of the graded set. The installed one passes.
+    """
+    sha = "0" * 40
+    planted = {
+        "setup.yml": f"jobs:\n  a:\n    steps:\n      - uses: actions/setup-python@{sha} # v6\n",
+        "bare.yml": "jobs:\n  a:\n    steps:\n      - run: python -m pytest tests\n",
+        "tool.yml": "jobs:\n  a:\n    steps:\n      - run: ruff check .\n",
+        "codeql.yml": (
+            f"jobs:\n  a:\n    steps:\n      - uses: actions/checkout@{sha} # v6\n"
+            f"      - uses: github/codeql-action/init@{sha} # v4\n"
+        ),
+        "shell.yml": "jobs:\n  a:\n    steps:\n      - run: echo python is mentioned\n",
+        "good.yml": (
+            "jobs:\n  a:\n    steps:\n      - run: |\n"
+            "          python -m pip install --require-hashes -r requirements-dev.txt\n"
+            "          ruff check .\n"
+        ),
+    }
+    for name, body in planted.items():
+        (tmp_path / name).write_bytes(body.encode("ascii"))
+    graded, missing = workflows_missing_the_pin_install(workflow_files(tmp_path))
+    assert sorted(graded) == ["bare.yml", "good.yml", "setup.yml", "tool.yml"]
+    assert sorted(missing) == ["bare.yml", "setup.yml", "tool.yml"]
 
 
 def test_the_command_scanner_reads_invocations_and_not_labels_or_prose():
