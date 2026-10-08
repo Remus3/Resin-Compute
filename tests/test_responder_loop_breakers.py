@@ -550,3 +550,62 @@ def test_r5_a_limit_phrase_on_a_clean_long_exit_still_backs_off(rsp, routed, mon
     monkeypatch.setattr(subprocess, "run", _Run(text, returncode=0))
     with pytest.raises(rsp.UsageLimited):
         rsp._spawn_headless("a prompt", rsp.Bounds())
+
+
+# ---------------------------------------------------------------------------
+# FLEET-COMMON 14c - ORDER / FIX / RULING are exempt from the per-sender cap
+# ---------------------------------------------------------------------------
+
+
+def _main_at_cap(rsp, now: float) -> None:
+    for i in range(rsp.MAX_REPLIES_PER_SENDER):
+        assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, rsp.MAIN_CODE, now - 60 * (i + 1), True)
+
+
+def test_14c_a_capped_sender_still_has_its_order_picked(rsp, tmp_path):
+    """A MAIN ORDER is never held behind the per-sender reply cap."""
+    now = time.time()
+    _main_at_cap(rsp, now)
+    capped = rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, now)
+    assert rsp.MAIN_CODE in capped
+    inbox = tmp_path / "inbox"
+    order = _note(inbox, "2026-10-07-1000-from-MAIN-ORDER-to-RSC-adopt-v9.md")
+    answer = _note(inbox, "2026-10-07-1001-from-MAIN-ANSWER-to-RSC-re-question.md")
+    picked = [p.name for p in rsp.pending(inbox, rsp.OPTED_IN, set(), capped=capped)]
+    assert order.name in picked, picked
+    # Non-vacuity: the cap still holds a non-exempt class from the same sender.
+    assert answer.name not in picked, picked
+    # And without the cap the ANSWER is eligible, so the exclusion is the cap's.
+    assert answer.name in [p.name for p in rsp.pending(inbox, rsp.OPTED_IN, set())]
+
+
+@pytest.mark.parametrize("cls", ["ORDER", "FIX", "RULING"])
+def test_14c_every_exempt_class_passes_the_cap(rsp, tmp_path, cls):
+    now = time.time()
+    _main_at_cap(rsp, now)
+    inbox = tmp_path / "inbox"
+    note = _note(inbox, f"2026-10-07-1000-from-MAIN-{cls}-to-RSC-x.md")
+    capped = rsp.senders_at_cap(rsp.DEFAULT_OUTBOUND, now)
+    assert note.name in [p.name for p in rsp.pending(inbox, rsp.OPTED_IN, set(), capped=capped)]
+
+
+def test_14c_reservation_passes_an_order_and_refuses_an_answer_at_cap(rsp):
+    now = time.time()
+    _main_at_cap(rsp, now)
+    before = rsp.DEFAULT_OUTBOUND.read_bytes()
+    assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, rsp.MAIN_CODE, now, True) is False
+    assert rsp.DEFAULT_OUTBOUND.read_bytes() == before
+    assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, rsp.MAIN_CODE, now, True, exempt=True) is True
+
+
+def test_14c_reserve_targets_reads_the_class_from_the_note_name(rsp, tmp_path):
+    now = time.time()
+    _main_at_cap(rsp, now)
+    inbox = tmp_path / "inbox"
+    dest = tmp_path / "main"
+    order = _note(inbox, "2026-10-07-1000-from-MAIN-ORDER-to-RSC-x.md")
+    answer = _note(inbox, "2026-10-07-1001-from-MAIN-ANSWER-to-RSC-y.md")
+    targets, own, reasons = rsp._reserve_targets(rsp.DEFAULT_OUTBOUND, answer, [dest], inbox, now)
+    assert (targets, own, reasons) == ([], [], [rsp.OUTBOUND_UNRESERVED_REASON])
+    targets, own, reasons = rsp._reserve_targets(rsp.DEFAULT_OUTBOUND, order, [dest], inbox, now)
+    assert targets == [dest / "moon_sync_inbox"] and own == [inbox] and reasons == []
