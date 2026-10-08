@@ -60,7 +60,7 @@ STATE OBSERVED 2026-10-07 AT e16c9ae (the /done gate run)
   and deleted. Live seen ledger read back at 624 lines (15 appended). One-line
   TERMINAL ANSWER 2113 delivered, MAIN copy sha256 4d0c1471... re-hashed,
   1/1 reached. MAIN 1927 also ANSWERED old item 5 (widget reads only
-  lane-<i>.json plus inbox_status.json; no rename needed) - item retired.
+  lane-<i>.json plus ops/loop/control/inbox_status.json; no rename needed) - item retired.
   Full record in docs/LEDGER.md.
 PRIOR READING 2026-10-05 AT bed3725
   Python 3.14, private --basetemp outside
