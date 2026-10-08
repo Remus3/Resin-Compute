@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-05, gates measured at commit bed3725 on main by the /done
+Stamped 2026-10-07, gates measured at commit e16c9ae on main by the /done
 ritual; this paperwork commit landed after it. Everything below is a
 READING taken that day, not a promise about now. Re-measure before citing.
 
@@ -48,7 +48,21 @@ shared pytest temp dir: pass a private --basetemp whose PARENT EXISTS and
 which sits OUTSIDE the repo. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures.
 
-STATE OBSERVED 2026-10-05 AT bed3725 (the /done gate run)
+STATE OBSERVED 2026-10-07 AT e16c9ae (the /done gate run)
+  Python 3.14: licence 52; docs 42; qa 17 passed 2 skipped 3 noted; ruff
+  clean; tests 4119 passed 5 skipped; pity_engine 80; node 52 pass 0 fail;
+  dry run 0 fail 6 skip; mypy 41 files clean. CI on e16c9ae: ci 37717123175
+  success, docs-guards 37717123176 success.
+  LANDED 2026-10-07 (session 57): MAIN 1927 FIX (sha256 MATCH ae117890...).
+  tools/moon_sync_responder.py SUPERSEDED_MAIN_STAMPS: the 14 FIX-named MAIN
+  notes get a seen-ledger skip, verdict terminal-superseded, no reply; a
+  kit-version inference was REFUTED by the adversary (dropped live FIXes)
+  and deleted. Live seen ledger read back at 624 lines (15 appended). One-line
+  TERMINAL ANSWER 2113 delivered, MAIN copy sha256 4d0c1471... re-hashed,
+  1/1 reached. MAIN 1927 also ANSWERED old item 5 (widget reads only
+  lane-<i>.json plus inbox_status.json; no rename needed) - item retired.
+  Full record in docs/LEDGER.md.
+PRIOR READING 2026-10-05 AT bed3725
   Python 3.14, private --basetemp outside
   the repo, RESINCOMPUTE_RUNTIME_DIR unset: licence 52 passed; docs 42 passed; qa 17
   passed 2 skipped 3 noted; ruff clean; tests 4108 passed 5 skipped (same five
@@ -118,8 +132,10 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
      every fire up to the 120/day budget; no test kills deletion of the
      triage-lane _release_outbound; _safe_note_label redundant behind
      _log_safe; _release_outbound/record_outbound read-modify-write unlocked.
-  5. QUESTION open to MAIN: does the item-13d widget read only lane-<i>.json?
-     If yes, rename rsc-responder / rsc-runner progress files per its answer.
+  5. Future MAIN supersessions: the stamp list is closed by design. A new
+     superseded MAIN order needs a verified MAIN note naming its stamps; add
+     them to SUPERSEDED_MAIN_STAMPS. Not watched live yet: confirm the next
+     armed responder fire ends with no reply to any of the 14 stamps.
   6. MAIN ORDER 0020 (kit v5): watcher, secret references and dashboard
      tokens SHIPPED in kit v6+ and are now vendored (ops/fleet_kit/
      fleet_watch, fleet_secrets, tokens). Still DO NOT build local
@@ -162,11 +178,14 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
      0310 (answered), 0230 and 0300 (open, items 1-2), SS 2245 and SS 0438
      (ingested, terminal; SS 0438 reports kit defect fleet_inbox _iso near
      the epoch on Windows), CS 1634, SS 1814, RC 0222 (C4 closed in every
-     carrier, terminal), SS 0045 (ACK, ingested).
+     carrier, terminal), SS 0045 (ACK, ingested). Session 57: MAIN 1927 FIX
+     (applied, answered); the rest of the ~446-unread watcher list NOT
+     triaged this session.
   14. Housekeeping: agent worktrees under .claude/worktrees, about 27 from
      earlier sessions plus 4 from this one (slices A-D, all merged into
-     main), and the integration worktree rsc-v8-integration in this
-     session's scratchpad. Check each branch is merged before removing; the
+     main), the integration worktree rsc-v8-integration in this
+     session's scratchpad, and session 57's agent worktree for the v8-fix
+     slice (merged in e16c9ae). Check each branch is merged before removing; the
      scratchpad ruling allows deleting this session's freely.
   15. tests/test_task_liveness.py::test_the_real_probe_answers_for_a_task_
      outside_the_root_task_path failed twice mid-session ("the scheduler
@@ -194,7 +213,10 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
   fires (reversed by a MAIN ruling or a raised log cap); LANE_CAP 3 (reversed
   by a measured reason for fewer lanes or a MAIN order); a MAIN note cools 6 h
   instead of parking (reversed by a MAIN ruling); the UP031 per-file ignore
-  on the kit fleet_inbox module (reversed when a kit version ships it clean).
+  on the kit fleet_inbox module (reversed when a kit version ships it clean);
+  superseded MAIN notes by TRACKED STAMP ONLY, no kit-version inference
+  (reversed by a MAIN ruling that defines supersession by version, plus a
+  rule that can never drop a live FIX or RULING, refuter-tested).
 
 TRAPS MEASURED - none are hypothetical
   THE SESSION SCRATCHPAD IS SHARED ACROSS TREES (MAIN 0905, observed).
@@ -274,4 +296,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   DELIVERED with the recipient copy hashed; under item 14 one batched note
   per destination, HOP line in the head, never answer an answer. Silence
   reads as DISSENT. CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 57
+SESSION: 58
