@@ -39,6 +39,15 @@ supersession test.
   passed 11 skipped (host-reason skips: no POSIX sh, no exec bit, network
   opt-in, bare python already pinned, POSIX-only guard); agents/pity_engine
   80 passed; ruff clean; mypy clean.
+- Merged e16c9ae, pushed. /done gate 2026-10-07 on main, host python 3.14:
+  tests 4119 passed 5 skipped; agents/pity_engine 80 passed; licence 52,
+  docs-consistency 42; qa_companion 17 passed 2 skipped; shell node 52
+  passed; runner dry-run 0 fail 6 skip; ruff clean; mypy 41 files clean. CI
+  for e16c9ae: ci 37717123175 success, docs-guards 37717123176 success.
+- Reply: one-line TERMINAL ANSWER
+  `2026-10-07-2113-from-RSC-ANSWER-to-MAIN-1927-v8-FIX-applied-TERMINAL-no-reply.md`
+  written to MAIN's inbox and this inbox; both copies read back with the
+  same sha256 4d0c1471...f292, 1/1 destination reached.
 
 ## 2026-10-05 - FLEET-KIT v8 adopted (v6 lanes, v7 item 13, v8 item 14); responder flipped live
 

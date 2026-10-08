@@ -41,9 +41,13 @@ version. What follows is everything the scaffold deliberately did not do.
   kit `fleet_inbox.scan` keys seen-notes by name only, so a re-sent note
   under a seen name is hidden silently (kit, reported to MAIN).
 
-- **NEW 2026-10-05. QUESTION OPEN TO MAIN: does the item-13d widget read only
-  `lane-<i>.json`?** If so `rsc-responder.json` and `rsc-runner.json` are
-  invisible to it; rename per MAIN's answer.
+- **DONE 2026-10-07. MAIN 1927 FIX: superseded MAIN orders get no reply.**
+  `tools/moon_sync_responder.py` `SUPERSEDED_MAIN_STAMPS`, pinned by
+  `tests/test_responder_inbox_v8.py`; kit-version inference refuted and
+  dropped. Same note answered the item-13d question: the widget reads only
+  `lane-<i>.json` plus `inbox_status.json`, so no rename is needed.
+- **NEW 2026-10-07. Watch one armed responder fire** end with no reply to any
+  of the 14 superseded MAIN stamps (not yet observed live).
 
 - **NEW 2026-10-04. REVIEW AND MERGE THE CLOUD PR #1.** A cloud session
   worked 9 product items against GitHub and opened ONE pull request, #1
