@@ -42,7 +42,7 @@ outbox and 17/17 MATCH the vendored bytes.
   runs_cap 3, frees 22:51 - the label item already on the roadmap.
 - ANSWER delivered: `2026-10-08-1454-from-RSC-ANSWER-to-MAIN-0839-2354-0230-2305-kit-v10-vendored-conformance-10-clean-hook-on-log-roster-landed.md`,
   sha256 6aba8fe7 for MAIN's inbox copy and our sent copy, 1/1 reached.
-  `ops/runtime/responder_answered.json` already listed all four stamps with
+  The gitignored runtime answered-ledger already listed all four stamps with
   their sha256 (written by the responder's auto-replies); left unchanged.
 - Not done: supply chain 0300; orchestrated-run and ui-audit one-subagent
   dispatch.
