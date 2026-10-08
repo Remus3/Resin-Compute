@@ -92,120 +92,192 @@ def test_the_spawn_argv_pins_the_permission_floor(rsp):
     assert not any("dangerously" in a.lower() for a in argv), argv
 
 
-def test_run_reservations_stop_at_the_daily_cap(rsp):
-    now = 1_000_000.0
-    oks = [rsp.reserve_run(rsp.DEFAULT_RUNS, now + i)[0] for i in range(rsp.MAX_RUNS_PER_DAY)]
-    assert all(oks), "a run under the cap was refused"
+# ---------------------------------------------------------------------------
+# The run budget is the KIT'S (session 63, adjudicated ruling 0f, DECISION C).
+# The responder-local run ledger is retired: kit v10's `RunBudget` holds an
+# OS byte-range lock that a dead holder frees at once and never unlinks, and
+# `kit.spawn` counts every start under it, so a second responder counter
+# only drifted (it counted before `kit.spawn`, so a failed spawn cost a
+# responder run and no kit run). The per-sender outbound ledger and the hop
+# budget STAY: the kit's OutboundCap is per tree, not per sender.
+# ---------------------------------------------------------------------------
 
-    ok, why = rsp.reserve_run(rsp.DEFAULT_RUNS, now + rsp.MAX_RUNS_PER_DAY)
+#: Every name the ruling removes. A name that comes back is a second counter.
+RETIRED_RUN_LEDGER_NAMES = (
+    "MAX_RUNS_PER_DAY", "RUNS_WINDOW_SECONDS", "RUN_BUDGET_REASON",
+    "RUN_RECORD_REASON", "RUN_LOCK_REASON", "_run_rows", "run_lock_path",
+    "_acquire_run_lock", "_release_run_lock", "reserve_run", "RunLockBusy",
+    "CAP_RUNS", "_binding_run_budget", "RunBudgetSpent",
+)
 
-    assert ok is False and why == rsp.RUN_BUDGET_REASON
-    rows = json.loads(rsp.DEFAULT_RUNS.read_text())["runs"]
-    assert len(rows) == rsp.MAX_RUNS_PER_DAY, "a refused run still wrote a row"
+#: What the ruling KEEPS. The non-vacuity half of the sweep above: a removal
+#: that took these with it would pass the first arm and break the lane.
+KEPT_NAMES = (
+    "DEFAULT_RUNS", "halt_sentinel", "_kit_root", "progress_lock_path",
+    "MAX_REPLIES_PER_SENDER", "senders_at_cap", "record_outbound", "MAX_HOPS",
+    "HaltedBeforeSpawn", "KitRunBudgetSpent", "KitBudgetUnreadable", "KitBudgetLockBusy",
+)
 
 
-def test_runs_older_than_the_window_age_out(rsp):
-    now = 1_000_000.0
-    for i in range(rsp.MAX_RUNS_PER_DAY):
-        assert rsp.reserve_run(rsp.DEFAULT_RUNS, now + i)[0]
-
-    later = now + rsp.RUNS_WINDOW_SECONDS + rsp.MAX_RUNS_PER_DAY + 1
-
-    assert rsp.reserve_run(rsp.DEFAULT_RUNS, later) == (True, "")
-    assert json.loads(rsp.DEFAULT_RUNS.read_text())["runs"] == [later]
+def test_the_responder_run_ledger_is_retired(rsp):
+    left = [n for n in RETIRED_RUN_LEDGER_NAMES if hasattr(rsp, n)]
+    assert left == [], f"the retired responder run ledger is back: {left}"
+    assert "run-budget" not in rsp.TERMINATIONS, "a termination nothing can produce"
 
 
-@pytest.mark.parametrize("poison", [b"{not json", b'{"runs": "x"}', b'{"runs": [1, "two"]}'])
-def test_a_corrupt_run_record_fails_closed_and_is_not_overwritten(rsp, poison):
+def test_the_ruling_keeps_the_loop_breakers_and_the_derived_paths(rsp):
+    missing = [n for n in KEPT_NAMES if not hasattr(rsp, n)]
+    assert missing == [], f"the shrink removed a kept name: {missing}"
+    assert rsp.halt_sentinel().parent == rsp.DEFAULT_RUNS.parent
+    assert rsp.progress_lock_path().parent == rsp.DEFAULT_RUNS.parent
+
+
+def test_the_pre_spawn_refusals_survive_the_reparenting(rsp):
+    """HaltedBeforeSpawn and the kit refusals keep ONE handler at the spawn site."""
+    for cls, termination in (
+        (rsp.HaltedBeforeSpawn, "halted"),
+        (rsp.KitRunBudgetSpent, "kit-run-budget"),
+        (rsp.KitBudgetUnreadable, "usage-backoff"),
+        (rsp.KitBudgetLockBusy, "run-locked"),
+    ):
+        assert issubclass(cls, rsp.NoSessionStarted) and issubclass(cls, rsp.SpawnFailed), cls
+        assert cls.termination == termination and termination in rsp.TERMINATIONS, cls
+
+
+def _seed_legacy_runs(rsp, stamps) -> None:
+    """A responder run record as the retired ledger wrote it."""
     rsp.DEFAULT_RUNS.parent.mkdir(parents=True, exist_ok=True)
-    rsp.DEFAULT_RUNS.write_bytes(poison)
-
-    ok, why = rsp.reserve_run(rsp.DEFAULT_RUNS, 1_000_000.0)
-
-    assert ok is False and why == rsp.RUN_RECORD_REASON
-    assert rsp.DEFAULT_RUNS.read_bytes() == poison
+    rsp.DEFAULT_RUNS.write_text(json.dumps({"version": 1, "runs": list(stamps)}))
 
 
-def _seed(rsp, rows) -> None:
-    rsp.DEFAULT_RUNS.parent.mkdir(parents=True, exist_ok=True)
-    rsp.DEFAULT_RUNS.write_text(json.dumps({"version": 1, "runs": rows}))
+def _kit_starts(rsp) -> list[float]:
+    from ops.fleet_kit import fleet_headless as kit
+
+    path = rsp._kit_root() / kit.BUDGET_REL
+    return json.loads(path.read_text())["starts"] if path.exists() else []
 
 
-def test_future_stamped_rows_count_and_are_never_discarded(rsp):
-    """Lifetime probe fut.py: rows written while the clock ran fast still bind."""
-    now = 1_000_000.0
-    future = [now + 2 * rsp.RUNS_WINDOW_SECONDS] * rsp.MAX_RUNS_PER_DAY
-    _seed(rsp, future)
+def test_a_full_legacy_run_record_no_longer_refuses_a_spawn(rsp, routed):
+    """ITEM-14 MINOR (1), the retry bound: what bounds a MAIN note retried every
+    fire is the KIT'S 120, so a full legacy responder record binds nothing and
+    is never read, written or deleted."""
+    import time
 
-    ok, why = rsp.reserve_run(rsp.DEFAULT_RUNS, now)
+    _seed_legacy_runs(rsp, [time.time() - 60.0] * 120)
+    before = rsp.DEFAULT_RUNS.read_bytes()
 
-    assert ok is False and why == rsp.RUN_BUDGET_REASON, (ok, why)
-    assert json.loads(rsp.DEFAULT_RUNS.read_text())["runs"] == future
-
-
-def test_a_future_row_survives_a_successful_reservation(rsp):
-    now = 1_000_000.0
-    _seed(rsp, [now + 3600.0])
-
-    assert rsp.reserve_run(rsp.DEFAULT_RUNS, now) == (True, "")
-    assert json.loads(rsp.DEFAULT_RUNS.read_text())["runs"] == [now + 3600.0, now]
+    assert rsp._spawn_headless("a prompt", rsp.Bounds()) == "draft"
+    assert routed.calls == 1, "a full legacy record still refused the session"
+    assert len(_kit_starts(rsp)) == 1, "the kit did not count the start"
+    assert rsp.DEFAULT_RUNS.read_bytes() == before, "the retired record was written"
 
 
-@pytest.mark.parametrize(("age_offset", "counts"), [(0.0, False), (-1.0, True)])
-def test_the_window_edge_is_exact(rsp, age_offset, counts):
-    """A row exactly one window old has expired; one second younger counts."""
-    now = 1_000_000.0
-    stamp = now - rsp.RUNS_WINDOW_SECONDS - age_offset
-    _seed(rsp, [stamp] * rsp.MAX_RUNS_PER_DAY)
+def test_a_spawn_counts_one_kit_start_and_a_full_kit_budget_starts_none(rsp, routed):
+    from ops.fleet_kit import fleet_headless as kit
 
-    ok, _ = rsp.reserve_run(rsp.DEFAULT_RUNS, now)
+    assert rsp._spawn_headless("a prompt", rsp.Bounds()) == "draft"
+    assert routed.calls == 1 and len(_kit_starts(rsp)) == 1
 
-    assert ok is (not counts), (stamp, ok)
+    import time
+
+    path = rsp._kit_root() / kit.BUDGET_REL
+    path.write_text(json.dumps({"starts": [time.time() - 60.0] * kit.RUNS_CAP}))
+    with pytest.raises(rsp.KitRunBudgetSpent):
+        rsp._spawn_headless("a prompt", rsp.Bounds())
+    assert routed.calls == 1, "a session started with the kit budget spent"
+    assert not rsp.DEFAULT_RUNS.exists(), "a spawn wrote the retired responder record"
 
 
-def _hold(rsp):
-    """Take the run lock on a handle of our own, as another process would."""
-    handle = rsp._acquire_run_lock(rsp.run_lock_path(rsp.DEFAULT_RUNS))
+def test_the_kits_budget_lock_busy_ends_the_spawn_as_run_locked(rsp, routed, monkeypatch):
+    from ops.fleet_kit import fleet_headless as kit
+
+    def refuse(*_a, **_k):
+        raise kit.Refused("budget lock busy")
+
+    monkeypatch.setattr(kit, "spawn", refuse)
+    with pytest.raises(rsp.KitBudgetLockBusy) as caught:
+        rsp._spawn_headless("a prompt", rsp.Bounds())
+    assert caught.value.termination == "run-locked"
+    assert not isinstance(caught.value, rsp.KitRunBudgetSpent), "a busy lock is not a spent budget"
+
+
+def test_a_busy_kit_lock_fire_terminates_run_locked(rsp, tmp_path):
+    rsp.DEFAULT_CONFIRMATION.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_CONFIRMATION.write_text(
+        json.dumps({"confirmed_by": "RC", "note": "a.md", "expires": 9_999_999_999})
+    )
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-03-0900-from-RC-q.md")
+    rc = tmp_path / "rc"
+    (rc / "moon_sync_inbox").mkdir(parents=True)
+
+    def spawn(prompt, bounds):
+        raise rsp.KitBudgetLockBusy("budget lock busy")
+
+    result = rsp.run_once(inbox=inbox, roots={"RC": rc}, bounds=rsp.Bounds(armed=True), spawn=spawn)
+
+    assert result["termination"] == "run-locked", result
+    assert list((rc / "moon_sync_inbox").iterdir()) == []
+    assert not list(rsp.DEFAULT_STAGING.glob("held/*")), "a refused fire held a file"
+
+
+# ---------------------------------------------------------------------------
+# The OS-held lock. No longer a run-ledger lock: it guards the progress lock
+# and, since ITEM-14 MINOR (4), the per-sender outbound record.
+# ---------------------------------------------------------------------------
+
+
+def _hold(rsp, lock: Path) -> int:
+    """Take the lock on a handle of our own, as another process would."""
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    handle = rsp._acquire_os_lock(lock)
     assert handle is not None, "the arm could not take the lock it needs to hold"
     return handle
 
 
-def test_a_held_lock_starts_nothing_and_leaves_the_record_alone(rsp):
-    _seed(rsp, [])
-    handle = _hold(rsp)
-    try:
-        ok, why = rsp.reserve_run(rsp.DEFAULT_RUNS, 1_000_000.0)
-    finally:
-        rsp._release_run_lock(handle)
-
-    assert ok is False and why == rsp.RUN_LOCK_REASON, (ok, why)
-    assert json.loads(rsp.DEFAULT_RUNS.read_text())["runs"] == []
-
-
 def test_a_holder_that_dies_frees_the_lock_at_once(rsp):
     """A closed handle - what the OS does for a dead process - frees the lock."""
-    import os
-
-    _seed(rsp, [])
-    handle = _hold(rsp)
+    lock = rsp.outbound_lock_path(rsp.DEFAULT_OUTBOUND)
+    handle = _hold(rsp, lock)
+    assert rsp._acquire_os_lock(lock) is None, "non-vacuity: a held lock was taken twice"
     os.close(handle)  # no unlock call: the holder simply "dies"
 
-    assert rsp.reserve_run(rsp.DEFAULT_RUNS, 1_000_000.0) == (True, "")
+    again = rsp._acquire_os_lock(lock)
+    assert again is not None, "a dead holder's lock was not freed"
+    rsp._release_os_lock(again)
 
 
 def test_no_stale_timeout_path_is_left_and_the_lock_file_is_never_unlinked(rsp):
     """An old lock FILE with no OS lock on it blocks nothing; nothing deletes it."""
-    import os
-
     assert not hasattr(rsp, "RUN_LOCK_STALE_SECONDS")
     assert not hasattr(rsp, "_take_run_lock")
-    _seed(rsp, [])
-    lock = rsp.run_lock_path(rsp.DEFAULT_RUNS)
+    lock = rsp.outbound_lock_path(rsp.DEFAULT_OUTBOUND)
+    lock.parent.mkdir(parents=True, exist_ok=True)
     lock.write_text("left by a dead process\n")
     os.utime(lock, (1.0, 1.0))
 
-    assert rsp.reserve_run(rsp.DEFAULT_RUNS, 1_000_000.0) == (True, "")
+    assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, "RC", 1_000_000.0, True) is True
     assert lock.exists(), "the lock file was unlinked"
+
+
+def test_a_held_outbound_lock_reserves_nothing_and_releases_nothing(rsp, monkeypatch):
+    """ITEM-14 MINOR (4): both read-modify-writes run under the lock, and a
+    lock that cannot be taken leaves the record alone - the safe side."""
+    monkeypatch.setattr(rsp, "OUTBOUND_LOCK_WAIT_SECONDS", 0.0)
+    now = 1_000_000.0
+    assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, "RC", now, True) is True
+    before = rsp.DEFAULT_OUTBOUND.read_bytes()
+    handle = _hold(rsp, rsp.outbound_lock_path(rsp.DEFAULT_OUTBOUND))
+    try:
+        assert rsp.record_outbound(rsp.DEFAULT_OUTBOUND, "RC", now + 1, True) is False
+        assert rsp._release_outbound(rsp.DEFAULT_OUTBOUND, "RC", now) is False
+    finally:
+        rsp._release_os_lock(handle)
+    assert rsp.DEFAULT_OUTBOUND.read_bytes() == before, "a write landed without the lock"
+    log = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii")
+    assert "fail-closed:outbound-lock-busy" in log, log
+    # Neighbour: with the lock free again, the release lands.
+    assert rsp._release_outbound(rsp.DEFAULT_OUTBOUND, "RC", now) is True
 
 
 _CONTENDER = r"""
@@ -214,9 +286,9 @@ from pathlib import Path
 spec = importlib.util.spec_from_file_location("rsp_contender", sys.argv[1])
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
-runs, now, tries = Path(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4])
-out = [m.reserve_run(runs, now) for _ in range(tries)]
-print(json.dumps([[ok, why] for ok, why in out]))
+record, now, tries = Path(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4])
+out = [m.record_outbound(record, "RC", now + i / 1000.0, True, exempt=True) for i in range(tries)]
+print(json.dumps(out))
 """
 
 
@@ -228,9 +300,9 @@ def fake_repo(tmp_path) -> Path:
     module afresh, and every `DEFAULT_*` record then resolves from
     `RESINCOMPUTE_RUNTIME_DIR` or, unset, from `<repo root>/ops/runtime`.
     Measured 2026-10-03: launched from the MAIN checkout with the variable unset,
-    the contention arm below appended 103 `fail-closed:run-lock-busy` lines to
-    the LIVE invocation log. Children therefore load THIS copy, so even a child
-    that loses its environment lands in `tmp_path` and never in the real tree.
+    a contention arm appended 103 `fail-closed:run-lock-busy` lines to the LIVE
+    invocation log. Children therefore load THIS copy, so even a child that
+    loses its environment lands in `tmp_path` and never in the real tree.
     """
     import shutil
 
@@ -246,19 +318,18 @@ def fake_repo(tmp_path) -> Path:
     return fake
 
 
-def _contend(fake: Path, runs: Path, now: float, tries: int, cwd: Path) -> subprocess.Popen:
-    """One contender interpreter against `runs`, loading the fake repo's copy.
+def _contend(fake: Path, record: Path, now: float, tries: int, cwd: Path) -> subprocess.Popen:
+    """One contender interpreter against `record`, loading the fake repo's copy.
 
     The child's runtime is pinned EXPLICITLY to `cwd / "child-runtime"`: set,
     never inherited, so an operator's exported value cannot steer it either.
     """
-    import os
     import sys
 
     env = dict(os.environ)
     env[_runtime_env_name()] = str(cwd / "child-runtime")
     return subprocess.Popen(
-        [sys.executable, "-c", _CONTENDER, str(fake / "tools" / MODULE.name), str(runs), str(now), str(tries)],
+        [sys.executable, "-c", _CONTENDER, str(fake / "tools" / MODULE.name), str(record), str(now), str(tries)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -280,83 +351,25 @@ def _responder_records(runtime: Path) -> list[str]:
     return sorted(p.name for p in runtime.iterdir() if p.name.lstrip(".").startswith("responder"))
 
 
-def test_a_contender_child_writes_only_its_redirected_runtime(rsp, tmp_path, fake_repo):
-    """THE LEAK ARM. A child that fails closed logs, and the log must land in tmp.
-
-    The parent holds the run lock, so the child's one reservation is refused
-    with `run-lock-busy` and `_log_fail_closed` writes a line - deterministic,
-    unlike the contention arm, where a busy refusal depends on scheduling.
-    """
-    _seed(rsp, [])
-    runtime = tmp_path / "child-runtime"
-    handle = _hold(rsp)
-    try:
-        proc = _contend(fake_repo, rsp.DEFAULT_RUNS, 1_000_000.0, 1, tmp_path)
-        out, err = proc.communicate(timeout=120)
-    finally:
-        rsp._release_run_lock(handle)
-
-    assert proc.returncode == 0, err
-    assert json.loads(out.strip().splitlines()[-1]) == [[False, rsp.RUN_LOCK_REASON]], out
-    leaked = _responder_records(fake_repo / "ops" / "runtime")
-    assert leaked == [], f"the child wrote the repo's default runtime: {leaked}"
-    log = runtime / rsp.DEFAULT_INVOCATIONS.name
-    assert "fail-closed:run-lock-busy" in log.read_text(encoding="ascii"), (
-        "non-vacuity: the child never logged, so the arm proved nothing about where"
-    )
-
-
-def test_real_processes_contending_never_exceed_the_cap(rsp, tmp_path, fake_repo):
-    """Several interpreters reserve against one record at once."""
+def test_real_processes_reserving_outbound_rows_lose_none(rsp, tmp_path, fake_repo):
+    """ITEM-14 MINOR (4). Several interpreters reserve against ONE outbound
+    record at once. Every reservation that reported True must be a row: an
+    unlocked read-modify-write loses the rows a concurrent writer landed."""
+    record = rsp.DEFAULT_OUTBOUND
+    record.parent.mkdir(parents=True, exist_ok=True)
     now = 1_000_000.0
-    room = 5
-    _seed(rsp, [now - 10.0] * (rsp.MAX_RUNS_PER_DAY - room))
-    procs = [_contend(fake_repo, rsp.DEFAULT_RUNS, now, 40, tmp_path) for _ in range(4)]
-    results = []
+    procs = [_contend(fake_repo, record, now, 25, tmp_path) for _ in range(4)]
+    results: list[bool] = []
     for proc in procs:
-        out, err = proc.communicate(timeout=120)
+        out, err = proc.communicate(timeout=180)
         assert proc.returncode == 0, err
         results.extend(json.loads(out.strip().splitlines()[-1]))
 
-    oks = sum(1 for ok, _ in results if ok)
-    rows = json.loads(rsp.DEFAULT_RUNS.read_text())["runs"]
-    whys = {why for ok, why in results if not ok}
-    assert 1 <= oks <= room, (oks, whys)
-    assert len(rows) == rsp.MAX_RUNS_PER_DAY - room + oks <= rsp.MAX_RUNS_PER_DAY, (len(rows), oks)
-    assert whys <= {rsp.RUN_BUDGET_REASON, rsp.RUN_LOCK_REASON}, whys
+    oks = sum(1 for ok in results if ok)
+    rows = json.loads(record.read_text())["replies"]
+    assert oks > 0, "non-vacuity: no contender reserved anything"
+    assert len(rows) == oks, f"{oks} reservations reported landed, {len(rows)} rows survived"
     assert _responder_records(fake_repo / "ops" / "runtime") == [], "a contender wrote the default runtime"
-
-
-def test_a_busy_lock_ends_the_spawn_with_its_own_outcome(rsp, routed):
-    _seed(rsp, [])
-    handle = _hold(rsp)
-    try:
-        with pytest.raises(rsp.RunLockBusy) as caught:
-            rsp._spawn_headless("a prompt", rsp.Bounds())
-    finally:
-        rsp._release_run_lock(handle)
-
-    assert routed.calls == 0
-    assert caught.value.termination == "run-locked" and "run-locked" in rsp.TERMINATIONS
-
-
-def test_a_busy_lock_fire_terminates_run_locked(rsp, tmp_path):
-    rsp.DEFAULT_CONFIRMATION.parent.mkdir(parents=True, exist_ok=True)
-    rsp.DEFAULT_CONFIRMATION.write_text(
-        json.dumps({"confirmed_by": "RC", "note": "a.md", "expires": 9_999_999_999})
-    )
-    inbox = tmp_path / "inbox"
-    _note(inbox, "2026-10-03-0900-from-RC-q.md")
-    (tmp_path / "rc" / "moon_sync_inbox").mkdir(parents=True)
-
-    def spawn(prompt, bounds):
-        raise rsp.RunLockBusy(rsp.RUN_LOCK_REASON)
-
-    result = rsp.run_once(
-        inbox=inbox, roots={"RC": tmp_path / "rc"}, bounds=rsp.Bounds(armed=True), spawn=spawn
-    )
-
-    assert result["termination"] == "run-locked", result
 
 
 class _Run:
@@ -379,43 +392,6 @@ def routed(rsp, monkeypatch, tmp_path):
     run = _Run()
     monkeypatch.setattr(subprocess, "run", run)
     return run
-
-
-def test_a_spawn_reserves_one_run_and_the_full_budget_starts_none(rsp, routed):
-    assert rsp._spawn_headless("a prompt", rsp.Bounds()) == "draft"
-    assert routed.calls == 1
-    assert len(json.loads(rsp.DEFAULT_RUNS.read_text())["runs"]) == 1
-
-    import time
-
-    stamp = time.time()
-    rsp.DEFAULT_RUNS.write_text(
-        json.dumps({"version": 1, "runs": [stamp] * rsp.MAX_RUNS_PER_DAY})
-    )
-    with pytest.raises(rsp.RunBudgetSpent):
-        rsp._spawn_headless("a prompt", rsp.Bounds())
-    assert routed.calls == 1, "a session started with the run budget spent"
-
-
-def test_a_spent_run_budget_ends_the_fire_as_run_budget(rsp, tmp_path, monkeypatch):
-    rsp.DEFAULT_CONFIRMATION.parent.mkdir(parents=True, exist_ok=True)
-    rsp.DEFAULT_CONFIRMATION.write_text(
-        json.dumps({"confirmed_by": "RC", "note": "a.md", "expires": 9_999_999_999})
-    )
-    inbox = tmp_path / "inbox"
-    _note(inbox, "2026-10-03-0900-from-RC-q.md")
-    rc = tmp_path / "rc"
-    (rc / "moon_sync_inbox").mkdir(parents=True)
-
-    def spawn(prompt, bounds):
-        raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
-
-    result = rsp.run_once(inbox=inbox, roots={"RC": rc}, bounds=rsp.Bounds(armed=True), spawn=spawn)
-
-    assert result["termination"] == "run-budget", result
-    assert "run-budget" in rsp.TERMINATIONS
-    assert list((rc / "moon_sync_inbox").iterdir()) == []
-    assert not list(rsp.DEFAULT_STAGING.glob("held/*")), "a run-budget fire held a file"
 
 
 # ---------------------------------------------------------------------------
@@ -591,7 +567,8 @@ def test_the_fence_covers_every_runtime_default_of_the_responder(monkeypatch):
     fenced = _root_conftest()._is_live_responder_record
     unfenced = [n for n, p in defaults.items() if not fenced(p)]
     assert unfenced == [], unfenced
-    assert fenced(module.run_lock_path(module.DEFAULT_RUNS))
+    assert fenced(module.outbound_lock_path(module.DEFAULT_OUTBOUND))
+    assert fenced(module.progress_lock_path())
     assert fenced(module.DEFAULT_INBOX / "2026-10-03-0900-from-RC-q.md")
 
 
