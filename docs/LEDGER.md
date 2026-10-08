@@ -12,6 +12,28 @@ now.
 
 ---
 
+## 2026-10-07 - MAIN 1927 FIX: superseded MAIN orders get no reply, marked TERMINAL
+
+MAIN 2026-10-07 1927 FIX (operator authority): the unattended responder kept
+auto-replying, one per fire, to 2026-10-03 MAIN orders already superseded by
+kit v8 (MAIN 2026-10-05 0310). Every MAIN note went to the work lane with no
+supersession test.
+- Code, `tools/moon_sync_responder.py`: `superseded_main()` and the tracked
+  `SUPERSEDED_MAIN_STAMPS` (the 14 stamps of FIX section 2). A superseded
+  MAIN note is acked with one seen-ledger line, action skip, verdict
+  `terminal-superseded`, and no session. General rule, the safer of the two
+  offered: a MAIN note announcing FLEET-KIT vN is superseded only when the
+  vendored manifest version V > N AND the inbox holds a MAIN note announcing
+  some vM with N < M <= V; any read failure suppresses nothing. Notes already
+  seen as work are backfilled once and leave the work set the same fire; the
+  triage-off legacy path drops them too. Unlisted MAIN orders (0230 roster,
+  0300 supply chain, 0020 designs) still reach the work lane, pinned by arm.
+- Data: 15 lines appended to the live seen ledger via `fleet_inbox.mark_seen`
+  (609 -> 624 lines, read back 2026-10-07): the 14 FIX notes as
+  `terminal-superseded`, the 1927 FIX itself as `handled-by-session`.
+- Suites 2026-10-07 on host python 3.14: tests 4113 passed 11 skipped;
+  agents/pity_engine 80 passed; ruff clean; mypy clean.
+
 ## 2026-10-05 - FLEET-KIT v8 adopted (v6 lanes, v7 item 13, v8 item 14); responder flipped live
 
 MAIN orders 2237 (v6), 0215 (v7) and 0310 (v8) each verified by sha256
