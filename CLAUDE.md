@@ -20,11 +20,14 @@ inside it.
 
 ################################################################################
 #  SUB-AGENT FIRST. THE MAIN SESSION IS THE OPERATOR'S - KEEP IT CLEAR.        #
-#  Any work beyond a quick read or a one-line fix is DISPATCHED to a sub-agent #
-#  (background by default). The main session plans, dispatches, monitors and   #
-#  reports. Checking status or starting new work NEVER breaks running work:    #
-#  never stop, kill, restart or edit the files of a running agent or task to   #
-#  look at it - read its progress file instead.                                #
+#  The main session ONLY dispatches (Agent, SendMessage), monitors and         #
+#  reports. Every Bash, PowerShell, Read, Edit, Write, Grep, Glob and          #
+#  NotebookEdit call runs inside a sub-agent (background by default) - no      #
+#  quick-read or one-line-fix exception; the kit PreToolUse hook               #
+#  fleet_subagent_first.py denies them in the main thread. Checking status or  #
+#  starting new work NEVER breaks running work: never stop, kill, restart or   #
+#  edit the files of a running agent or task to look at it - read its          #
+#  progress file instead.                                                      #
 ################################################################################
 
 Source of truth: MAIN's fleet kit. A change lands ONLY as a new kit version
@@ -135,6 +138,14 @@ edit. Tree-specific rules go BELOW this block, never inside it.
        `ops/loop/control/headless_usage.jsonl` via the kit, with `kind`
        build / inbox / triage and a non-empty note label. MAIN reports the
        weekly build-vs-inbox split in its insights report.
+15. CLI DISPLAY (kit v9; the fleet UI/UX standard ruled 2026-10-07). Display
+    keys live only in the two account settings, from the kit's
+    cli_display.json; a tree sets none. Status surfaces use the kit state
+    vocabulary (tokens.json states). Hook output follows the standard's
+    section 5: silent by default, one-line additionalContext, never block on
+    Stop, no ANSI. /done's last act is `fleet_done.py mark`; its Stop hook is
+    the kit's `fleet_done.py stop-hook`. Kit helpers: fleet_statusline.js,
+    fleet_done.py.
 <!-- FLEET-COMMON END -->
 
 # Tree-specific rules (ResinCompute)
@@ -434,8 +445,28 @@ item 14 (fleet_inbox triage before any spawn, the 6-notes-a-day outbound cap,
 HOP lines, never answer an answer, kind-labelled usage lines) lands in the
 responder slice, `tools/moon_sync_responder.py`. Hard constraint from the
 order: inbox handling stays automatic and unattended; nothing may make a note
-wait for a human. Kit v8 `fleet_inbox.py` fails ruff UP031 and is
-per-file-ignored for that one rule in `ruff.toml`, never patched.
+wait for a human. Kit v10 ships the kit UP031 clean; the kit files that still
+fail a rule (UP017, UP032, BLE001) are per-file-ignored for exactly those
+rules in `ruff.toml`, never patched. `ruff.toml` carries the measured list.
+
+## Sub-agent-first hook - FLEET-KIT v10 in this tree
+
+MAIN 0839 ORDER of 2026-10-08 (FLEET-KIT v10, SHA-256 verified). The project
+`.claude/settings.json` runs `ops/fleet_kit/fleet_subagent_first.py` as a
+PreToolUse hook on Bash, PowerShell, Read, Edit, Write, Grep, Glob,
+NotebookEdit and MultiEdit. It decides only in the main thread (no
+`agent_id`); sub-agents and headless kit spawns (env
+`FLEET_SUBAGENT_FIRST=off`) are never denied.
+
+- **Mode** is the first word of `ops/loop/control/subagent_first.mode`
+  (gitignored), else env `FLEET_SUBAGENT_FIRST`, which wins. A MISSING file
+  means `deny`. The tree starts on `log`; decisions append to
+  `ops/loop/control/subagent_first.jsonl` (gitignored).
+- **Switch to deny** after 3 interactive sessions whose jsonl shows no
+  would-deny row for work that could not be dispatched, and say so in the
+  next batched note to MAIN. Blocked work that cannot be routed around stays
+  on `log` and asks MAIN for a ruling. Reversed by: a MAIN ruling or a later
+  kit version.
 
 ## Output
 

@@ -112,6 +112,13 @@ SCRIPT_SUFFIXES = (".py", ".sh", ".cmd", ".bat", ".ps1")
 #: at its declared timeout, so the declaration is a promise about latency.
 MAX_HOOK_TIMEOUT = 5
 
+#: Per-event ceilings that differ from MAX_HOOK_TIMEOUT, each set by an ORDER.
+#: PreToolUse: FLEET-KIT v10 (MAIN 0839 ORDER of 2026-10-08, s3.2) declares the
+#: SUBAGENT-FIRST hook at timeout 10. It runs before a tool call, not before
+#: the operator can type, and on any exception it exits 0 with no output, so a
+#: slow run degrades to "no decision", never to a blocked session.
+MAX_HOOK_TIMEOUT_BY_EVENT = {"PreToolUse": 10}
+
 #: Claude Code substitutes the project root for these. Accepted and unwrapped
 #: so a later edit to the self-locating form keeps resolving, and so the
 #: absolute-path guard below does not have to special-case them.
@@ -252,6 +259,26 @@ QUIET_SHAPE = re.compile(
     r")\Z"
 )
 
+#: What the kit v9 Stop hook (`ops/fleet_kit/fleet_done.py stop-hook`, MAIN
+#: 2354 ORDER of 2026-10-07) prints: NOTHING unless a validated marker exists,
+#: else ONE JSON line carrying only `terminalSequence` (STANDARD s5: silent by
+#: default, never additionalContext, never systemMessage). Whole-body anchored.
+#: Not fired by the SessionStart firing arm; graded on its own in
+#: `tests/test_fleet_kit_v9_adoption.py`.
+STOP_HOOK_SHAPE = re.compile(r'\A(?:|\{"terminalSequence": "[^"\n]*"\}\r?\n)\Z')
+
+#: What the kit v10 PreToolUse hook (`ops/fleet_kit/fleet_subagent_first.py`,
+#: MAIN 0839 ORDER of 2026-10-08) prints: NOTHING (no decision - off, log, a
+#: sub-agent, an unguarded tool, or any exception), else ONE JSON line carrying
+#: the deny decision with the kit's fixed reason. Whole-body anchored. Not
+#: fired by the SessionStart firing arm; graded on its own in
+#: `tests/test_fleet_kit_v10_adoption.py`.
+SUBAGENT_FIRST_SHAPE = re.compile(
+    r'\A(?:|\{"hookSpecificOutput": \{"hookEventName": "PreToolUse", '
+    r'"permissionDecision": "deny", "permissionDecisionReason": '
+    r'"SUBAGENT-FIRST: dispatch this to a sub-agent"\}\}\r?\n)\Z'
+)
+
 #: The EXACT declared command -> the shape its stdout must carry.
 #:
 #: Keyed on the whole command rather than on a script basename, because two
@@ -283,6 +310,8 @@ EXPECTED_SHAPE = {
     ),
     'python "$CLAUDE_PROJECT_DIR/tools/caveman_default.py"': BANNER_SHAPE,
     'python "$CLAUDE_PROJECT_DIR/tools/session_checklist.py"': SESSION_COUNTER_SHAPE,
+    'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_done.py" stop-hook': STOP_HOOK_SHAPE,
+    'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_subagent_first.py"': SUBAGENT_FIRST_SHAPE,
 }
 
 #: sha256 of the `_BANNER` string literal in `tools/caveman_default.py`, and its
@@ -852,9 +881,10 @@ def test_every_hook_declares_a_short_timeout():
             f"hooks.{hook.event} declares timeout {hook.timeout!r}, not an integer "
             "number of seconds"
         )
-        assert 1 <= hook.timeout <= MAX_HOOK_TIMEOUT, (
-            f"hooks.{hook.event} declares timeout {hook.timeout}s; a session-start "
-            f"hook must finish inside {MAX_HOOK_TIMEOUT}s or it is killed"
+        ceiling = MAX_HOOK_TIMEOUT_BY_EVENT.get(hook.event, MAX_HOOK_TIMEOUT)
+        assert 1 <= hook.timeout <= ceiling, (
+            f"hooks.{hook.event} declares timeout {hook.timeout}s; a {hook.event} "
+            f"hook must finish inside {ceiling}s or it is killed"
         )
 
 

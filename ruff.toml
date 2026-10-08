@@ -67,11 +67,18 @@ exclude = [
 "ops/supervisor.py" = ["BLE001"]
 # Tests assert on constants that read as magic numbers by design.
 "tests/*.py" = ["B011"]
-# Kit v8 fleet_inbox.py fails UP031 (8 printf-style formats, measured
-# 2026-10-05). Kit bytes are never patched; this one rule on this one kit file
-# is ignored instead of excluding the whole kit dir, and the defect is reported
-# to MAIN. Remove when a kit version ships the file clean.
-"ops/fleet_kit/fleet_inbox.py" = ["UP031"]
+# Kit v10 (MAIN 0839 ORDER of 2026-10-08) ships fleet_inbox.py and
+# fleet_done.py UP031 clean, so UP031 is no longer ignored anywhere. Measured
+# 2026-10-08 under this config with no kit per-file ignores, the v10 kit still
+# fails: fleet_inbox.py UP017 x1; fleet_done.py UP017 x1 and UP032 x3 (new in
+# v10, `str.format` replacing the old printf formats); fleet_subagent_first.py
+# BLE001 x1 (its deliberate never-fail-closed `except Exception`). Kit bytes are
+# never patched; only the failing rules on only the failing kit files are
+# ignored instead of excluding the whole kit dir, and the defect is reported to
+# MAIN. Remove an entry when a kit version ships that file clean.
+"ops/fleet_kit/fleet_inbox.py" = ["UP017"]
+"ops/fleet_kit/fleet_done.py" = ["UP017", "UP032"]
+"ops/fleet_kit/fleet_subagent_first.py" = ["BLE001"]
 "agents/pity_engine/tests/*.py" = ["B011"]
 
 [lint.isort]
