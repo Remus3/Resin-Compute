@@ -758,12 +758,12 @@ def test_the_bypass_still_spends_the_run_budget(rsp, tmp_path):
     _spend_hops(rsp, inbox)
 
     def spawn(prompt, bounds):
-        raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
+        raise rsp.KitRunBudgetSpent("the fleet kit's run budget is exhausted (120/120)")
 
     _agree(rsp)
     result = rsp.run_once(inbox=inbox, roots={"MAIN": main}, bounds=rsp.Bounds(armed=True), spawn=spawn)
 
-    assert result["termination"] == "run-budget", result
+    assert result["termination"] == "kit-run-budget", result
     assert _replies(main) == []
 
 
@@ -1353,12 +1353,17 @@ def test_a_bundle_twin_missing_is_retryable_and_an_empty_bundle_is_not(rsp, tmp_
     assert prov.reason == "the bundle is empty" and prov.retryable is False, prov
 
 
+def _kit_ledger(rsp) -> Path:
+    """The run ledger: the fleet kit's, the only one since session 63 (0f)."""
+    return rsp._kit_root() / rsp.kit.BUDGET_REL
+
+
 def test_a_deferred_note_spends_no_run_no_outbound_row_and_no_hop(rsp, tmp_path):
     inbox, main = _bed(tmp_path, outbox_bytes=None)
 
     def snap():
         return (
-            rsp.DEFAULT_RUNS.read_bytes() if rsp.DEFAULT_RUNS.is_file() else None,
+            _kit_ledger(rsp).read_bytes() if _kit_ledger(rsp).is_file() else None,
             rsp.DEFAULT_OUTBOUND.read_bytes() if rsp.DEFAULT_OUTBOUND.is_file() else None,
             rsp.hops_used(inbox),
         )

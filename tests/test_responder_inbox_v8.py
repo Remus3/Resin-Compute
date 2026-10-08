@@ -595,6 +595,62 @@ def test_d4_an_undelivered_batch_leaves_the_notes_unseen(rsp, tmp_path):
     assert not rsp.DEFAULT_ANSWERED.exists()
 
 
+def _rc_rows(rsp) -> list[dict]:
+    if not rsp.DEFAULT_OUTBOUND.exists():
+        return []
+    return [r for r in json.loads(rsp.DEFAULT_OUTBOUND.read_text())["replies"] if r["to"] == "RC"]
+
+
+def _undelivered_batch(rsp, tmp_path) -> None:
+    (tmp_path / "rc").mkdir()
+    (tmp_path / "rc" / "moon_sync_inbox").write_bytes(b"a file where the inbox should be")
+    items = _items(rsp, tmp_path / "inbox", ["2026-10-05-1600-from-RC-QUESTION-a.md"])
+    rsp._send_batch(rsp._kit_root(), "RC", items, {"RC": tmp_path / "rc"}, tmp_path / "inbox",
+                    rsp.Bounds(armed=True), time.time(), "run_once")
+
+
+def test_r5_minor2_an_undelivered_batch_gives_its_sender_reservation_back(rsp, tmp_path):
+    """ITEM-14 MINOR (2): the TRIAGE lane's `_release_outbound` call had no arm
+    that failed on its deletion. Without it a failed batch spends one of the
+    sender's per-day replies for nothing."""
+    _undelivered_batch(rsp, tmp_path)
+    assert _rc_rows(rsp) == [], "an undelivered batch kept its reservation"
+
+
+def test_r5_minor2_non_vacuity_without_the_release_the_row_stays(rsp, tmp_path, monkeypatch):
+    """The arm above reaches the reservation: with the release stubbed out, the
+    row it wrote is still there."""
+    monkeypatch.setattr(rsp, "_release_outbound", lambda *_a, **_k: False)
+    _undelivered_batch(rsp, tmp_path)
+    assert len(_rc_rows(rsp)) == 1, "non-vacuity: the batch never reserved a row"
+
+
+def test_r5_minor3_the_redundant_note_label_helper_is_gone(rsp):
+    """ITEM-14 MINOR (3): `_log_safe` is the one sanitiser on the log path."""
+    assert not hasattr(rsp, "_safe_note_label")
+    assert not hasattr(rsp, "_SAFE_NOTE_NAME")
+
+
+def test_r5_minor3_a_non_ascii_note_name_still_logs_one_ascii_line(rsp):
+    """What made the helper look necessary: the log is opened `ascii`, so a
+    note name with one non-ASCII character raised UnicodeEncodeError inside
+    `log_invocation`, which swallowed it, and the line was lost. `_log_safe`
+    now replaces it, so every caller is covered, not only the cooldown lines."""
+    name = "caf" + chr(0xE9) + "-" + chr(10) + "x.md"
+    assert rsp.log_invocation("run_once", name, "work-cooling-until-1") is True
+    lines = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines()
+    assert len(lines) == 1 and lines[0].split("\t")[2:] == ["caf?-?x.md", "work-cooling-until-1"], lines
+
+
+def test_r5_minor3_a_plain_note_name_and_a_nul_are_logged_as_they_are(rsp):
+    """Neighbours: a plain name is untouched, and a NUL is still not replaced
+    (`tests/test_responder_broadcast_refusal.py` pins that)."""
+    plain = "2026-10-05-1600-from-RC-QUESTION-a.md"
+    rsp.log_invocation("run_once", plain, "o" + chr(0) + "k")
+    line = rsp.DEFAULT_INVOCATIONS.read_text(encoding="ascii").splitlines()[-1]
+    assert line.split("\t")[2:] == [plain, "o" + chr(0) + "k"], line
+
+
 def test_d5_an_empty_roots_map_leaves_triage_notes_unseen(rsp, tmp_path, monkeypatch):
     name = "2026-10-05-1700-from-RC-QUESTION-q.md"
     _note(tmp_path / "inbox", name)
@@ -688,7 +744,7 @@ def test_d12_a_note_whose_triage_keeps_failing_is_escalated_not_retried_forever(
 def test_d12_a_budget_refusal_is_not_counted_against_the_note(rsp, tmp_path, monkeypatch):
     name = "2026-10-05-2210-from-RC-QUESTION-budget.md"
     _note(tmp_path / "inbox", name)
-    sessions = Sessions(rsp, raises=rsp.RunBudgetSpent("the runs-per-day budget is spent"))
+    sessions = Sessions(rsp, raises=rsp.KitRunBudgetSpent("the fleet kit's run budget is exhausted (120/120)"))
     for _ in range(rsp.MAX_TRIAGE_ATTEMPTS + 1):
         _fire(rsp, tmp_path, monkeypatch, sessions)
     assert [r for r in _seen(rsp) if r["note"] == name] == []
@@ -954,7 +1010,7 @@ def test_r2_d1_a_budget_refusal_is_not_a_work_attempt(rsp, tmp_path, monkeypatch
 
     def refused(prompt, bounds):
         sessions.work.append(prompt)
-        raise rsp.RunBudgetSpent("the runs-per-day budget is spent")
+        raise rsp.KitRunBudgetSpent("the fleet kit's run budget is exhausted (120/120)")
 
     sessions.spawn = refused
     for _ in range(rsp.MAX_WORK_ATTEMPTS + 1):

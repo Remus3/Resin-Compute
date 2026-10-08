@@ -240,18 +240,17 @@ TERMINATIONS = (
     # THE OUTBOUND ROW COULD NOT BE RESERVED, so nothing was delivered and the
     # note was recorded answered - dropped on purpose, the safe side.
     "reserve-failed",
-    # THE RUNS-PER-DAY BUDGET IS SPENT, or its record is unusable (fail
-    # closed), so this fire started no session. See `MAX_RUNS_PER_DAY`.
-    "run-budget",
-    # ANOTHER RESPONDER PROCESS HELD THE RUN LOCK, so this fire started no
-    # session rather than racing it for the run record.
+    # THE FLEET KIT'S BUDGET LOCK WAS BUSY (`KitBudgetLockBusy`), so this fire
+    # started no session rather than racing another process for the kit's
+    # run record. Session 63 retired the responder's own run ledger and its
+    # `run-budget` termination (ruling 0f, see `NoSessionStarted`).
     "run-locked",
     # THE OPERATOR'S HALT SENTINEL IS PRESENT (`halt_sentinel`), so this fire
     # did nothing at all. Checked in `run_once` before the cycle body.
     "halted",
-    # THE FLEET KIT'S OWN RUN BUDGET BOUND, not the responder's. Its own
-    # string because the status file must count and name a free time from
-    # the ledger that bound (`_status_budget`), and the log must say which.
+    # THE FLEET KIT'S RUN BUDGET BOUND - since session 63 the ONLY run
+    # budget. The status file counts and names a free time from the kit's
+    # ledger (`_status_budget`).
     "kit-run-budget",
     # THE QUEUE WAS EMPTY ONLY BECAUSE `defer_unverified` HELD a retryably
     # UNVERIFIABLE MAIN note for a later tick's verdict. Nothing ran.
@@ -413,14 +412,15 @@ USAGE_BACKOFF_MAX_SECONDS = 86400.0
 USAGE_LIMITED_REASON = "the session was refused for usage - backing off, no retry by another route"
 USAGE_BACKOFF_REASON = "a usage-limit backoff is in force - nothing spawned"
 
-#: THE RUN RECORD. `{"version": 1, "runs": [epoch, ...]}`, one row RESERVED per
-#: headless session BEFORE it starts, read back over a rolling day against
-#: `MAX_RUNS_PER_DAY`. FAILS CLOSED: a record present but unreadable, or one
-#: that cannot be written, starts no session.
+#: THE RETIRED RUN RECORD'S PATH, KEPT AS AN ANCHOR. Session 63 (adjudicated
+#: ruling 0f, DECISION C) retired the responder-local run ledger: the fleet
+#: kit's v10 `RunBudget` counts every start under an OS-held lock, and a
+#: second counter only drifted from it. Nothing reads or writes this file any
+#: more. The PATH stays because `halt_sentinel`, `_kit_root` and
+#: `progress_lock_path` derive from its parent, so an arm that redirects the
+#: records redirects all three. Reversed by: a kit version dropping the
+#: OS-held lock, or the kit not counting every spawn in this tree.
 DEFAULT_RUNS = RUNTIME_DIR / "responder_runs.json"
-RUN_BUDGET_REASON = "the runs-per-day budget is spent - nothing spawned"
-RUN_RECORD_REASON = "the run record could not be read or written - nothing spawned (fail closed)"
-RUN_LOCK_REASON = "another responder process holds the run lock - nothing spawned"
 
 #: THE PROVENANCE DEFERRAL RECORD (adjudicated 2026-10-03). A MAIN note whose
 #: provenance is RETRYABLY UNVERIFIABLE - MAIN's outbox copy not there yet, or a
@@ -747,52 +747,60 @@ class UsageBackoff(SpawnFailed):
     """
 
 
-class RunBudgetSpent(SpawnFailed):
-    """The runs-per-day budget is spent, or its record is unusable.
+class NoSessionStarted(SpawnFailed):
+    """A refusal raised INSIDE the spawn before any session started.
 
-    Raised INSIDE the spawn, beside the usage backoff and for the same reason:
-    the budget binds exactly a real session start and nothing else, so a fire
-    that ends `empty` or `disarmed` spends nothing. `_run_once` maps it to the
-    `run-budget` termination in the spawn site's own handler list.
+    The base of every pre-spawn refusal that maps to its own termination, so
+    the spawn site keeps ONE handler: `_run_once` reads `termination` off the
+    subclass. Never raised itself. It replaces `RunBudgetSpent` (session 63,
+    adjudicated ruling 0f, DECISION C): the responder-local run ledger is
+    retired because kit v10's `RunBudget` holds an OS lock that a dead holder
+    frees at once, never unlinks, and counts every start under it (the
+    ROADMAP "/120 COUNTER" REVERSE IF). Keeping both drifted: the responder
+    counted BEFORE `kit.spawn`, so a failed spawn cost a responder run and no
+    kit run. Alternatives rejected: (A) retire every responder bound - loses
+    the per-sender loop breaker, since the kit's OutboundCap is per tree;
+    (B) keep both counters - they drift. Reversed by: a kit version dropping
+    the OS-held lock, or the kit not counting every spawn in this tree.
     """
 
-    termination = "run-budget"
+    termination: str
 
 
-class HaltedBeforeSpawn(RunBudgetSpent):
+class HaltedBeforeSpawn(NoSessionStarted):
     """The operator's HALT sentinel appeared after the tick's own check.
 
     Raised by `_spawn_headless` immediately before `kit.spawn` (ruling on the
     refutation of 6f9dda2), so a HALT that lands mid-tick starts no session.
-    A `RunBudgetSpent` subclass so the spawn site's ONE existing handler maps
+    A `NoSessionStarted` subclass so the spawn site's ONE existing handler maps
     it, to the `halted` termination the status file already renders.
     """
 
     termination = "halted"
 
 
-class RunLockBusy(RunBudgetSpent):
-    """Another responder process holds the run lock, so nothing was started.
+class KitBudgetLockBusy(NoSessionStarted):
+    """The fleet kit's budget lock stayed busy past its wait ("budget lock
+    busy"), so nothing was started.
 
-    A subclass so the spawn site's ONE existing handler covers it, with its own
-    termination: a busy lock is not a spent budget, and the log must say which.
+    Its own termination: a busy lock is not a spent budget, and the log must
+    say which. Status Idle, because the next tick simply tries again.
     """
 
     termination = "run-locked"
 
 
-class KitRunBudgetSpent(RunBudgetSpent):
+class KitRunBudgetSpent(NoSessionStarted):
     """The fleet kit's `RunBudget` refused, so nothing was started.
 
-    The responder's own ledger may have headroom: the KIT'S ledger is the one
-    that binds, so the status file counts from it and names when ITS oldest
-    start ages out (`_status_budget`), never the responder ledger's.
+    The kit's ledger is the only run budget, so the status file counts from
+    it and names when ITS oldest start ages out (`_status_budget`).
     """
 
     termination = "kit-run-budget"
 
 
-class KitBudgetUnreadable(RunBudgetSpent):
+class KitBudgetUnreadable(NoSessionStarted):
     """The fleet kit's run-budget record could not be READ, so nothing started.
 
     Not a spent budget (adversary, 2026-10-03): a transient read error or a
@@ -808,7 +816,7 @@ class KitBudgetUnreadable(RunBudgetSpent):
 
 
 #: The fail-closed log token for an unreadable kit run-budget record, beside
-#: its siblings `run-record-unreadable` and `outbound-record-unreadable`. The
+#: its sibling `outbound-record-unreadable`. The
 #: cause is either TRANSIENT (measured 2026-10-03: a PermissionError on about
 #: 1 read in 13 under a concurrent writer on this host), which clears by the
 #: next tick, or a CORRUPT record, which the kit refuses on every start until
@@ -852,13 +860,10 @@ class _DraftRefused(ValueError):
     """
 
 
-#: THE ONE FLEET BUDGET, operator order relayed by MAIN 2026-10-03 0855
-#: (SHA-256 verified against MAIN's outbox; it retracts the other four knobs of
-#: MAIN 0845): at most this many headless runs started per rolling 24 h. A
-#: "run" is one headless SESSION started, counted in `DEFAULT_RUNS` - not a
-#: scheduled-task fire, most of which end `empty` and start nothing.
-MAX_RUNS_PER_DAY = 120
-RUNS_WINDOW_SECONDS = 86400.0
+#: THE ONE FLEET BUDGET, operator order relayed by MAIN 2026-10-03 0855: at
+#: most 120 headless runs started per rolling 24 h. Since session 63 (ruling
+#: 0f) it is enforced ONLY by the fleet kit's `RunBudget` inside `kit.spawn`,
+#: which counts every real start; this module keeps no run counter of its own.
 
 #: M1's hop budget, unchanged by MAIN 0855. The scheduled task passes no
 #: `--max-hops`, so this default is the figure the armed responder runs under.
@@ -1271,8 +1276,14 @@ def pending(
     since: float | None = None,
     deprioritise: set[str] | None = None,
     capped: set[str] | None = None,
+    held_out: list[Path] | None = None,
 ) -> list[Path]:
     """Notes from an opted-in sender that have not been answered yet.
+
+    `held_out` (hand-off 0c, appended at the END with a default): when given,
+    every note that passed every OTHER filter and was kept out ONLY by the
+    per-sender cap is appended to it, so the status can tell a cap that holds
+    a note from a cap with nothing waiting. The returned list is unchanged.
 
     DEFAULT DENY. A sender not on the list is not answered, an unparseable name
     is not answered, and this repo's OWN notes are never answered - a responder
@@ -1334,7 +1345,11 @@ def pending(
         # for the basis, the FLEET-COMMON 14 hard constraint that no note waits
         # on a human): holding one up to 24h behind a local loop breaker is the
         # defect this closes. `record_outbound` re-checks the same way.
-        if code in (capped or set()) and not _cap_exempt(child.name):
+        # DECIDED HERE, APPLIED AT THE APPEND (hand-off 0c): the note still
+        # never reaches `out`, but it is checked against every other filter
+        # first, so `held_out` names only notes the cap alone is holding.
+        cap_holds = code in (capped or set()) and not _cap_exempt(child.name)
+        if cap_holds and held_out is None:
             continue
         # LOOP BREAKER (a): never auto-answer an auto-reply, from any tree.
         # Also this tree's OWN notes: `code == SELF_CODE` above for a from-RSC
@@ -1367,7 +1382,7 @@ def pending(
             # makes `is_terminal_note` a NAME-only check.
             if is_terminal_note(child.name, ""):
                 continue
-            out.append(child)
+            (held_out if cap_holds and held_out is not None else out).append(child)
             continue
         if kit.should_skip(child.name, SELF_CODE, text[:NOTE_HEAD_CHARS]) is not None:
             continue
@@ -1378,7 +1393,7 @@ def pending(
         # caught here (pinned in tests/test_responder_uniform_budget.py).
         if is_terminal_note(child.name, text):
             continue
-        out.append(child)
+        (held_out if cap_holds and held_out is not None else out).append(child)
     return out
 
 
@@ -2743,8 +2758,16 @@ _LOG_BREAKERS = frozenset("\t\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029")
 
 
 def _log_safe(text: str) -> str:
-    """`text` with every record-splitting character replaced by `?`."""
-    return "".join("?" if c in _LOG_BREAKERS else c for c in str(text))
+    """`text` with every record-splitting character, and every non-ASCII
+    character, replaced by `?`.
+
+    NON-ASCII TOO (item-14 minor 3, session 63): the log is opened `ascii`, so
+    one non-ASCII character in a note name raised UnicodeEncodeError inside
+    `log_invocation`, which swallowed it, and the whole line was lost. Every
+    breaker but NEL and the two Unicode separators is ASCII; those three are
+    non-ASCII and caught either way.
+    """
+    return "".join("?" if c in _LOG_BREAKERS or c > "\x7f" else c for c in str(text))
 
 
 #: THE LABEL OF A DETAIL LINE A FIRE WRITES BETWEEN ITS `start` AND ITS
@@ -3583,42 +3606,12 @@ def backoff_active(path: Path, now: float) -> bool:
     return isinstance(until, (int, float)) and now < float(until)
 
 
-def _run_rows(path: Path, now: float) -> list[float] | None:
-    """Run starts still ACTIVE at `now`; [] when absent; None when CORRUPT.
-
-    ACTIVE means stamped strictly after `now - RUNS_WINDOW_SECONDS`: a row
-    exactly one window old has expired, one a second younger still counts.
-
-    A FUTURE-STAMPED ROW IS ACTIVE AND IS NEVER DISCARDED, measured by the
-    lifetime adversary: the earlier upper bound dropped rows stamped more than
-    a window ahead and the next write erased them, so after a backward clock
-    correction every run started while the clock ran fast was forgotten and
-    more than `MAX_RUNS_PER_DAY` could start in one real day. A future row now
-    counts until it ages out by the clock that wrote it.
-
-    NON-FINITE stamps (NaN, Infinity, a bool, a non-number, an int too large
-    for a float) make the whole record CORRUPT and fail closed, unchanged. A
-    NEGATIVE stamp is finite and simply long expired, so it is dropped on the
-    next write like any other aged-out row - also unchanged, and stated here
-    because it is a choice rather than an oversight.
-    """
-    doc = _load_record(path)
-    if doc is _MISSING:
-        return []
-    rows = doc.get("runs") if isinstance(doc, dict) else None
-    if not isinstance(rows, list) or not all(_finite_number(r) for r in rows):
-        return None
-    floor = now - RUNS_WINDOW_SECONDS
-    return [float(r) for r in rows if floor < float(r)]
-
-
-def run_lock_path(path: Path) -> Path:
-    """The exclusive lock beside a run record: `<record name>.lock`."""
-    return path.with_name(path.name + ".lock")
-
-
-def _acquire_run_lock(lock: Path) -> int | None:
+def _acquire_os_lock(lock: Path, wait: float = 0.0) -> int | None:
     """An OS-level exclusive lock on an open handle of `lock`, or None if busy.
+
+    Used by the progress lock and the per-sender outbound record. It was the
+    retired run ledger's lock (session 63, ruling 0f); the lock itself is
+    unchanged. `wait` (seconds, default none) polls a busy lock until then.
 
     THE OS HOLDS THE LOCK, NOT THE FILE'S EXISTENCE. The earlier `O_EXCL`
     lockfile needed a stale timeout to survive a crashed holder, and the
@@ -3638,23 +3631,27 @@ def _acquire_run_lock(lock: Path) -> int | None:
         fd = os.open(str(lock), os.O_RDWR | os.O_CREAT, 0o644)
     except (OSError, ValueError):
         return None
-    try:
-        if sys.platform == "win32":
-            import msvcrt
+    deadline = time.monotonic() + max(0.0, wait)
+    while True:
+        try:
+            if sys.platform == "win32":
+                import msvcrt
 
-            os.lseek(fd, 0, os.SEEK_SET)
-            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
 
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        os.close(fd)
-        return None
-    return fd
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return fd
+        except OSError:
+            if time.monotonic() >= deadline:
+                os.close(fd)
+                return None
+            time.sleep(0.02)
 
 
-def _release_run_lock(fd: int) -> None:
+def _release_os_lock(fd: int) -> None:
     """Unlock and close. The close alone releases the lock; the unlock is tidy."""
     try:
         if sys.platform == "win32":
@@ -3667,41 +3664,9 @@ def _release_run_lock(fd: int) -> None:
 
             fcntl.flock(fd, fcntl.LOCK_UN)
     except OSError:
-        _log_fail_closed(None, "run-lock-unlock-failed")
+        _log_fail_closed(None, "os-lock-unlock-failed")
     finally:
         os.close(fd)
-
-
-def reserve_run(path: Path, now: float) -> tuple[bool, str]:
-    """RESERVE one session start against `MAX_RUNS_PER_DAY`. FAILS CLOSED.
-
-    `(True, "")` only when the row LANDED. The whole read-modify-write happens
-    under the OS lock from `_acquire_run_lock`; a lock that cannot be taken
-    starts nothing and says so with `RUN_LOCK_REASON`. A corrupt record is
-    never overwritten - that would erase the count the cap reads - and an
-    unwritable one starts nothing. Only rows that have aged out are dropped on
-    the write.
-    """
-    if not _ensure_parent(path):
-        _log_fail_closed(None, "run-record-unwritable")
-        return False, RUN_RECORD_REASON
-    handle = _acquire_run_lock(run_lock_path(path))
-    if handle is None:
-        _log_fail_closed(None, "run-lock-busy")
-        return False, RUN_LOCK_REASON
-    try:
-        rows = _run_rows(path, now)
-        if rows is None:
-            _log_fail_closed(None, "run-record-unreadable")
-            return False, RUN_RECORD_REASON
-        if len(rows) >= MAX_RUNS_PER_DAY:
-            return False, RUN_BUDGET_REASON
-        if not atomic_write_json(path, {"version": 1, "runs": [*rows, now]}):
-            _log_fail_closed(None, "run-record-unwritable")
-            return False, RUN_RECORD_REASON
-        return True, ""
-    finally:
-        _release_run_lock(handle)
 
 
 def _finite_number(value: Any) -> bool:
@@ -3774,17 +3739,46 @@ def record_outbound(
     """
     if not delivered:
         return False
-    # RE-READ AND RE-CHECK IMMEDIATELY BEFORE THE WRITE. The cap that filtered
-    # the queue was read at the top of the cycle; a pass that overlapped this
-    # one may have reserved since. Narrows the window to this read-then-write;
-    # it is not a cross-process lock - the scheduled task's
-    # MultipleInstancesPolicy IgnoreNew is what keeps passes from overlapping.
-    rows = _outbound_rows(path, now)
-    if rows is None or not _ensure_parent(path):
+    if not _ensure_parent(path):
         return False
-    if not exempt and sum(1 for r in rows if r["to"] == to) >= MAX_REPLIES_PER_SENDER:
+    # RE-READ AND RE-CHECK UNDER THE OS LOCK (item-14 minor 4, session 63).
+    # The cap that filtered the queue was read at the top of the cycle; a
+    # writer that overlapped this one may have reserved since. Before the lock,
+    # measured: four contending interpreters reported 83 reservations landed
+    # and 27 rows survived - each read-modify-write overwrote the others.
+    # IgnoreNew on the scheduled task kept FIRES apart, but not a manual run.
+    handle = _acquire_outbound_lock(path)
+    if handle is None:
         return False
-    return atomic_write_json(path, {"version": 1, "replies": [*rows, {"to": to, "at": now}]})
+    try:
+        rows = _outbound_rows(path, now)
+        if rows is None:
+            return False
+        if not exempt and sum(1 for r in rows if r["to"] == to) >= MAX_REPLIES_PER_SENDER:
+            return False
+        return atomic_write_json(path, {"version": 1, "replies": [*rows, {"to": to, "at": now}]})
+    finally:
+        _release_os_lock(handle)
+
+
+#: How long a reservation or a release waits for another holder of the
+#: outbound lock before failing closed. A holder keeps it for one read and
+#: one atomic write, so this is generous; a dead holder frees it at once.
+OUTBOUND_LOCK_WAIT_SECONDS = 2.0
+
+
+def outbound_lock_path(path: Path) -> Path:
+    """The OS lock beside the outbound record: `<record name>.lock`. Created
+    once and never unlinked - the OS holds the lock, not the file."""
+    return path.with_name(path.name + ".lock")
+
+
+def _acquire_outbound_lock(path: Path) -> int | None:
+    """The outbound record's lock, or None (logged) when it stayed busy."""
+    handle = _acquire_os_lock(outbound_lock_path(path), OUTBOUND_LOCK_WAIT_SECONDS)
+    if handle is None:
+        _log_fail_closed(None, "outbound-lock-busy")
+    return handle
 
 
 def _reserve_targets(
@@ -3835,18 +3829,26 @@ def _release_outbound(path: Path, to: str, at: float) -> bool:
     """Remove the ONE reservation row this fire wrote for `to` at `at` (round
     4, defect 1), so the per-sender cap counts only replies that LANDED. A
     record that cannot be read or rewritten is left alone and logged: it
-    stays at the safe side, capped."""
-    rows = _outbound_rows(path, at)
-    if rows is None:
+    stays at the safe side, capped. Under the same OS lock as
+    `record_outbound` (item-14 minor 4); a busy lock leaves it capped too."""
+    handle = _acquire_outbound_lock(path)
+    if handle is None:
         _log_fail_closed(None, "outbound-unreleased")
         return False
-    for i, row in enumerate(rows):
-        if row["to"] == to and float(row["at"]) == at:
-            if atomic_write_json(path, {"version": 1, "replies": rows[:i] + rows[i + 1:]}):
-                return True
+    try:
+        rows = _outbound_rows(path, at)
+        if rows is None:
             _log_fail_closed(None, "outbound-unreleased")
             return False
-    return False
+        for i, row in enumerate(rows):
+            if row["to"] == to and float(row["at"]) == at:
+                if atomic_write_json(path, {"version": 1, "replies": rows[:i] + rows[i + 1:]}):
+                    return True
+                _log_fail_closed(None, "outbound-unreleased")
+                return False
+        return False
+    finally:
+        _release_os_lock(handle)
 
 
 def _release_undelivered(result: dict, only: set[str] | None, started: float) -> None:
@@ -4023,7 +4025,7 @@ def run_once(
     finally:
         _FIRE.ctx = None
         if lock is not None:
-            _release_run_lock(lock)
+            _release_os_lock(lock)
 
 
 #: The operator's HALT sentinel, by the name `headless/runner.py` uses for its
@@ -4032,7 +4034,7 @@ HALT_SENTINEL_NAME = "HALT"
 
 
 def halt_sentinel() -> Path:
-    """Where the HALT file lives: beside the responder's own run record.
+    """Where the HALT file lives: beside the retired run record's path.
 
     DERIVED FROM `DEFAULT_RUNS` rather than bound to a module constant, so an
     arm that redirects the records also redirects the sentinel and a live
@@ -4086,17 +4088,16 @@ _TICK_STATES: dict[str, tuple[str, str]] = {
     "halted": ("halted", "Halted"),
     "usage-limited": ("backoff", "Backing Off"),
     "usage-backoff": ("backoff", "Backing Off"),
-    "run-budget": ("limit", "Turn Limit Reached"),
     "kit-run-budget": ("limit", "Turn Limit Reached"),
     "run-locked": ("idle", "Idle"),
     "headless-refused": ("refused", "Backing Off"),
 }
 MAIN_REPLY_LIMIT_TASK = "Turn Limit Reached"
 
-#: Which ledger the status counts from, for `_status_budget`.
-CAP_RUNS, CAP_MAIN_REPLIES = "runs", "main-replies"
-#: The kit's own `RunBudget` under `_kit_root()`, read only when IT bound.
-CAP_KIT_RUNS = "kit-runs"
+#: Which ledger the status counts from, for `_status_budget`: the kit's own
+#: `RunBudget` under `_kit_root()` - the only run ledger since session 63, and
+#: the default - or the replies to MAIN when MAIN's reply cap holds a note.
+CAP_KIT_RUNS, CAP_MAIN_REPLIES = "kit-runs", "main-replies"
 
 
 def _printable_epoch(epoch: float) -> bool:
@@ -4126,8 +4127,8 @@ class _StatusBudget:
     responder's own ledgers (MAIN 1325 FIX).
 
     `used()`, `cap` and `window` come from the BINDING cap's own ledger: the
-    runs in `DEFAULT_RUNS` against `MAX_RUNS_PER_DAY`, or the replies to MAIN
-    in `DEFAULT_OUTBOUND` against `MAX_REPLIES_PER_SENDER`. `frees_at()` is the
+    kit's run starts against its cap, or the replies to MAIN in
+    `DEFAULT_OUTBOUND` against `MAX_REPLIES_PER_SENDER`. `frees_at()` is the
     epoch the oldest counted row ages out. Duck-typed to the kit's
     `RunBudget`, so the kit is called with its own parameters and not edited.
     """
@@ -4151,26 +4152,11 @@ class _StatusBudget:
 def _status_budget(cap: str, now: float) -> _StatusBudget:
     """The binding ledger's count, cap, window, and when its oldest row ages out.
 
+    `CAP_MAIN_REPLIES` reads the replies to MAIN; anything else reads the
+    kit's run ledger, the only run budget since session 63 (ruling 0f).
     A corrupt ledger counts as the cap and names no time, as the kit does;
     `_write_tick_status` then refuses to call that a limit.
     """
-    if cap == CAP_KIT_RUNS:
-        # ONE READ of the kit ledger (adversary round 3), through the kit's own
-        # parser `_load`, as the pre-check in `_spawn_headless` does. Its public
-        # `used()` and `frees_at()` read the file once EACH and both swallow a
-        # read error, so a transient failure between them mixed a failed count
-        # (the cap) with a real free time: a false limit freeing ~22 h late.
-        # Unreadable counts as the cap with NO free time, exactly as the
-        # branches below do, so `_write_tick_status` never calls it a limit.
-        kit_budget = kit.RunBudget(_kit_root() / kit.BUDGET_REL, clock=lambda: now)
-        try:
-            starts = kit_budget._load()
-        except kit.BudgetUnreadable:
-            return _StatusBudget(kit_budget.cap, kit_budget.cap, kit_budget.window, None)
-        if not _stamps_printable(starts, kit_budget.window):
-            return _StatusBudget(kit_budget.cap, kit_budget.cap, kit_budget.window, None)
-        kit_frees = starts[0] + kit_budget.window if starts else None
-        return _StatusBudget(len(starts), kit_budget.cap, kit_budget.window, kit_frees)
     if cap == CAP_MAIN_REPLIES:
         rows = _outbound_rows(DEFAULT_OUTBOUND, now)
         if rows is None:
@@ -4180,35 +4166,22 @@ def _status_budget(cap: str, now: float) -> _StatusBudget:
             return _StatusBudget(MAX_REPLIES_PER_SENDER, MAX_REPLIES_PER_SENDER, OUTBOUND_WINDOW_SECONDS, None)
         frees = min(mine) + OUTBOUND_WINDOW_SECONDS if mine else None
         return _StatusBudget(len(mine), MAX_REPLIES_PER_SENDER, OUTBOUND_WINDOW_SECONDS, frees)
-    runs = _run_rows(DEFAULT_RUNS, now)
-    if runs is None or not _stamps_printable(runs, RUNS_WINDOW_SECONDS):
-        return _StatusBudget(MAX_RUNS_PER_DAY, MAX_RUNS_PER_DAY, RUNS_WINDOW_SECONDS, None)
-    frees_run = min(runs) + RUNS_WINDOW_SECONDS if runs else None
-    return _StatusBudget(len(runs), MAX_RUNS_PER_DAY, RUNS_WINDOW_SECONDS, frees_run)
-
-
-def _binding_run_budget(now: float, runs: _StatusBudget) -> _StatusBudget | None:
-    """Of the TWO run ledgers, the one the lane waits on; None when neither is full.
-
-    RULE (adversary, 2026-10-03): a run starts only when BOTH the responder's
-    ledger and the kit's have headroom, so when both are at cap the lane frees
-    when the LATER of the two frees, and the status reports that ledger whole -
-    its count, cap, window and free time together. A full ledger with no free
-    time (corrupt) is returned as is, so the caller degrades it to a backoff.
-
-    `runs` is the caller's OWN snapshot of the responder ledger, so one tick's
-    decision reads each ledger exactly once (adversary round 3 sibling).
-    """
-    full = [
-        b for b in (runs, _status_budget(CAP_KIT_RUNS, now))
-        if b.used() >= b.cap
-    ]
-    if not full:
-        return None
-    timeless = [b for b in full if b.frees_at() is None]
-    if timeless:
-        return timeless[0]
-    return max(full, key=lambda b: b.frees_at() or 0.0)
+    # ONE READ of the kit ledger (adversary round 3), through the kit's own
+    # parser `_load`, as the pre-check in `_spawn_headless` does. Its public
+    # `used()` and `frees_at()` read the file once EACH and both swallow a
+    # read error, so a transient failure between them mixed a failed count
+    # (the cap) with a real free time: a false limit freeing ~22 h late.
+    # Unreadable counts as the cap with NO free time, exactly as the MAIN
+    # branch above does, so `_write_tick_status` never calls it a limit.
+    kit_budget = kit.RunBudget(_kit_root() / kit.BUDGET_REL, clock=lambda: now)
+    try:
+        starts = kit_budget._load()
+    except kit.BudgetUnreadable:
+        return _StatusBudget(kit_budget.cap, kit_budget.cap, kit_budget.window, None)
+    if not _stamps_printable(starts, kit_budget.window):
+        return _StatusBudget(kit_budget.cap, kit_budget.cap, kit_budget.window, None)
+    kit_frees = starts[0] + kit_budget.window if starts else None
+    return _StatusBudget(len(starts), kit_budget.cap, kit_budget.window, kit_frees)
 
 
 def _write_tick_status(result: dict | None) -> None:
@@ -4217,24 +4190,24 @@ def _write_tick_status(result: dict | None) -> None:
     Written through the kit's own `write_status`, which is atomic, to the
     kit's root - see `_kit_root` for why an arm can never reach the live file.
     A write failure is logged fail-closed and never ends the tick.
+
+    MAIN'S REPLY CAP READS "limit" ONLY WHILE IT HOLDS A NOTE (hand-off 0c,
+    session 63). Before, an idle fire with no note read "limit" whenever MAIN
+    was at `MAX_REPLIES_PER_SENDER`, even with nothing waiting, while the log
+    said `empty`. `_run_once` now records `cap_held`, the senders whose
+    otherwise-eligible notes the cap kept out of this fire's queue.
     """
     termination = (result or {}).get("termination", "crashed")
     state, task = _TICK_STATES.get(termination, ("idle", "Idle"))
-    cap = CAP_RUNS
+    cap = CAP_KIT_RUNS
     if (
         state == "idle"
         and (result or {}).get("note") is None
-        and MAIN_CODE in senders_at_cap(DEFAULT_OUTBOUND, time.time())
+        and MAIN_CODE in (result or {}).get("cap_held", ())
     ):
         state, task, cap = "limit", MAIN_REPLY_LIMIT_TASK, CAP_MAIN_REPLIES
     now = time.time()
     budget = _status_budget(cap, now)
-    if termination in (RunBudgetSpent.termination, KitRunBudgetSpent.termination):
-        # Whichever ledger refused, report the one the lane actually waits on.
-        # `cap` is CAP_RUNS here: the MAIN-cap override applies only to idle.
-        binding = _binding_run_budget(now, budget)
-        if binding is not None:
-            budget = binding
     if state == "limit" and budget.used() < budget.cap:
         # NEVER A LIMIT WITH HEADROOM (adversary, 2026-10-03): a refusal the
         # ledger re-read does not bear out - a transient read, a race - was
@@ -4362,6 +4335,7 @@ def _run_once(
     # before older mail, and no gate is skipped for it.
     answered = _answered(DEFAULT_ANSWERED)
     capped = senders_at_cap(DEFAULT_OUTBOUND, started)
+    cap_held: list[Path] = []
     candidates = pending(
         inbox,
         OPTED_IN,
@@ -4369,6 +4343,7 @@ def _run_once(
         since=bounds.window_opens,
         deprioritise=bounced,
         capped=capped,
+        held_out=cap_held,
     )
     # ITEM 14: only the work lane's notes reach a session from here.
     candidates = _work_lane_only(candidates, only)
@@ -4379,7 +4354,17 @@ def _run_once(
     # THE CAP EXEMPTION NEEDS A MATCH: `pending` lets a capped MAIN ORDER/FIX/
     # RULING through by NAME; only a MATCH verdict carries the authority the
     # exemption rests on. `_reserve_targets` re-checks the same way.
+    cap_held += [c for c in candidates if sender_of(c.name) in capped and not _verified(c, verdicts)]
     candidates = [c for c in candidates if sender_of(c.name) not in capped or _verified(c, verdicts)]
+    # HAND-OFF 0c: the senders whose notes the cap alone kept out of this
+    # fire, narrowed to the work lane like the queue. `_write_tick_status`
+    # reads "limit" for MAIN's cap only when MAIN is named here.
+    # A REPORT, never a gate - nothing in the cycle branches on it - so it is
+    # built in a local first and carries no gate tag (the census in
+    # `tests/test_responder_gate_census.py` counts only result writes that
+    # choose a value).
+    held_senders = sorted({sender_of(c.name) or "" for c in _work_lane_only(cap_held, only)})
+    result["cap_held"] = held_senders
     # RE-DROPS KEYED BY CONTENT HASH (S3 residual b): bytes already answered or
     # held under another name are not picked again, whatever their mtime.
     backfill_answered_hashes(DEFAULT_ANSWERED, inbox, roots)
@@ -4457,7 +4442,7 @@ def _run_once(
             DEFAULT_BACKOFF, exc.reset_at, started, note.name
         )
         return result
-    except RunBudgetSpent as exc:
+    except NoSessionStarted as exc:
         # NOTHING STARTED, nothing held, no metrics row - like the backoff.
         print(f"responder: {exc}")
         result["reasons"] = [str(exc)]
@@ -4795,7 +4780,7 @@ def _acquire_progress_lock() -> int | None:
     lock = progress_lock_path()
     if not _ensure_parent(lock):
         return None
-    return _acquire_run_lock(lock)
+    return _acquire_os_lock(lock)
 
 
 class _FireContext:
@@ -5022,7 +5007,7 @@ WORK_ATTEMPT_TERMINATIONS = (
 
 #: A MAIN note at `MAX_WORK_ATTEMPTS` COOLS DOWN for this long, then gets a
 #: fresh attempt window: at most 3 sessions per 6 h, about 12 a day per note,
-#: and the run budget still binds. ADJUDICATED 2026-10-05. Alternatives
+#: and the kit run budget still binds. ADJUDICATED 2026-10-05. Alternatives
 #: rejected: a terminal park (item 14 sec 0 - nothing may make a note wait for
 #: a human, and MAIN speaks for the operator) and endless per-fire retry (the
 #: runaway the round-2 refuter measured). Non-MAIN notes keep the terminal
@@ -5252,30 +5237,22 @@ def _cooling(now: float, source: str = SOURCE_RUN_ONCE) -> set[str]:
     MAIN note for 364 days). It is CLAMPED to that bound and logged (round 4,
     defect 4): a year-ahead glitch clears within 6 h of the clock's return, and
     a small backward clock step only re-bounds a valid cooldown, never drops
-    it. Names are logged only when they are plain note names (round 4, defect
-    3): a key in this record is data and may carry a TAB or a newline."""
+    it. A key in this record is data and may carry a TAB, a newline or a
+    non-ASCII character (round 4, defect 3): `log_invocation` passes every
+    column through `_log_safe`, which replaces all three (item-14 minor 3,
+    session 63, retired the duplicate `_safe_note_label` filter here)."""
     cooldown = _cooldowns(DEFAULT_WORK_ATTEMPTS)
     bound = now + MAIN_WORK_COOLDOWN_S
     clamped = {n for n, until in cooldown.items() if until > bound}
     for name in sorted(clamped):
-        _log_fire_detail(source, _safe_note_label(name), "work-cooldown-clamped")
+        _log_fire_detail(source, name, "work-cooldown-clamped")
         cooldown[name] = bound
     if clamped and not _write_attempts(DEFAULT_WORK_ATTEMPTS, _attempts(DEFAULT_WORK_ATTEMPTS), cooldown):
         _log_fail_closed(None, "work-cooldown-unrecorded")
     cooling = {n for n, until in cooldown.items() if now < until}
     for name in sorted(cooling):
-        _log_fire_detail(source, _safe_note_label(name), f"work-cooling-until-{int(cooldown[name])}")
+        _log_fire_detail(source, name, f"work-cooling-until-{int(cooldown[name])}")
     return cooling
-
-
-#: A note name as this module writes and reads them: one plain path segment.
-_SAFE_NOTE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}")
-
-
-def _safe_note_label(name: str) -> str:
-    """`name` when it is a plain note name, else a fixed placeholder.
-    `fullmatch`, never `match` with `$`, which accepts a trailing newline."""
-    return name if _SAFE_NOTE_NAME.fullmatch(name) else "<unsafe-note-name>"
 
 
 def _cool_main(note: str, now: float, source: str) -> bool:
@@ -5305,7 +5282,7 @@ def _count_work_lane(
     and one detail line - so it can never loop silently. A MAIN note is never
     parked: it COOLS DOWN (`MAIN_WORK_COOLDOWN_S`) and comes back with a fresh
     attempt window. A MAIN cooldown that cannot be recorded leaves the note
-    eligible (run budget bound) and is logged fail-closed on every fire it
+    eligible (bounded by the kit's 120-run budget) and is logged fail-closed on every fire it
     recurs (round 4, defect 2). Nothing with triage off."""
     note = result.get("note")
     if only is None or not isinstance(note, str) or note not in only:
@@ -5316,7 +5293,7 @@ def _count_work_lane(
         return
     if _is_main(note):
         # NEVER PARKED (round 4, defect 2). A cooldown that cannot be recorded
-        # leaves the MAIN note eligible, bounded by the run budget; `_cool_main`
+        # leaves the MAIN note eligible, bounded by the kit's 120 runs; `_cool_main`
         # logs it fail-closed, and does so again on every fire it recurs.
         _cool_main(note, time.time() if now is None else now, source)
         return
@@ -5488,7 +5465,7 @@ def _inbox_triage(
             _log_fire_detail(source, name, "triage-usage-limited")
             budget = 0
             continue
-        except (RunBudgetSpent, UsageBackoff, HeadlessRefused) as exc:
+        except (NoSessionStarted, UsageBackoff, HeadlessRefused) as exc:
             # The fire's state, not the note's: not counted against it.
             _log_fire_detail(source, name, f"triage-refused-{exc.__class__.__name__}")
             budget = 0
@@ -5796,7 +5773,7 @@ def _write_idle() -> None:
     try:
         kit.write_status(
             _kit_root(), SELF_CODE, "idle", "Idle", None,
-            _status_budget(CAP_RUNS, time.time()),
+            _status_budget(CAP_KIT_RUNS, time.time()),
             next_tick=time.time() + RESPONDER_TICK_SECONDS,
         )
     except (OSError, ValueError, OverflowError) as exc:
@@ -5910,15 +5887,12 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "", kind: str 
       `_capturing_run` adds the env hardening and keeps the raw result.
     - THE PERMISSION FLOOR goes on through `extra=` (`SPAWN_FLOOR`), no Bash.
     - THE PARENT MEASURES what the child no longer can (`repo_facts`).
-    - THE RESPONDER'S OWN RUN BUDGET is reserved too, under its OS lock. KEPT,
-      RE-MEASURED AGAINST v4: v4's `RunBudget` now fails closed on a corrupt
-      file, never overwrites it, and locks - but its lock is an O_EXCL lock
-      FILE that a dead holder leaves behind (every start then waits and is
-      refused until the 120 s stale-steal), and the steal UNLINKS it.
-      `tests/test_responder_uniform_budget.py` pins both properties v4 still
-      lacks: "a holder that dies frees the lock at once" and "the lock file is
-      never unlinked, no stale-timeout path". The kit's budget still binds
-      inside `spawn`, so both budgets apply.
+    - NO RESPONDER RUN BUDGET (session 63, ruling 0f, DECISION C). Kit v10's
+      `RunBudget` holds an OS byte-range lock that a dead holder frees at
+      once and never unlinks, and `spawn` counts every start under it - the
+      two properties the responder ledger was kept for. The kit's budget is
+      the only run budget; its refusals map to `KitRunBudgetSpent`,
+      `KitBudgetLockBusy` and `KitBudgetUnreadable`.
     - THE TIMEOUT comes from the agreed bounds.
     - NO CONSOLE WINDOW (`_NO_WINDOW`), and a usage-limit backoff.
 
@@ -5944,12 +5918,9 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "", kind: str 
         raise SpawnFailed("the session command was not found on PATH") from None
 
     # THE KIT'S BUDGET HAS HEADROOM, checked READ-ONLY - one read through the
-    # kit's own parser, see below - before the responder's own run is
-    # reserved (adversary 4b), so a spent
-    # kit budget burns no responder run. ACCEPTED RESIDUAL: a kit refusal that
-    # arises BETWEEN these checks and `kit.spawn` - the proxy dying, or another
-    # process taking the last kit run - still costs one responder run. That
-    # race needs a kit change to close and errs on the side of spawning less.
+    # kit's own parser, see below - so a spent kit budget is refused before
+    # the checklist moves and before `kit.spawn`. `kit.spawn` counts the start
+    # itself, under its OS lock; nothing is counted here (ruling 0f).
     #
     # ONE READ, then decide (adversary round 2): `readable()` then `can_start()`
     # read the file twice, and a failure on the second read came back as a
@@ -5972,18 +5943,6 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "", kind: str 
         raise KitRunBudgetSpent(
             f"the fleet kit's run budget is exhausted ({len(kit_starts)}/{kit_budget.cap})"
         )
-
-    # HALT BEFORE THE RESERVATION (refuted on 46c2b3e): a sentinel that landed
-    # since the tick's own check must not spend one of the day's runs. The
-    # check right before `kit.spawn` below stays, for a HALT that lands later.
-    if _halt_requested():
-        raise HaltedBeforeSpawn("the operator's HALT sentinel is present")
-
-    # THE RESPONDER'S RUNS-PER-DAY BUDGET, reserved LAST before the session,
-    # so a refused route or a missing executable spends no run.
-    reserved, why_not = reserve_run(DEFAULT_RUNS, time.time())
-    if not reserved:
-        raise (RunLockBusy if why_not == RUN_LOCK_REASON else RunBudgetSpent)(why_not)
 
     # The parent-measured facts are already in `prompt`, nonce-delimited and
     # ABOVE the note (`build_prompt`); nothing is appended after the note.
@@ -6026,8 +5985,10 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "", kind: str 
         raise _kit_budget_unreadable() from None
     except kit.Refused as exc:
         why = str(exc)
-        if "lock busy" in why:
-            raise RunLockBusy(why) from None
+        if "budget lock busy" in why:
+            # By TEXT, before the "budget" match below: a busy lock is not a
+            # spent budget, and the next tick simply tries again.
+            raise KitBudgetLockBusy(why) from None
         raise (KitRunBudgetSpent if "budget" in why else HeadlessRefused)(why) from None
     except SpawnFailed:
         raise
