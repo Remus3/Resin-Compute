@@ -11,6 +11,13 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-08. Kit v10 residue (session 62 merge).** (a) The
+  `orchestrated-run.md` and `ui-audit.md` skills still need kit v10 item-4
+  one-subagent dispatch: the main thread launches ONE sub-agent that runs the
+  skill, as `.claude/commands/done.md` now does. (b) Open question: does the
+  responder's own budget ledger retire now that kit v10 frees dead-holder
+  locks? Answer it before touching `tools/moon_sync_responder.py` budget code.
+
 - **E: move follow-through (session 59).** Steps a-c DONE session 60 (see
   `docs/LEDGER.md`): session started at E:, C: copy recycled and replaced by
   a junction to E:, RSC-InboxResponder re-armed from E: with a new window.

@@ -467,6 +467,14 @@ NotebookEdit and MultiEdit. It decides only in the main thread (no
   next batched note to MAIN. Blocked work that cannot be routed around stays
   on `log` and asks MAIN for a ruling. Reversed by: a MAIN ruling or a later
   kit version.
+- **Command form.** The hook command is
+  `python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_subagent_first.py"`, not
+  the order's bare relative path. Alternative rejected: the bare relative
+  path `python ops/fleet_kit/fleet_subagent_first.py`. Why: if the hook's
+  cwd moves or the script is not found, python exits 2, and a PreToolUse
+  exit 2 blocks every guarded tool; every other hook in
+  `.claude/settings.json` already uses the `$CLAUDE_PROJECT_DIR` form.
+  Reversed by: a MAIN ruling or a kit-shipped command form.
 
 ## Output
 
