@@ -327,17 +327,28 @@ def test_a_reader_holding_the_file_on_the_final_write_still_ends_done(
     real = kit.write_progress
     state: dict[str, Any] = {"held": None, "timer": None, "refused": 0}
 
+    # Kit v10 (MAIN 0839 ORDER s2) retries `replace` INSIDE `_atomic_write`, so
+    # a held reader may never surface as an OSError from `write_progress`.
+    # Contention is therefore counted where it happens, at `Path.replace`,
+    # whichever layer - the kit's retry or the runner's - absorbs it.
+    real_replace = Path.replace
+
+    def _counting_replace(self, target):
+        try:
+            return real_replace(self, target)
+        except PermissionError:
+            state["refused"] += 1
+            raise
+
+    monkeypatch.setattr(Path, "replace", _counting_replace)
+
     def _wrapped(root, task, **kwargs):
         path = Path(root) / kit.PROGRESS_REL / (task + ".json")
         if kwargs.get("status") == "done" and state["held"] is None:
             state["held"] = open(path, "rb")  # noqa: SIM115 - closed by the timer
             state["timer"] = threading.Timer(0.05, state["held"].close)
             state["timer"].start()
-        try:
-            return real(root, task, **kwargs)
-        except OSError:
-            state["refused"] += 1
-            raise
+        return real(root, task, **kwargs)
 
     monkeypatch.setattr(kit, "write_progress", _wrapped)
     _register(JOB_A, _ok(JOB_A))

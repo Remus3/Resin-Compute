@@ -126,3 +126,14 @@ ops/moon_sync_repos.json
 
 # FLEET-KIT v3 runtime: status, budget, usage, progress (MAIN 0955 s2.5, 1014 s2)
 ops/loop/control/
+# FLEET-KIT v9 /done marker and its Stop-hook dedupe file (MAIN 2354 ORDER
+# s2.4). Already covered by the directory rule above; named so the order's
+# two paths stay ignored if that rule is ever narrowed.
+ops/loop/control/session_done.json
+ops/loop/control/session_done.seen
+# FLEET-KIT v10 SUBAGENT-FIRST hook mode file and decision log (MAIN 0839
+# ORDER s3.3). Covered by the directory rule above; named so they stay
+# ignored if that rule is ever narrowed. The mode file is per-checkout
+# runtime state: the merger writes `log` in the main checkout.
+ops/loop/control/subagent_first.mode
+ops/loop/control/subagent_first.jsonl

@@ -2,11 +2,14 @@
 
 ################################################################################
 #  SUB-AGENT FIRST. THE MAIN SESSION IS THE OPERATOR'S - KEEP IT CLEAR.        #
-#  Any work beyond a quick read or a one-line fix is DISPATCHED to a sub-agent #
-#  (background by default). The main session plans, dispatches, monitors and   #
-#  reports. Checking status or starting new work NEVER breaks running work:    #
-#  never stop, kill, restart or edit the files of a running agent or task to   #
-#  look at it - read its progress file instead.                                #
+#  The main session ONLY dispatches (Agent, SendMessage), monitors and         #
+#  reports. Every Bash, PowerShell, Read, Edit, Write, Grep, Glob and          #
+#  NotebookEdit call runs inside a sub-agent (background by default) - no      #
+#  quick-read or one-line-fix exception; the kit PreToolUse hook               #
+#  fleet_subagent_first.py denies them in the main thread. Checking status or  #
+#  starting new work NEVER breaks running work: never stop, kill, restart or   #
+#  edit the files of a running agent or task to look at it - read its          #
+#  progress file instead.                                                      #
 ################################################################################
 
 Source of truth: MAIN's fleet kit. A change lands ONLY as a new kit version
@@ -117,3 +120,11 @@ edit. Tree-specific rules go BELOW this block, never inside it.
        `ops/loop/control/headless_usage.jsonl` via the kit, with `kind`
        build / inbox / triage and a non-empty note label. MAIN reports the
        weekly build-vs-inbox split in its insights report.
+15. CLI DISPLAY (kit v9; the fleet UI/UX standard ruled 2026-10-07). Display
+    keys live only in the two account settings, from the kit's
+    cli_display.json; a tree sets none. Status surfaces use the kit state
+    vocabulary (tokens.json states). Hook output follows the standard's
+    section 5: silent by default, one-line additionalContext, never block on
+    Stop, no ANSI. /done's last act is `fleet_done.py mark`; its Stop hook is
+    the kit's `fleet_done.py stop-hook`. Kit helpers: fleet_statusline.js,
+    fleet_done.py.

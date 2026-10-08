@@ -27,6 +27,21 @@ goes into the files below - `docs/LEDGER.md`, `ROADMAP.md` and
 earlier in the session or from a subagent; record only what you observed in
 this ritual.
 
+**THE MAIN SESSION DISPATCHES THE WHOLE RITUAL TO ONE SUB-AGENT** (FLEET-KIT
+v10, MAIN 0839 ORDER of 2026-10-08, section 3 item 4). The main session runs
+no section itself: under the kit's SUBAGENT-FIRST PreToolUse hook every Bash,
+PowerShell, Read, Edit, Write, Grep and Glob call in the main thread is denied
+(or, in log mode, logged as would-deny). It launches ONE sub-agent, in the
+foreground, whose prompt is this file's sections in order plus the session
+topic, the session counter `n` and the list of checklist tasks the session
+printed (the sub-agent cannot see the main thread's context, so the pre-flight
+inputs travel in its prompt). The sub-agent runs every section below and ends
+its reply with exactly one line: `Done ritual complete, safe to clear`, or the
+one line naming the failure that stopped it. The main session relays only
+that final line, byte-exact, and nothing else. A sub-agent that returns no
+such line is a failure; the main session relays `/done failed - the ritual
+sub-agent returned no final line` and does not retry.
+
 ## Pre-flight - the session checklist
 
 Pre-flight: every checklist task done or carried into the hand-off.
@@ -169,10 +184,32 @@ failure. `--check` reports drift and writes nothing. Any other refusal is the
 failure line - fix `RSC-NEXT-SESSION.txt` and re-run. Never hand-write anything
 onto the Desktop.
 
-## 10. The one line
+## 10. The done marker, then the one line
 
-Print exactly `Done ritual complete, safe to clear`, or the one line naming the
-failure that stopped the ritual. Nothing before it, nothing after it. Never
+The LAST act of the ritual (FLEET-KIT v9, FLEET-COMMON item 15, MAIN 2354
+ORDER of 2026-10-07). Only after the commit and the hand-off have been READ
+BACK, write the marker, with n the counter the CURRENT session ran under (the
+value read in section 7, not the n+1 just written):
+
+```
+python ops/fleet_kit/fleet_done.py mark --session <n> --status done
+```
+
+If any section stopped the ritual, still write the marker, naming the step:
+
+```
+python ops/fleet_kit/fleet_done.py mark --session <n> --status failed --reason "<step>"
+```
+
+The kit reads HEAD and hashes `RSC-NEXT-SESSION.txt` itself and writes its session_done marker under the
+MAIN checkout's loop control directory (gitignored runtime state). Its
+stdout line is NOT chat: it is the marker's receipt and is not repeated. The
+project Stop hook (`fleet_done.py stop-hook` in `.claude/settings.json`) then
+sets the tab title; any later commit or hand-off edit invalidates the marker,
+which is correct.
+
+Then print exactly `Done ritual complete, safe to clear`, or the one line
+naming the failure that stopped the ritual. Nothing before it, nothing after it. Never
 print the hand-off or a next-session prompt into chat; the operator opens
 `RSC-NEXT-SESSION.txt` and types only "continue", "/done" or "/clear".
 

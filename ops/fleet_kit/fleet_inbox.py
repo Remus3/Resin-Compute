@@ -32,7 +32,13 @@ Rules enforced here:
   and RULING are exempt; several answers to one destination go in ONE note;
 - never answer an answer; a note chain stops at MAX_HOPS (2) unless the reply
   carries new work (the `HOP: <n>` header line, absent = 1);
-- cost_split() sorts usage lines into build / inbox / unattributed spend.
+- cost_split() sorts usage lines into build / inbox / unattributed spend;
+  kind "inbox" is a run doing the work a note orders, "triage" the cheap look.
+
+v10: a block-quoted marker line is not a marker; scan reads a 4096-byte head
+and re-offers a seen name whose bytes changed (the ledger records sha256);
+enqueue_work / pending_work / mark_work_done keep inbox_work.jsonl, the WORK
+queue a tree's lane tick consumes; no printf-style formatting (ruff UP031).
 
 Pure stdlib. No machine path, account id or repo name appears in this file.
 """
@@ -45,14 +51,14 @@ import re
 import time
 from pathlib import Path
 
-INBOX_VERSION = 1
+INBOX_VERSION = 3
 OUTBOUND_CAP = 6
 MAX_HOPS = 2
 EXEMPT = ("ORDER", "FIX", "RULING")
 ACK_CLASSES = ("ACK", "INFORMATION", "TERMINAL", "CORRECTION-ACCEPTED",
-               "POLL-ANSWER", "RECEIVED", "NO-REPLY", "NOREPLY")
+               "POLL-ANSWER", "RECEIVED", "NO-REPLY", "NOREPLY", "REPORT")
 ANSWER_CLASSES = ("ANSWER", "ACK", "RECEIVED", "POLL-ANSWER", "INFORMATION",
-                  "CORRECTION-ACCEPTED", "RESPONDER", "REPLY")
+                  "CORRECTION-ACCEPTED", "RESPONDER", "REPLY", "AUTO-REPLY")
 TRIAGE_SPAWN = {"model": "sonnet", "effort": "low", "bare": True, "timeout": 300}
 SKIP, ACK, WORK, TRIAGE = "skip", "ack", "work", "triage"
 VERDICTS = ("NOREPLY", "ACK", "ANSWER")
@@ -60,9 +66,14 @@ KINDS = ("build", "inbox", "triage", "unattributed")
 SEEN_REL = Path("ops/loop/control/inbox_seen.jsonl")
 OUTBOUND_REL = Path("ops/loop/control/outbound_notes.jsonl")
 USAGE_REL = Path("ops/loop/control/headless_usage.jsonl")
+WORK_REL = Path("ops/loop/control/inbox_work.jsonl")
+HEAD_BYTES = 4096
 _SENDER = re.compile(r"(?:^|[-_])(?i:from)-([A-Z]+)-")
 _CLASS = re.compile(r"(?:^|[-_])(?i:from)-[A-Z]+-([A-Za-z]+(?:-[A-Z]+)?)")
-_TITLE = re.compile(r"^#+\s*(?i:from)\s+([A-Z]+)\b(?:\s*-\s*([A-Z][A-Za-z-]*))?")
+_AUTO = re.compile(r"(?:^|[-_])(?i:from)-[A-Z]+-(?i:auto[-_]?reply)(?:[-_.]|$)")
+_TITLE = re.compile(r"^#+\s*(?i:from)\s+([A-Z]+)\b(?:\s*\([^)]*\))?"
+                    r"(?:\s*-\s*([A-Z][A-Za-z-]*))?")
+_RESPONDER_TAG = re.compile(r"^\[([A-Z]+)-RESPONDER\]", re.M)
 _HOP = re.compile(r"^\s*HOP:\s*(\d+)\s*$", re.M)
 _VERDICT = re.compile(r"^\s*VERDICT:\s*([A-Z-]+)\s*$", re.M)
 _MARK = r"(?:TERMINAL|NO[-_ ]?REPLY)"
@@ -86,7 +97,7 @@ class Decision:
         return {k: getattr(self, k) for k in self.__slots__}
 
     def __repr__(self):
-        return "Decision(%s)" % self.as_dict()
+        return f"Decision({self.as_dict()})"
 
 
 # ---------------------------------------------------------------- classify
@@ -111,17 +122,28 @@ def sender(name, head=""):
     if m:
         return m.group(1)
     t = _title(head)
-    return t.group(1) if t else None
+    if t:
+        return t.group(1)
+    r = _RESPONDER_TAG.search(head or "")
+    return r.group(1) if r else None
 
 
 def note_class(name, head=""):
-    """ORDER, FIX, ANSWER, ... from the name (`-from-XX-<CLASS>-`), else the title."""
+    """ORDER, FIX, ANSWER, ... from the name (`-from-XX-<CLASS>-`), else the title.
+    A responder's `-from-XX-auto-reply-to-<quoted note>` is AUTO-REPLY (an
+    answer), never the class of the note it quotes (v9)."""
+    if _AUTO.search(_base(name)):
+        return "AUTO-REPLY"
     m = _CLASS.search(_base(name))
     if m:
         word = m.group(1).upper()
         return word if word in ACK_CLASSES else word.split("-")[0]
     t = _title(head)
-    return t.group(2).upper().split("-")[0] if t and t.group(2) else None
+    if t and t.group(2):
+        return t.group(2).upper().split("-")[0]
+    if _RESPONDER_TAG.search(head or ""):
+        return "AUTO-REPLY"
+    return None
 
 
 def hop(head):
@@ -136,7 +158,9 @@ def _terminal(name, head):
     if "TERMINAL" in toks or "NOREPLY" in toks or "-NO-REPLY-" in joined:
         return True
     for line in (head or "").splitlines():
-        text = line.strip().lstrip("#*>- \t").rstrip("* \t").upper()
+        if line.lstrip().startswith(">"):
+            continue  # a quoted marker belongs to the quoted note (v10)
+        text = line.strip().lstrip("#*- \t").rstrip("* \t").upper()
         if text and _MARKER.match(text):
             return True
     return False
@@ -151,15 +175,15 @@ def classify(name, own_code, head=""):
     if snd == own_code:
         return Decision(SKIP, cls, snd, "self", h)
     if cls in EXEMPT:
-        return Decision(WORK, cls, snd, "class %s escalates" % cls, h)
+        return Decision(WORK, cls, snd, f"class {cls} escalates", h)
     if _terminal(name, head):
         return Decision(SKIP, cls, snd, "terminal", h)
     if cls in ACK_CLASSES:
-        return Decision(ACK, cls, snd, "ack class %s" % cls, h)
+        return Decision(ACK, cls, snd, f"ack class {cls}", h)
     if cls in ANSWER_CLASSES:
         return Decision(ACK, cls, snd, "never answer an answer", h)
     if h >= MAX_HOPS:
-        return Decision(ACK, cls, snd, "hop %d >= %d" % (h, MAX_HOPS), h)
+        return Decision(ACK, cls, snd, f"hop {h} >= {MAX_HOPS}", h)
     return Decision(TRIAGE, cls, snd, "unclassified", h)
 
 
@@ -196,11 +220,22 @@ def next_hop(incoming_hop, new_work=False):
 # ---------------------------------------------------------------- ledgers
 
 def _local_day(epoch):
-    return _dt.datetime.fromtimestamp(epoch).strftime("%Y-%m-%d")
+    try:
+        return _dt.datetime.fromtimestamp(epoch).strftime("%Y-%m-%d")
+    except (OSError, OverflowError, ValueError):
+        return (_EPOCH + _dt.timedelta(seconds=epoch)).strftime("%Y-%m-%d")
+
+
+_EPOCH = _dt.datetime(1970, 1, 1, tzinfo=_dt.timezone.utc)
 
 
 def _iso(epoch):
-    return _dt.datetime.fromtimestamp(epoch).astimezone().isoformat(timespec="seconds")
+    """Local ISO time. Near the epoch Windows' localtime() raises OSError 22;
+    fall back to UTC arithmetic there (v9; same class as the v5 headless fix)."""
+    try:
+        return _dt.datetime.fromtimestamp(epoch).astimezone().isoformat(timespec="seconds")
+    except (OSError, OverflowError, ValueError):
+        return (_EPOCH + _dt.timedelta(seconds=epoch)).isoformat(timespec="seconds")
 
 
 def _append(path, doc):
@@ -223,27 +258,60 @@ def _lines(path):
     return out
 
 
+def _sha256(path):
+    import hashlib
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def seen_hashes(root):
+    """{note name: sha256 of its LATEST ledger line, or None for a v8/v9 line}."""
+    out = {}
+    for d in _lines(Path(root) / SEEN_REL):
+        if d.get("note"):
+            out[d["note"]] = d.get("sha256")
+    return out
+
+
 def seen(root):
-    return {d.get("note") for d in _lines(Path(root) / SEEN_REL)}
+    return set(seen_hashes(root))
 
 
 def mark_seen(root, note, decision, verdict=None, clock=time.time):
-    """The mechanical ack: one ledger line, no note sent."""
+    """The mechanical ack: one ledger line, no note sent. v10 records the note's
+    sha256 when the note path is readable, so a re-sent note under a seen name
+    is offered again (RSC 0523 item 8)."""
     doc = {"ts": _iso(clock()), "note": _base(note), "action": decision.action,
            "cls": decision.cls, "reason": decision.reason, "verdict": verdict}
+    digest = _sha256(note) if Path(str(note)).is_file() else None
+    if digest:
+        doc["sha256"] = digest
     _append(Path(root) / SEEN_REL, doc)
     return doc
 
 
-def scan(root, inbox_dir, own_code, head_bytes=1500):
+def _is_seen(p, done):
+    """Seen = the name is in the ledger and, when its latest line carries a
+    sha256, the file still hashes to it. A legacy line (no sha256) stays seen."""
+    if p.name not in done:
+        return False
+    want = done[p.name]
+    return want is None or _sha256(p) == want
+
+
+def scan(root, inbox_dir, own_code, head_bytes=HEAD_BYTES):
     """Unseen notes in inbox_dir, oldest mtime first (FLEET-COMMON 7), each with
-    its classify() Decision. Directories (kit bundles) are skipped."""
-    done = seen(root)
+    its classify() Decision. Directories (kit bundles) are skipped. v10: the
+    head read is 4096 bytes (HOP lines sit below long titles) and a seen name
+    whose bytes changed since it was marked is offered again."""
+    done = seen_hashes(root)
     rows = []
     with contextlib.suppress(OSError):
         for p in Path(inbox_dir).iterdir():
-            if p.is_file() and p.suffix.lower() in (".md", ".txt") and p.name not in done \
-                    and p.name.upper() != "README.TXT":
+            if p.is_file() and p.suffix.lower() in (".md", ".txt") \
+                    and p.name.upper() != "README.TXT" and not _is_seen(p, done):
                 rows.append((p.stat().st_mtime, p))
     out = []
     for _, p in sorted(rows):
@@ -253,6 +321,50 @@ def scan(root, inbox_dir, own_code, head_bytes=1500):
             continue
         out.append((p, classify(p.name, own_code, head)))
     return out
+
+
+# ---------------------------------------------------------------- work queue
+
+def enqueue_work(root, note, decision, clock=time.time):
+    """Append one WORK row (ORDER / FIX / RULING) to inbox_work.jsonl, keyed by
+    note name + sha256. A row already queued for the same key is not doubled.
+    Turning a row into a lane is the tree's policy; the kit only queues (v10,
+    RC 2220 a)."""
+    key = {"note": _base(note), "sha256": _sha256(note)}
+    for d in _lines(Path(root) / WORK_REL):
+        if d.get("op") == "queued" and d.get("note") == key["note"] \
+                and d.get("sha256") == key["sha256"]:
+            return None
+    doc = {"ts": _iso(clock()), "op": "queued", **key, "cls": decision.cls,
+           "sender": decision.sender, "hop": decision.hop}
+    _append(Path(root) / WORK_REL, doc)
+    return doc
+
+
+def pending_work(root):
+    """Queued WORK rows with no later done line, oldest first."""
+    rows, done = [], set()
+    for d in _lines(Path(root) / WORK_REL):
+        key = (d.get("note"), d.get("sha256"))
+        if d.get("op") == "queued":
+            rows.append(d)
+        elif d.get("op") == "done":
+            done.add(key)
+    out, keys = [], set()
+    for d in rows:
+        key = (d.get("note"), d.get("sha256"))
+        if key not in done and key not in keys:
+            keys.add(key)
+            out.append(d)
+    return out
+
+
+def mark_work_done(root, row, outcome="done", clock=time.time):
+    """Close a queued row by appending a done line (the ledger is append-only)."""
+    doc = {"ts": _iso(clock()), "op": "done", "note": row.get("note"),
+           "sha256": row.get("sha256"), "outcome": str(outcome)[:200]}
+    _append(Path(root) / WORK_REL, doc)
+    return doc
 
 
 class OutboundCap:
@@ -286,11 +398,12 @@ def batch_note(code, to, answers, hop_n=2, stamp=None):
     classify() stops the chain."""
     stamp = stamp or _dt.datetime.now().strftime("%Y-%m-%d-%H%M")
     names = [_base(n) for n, _ in answers]
-    slug = "%s-from-%s-ANSWER-to-%s-batched-%d-answers" % (stamp, code, to, len(answers))
-    lines = ["# From %s - ANSWER to %s: %d batched answers" % (code, to, len(answers)), "",
-             "HOP: %d" % hop_n, "TERMINAL no-reply.", ""]
+    n = len(answers)
+    slug = f"{stamp}-from-{code}-ANSWER-to-{to}-batched-{n}-answers"
+    lines = [f"# From {code} - ANSWER to {to}: {n} batched answers", "",
+             f"HOP: {hop_n}", "TERMINAL no-reply.", ""]
     for name, text in answers:
-        lines += ["## Re %s" % name, "", (text or "").strip(), ""]
+        lines += [f"## Re {name}", "", (text or "").strip(), ""]
     body = "\n".join(lines).rstrip() + "\n"
     body.encode("ascii")
     return slug + ".md", body, names
