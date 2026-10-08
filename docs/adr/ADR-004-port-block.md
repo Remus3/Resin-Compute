@@ -8,10 +8,12 @@
 
 Seven projects shared the Legion box when this ADR was written, all running
 concurrently. Since the 2026-10-05 roster change `core/ports.py` `BLOCKS` holds
-EIGHT blocks - ResinCompute plus seven siblings - of which seven belong to live
-projects: Sibling-K joined, and Sibling-D is retired with its block still
-reserved. A machine-wide block registry has existed since 2026-08-29, operator-declared, with
-one contiguous block per project:
+EIGHT blocks - ResinCompute plus seven siblings, one of them archived
+(Sibling-B) and one retired (Sibling-D), so SIX belong to live projects, the
+count the `core/ports.py` module docstring gives. Sibling-K joined on that
+change; the archived and the retired block both stay reserved. A machine-wide
+block registry has existed since 2026-08-29, operator-declared, with one
+contiguous block per project:
 
 | Code | Project | Block |
 |---|---|---|
