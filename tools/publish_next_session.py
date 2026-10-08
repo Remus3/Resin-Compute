@@ -46,8 +46,9 @@ session and quoted into sibling repos. A credential or an account path in that
 file is published either way, and this is still the gate that runs at the
 moment the operator is told the hand-off is ready:
 
-- The Desktop is SHARED with five sibling projects, which own the `CS-`, `LL-`,
-  `LW-`, `RC-` and `RM-` prefixed hand-offs sitting beside ours. The link
+- The Desktop is SHARED with sibling projects, which own the `CS-`, `EW-`,
+  `LL-` (retired 2026-10-04, file kept), `LW-`, `RC-` and `RM-` prefixed
+  hand-offs sitting beside ours. The link
   basename is a module constant and no function takes a filename parameter, so
   a path bug cannot reach a neighbour's file.
 - A TRUNCATED block is refused. A stale hand-off and a truncated one both read

@@ -311,6 +311,13 @@ def test_the_final_gate_refuses_a_main_reply_without_exactly_one_responder_line(
         (b"2026-09-21 local, about 1545. To RC, CS, LL, LW, RSC, SS. INFORMATION ONLY\n", True),
         (b"2026-09-20 local, about 2230. Addressed to CS, LL, LW, RC, RSC and SS - all six,\n", True),
         (b"Copied to LL, LW, RC, RSC, SS.\n", True),
+        # The CURRENT six-destination form after the MAIN 0230 ORDER of
+        # 2026-10-05: EW in place of the retired LL. The LL rows above are
+        # fixtures of past notes and stay as written.
+        (b"TO CS. TO EW. TO LW. TO RC. TO RSC. TO SS. Six destinations.\n", True),
+        (b"2026-10-05 local, about 0230. To RC, CS, LW, SS, RSC, EW. INFORMATION ONLY\n", True),
+        (b"Copied to EW, LW, RC, RSC, SS.\n", True),
+        (b"TO EW only. Do X in EW.\n", False),
         (b"cc: RSC\n", True),
         (b"TO LW. (Re RSC 0704.)\n", True),  # a cc counts, by the adjudicated rule
         (b"TO LW only. Do X in LW.\n", False),
@@ -328,6 +335,8 @@ def test_the_header_decides_whether_a_note_addresses_rsc(rsp, header, addressed)
     ("title", "addressed"),
     [
         (b"# ANSWER, from MAIN to RSC, copied to CS, LL, LW, RC, SS\n", True),
+        (b"# ANSWER, from MAIN to RSC, copied to CS, EW, LW, RC, SS\n", True),
+        (b"# From MAIN - ORDER to EW: fleet roster change\n", False),
         (b"# From MAIN - RULING to RSC: halt clause (b) CLEARED\n", True),
         (b"# From MAIN - FIX to LW\n", False),
     ],
@@ -388,6 +397,10 @@ REAL_MAIN_NOTES: dict[str, bool] = {
     "2026-10-03-0855-from-MAIN-CORRECTION-ALL-the-budget-is-ONE-number-120-runs-per-24h-in-every-tree-the-other-four-knobs-of-0845-are-RETRACTED.md": True,
     # "TO RC (sections 2 and 3). ... TO RSC. ..."
     "2026-10-03-0915-from-MAIN-ORDER-lane-widget-redesign-to-RC-and-a-uniform-inbox-status-file-from-ALL-six.md": True,
+    # "TO RSC. One destination." - the roster change (EW joins, LL retired)
+    "2026-10-05-0230-from-MAIN-ORDER-to-RSC-ROSTER-CHANGE-EW-joins-LL-retired-update-every-sibling-list-needle-port-block-and-route-delete-nothing.md": True,
+    # "TO RSC. One destination." - the codename ruling refining 0230
+    "2026-10-07-2305-from-MAIN-RULING-to-RSC-EW-codename-is-Sibling-K-LL-keeps-Sibling-D-retired-8940-8959-block-confirmed.md": True,
 }
 
 

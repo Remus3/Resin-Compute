@@ -19,6 +19,16 @@ one contiguous block per project:
 | SE | Sibling-E | 8900-8919 |
 | SA | Sibling-A | 8920-8939 |
 
+ROSTER CHANGE 2026-10-05, recorded beside the table and not by rewriting it
+(MAIN 0230 ORDER, codename by MAIN 2305 RULING of 2026-10-07, both SHA-256
+verified): Sibling-D is RETIRED and its 8810-8819 block stays reserved - not
+freed, not reallocated. Sibling-K joined with the block below. `core/ports.py`
+carries both as `SD_BLOCK` (flagged in `RETIRED`) and `SK_BLOCK`.
+
+| Code | Project | Block |
+|---|---|---|
+| SK | Sibling-K | 8940-8959 |
+
 ResinCompute was scaffolded after that registry was drawn and was never given a
 block. It picked `:8870` for PityEngine by mirroring Sibling-F's `:8860` and
 adding ten, which SPEC_SCAFFOLD section 1 recorded as a deliberate convention.
