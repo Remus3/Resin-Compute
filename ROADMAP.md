@@ -17,16 +17,27 @@ version. What follows is everything the scaffold deliberately did not do.
   skill, as `.claude/commands/done.md` now does. (b) Open question: does the
   responder's own budget ledger retire now that kit v10 frees dead-holder
   locks? Answer it before touching `tools/moon_sync_responder.py` budget code.
+  (c) Kit v10 still fails ruff on its own bytes: fleet_inbox UP017,
+  fleet_done UP017 and UP032, fleet_subagent_first BLE001 - per-file ignored
+  in `ruff.toml`, reported to MAIN in the 1454 ANSWER; drop each ignore when
+  a kit version ships clean. (d) One-off unexplained failure in the session
+  62 build run:
+  `tests/test_conftest_git_gate_sites.py::test_the_run_half_reports_a_module_welded_to_skip_unconditionally`
+  (passed solo and in the re-run); watch for a repeat. (e) The
+  subagent-first hook runs in log mode (gitignored mode file under
+  ops/loop/control; an absent mode file means deny). Switch to deny after 3
+  interactive sessions (62, 63, 64) show no un-routable would-deny row;
+  target 2026-10-11.
 
 - **E: move follow-through (session 59).** Steps a-c DONE session 60 (see
   `docs/LEDGER.md`): session started at E:, C: copy recycled and replaced by
   a junction to E:, RSC-InboxResponder re-armed from E: with a new window.
-  Step d (vendor kit v9, ONE ANSWER to MAIN) is open: a builder branch was
-  in flight at session end, reporting to the gitignored runtime progress
-  file ops/loop/control/progress/rsc-v9.json; the MAIN 0230 roster builder
-  reports to ops/loop/control/progress/rsc-roster.json. MIG-1 residues of the 14 pruned worktrees are
-  kept at ops/runtime/mig1_residue/ (gitignored runtime artifact, one folder
-  per worktree); review and discard once item 0a closes.
+  Step d (vendor kit v9, ONE ANSWER to MAIN) DONE session 62 (merge
+  e475a09, ANSWER 1454). The four merged session-62 worktrees were recycled
+  and pruned at /done (git worktree list read back 1 entry). Remaining: the
+  MIG-1 residues of the 14 pruned worktrees, kept at ops/runtime/mig1_residue/
+  (gitignored runtime artifact, one folder per worktree); review and
+  discard.
 
 - **DONE 2026-10-08. MAIN 0839 FLEET-KIT v10 and 2354 v9 vendored**
   (merge e475a09), roster 0230 + 2305 merged (e39a065), ONE ANSWER 1454
@@ -48,15 +59,17 @@ version. What follows is everything the scaffold deliberately did not do.
   unanswered; if MAIN 1927's "v8 supersedes every older kit order" covers
   them, they need a verified MAIN note naming their stamps for
   SUPERSEDED_MAIN_STAMPS rather than an auto-reply each.
+  Session 62: the 1454 ANSWER asked MAIN for the 2354 and 0020 stamps;
+  await the reply.
 
-- **IMPLEMENTED, PENDING MERGE 2026-10-08. MAIN ORDER 0230 ROSTER CHANGE,
+- **DONE 2026-10-08 (merge e39a065, `tests/test_roster_retired.py`). MAIN ORDER 0230 ROSTER CHANGE,
   refined by MAIN 2305 RULING (both verified MATCH).** LL retired as
   Sibling-D (block 8810-8819 kept reserved, nothing deleted, every LL needle
   kept); EW joined as Sibling-K with ports 8940-8959 (`SK_BLOCK` in
   `core/ports.py`). Lists, needles, port registry and route landed on the
   roster branch (03a14a7) plus the refuter fixes; the gitignored per-host
-  roster carries EW's real root. Remaining after merge: answer MAIN with one
-  ANSWER note (HOP 2), one line per file.
+  roster carries EW's real root. Answered in the 1454 ANSWER, 1/1 reached.
+  See `docs/LEDGER.md`.
 
 - **NEW 2026-10-05. MAIN ORDER 0300 SUPPLY-CHAIN HARDENING (verified
   MATCH).** dependabot.yml (pip root, npm shell/, github-actions); SHA-pin
