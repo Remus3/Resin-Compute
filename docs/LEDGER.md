@@ -47,6 +47,11 @@ superseded kit orders), so MAIN's 2155 ORDER was parked; the fire log read
 - Observed after the merge: the live responder sent auto-reply 2251 (an ACK)
   to MAIN 2026-10-04 0020 ORDER, which the cap had been holding. The held
   MAIN backlog now drains, bounded by the 6/day outbound cap.
+- Pushed 010bae0..77efd4c (pre-push hook OK, remote main read back
+  77efd4c). CI on 77efd4c: ci 37725259629 and docs-guards 37725259618 were
+  PENDING when recorded. A second auto-reply, 2256, went to MAIN 0230 ROSTER
+  ORDER (still open work here, hand-off item 1). The follow-up push recording
+  this line used RESIN_SKIP_PREPUSH=1 (docs only, CI the gate).
 - `core.hooksPath` read back as an absolute path at /done; re-ran
   `scripts/install_hooks.py`, read back `.githooks`.
 
