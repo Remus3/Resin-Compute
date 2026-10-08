@@ -254,8 +254,13 @@ def trusted(rsp, monkeypatch):
     monkeypatch.setattr(rsp, "workspace_trust", lambda *_a, **_k: (True, "trusted"))
 
 
-def _no_run_reserved(rsp) -> bool:
-    return not rsp.DEFAULT_RUNS.exists() or json.loads(rsp.DEFAULT_RUNS.read_text())["runs"] == []
+def _no_run_reserved(rsp, seeded: int = 0) -> bool:
+    """No start counted in the kit's run ledger - the only one since session
+    63 (ruling 0f) - beyond the `seeded` rows the arm wrote, and nothing
+    written to the retired responder record."""
+    path = rsp._kit_root() / kit.BUDGET_REL
+    starts = json.loads(path.read_text())["starts"] if path.exists() else []
+    return len(starts) == seeded and not rsp.DEFAULT_RUNS.exists()
 
 
 def test_the_responder_route_is_the_kits_own_by_default(rsp):
@@ -554,8 +559,8 @@ def test_the_kit_writes_its_records_under_its_root_and_ends_idle(rsp, routed, mo
     assert len(usage) == 1 and json.loads(usage[0])["bare"] is True
     starts = json.loads((root / kit.BUDGET_REL).read_text(encoding="ascii"))["starts"]
     assert len(starts) == 1 and starts[0] >= before
-    # The responder's own budget reserved its run too.
-    assert len(json.loads(rsp.DEFAULT_RUNS.read_text())["runs"]) == 1
+    # The retired responder run record is never written (ruling 0f).
+    assert not rsp.DEFAULT_RUNS.exists(), "a spawn wrote the retired run record"
 
 
 def test_a_spent_kit_budget_starts_nothing(rsp, routed, monkeypatch, tmp_path):
@@ -565,10 +570,10 @@ def test_a_spent_kit_budget_starts_nothing(rsp, routed, monkeypatch, tmp_path):
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps({"starts": [time.time() - 60.0] * kit.RUNS_CAP}))
 
-    with pytest.raises(rsp.RunBudgetSpent):
+    with pytest.raises(rsp.KitRunBudgetSpent):
         rsp._spawn_headless("p", rsp.Bounds())
     assert run.calls == 0
-    assert _no_run_reserved(rsp), "a kit refusal burned a responder run"
+    assert not rsp.DEFAULT_RUNS.exists(), "a kit refusal wrote the retired run record"
     # Non-vacuity: the kit's file is unchanged - the pre-check only read it.
     assert len(json.loads(path.read_text())["starts"]) == kit.RUNS_CAP
 
@@ -1012,15 +1017,16 @@ def test_a_halt_that_lands_after_the_tick_check_stops_the_spawn(
     appeared between that check and `kit.spawn` still launched a session."""
     run = Run()
     monkeypatch.setattr(subprocess, "run", run)
-    real_reserve = rsp.reserve_run
+    real_load = kit.RunBudget._load
 
-    def reserve_then_halt(path, now):
+    def load_then_halt(self):
+        # The pre-spawn kit-budget read is the last step before `kit.spawn`.
         sentinel = rsp.halt_sentinel()
         sentinel.parent.mkdir(parents=True, exist_ok=True)
         sentinel.write_text("halt\n")
-        return real_reserve(path, now)
+        return real_load(self)
 
-    monkeypatch.setattr(rsp, "reserve_run", reserve_then_halt)
+    monkeypatch.setattr(kit.RunBudget, "_load", load_then_halt)
     result = _armed_cycle(rsp, tmp_path)
 
     assert run.calls == 0, "a session launched after the HALT sentinel appeared"
@@ -1029,11 +1035,12 @@ def test_a_halt_that_lands_after_the_tick_check_stops_the_spawn(
     assert status["state"] == "halted" and status["task"] == "Halted", status
 
 
-def test_a_halt_before_the_run_is_reserved_burns_no_daily_run(
+def test_a_halt_mid_tick_burns_no_daily_run(
     rsp, routed, monkeypatch, tmp_path, trusted
 ):
-    """Refuted on 46c2b3e: the pre-spawn re-check ran AFTER `reserve_run`, so a
-    HALT that landed mid-tick still spent one of the day's runs."""
+    """Refuted on 46c2b3e: a HALT that landed mid-tick still spent one of the
+    day's runs. Since session 63 the kit counts the run, so its ledger is the
+    one that must stay empty."""
     run = Run()
     monkeypatch.setattr(subprocess, "run", run)
 
@@ -1048,8 +1055,7 @@ def test_a_halt_before_the_run_is_reserved_burns_no_daily_run(
 
     assert result["termination"] == "halted", result
     assert run.calls == 0
-    runs = json.loads(rsp.DEFAULT_RUNS.read_text())["runs"] if rsp.DEFAULT_RUNS.exists() else []
-    assert runs == [], f"a HALT before the reservation still spent a daily run: {runs}"
+    assert _no_run_reserved(rsp), "a HALT mid-tick still spent a daily run"
 
 
 def test_a_halt_directory_halts_and_an_absent_one_does_not(rsp):
@@ -1094,14 +1100,11 @@ def test_a_backoff_tick_reads_backing_off(rsp, tmp_path, trusted):
 
 
 def test_a_spent_budget_tick_reads_turn_limit_reached(rsp, tmp_path, trusted):
-    def spawn(prompt, bounds):
-        raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
-
     # A real spent budget is FULL and has rows to age out: with none, "limit"
     # would ship a null cap_frees_at, and with headroom it would claim a cap
     # the ledger does not show (adversary, 2026-10-03).
-    _seed_runs(rsp, [time.time() - 60] * rsp.MAX_RUNS_PER_DAY)
-    _armed_cycle(rsp, tmp_path, spawn=spawn)
+    _seed_kit_budget(rsp, [time.time() - 60] * kit.RUNS_CAP)
+    _armed_cycle(rsp, tmp_path, spawn=_budget_spent_spawn(rsp))
     status = _status(rsp)
     assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
 
@@ -1126,6 +1129,44 @@ def test_a_main_reply_limit_tick_is_a_limit_with_an_allowed_task_name(rsp, tmp_p
     # state plus cap_frees_at, never a private task name.
     assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
     assert status["cap_frees_at"] is not None, "the MAIN cap's free time is missing"
+    assert result["cap_held"] == [rsp.MAIN_CODE], result
+
+
+def _main_at_cap(rsp) -> None:
+    from tests.test_moon_sync_responder import _agree
+
+    _agree(rsp)
+    now = time.time()
+    rsp.DEFAULT_OUTBOUND.parent.mkdir(parents=True, exist_ok=True)
+    rsp.DEFAULT_OUTBOUND.write_text(json.dumps(
+        {"version": 1, "replies": [{"to": "MAIN", "at": now - 60}] * rsp.MAX_REPLIES_PER_SENDER}
+    ))
+
+
+def test_a_main_cap_with_nothing_held_reads_idle_not_limit(rsp, tmp_path, trusted):
+    """HAND-OFF 0c (ROADMAP "Responder tick label on a cap hold"): MAIN at its
+    reply cap with NOTHING held is not a limit. Measured before the fix: the
+    label read `limit` / Turn Limit Reached while the log said `empty`."""
+    _main_at_cap(rsp)
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    result = rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
+    assert result["termination"] == "empty", result
+    status = _status(rsp)
+    assert status["state"] == "idle" and status["task"] == "Idle", status
+
+
+def test_a_main_cap_with_only_an_answered_note_reads_idle(rsp, tmp_path, trusted):
+    """A MAIN note already answered is not waiting on the cap, so it is not
+    HELD by it. The limit neighbour is the unanswered CORRECTION arm above."""
+    _main_at_cap(rsp)
+    inbox = tmp_path / "inbox"
+    _note(inbox, "2026-10-03-1700-from-MAIN-CORRECTION-x.md", "TO RSC. do it\n")
+    rsp._remember_answered(rsp.DEFAULT_ANSWERED, "2026-10-03-1700-from-MAIN-CORRECTION-x.md")
+    result = rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
+    status = _status(rsp)
+    assert result.get("cap_held", []) == [], result
+    assert status["state"] == "idle" and status["task"] == "Idle", status
 
 
 #: MAIN 0915 section 1, verbatim: the minimum set plus the stream refinements.
@@ -1189,7 +1230,9 @@ def _seed_main_cap(rsp, stamps):
     ))
 
 
-def _seed_runs(rsp, stamps):
+def _seed_legacy_runs(rsp, stamps):
+    """A responder run record as the RETIRED ledger wrote it (ruling 0f). Only
+    ever seeded to prove nothing reads it any more."""
     rsp.DEFAULT_RUNS.parent.mkdir(parents=True, exist_ok=True)
     rsp.DEFAULT_RUNS.write_text(json.dumps({"version": 1, "runs": list(stamps)}))
 
@@ -1201,7 +1244,6 @@ def test_a_main_reply_limit_tick_names_when_the_oldest_reply_ages_out(rsp, tmp_p
     now = time.time()
     oldest = now - 3600
     _seed_main_cap(rsp, [now - 60, oldest, now - 600])
-    _seed_runs(rsp, [now - 120, now - 30])
     inbox = tmp_path / "inbox"
     # Non-exempt class: an inbound ORDER/FIX/RULING passes the cap (`_cap_exempt`).
     _note(inbox, "2026-10-03-1700-from-MAIN-CORRECTION-x.md", "TO RSC. do it\n")
@@ -1220,17 +1262,14 @@ def test_a_main_reply_limit_tick_names_when_the_oldest_reply_ages_out(rsp, tmp_p
 def test_a_run_budget_tick_names_when_the_oldest_run_ages_out(rsp, tmp_path, trusted):
     now = time.time()
     oldest = now - 7200
-    _seed_runs(rsp, [oldest] + [now - 60] * (rsp.MAX_RUNS_PER_DAY - 1))
+    _seed_kit_budget(rsp, [oldest] + [now - 60] * (kit.RUNS_CAP - 1))
 
-    def spawn(prompt, bounds):
-        raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
-
-    _armed_cycle(rsp, tmp_path, spawn=spawn)
+    _armed_cycle(rsp, tmp_path, spawn=_budget_spent_spawn(rsp))
     status = _status(rsp)
     assert status["state"] == "limit" and status["task"] == "Turn Limit Reached", status
-    assert status["cap_frees_at"] == kit._iso(oldest + rsp.RUNS_WINDOW_SECONDS), status
-    assert status["runs_in_window"] == rsp.MAX_RUNS_PER_DAY
-    assert status["runs_cap"] == rsp.MAX_RUNS_PER_DAY
+    assert status["cap_frees_at"] == kit._iso(oldest + kit.WINDOW_S), status
+    assert status["runs_in_window"] == kit.RUNS_CAP
+    assert status["runs_cap"] == kit.RUNS_CAP
 
 
 def test_a_hop_budget_tick_reads_idle_not_limit(rsp, tmp_path, trusted):
@@ -1240,7 +1279,6 @@ def test_a_hop_budget_tick_reads_idle_not_limit(rsp, tmp_path, trusted):
     from tests.test_moon_sync_responder import _agree
 
     _agree(rsp)
-    _seed_runs(rsp, [time.time() - 60])
     inbox = tmp_path / "inbox"
     for i in range(rsp.Bounds().max_hops):
         _note(inbox, f"2026-10-03-17{i:02d}-from-RSC-reply.md", rsp.RESPONDER_TAG + "\nx\n")
@@ -1256,10 +1294,10 @@ def test_a_hop_budget_tick_reads_idle_not_limit(rsp, tmp_path, trusted):
 
 
 def _budget_spent_spawn(rsp):
-    """A session stand-in that reports the run budget spent."""
+    """A session stand-in that reports the kit's run budget spent."""
 
     def spawn(prompt, bounds):
-        raise rsp.RunBudgetSpent(rsp.RUN_BUDGET_REASON)
+        raise rsp.KitRunBudgetSpent(f"the fleet kit's run budget is exhausted ({kit.RUNS_CAP}/{kit.RUNS_CAP})")
 
     return spawn
 
@@ -1279,12 +1317,12 @@ def _limit_path_main(rsp, tmp_path):
 
 def _limit_path_runs(rsp, tmp_path):
     now = time.time()
-    _seed_runs(rsp, [now - 10 * (i + 1) for i in range(rsp.MAX_RUNS_PER_DAY)])
+    _seed_kit_budget(rsp, [now - 10 * (i + 1) for i in range(kit.RUNS_CAP)])
     _armed_cycle(rsp, tmp_path, spawn=_budget_spent_spawn(rsp))
-    return rsp.MAX_RUNS_PER_DAY, rsp.MAX_RUNS_PER_DAY, rsp.RUNS_WINDOW_SECONDS
+    return kit.RUNS_CAP, kit.RUNS_CAP, kit.WINDOW_S
 
 
-@pytest.mark.parametrize("path", [_limit_path_main, _limit_path_runs], ids=["main-replies", "run-budget"])
+@pytest.mark.parametrize("path", [_limit_path_main, _limit_path_runs], ids=["main-replies", "kit-run-budget"])
 def test_every_limit_path_names_a_free_time_from_its_own_ledger(rsp, tmp_path, trusted, path):
     """INVARIANT (widget owner, 2026-10-03): state "limit" never ships with a
     null cap_frees_at, and its counts come from the binding cap's ledger."""
@@ -1295,18 +1333,23 @@ def test_every_limit_path_names_a_free_time_from_its_own_ledger(rsp, tmp_path, t
     assert (status["runs_in_window"], status["runs_cap"], status["window_s"]) == (used, cap, window)
 
 
-@pytest.mark.parametrize("record", ["DEFAULT_RUNS", "DEFAULT_OUTBOUND"])
+@pytest.mark.parametrize("record", ["kit", "DEFAULT_OUTBOUND"])
 def test_a_limit_with_no_computable_free_time_never_reads_limit(rsp, tmp_path, trusted, record):
     """Non-vacuity for the invariant: a corrupt ledger counts as the cap and has
     no free time, so the tick reads Backing Off rather than a timeless limit."""
-    target = getattr(rsp, record)
+    target = rsp._kit_root() / kit.BUDGET_REL if record == "kit" else rsp.DEFAULT_OUTBOUND
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("{not json")
     if record == "DEFAULT_OUTBOUND":
         from tests.test_moon_sync_responder import _agree
 
         _agree(rsp)
-        rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds(armed=True))
+        # A corrupt outbound record caps every sender; the tick reads it only
+        # while it HOLDS a note (hand-off 0c), so one MAIN note waits here.
+        inbox = tmp_path / "inbox"
+        _note(inbox, "2026-10-03-1700-from-MAIN-CORRECTION-x.md", "TO RSC. do it\n")
+        result = rsp.run_once(inbox=inbox, roots={}, bounds=rsp.Bounds(armed=True))
+        assert result["cap_held"] == [rsp.MAIN_CODE], "non-vacuity: nothing was held"
     else:
         _armed_cycle(rsp, tmp_path, spawn=_budget_spent_spawn(rsp))
     status = _status(rsp)
@@ -1314,13 +1357,13 @@ def test_a_limit_with_no_computable_free_time_never_reads_limit(rsp, tmp_path, t
     assert status["state"] == "backoff" and status["task"] == "Backing Off", status
 
 
-def test_an_idle_tick_counts_the_responders_own_runs(rsp, tmp_path):
+def test_an_idle_tick_counts_the_kits_runs_and_ignores_the_retired_record(rsp, tmp_path):
     now = time.time()
-    _seed_runs(rsp, [now - 100, now - 50, now - 10])
+    _seed_kit_budget(rsp, [now - 100, now - 50, now - 10])
+    _seed_legacy_runs(rsp, [now - 5] * 7)
     rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
     status = _status(rsp)
-    assert status["runs_in_window"] == 3 and status["runs_cap"] == rsp.MAX_RUNS_PER_DAY, status
-    assert not (rsp._kit_root() / kit.BUDGET_REL).exists(), "non-vacuity: the kit record is absent"
+    assert status["runs_in_window"] == 3 and status["runs_cap"] == kit.RUNS_CAP, status
 
 
 # THE /120 COUNTER, settled 2026-10-03 (ROADMAP "FLEET-KIT v4 WRAP-UP"). Two
@@ -1344,7 +1387,7 @@ def test_a_spent_kit_budget_raises_its_own_outcome(rsp, routed, monkeypatch, tmp
     with pytest.raises(rsp.KitRunBudgetSpent) as caught:
         rsp._spawn_headless("p", rsp.Bounds())
     assert caught.value.termination == "kit-run-budget" and "kit-run-budget" in rsp.TERMINATIONS
-    assert run.calls == 0 and _no_run_reserved(rsp)
+    assert run.calls == 0 and _no_run_reserved(rsp, seeded=kit.RUNS_CAP)
 
 
 def test_a_kit_refusal_inside_spawn_for_budget_is_the_kits_outcome(rsp, routed, monkeypatch):
@@ -1363,8 +1406,9 @@ def test_a_kit_lock_busy_inside_spawn_is_still_run_locked(rsp, routed, monkeypat
         raise kit.Refused("budget lock busy")
 
     monkeypatch.setattr(kit, "spawn", refuse)
-    with pytest.raises(rsp.RunLockBusy):
+    with pytest.raises(rsp.KitBudgetLockBusy) as caught:
         rsp._spawn_headless("p", rsp.Bounds())
+    assert caught.value.termination == "run-locked"
 
 
 def test_a_kit_budget_tick_counts_and_frees_from_the_kit_ledger(rsp, routed, monkeypatch, tmp_path, trusted):
@@ -1372,9 +1416,9 @@ def test_a_kit_budget_tick_counts_and_frees_from_the_kit_ledger(rsp, routed, mon
     now = time.time()
     oldest = now - 7200
     _seed_kit_budget(rsp, [oldest] + [now - 60.0] * (kit.RUNS_CAP - 1))
-    # The responder ledger holds a DIFFERENT oldest row, so a status built from
-    # the wrong ledger is caught by its free time, not only by its count.
-    _seed_runs(rsp, [now - 30])
+    # A full RETIRED record with a different oldest row: a status still built
+    # from it would be caught by its free time, not only by its count.
+    _seed_legacy_runs(rsp, [now - 30] * 120)
 
     result = _armed_cycle(rsp, tmp_path)
     status = _status(rsp)
@@ -1387,7 +1431,7 @@ def test_a_kit_budget_tick_counts_and_frees_from_the_kit_ledger(rsp, routed, mon
     ), status
 
 
-@pytest.mark.parametrize("cap", ["CAP_RUNS", "CAP_MAIN_REPLIES", "CAP_KIT_RUNS"])
+@pytest.mark.parametrize("cap", ["CAP_MAIN_REPLIES", "CAP_KIT_RUNS"])
 def test_every_status_ledger_ships_window_s_as_an_int(rsp, cap):
     """MAIN 0915 schema 1: `"window_s": <int>`. Measured 2026-10-03: the
     responder ledgers shipped 86400.0, the kit's own 86400."""
@@ -1412,38 +1456,20 @@ def test_a_corrupt_kit_ledger_tick_never_reads_a_timeless_limit(rsp, routed, mon
 # ADVERSARY 2026-10-03, two counterexamples, ported from its reproducer.
 
 
-def test_both_run_ledgers_full_report_the_later_free_time(rsp, routed, monkeypatch, tmp_path, trusted):
-    """RULE: when both run ledgers are at cap, the status reports the one that
-    frees LAST - the lane is capped until both free - with that ledger's counts."""
+def test_a_full_retired_record_never_decides_the_status(rsp, routed, monkeypatch, tmp_path, trusted):
+    """Ruling 0f: one run ledger. A full retired record with a LATER free time
+    than the kit's must not move the status's count or free time."""
     monkeypatch.setattr(subprocess, "run", Run())
     now = time.time()
     _seed_kit_budget(rsp, [now - 7200] + [now - 60.0] * (kit.RUNS_CAP - 1))
-    young = now - 30.0
-    _seed_runs(rsp, [young] * rsp.MAX_RUNS_PER_DAY)
+    _seed_legacy_runs(rsp, [now - 30.0] * 120)
 
     result = _armed_cycle(rsp, tmp_path)
     status = _status(rsp)
 
     assert result["termination"] == "kit-run-budget", result
-    assert status["state"] == "limit", status
-    assert status["cap_frees_at"] == kit._iso(young + rsp.RUNS_WINDOW_SECONDS), status
-    assert (status["runs_in_window"], status["runs_cap"]) == (
-        rsp.MAX_RUNS_PER_DAY, rsp.MAX_RUNS_PER_DAY,
-    ), status
-
-
-def test_both_full_the_kit_freeing_last_is_the_one_reported(rsp, routed, monkeypatch, tmp_path, trusted):
-    """Neighbour: the rule picks by free time, not by which ledger refused."""
-    monkeypatch.setattr(subprocess, "run", Run())
-    now = time.time()
-    young = now - 30.0
-    _seed_kit_budget(rsp, [young] * kit.RUNS_CAP)
-    _seed_runs(rsp, [now - 7200] * rsp.MAX_RUNS_PER_DAY)
-
-    _armed_cycle(rsp, tmp_path)
-    status = _status(rsp)
-
-    assert status["cap_frees_at"] == kit._iso(young + kit.WINDOW_S), status
+    assert status["cap_frees_at"] == kit._iso(now - 7200 + kit.WINDOW_S), status
+    assert (status["runs_in_window"], status["runs_cap"]) == (kit.RUNS_CAP, kit.RUNS_CAP), status
 
 
 def test_a_kit_refusal_the_status_reread_does_not_bear_out_never_reads_limit(rsp, routed, monkeypatch, tmp_path, trusted):
@@ -1519,11 +1545,11 @@ def test_a_kit_ledger_that_fails_its_second_read_is_unreadable_not_full(rsp, rou
 
 
 def test_a_run_budget_refusal_with_headroom_never_reads_limit(rsp, tmp_path, trusted):
-    _seed_runs(rsp, [time.time() - 60])
+    _seed_kit_budget(rsp, [time.time() - 60])
     _armed_cycle(rsp, tmp_path, spawn=_budget_spent_spawn(rsp))
     status = _status(rsp)
     assert status["state"] == "backoff" and status["task"] == "Backing Off", status
-    assert status["runs_in_window"] == 1 and status["runs_cap"] == rsp.MAX_RUNS_PER_DAY, status
+    assert status["runs_in_window"] == 1 and status["runs_cap"] == kit.RUNS_CAP, status
 
 
 def test_an_unreadable_kit_ledger_in_spawn_is_a_backoff_not_a_budget(rsp, routed, monkeypatch):
@@ -1564,53 +1590,40 @@ def test_the_status_reads_the_kit_ledger_once_per_decision(rsp, routed, monkeypa
     assert calls["n"] == 1, calls
 
 
-@pytest.mark.parametrize("termination", ["run-budget", "kit-run-budget"])
-def test_a_run_limit_tick_reads_each_run_ledger_once(rsp, routed, monkeypatch, termination):
-    """Root-cause sibling: one tick's status decision takes ONE snapshot of each
+def test_a_run_limit_tick_reads_the_kit_ledger_once(rsp, routed, monkeypatch):
+    """Root-cause sibling: one tick's status decision takes ONE snapshot of the
     run ledger, so its count and its free time cannot come from two reads."""
     now = time.time()
-    _seed_runs(rsp, [now - 60.0] * rsp.MAX_RUNS_PER_DAY)
-    _seed_kit_budget(rsp, [now - 60.0] * 5)
+    _seed_kit_budget(rsp, [now - 60.0] * kit.RUNS_CAP)
     kit_calls = _count_kit_loads(monkeypatch)
-    real_rows = rsp._run_rows
-    run_calls = {"n": 0}
+    rsp._write_tick_status({"termination": "kit-run-budget", "note": None})
 
-    def rows(path, at):
-        run_calls["n"] += 1
-        return real_rows(path, at)
-
-    monkeypatch.setattr(rsp, "_run_rows", rows)
-    rsp._write_tick_status({"termination": termination, "note": None})
-
-    assert (run_calls["n"], kit_calls["n"]) == (1, 1), (run_calls, kit_calls)
+    assert kit_calls["n"] == 1, kit_calls
     assert _status(rsp)["state"] == "limit", "non-vacuity: the binding branch was not taken"
 
 
 def test_a_transient_kit_read_in_the_status_path_is_never_a_limit(rsp, routed, monkeypatch, tmp_path, trusted):
-    """Adversary round 3 reproducer: responder full (frees in ~1.8 h), kit
-    REALLY 5/120, one transient failure on the status path's kit read. It must
-    not ship a 120/120 kit limit freeing ~22 h too late."""
-    monkeypatch.setattr(subprocess, "run", Run())
+    """Adversary round 3 reproducer, re-pinned to the one run ledger: the kit
+    REALLY 5/120, the session refused as spent, one transient failure on the
+    status path's kit read. It must not ship a 120/120 kit limit."""
     now = time.time()
-    _seed_runs(rsp, [now - 80000.0] + [now - 30.0] * (rsp.MAX_RUNS_PER_DAY - 1))
     kit_frees = kit._iso(now - 60.0 + kit.WINDOW_S)
     _seed_kit_budget(rsp, [now - 60.0] * 5)
-    calls = _count_kit_loads(monkeypatch, fail_on=(2,))
+    calls = _count_kit_loads(monkeypatch, fail_on=(1,))
 
-    result = _armed_cycle(rsp, tmp_path)
+    rsp._write_tick_status({"termination": "kit-run-budget", "note": None})
     status = _status(rsp)
 
-    assert result["termination"] == "run-budget", result
-    assert calls["n"] >= 2, "non-vacuity: the status path never read the kit ledger"
+    assert calls["n"] == 1, "non-vacuity: the status path never read the kit ledger"
     assert status["state"] == "backoff" and status["task"] == "Backing Off", status
     assert status["cap_frees_at"] != kit_frees, status
 
 
 def test_the_wrong_ledger_mutant_is_killed_by_the_kit_tick(rsp, routed, monkeypatch, tmp_path, trusted):
-    """Adversary round 3 point 3: `_status_budget` forced onto the responder
+    """Adversary round 3 point 3: `_status_budget` forced onto the wrong
     ledger must turn a kit-ledger arm red. Run in-process as the mutant."""
     orig = rsp._status_budget
-    monkeypatch.setattr(rsp, "_status_budget", lambda cap, now: orig(rsp.CAP_RUNS, now))
+    monkeypatch.setattr(rsp, "_status_budget", lambda cap, now: orig(rsp.CAP_MAIN_REPLIES, now))
     with pytest.raises(AssertionError):
         test_a_kit_budget_tick_counts_and_frees_from_the_kit_ledger(
             rsp, routed, monkeypatch, tmp_path, trusted
@@ -1622,14 +1635,15 @@ def test_the_wrong_ledger_mutant_is_killed_by_the_kit_tick(rsp, routed, monkeypa
 # counted as its cap, no free time, never a limit.
 
 
-def test_a_millisecond_responder_row_never_crashes_an_idle_tick(rsp, tmp_path):
-    """Probe d1: one ms-epoch row, finite, so `_run_rows` keeps it active."""
-    _seed_runs(rsp, [time.time() * 1000.0])
+def test_a_millisecond_kit_row_never_crashes_an_idle_tick(rsp, tmp_path):
+    """Probe d1, re-pinned to the kit ledger: one ms-epoch row, finite and in
+    the future, so the kit's `_load` keeps it active."""
+    _seed_kit_budget(rsp, [time.time() * 1000.0])
     result = rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
     status = _status(rsp)
     assert result["termination"] == "empty", result
     assert status["cap_frees_at"] is None, status
-    assert status["runs_in_window"] == status["runs_cap"] == rsp.MAX_RUNS_PER_DAY, status
+    assert status["runs_in_window"] == status["runs_cap"] == kit.RUNS_CAP, status
 
 
 @pytest.mark.parametrize("stamp", ["inf", "ms"])
@@ -1654,7 +1668,7 @@ def test_an_unprintable_kit_stamp_under_cap_is_unreadable_at_the_pre_check(rsp, 
     _seed_kit_budget(rsp, [float("inf")] * 5)
     with pytest.raises(rsp.KitBudgetUnreadable):
         rsp._spawn_headless("p", rsp.Bounds())
-    assert run.calls == 0 and _no_run_reserved(rsp)
+    assert run.calls == 0 and _no_run_reserved(rsp, seeded=5)
 
 
 def test_a_printable_kit_ledger_neighbour_is_still_read(rsp, routed, monkeypatch):
