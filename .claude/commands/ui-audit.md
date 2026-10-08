@@ -24,10 +24,10 @@ Three rules govern when and by whom this runs, and none of them is negotiable:
   prompt-level property: it comes from the producer not grading its own work,
   not from a second opinion of any kind.
 
-**THE CONTROLLER DISPATCHES THE WHOLE AUDIT TO ONE SUB-AGENT** (FLEET-KIT v10,
-MAIN 0839 ORDER of 2026-10-08, section 3 item 4; the same shape as
-`.claude/commands/done.md`). Whoever invokes this command - the main session
-or an orchestrator - runs no phase itself: under the kit's SUBAGENT-FIRST
+**THE MAIN SESSION DISPATCHES THE WHOLE AUDIT TO ONE SUB-AGENT** (FLEET-KIT
+v10, MAIN 0839 ORDER of 2026-10-08, section 3 item 4; the same shape as
+`.claude/commands/done.md`). The caller is the main session, and it runs no
+phase itself: under the kit's SUBAGENT-FIRST
 PreToolUse hook every Bash, PowerShell, Read, Edit, Write, Grep, Glob,
 NotebookEdit and MultiEdit call in the main thread is denied (or, in log mode,
 logged as would-deny). It launches ONE sub-agent, the `ui-auditor` from

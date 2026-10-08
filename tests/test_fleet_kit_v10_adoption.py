@@ -28,8 +28,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 KIT_DIR = REPO_ROOT / "ops" / "fleet_kit"
 HOOK = KIT_DIR / "fleet_subagent_first.py"
@@ -228,31 +226,64 @@ def test_the_done_dispatch_detector_fires_when_the_rule_is_late():
 
 
 #: Kit v10 item 4 reaches every command the main session runs, not only
-#: /done: /orchestrated-run and /ui-audit each dispatch to ONE sub-agent and
-#: the main session relays only its final line. Each entry names the final
-#: line vocabulary the preamble must state.
-DISPATCHED_COMMANDS = {
-    "orchestrated-run.md": ("RUN: COMPLETE", "RUN: BLOCKED - "),
-    "ui-audit.md": ("AUDIT: PASS", "AUDIT: BLOCKED - "),
-}
+#: /done. /ui-audit hands the whole audit to ONE ui-auditor sub-agent and the
+#: main session relays only its verdict line. /orchestrated-run cannot take
+#: that shape: a sub-agent has no Agent tool, so a single orchestrator
+#: sub-agent could not dispatch the planner, builders, verifier, adjudicator
+#: or adversaries. There the main session stays orchestrator and merger and
+#: dispatches every tool call to a sub-agent.
+COMMANDS = REPO_ROOT / ".claude" / "commands"
+
+#: Wording of the refuted single-orchestrator-sub-agent shape. None of it may
+#: come back anywhere in orchestrated-run.md.
+REFUTED_ORCHESTRATOR_WORDING = (
+    "ONE sub-agent",
+    "orchestrator sub-agent",
+    "ONE background sub-agent",
+    "RUN: COMPLETE",
+)
 
 
-@pytest.mark.parametrize("name", sorted(DISPATCHED_COMMANDS))
-def test_command_dispatches_to_one_sub_agent(name):
-    text = (REPO_ROOT / ".claude" / "commands" / name).read_bytes().decode("ascii")
-    # Whitespace-normalised: a phrase reflowed across a line break still counts.
-    head = " ".join(_dispatch_section(text).split())
-    assert "ONE sub-agent" in head, f"{name} preamble does not dispatch to ONE sub-agent"
-    assert "FLEET-KIT v10" in head and "item 4" in head, f"{name} preamble does not cite kit v10 item 4"
-    assert "relays only" in head and "final line" in head, f"{name} preamble does not relay only the final line"
-    for line in DISPATCHED_COMMANDS[name]:
-        assert line in head, f"{name} preamble does not name the final line {line!r}"
+def _normalised_head(text: str) -> str:
+    """The preamble, whitespace-normalised: a phrase reflowed across a line
+    break still counts."""
+    return " ".join(_dispatch_section(text).split())
 
 
-def test_the_command_dispatch_detector_fires_on_a_preamble_without_it():
+def _command_text(name: str) -> str:
+    return (COMMANDS / name).read_bytes().decode("ascii")
+
+
+def test_ui_audit_dispatches_to_one_ui_auditor_sub_agent():
+    head = _normalised_head(_command_text("ui-audit.md"))
+    assert "ONE sub-agent" in head, "ui-audit.md preamble does not dispatch to ONE sub-agent"
+    assert "ui-auditor" in head
+    assert "FLEET-KIT v10" in head and "item 4" in head
+    assert "relays only" in head and "final line" in head
+    assert "AUDIT: PASS" in head and "AUDIT: BLOCKED - " in head
+    assert "or an orchestrator" not in head, "ui-audit.md names a caller other than the main session"
+
+
+def test_orchestrated_run_main_session_dispatches_every_tool_call():
+    text = _command_text("orchestrated-run.md")
+    head = _normalised_head(text)
+    # Case-folded: the rule is a bold all-caps heading line.
+    assert "main session dispatches every tool call" in head.lower()
+    assert "FLEET-KIT v10" in head and "item 4" in head
+    assert "orchestrator and the merger" in head.lower()
+    assert "no direct tool call" in head.lower()
+    flat = " ".join(text.split())
+    leaked = [w for w in REFUTED_ORCHESTRATOR_WORDING if w in flat]
+    assert leaked == [], f"orchestrated-run.md carries the refuted single-sub-agent shape: {leaked}"
+
+
+def test_the_command_dispatch_detectors_fire_on_planted_text():
     planted = "# /ui-audit\n\nRun every phase.\n\n## 9. Verdict\n\nONE sub-agent; relays only its final line, AUDIT: PASS.\n"
-    head = _dispatch_section(planted)
+    head = _normalised_head(planted)
     assert "ONE sub-agent" not in head and "AUDIT: PASS" not in head
+    refuted = "# /orchestrated-run\n\nThe main session launches ONE\nbackground sub-agent.\n"
+    flat = " ".join(refuted.split())
+    assert [w for w in REFUTED_ORCHESTRATOR_WORDING if w in flat] == ["ONE background sub-agent"]
 
 
 # ---------------------------------------------------------------- emit()
