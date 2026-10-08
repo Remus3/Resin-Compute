@@ -469,8 +469,8 @@ NotebookEdit and MultiEdit. It decides only in the main thread (no
   kit version.
 - **Command form.** The hook command is
   `python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_subagent_first.py"`, not
-  the order's bare relative path. Alternative rejected: the bare relative
-  path `python ops/fleet_kit/fleet_subagent_first.py`. Why: if the hook's
+  the order's bare relative path. Alternative rejected: that bare relative
+  path (python plus the script path relative to the repo root). Why: if the hook's
   cwd moves or the script is not found, python exits 2, and a PreToolUse
   exit 2 blocks every guarded tool; every other hook in
   `.claude/settings.json` already uses the `$CLAUDE_PROJECT_DIR` form.
