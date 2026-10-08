@@ -12,6 +12,48 @@ now.
 
 ---
 
+## 2026-10-08 - Session 63: responder run ledger retired (0f), cap-hold label (0c), item-14 minors (4)
+
+- RULING 0f, decided by a distinct adjudicator, DECISION C (shrink). The
+  responder-local RUN ledger is retired from `tools/moon_sync_responder.py`.
+  Why: kit v10's `RunBudget._lock` (`ops/fleet_kit/fleet_headless.py`) is an
+  OS byte-range lock on a never-unlinked file that a dead holder frees at
+  once, and `kit.spawn` counts every start under it - the ROADMAP
+  "/120 COUNTER" REVERSE IF. Keeping both drifted: the responder reserved
+  BEFORE `kit.spawn`, so a failed spawn cost a responder run and no kit run.
+  Alternatives rejected: (A) retire everything - loses the per-sender
+  loop-breaker floor, since the kit OutboundCap is per tree at 6 a day;
+  (B) keep both - a second counter that drifts. Reversed by: a kit version
+  dropping the OS-held lock, or the kit not counting every spawn in this
+  tree. Removed: `MAX_RUNS_PER_DAY`, `RUNS_WINDOW_SECONDS`,
+  `RUN_BUDGET_REASON`, `RUN_RECORD_REASON`, `RUN_LOCK_REASON`, `_run_rows`,
+  `run_lock_path`, `reserve_run`, `RunLockBusy`, `CAP_RUNS`,
+  `_binding_run_budget`, `RunBudgetSpent` and the `run-budget` termination.
+  `HaltedBeforeSpawn`, `KitRunBudgetSpent` and `KitBudgetUnreadable` are
+  re-parented onto `NoSessionStarted`; the kit's "budget lock busy" maps to
+  the new `KitBudgetLockBusy` (`run-locked`). `_acquire_run_lock` and
+  `_release_run_lock` are renamed `_acquire_os_lock`/`_release_os_lock`
+  (progress lock, outbound lock). KEPT: `DEFAULT_RUNS` as a path anchor,
+  `MAX_REPLIES_PER_SENDER`/`senders_at_cap`, `MAX_HOPS`. The responder test
+  arms that pinned the retired ledger were re-pinned to the kit ledger.
+- 0c, the cap-hold label. Root cause: `_write_tick_status` read `limit` /
+  Turn Limit Reached whenever MAIN was at `MAX_REPLIES_PER_SENDER` and the
+  fire took no note, whether or not any MAIN note was waiting. Fix:
+  `pending` gained `held_out` (appended, defaulted), `_run_once` records
+  `cap_held` (senders whose otherwise-eligible notes only the cap kept out),
+  and the label reads `limit` only when `cap_held` names MAIN. Failing arm
+  first: `test_a_main_cap_with_nothing_held_reads_idle_not_limit` read
+  `limit` before the fix.
+- Item-14 minors: (1) the MAIN retry bound is the kit's 120 alone - a full
+  legacy record no longer refuses a spawn (red before: `RunBudgetSpent`).
+  (2) `test_r5_minor2_*` pins the triage-lane `_release_outbound`; a mutant
+  deleting the call turned it red. (3) `_safe_note_label` removed;
+  `_log_safe` now replaces non-ASCII too - before, `log_invocation` returned
+  False and dropped the whole line for a name with one non-ASCII character.
+  (4) `record_outbound` and `_release_outbound` run under an OS lock
+  (`outbound_lock_path`, 2 s wait, fail closed); before, 4 contending
+  interpreters reported 83 reservations landed and 27 rows survived.
+
 ## 2026-10-08 - Session 62 /done: worktree housekeeping, inbox watermark, gates
 
 - Worktrees: the four merged session-62 worktrees (agent-af2a0f85823855fa5,
