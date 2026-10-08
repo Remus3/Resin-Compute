@@ -48,7 +48,11 @@ Hand-off item 0a. Step a: this session ran from `E:\Resin Compute`.
   - The paperwork push used RESIN_SKIP_PREPUSH=1 because the push is
     docs-only, so CI is the only gate on it. Pushed 7f1915d, and origin/main
     read back at 7f1915d. CI runs: ci 37734244001 and docs-guards
-    37734243906, both QUEUED when recorded. The next session reads the result.
+    37734243906, both QUEUED when recorded. Read back at the second /done:
+    ci 37734244001 success. docs-guards 37734243906 was cancelled because
+    640bc0c superseded it, and docs-guards 37734264014 on 640bc0c succeeded.
+    ci 37734886978 on 1e03c24 (hand-off note of the v9 builder result)
+    succeeded.
 - Step d (kit v9) and MAIN ORDER 0230 (roster) were dispatched to builders in
   worktrees and were still running at /done. Neither is merged. The hand-off
   carries both.
