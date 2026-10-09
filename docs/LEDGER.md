@@ -12,6 +12,32 @@ now.
 
 ---
 
+## 2026-10-08 - MAIN 2246 ORDER section 1: kit v13 identity hooks wired
+
+- Provenance: the 2246 ORDER matched MAIN's outbox (sha256 7ccc71ff...);
+  its delivered bundle is byte-identical to the 2128 bundle already
+  vendored (23 of 23 files). It arrived after the ANSWER 2301 had gone and
+  is the reversal condition of ruling C below, so the deferred wiring is
+  done now.
+- `.githooks/commit-msg` runs `fleet_identity.py commit-msg "$1" || true`
+  after the tree's own strip; `.githooks/pre-push` runs
+  `fleet_identity.py pre-push "$@" || exit 1` FIRST, before the
+  RESIN_SKIP_PREPUSH escape and the gates, feeding it the ref lines the
+  hook had read. `ops/loop/control/identity.jsonl` gitignored.
+  `tests/test_hook_gate.py` HOOK_DEPENDENCIES gains fleet_identity.py.
+  Test first: `tests/test_fleet_kit_v13_adoption.py` (MAIN's check (f)
+  regex) went red 4 of 6 before the wiring.
+- Local git config `fleet.operatorIdent`: 2 values, both `Name <address>`,
+  the two operator identities in main's history (the 4 Claude rows
+  excluded). Not in any tracked file or note. Read back: `check` over
+  aa9bbea..HEAD reads clean; over the Claude commit it refuses 2
+  violations (non-vacuity).
+- Measured 2026-10-08 on Python 3.14 through `fleet_suite_gate.py run`:
+  `tests` 4369 passed 6 skipped (same six host reasons); `agents/pity_engine`
+  191 passed; kit check `13 []`.
+- NOT done here, filed in ROADMAP: s1 Desktop shortcut removal and
+  sections 2-8 (perf, README, history rewrite, review driver).
+
 ## 2026-10-08 - FLEET-KIT v12 (MAIN 2031 ORDER) and v13 (staged bundle) vendored
 
 - Provenance: the v12 ORDER matched MAIN's outbox (sha256 3bad46b1...) and

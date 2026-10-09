@@ -230,10 +230,12 @@ HOOKS_DIR = REPO_ROOT / ".githooks"
 # either direction.
 EXPECTED_HOOKS = ("commit-msg", "pre-commit", "pre-push")
 
-# Everything the three shims reach for through "$ROOT/". All four are
+# Everything the three shims reach for through "$ROOT/". All five are
 # stdlib-only, which is what makes a bare `git init` enough to run them.
-# Re-derived from the hook bodies below rather than trusted.
+# Re-derived from the hook bodies below rather than trusted. Kit v13 (MAIN
+# 2246 ORDER s1.4) added the identity hooks' fleet_identity.py (stdlib only).
 HOOK_DEPENDENCIES = (
+    "ops/fleet_kit/fleet_identity.py",
     "scripts/hook_python.sh",
     "scripts/precommit_msg_check.py",
     "scripts/precommit_pycompile.py",

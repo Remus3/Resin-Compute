@@ -53,6 +53,13 @@ tmp="$1.rcfilt"
 grep -v -i -e '^Co-Authored-By: Claude' -e '^Claude-Session:' "$1" > "$tmp" || true
 mv "$tmp" "$1"
 
+# 1b. FLEET-COMMON 17 (kit v13, MAIN 2246 ORDER s1.4): the kit's identity
+# strip - AI or bot co-author / sign-off trailers, any `Claude-*:` trailer, a
+# "Generated with Claude Code" line, a bare session URL line. It never
+# rejects (a headless lane must not fail a commit over a trailer), hence the
+# `|| true`; step 1 above stays as this tree's own floor.
+"$PY" "$ROOT/ops/fleet_kit/fleet_identity.py" commit-msg "$1" || true
+
 # Both scripts below share one predicate - will git strip `#` lines? - and in
 # the editor flow it is answered by git's OWN template in this file, which
 # carries the effective `--cleanup=` mode that git never passes to a hook. The
