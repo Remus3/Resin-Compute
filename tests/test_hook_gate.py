@@ -239,6 +239,7 @@ HOOK_DEPENDENCIES = (
     "scripts/hook_python.sh",
     "scripts/precommit_msg_check.py",
     "scripts/precommit_pycompile.py",
+    "scripts/prepush_select.py",
     "tools/precommit_gate.py",
 )
 

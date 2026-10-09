@@ -19,11 +19,21 @@
 
 name: codeql
 
+# PATHS-IGNORE ON PUSH AND PULL REQUEST (MAIN 2246 ORDER s2, PERF-AUDIT item
+# 3). A prose or hand-off edit changes no analysed code, and three matrix legs
+# of up to 30 minutes each were running on every one of them. The weekly
+# schedule ignores paths, so it still sweeps the whole tree.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - '*.txt'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - '*.txt'
   schedule:
     # Weekly, Monday 06:17 UTC - off the hour so it does not queue behind
     # every other scheduled workflow on the shared runners.
