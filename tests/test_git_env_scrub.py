@@ -815,6 +815,12 @@ def test_every_variable_measured_to_swap_an_answer_is_scrubbed(
     """
     exported = _row_exports(name, kind, foreign_repo, hostile_artifacts)
     baseline_returncode, baseline_stdout = _clean_answer(argv, stdin or None)
+    if name == "GIT_SHALLOW_FILE" and baseline_stdout.strip() == "true":
+        # A SHALLOW checkout (CI fetches a bounded depth since MAIN 2246 s2
+        # item 10) already answers "true", so a one-line shallow file cannot
+        # move the answer. A shallow file that DOES NOT EXIST does: git then
+        # sees no boundary and answers "false" (an empty file still reads true).
+        exported = {name: str(tmp_path / "no-shallow-boundary.txt")}
 
     loose = _run_probe(
         probe_script, argv, exported=exported, import_conftest=False, stdin=stdin
