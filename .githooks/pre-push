@@ -89,6 +89,19 @@ fi
 # a root-wide run is how a sibling project earned an import-file-mismatch
 # incident.
 #
+# THE APPLICATION HALF IS A SELECTION, NOT THE WHOLE SUITE (MAIN 2246 ORDER
+# s2, PERF-AUDIT item 1). Both whole suites serially took about 230 s per push
+# and a low-memory run went red. scripts/prepush_select.py now maps the pushed
+# diff (against the remote sha git hands us on stdin, else @{u}) plus the
+# working tree's own edits to the tests/ modules that mention the changed
+# paths, adds pytest's last-failed modules, drops plumbing modules unless a
+# plumbing root changed, and falls back to the FULL application suite on no
+# upstream, a huge diff, a conftest or pytest.ini change, or any selector
+# error. `slow` is deselected here in every mode. The whole application suite
+# runs in CI and on the nightly schedule; this gate is the fast local half.
+# The selection reaches pytest through RSC_PREPUSH_SELECT, which tests/
+# conftest.py reads; pytest then prints a line saying the run was narrowed.
+#
 # WHY -rs, AND IT IS NOT COSMETIC. A GATE THAT CAN SEE A SKIP AND CANNOT SAY
 # WHICH ONE is the defect. Measured: under a REAL `git push` this hook's `tests`
 # run reported one MORE skip than the SAME command in an interactive shell.
@@ -115,9 +128,52 @@ fi
 # NOT the -rs short summary. Any -r spec containing s, a or A satisfies this;
 # tests/test_prepush_skip_reporting.py grades the spec and not the literal flag,
 # so -rA is a pass there.
+#
+# The remote sha of the first ref that already exists on the remote is the
+# diff base; a new remote ref (all zeros) leaves the selector to try @{u}.
+unset RSC_PREPUSH_SELECT
+BASE=""
+while read -r _lref _lsha _rref _rsha; do
+    case "$_rsha" in
+        "") continue ;;
+        *[!0]*) BASE="$_rsha"; break ;;
+        *) continue ;;
+    esac
+done <<EOF
+$PUSH_REFS
+EOF
+
 if TEST_PY="$(resin_pick_python pytest)"; then
-    "$TEST_PY" -m pytest -rs tests || exit 1
-    "$TEST_PY" -m pytest -rs agents/pity_engine || exit 1
+    SEL="$("$TEST_PY" "$ROOT/scripts/prepush_select.py" ${BASE:+--base "$BASE"})" || SEL=""
+    MODE=""
+    REASON=""
+    MODULES=""
+    {
+        read -r MODE || true
+        read -r REASON || true
+        read -r MODULES || true
+    } <<EOF
+$SEL
+EOF
+    case "$MODE" in
+        SELECT|NONE|FULL) ;;
+        *) MODE=FULL; REASON="the selector gave no answer" ;;
+    esac
+    echo "pre-push: application suite $MODE - $REASON"
+    if [ "$MODE" = "SELECT" ]; then
+        RSC_PREPUSH_SELECT="$MODULES"
+        export RSC_PREPUSH_SELECT
+    fi
+    # Exit 5 is pytest's "nothing collected": legitimate only for a SELECT
+    # whose every item is `slow`; anywhere else it is a broken collection.
+    if [ "$MODE" != "NONE" ]; then
+        "$TEST_PY" -m pytest -rs tests -m "not slow" || {
+            rc=$?
+            if [ "$MODE" != "SELECT" ] || [ "$rc" -ne 5 ]; then exit 1; fi
+        }
+    fi
+    unset RSC_PREPUSH_SELECT
+    "$TEST_PY" -m pytest -rs agents/pity_engine -m "not slow" || exit 1
 else
     echo "pre-push WARNING: pytest not importable - the suites did NOT run." >&2
     echo "  tried: $(resin_python_candidates)" >&2

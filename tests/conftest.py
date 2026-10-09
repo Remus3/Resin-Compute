@@ -214,3 +214,85 @@ fleet_test_guard.install(
     root=REPO_ROOT,
     env_roots={"RESINCOMPUTE_RUNTIME_DIR": "runtime"},
 )
+
+
+# ---------------------------------------------------------------------------
+# CENTRAL MARKERS AND THE PRE-PUSH SELECTION (MAIN 2246 ORDER s2, PERF-AUDIT
+# items 1-3). The `plumbing` and `reads_docs` markers come from the module
+# lists in tests/_markers.py, so no test module carries them as decorators.
+# Guarded by tests/test_test_markers.py.
+#
+# RSC_PREPUSH_SELECT is set ONLY by .githooks/pre-push, for one command, to
+# the comma-joined module list scripts/prepush_select.py chose. Unselected
+# modules are not even imported. The header line below names the selection
+# so a narrowed run can never read as the whole suite.
+# ---------------------------------------------------------------------------
+import os as _os  # noqa: E402
+
+from tests import _markers  # noqa: E402
+
+PREPUSH_SELECT_ENV = "RSC_PREPUSH_SELECT"
+
+
+def marker_for_module(module: str) -> tuple[str, ...]:
+    """The registry markers for one repo-relative POSIX module path."""
+    found = []
+    if module in _markers.PLUMBING:
+        found.append("plumbing")
+    if module in _markers.READS_DOCS:
+        found.append("reads_docs")
+    return tuple(found)
+
+
+def is_slow(module: str, item_name: str) -> bool:
+    """Is this item listed in SLOW, ignoring any parametrize suffix."""
+    return f"{module}::{item_name.split('[', 1)[0]}" in _markers.SLOW
+
+
+def _rel(path: Path) -> str | None:
+    try:
+        return path.resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return None
+
+
+def _prepush_selection() -> frozenset[str] | None:
+    raw = _os.environ.get(PREPUSH_SELECT_ENV)
+    if raw is None:
+        return None
+    return frozenset(part.strip() for part in raw.split(",") if part.strip())
+
+
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
+    selection = _prepush_selection()
+    if selection is None or collection_path.suffix != ".py":
+        return None
+    if not collection_path.name.startswith("test_"):
+        return None
+    rel = _rel(collection_path)
+    if rel is None or not rel.startswith("tests/"):
+        return None
+    return True if rel not in selection else None
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus: int, config: pytest.Config) -> None:
+    # A summary line rather than a report header: pytest.ini's -q suppresses
+    # the header, and a narrowed run must never read as the whole suite.
+    selection = _prepush_selection()
+    if selection is None:
+        return
+    terminalreporter.write_line(
+        f"{PREPUSH_SELECT_ENV}: pre-push selection of {len(selection)} module(s) - "
+        "NOT the whole application suite"
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    for item in items:
+        rel = _rel(Path(str(item.path)))
+        if rel is None:
+            continue
+        for name in marker_for_module(rel):
+            item.add_marker(getattr(pytest.mark, name))
+        if is_slow(rel, item.name):
+            item.add_marker(pytest.mark.slow)
