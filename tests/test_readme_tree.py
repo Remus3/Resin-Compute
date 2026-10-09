@@ -1,4 +1,10 @@
-"""The README's repository tree must describe the repository that ships.
+"""The repository trees must describe the repository that ships.
+
+TWO TREES, one parser (MAIN 2246 ORDER s3 item 4). `README.md` carries the
+short form - top-level folders plus the four entry points - and
+`docs/OVERVIEW.md` carries the per-file tree that used to sit in the README.
+Every arm below runs against both, so moving a line between them can never
+take it out from under the guard.
 
 WHY THIS EXISTS, and it is measured rather than hypothetical. The tree in
 README.md is a FENCED BLOCK, so `tests/test_docs_consistency.py` never sees it -
@@ -18,7 +24,7 @@ test was green locally. The arms below therefore assert TRACKEDNESS, via
 underneath it.
 
 THIS GUARD IS ONE-DIRECTIONAL, AND DELIBERATELY SO. It asserts that every path
-NAMED IN THE TREE exists and is tracked. It does NOT assert the converse - that
+NAMED IN A TREE exists and is tracked. It does NOT assert the converse - that
 every tracked file appears in the tree - because the converse couples this test
 to every unrelated addition anywhere in the repository. A session that adds an
 ADR, a test module or a fixture would turn this file red through no fault of its
@@ -43,14 +49,34 @@ from tests.conftest import require_git_repository
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-#: The heading the tree lives under. The block is found by heading rather than
-#: by position, so reordering the README does not break this.
+#: The heading each tree lives under. The block is found by heading rather than
+#: by position, so reordering a document does not break this.
 TREE_HEADING = "## Repository tree"
 
-#: The directory `git clone` creates from this repository's name. The block used
-#: to root itself at `resin-compute/`, which is not the repository, not the
-#: canonical checkout, and not what any clone produces.
-TREE_ROOT = "Resin-Compute/"
+#: The documents carrying a tree: the minimum number of paths the parser must
+#: recover from each (the non-vacuity floor), and paths each must contain.
+TREE_DOCS: dict[str, tuple[int, tuple[str, ...]]] = {
+    "README.md": (
+        20,
+        (
+            "agents/pity_engine/__main__.py",
+            "headless/runner.py",
+            "ops/supervisor.py",
+            "surface/__main__.py",
+            "shell/",
+            "tests/",
+        ),
+    ),
+    "docs/OVERVIEW.md": (40, ("core/types.py", "surface/", "shell/", "tests/", "README.md")),
+}
+
+_DOCS = sorted(TREE_DOCS)
+
+#: The root marker. A placeholder, not a directory name: a checkout can live
+#: anywhere under any name, and the repository slug appears once, in the README
+#: Quickstart. The block once rooted itself at `resin-compute/`, which was
+#: neither the repository nor any real checkout.
+TREE_ROOT = "<checkout>/"
 
 #: One path segment. Leading dot allowed - `.githooks/`, `.gitignore` and
 #: `.claude/` are all real entries.
@@ -68,29 +94,29 @@ _SEGMENT = re.compile(rf"{_SEG}(?:/{_SEG})*/?")
 
 
 # ---------------------------------------------------------------------------
-# Reading the tree out of the README
+# Reading a tree out of a document
 # ---------------------------------------------------------------------------
 
 
-def _readme() -> str:
-    return (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+def _doc(name: str) -> str:
+    return (REPO_ROOT / name).read_text(encoding="utf-8")
 
 
-def _tree_block() -> str:
+def _tree_block(doc: str) -> str:
     """The raw text inside the fence under the Repository tree heading."""
-    _, heading, after = _readme().partition(TREE_HEADING)
-    assert heading, f"README.md has no {TREE_HEADING!r} section"
+    _, heading, after = _doc(doc).partition(TREE_HEADING)
+    assert heading, f"{doc} has no {TREE_HEADING!r} section"
     _, opened, rest = after.partition("```")
-    assert opened, "the Repository tree section opens no fence"
+    assert opened, f"the {doc} Repository tree section opens no fence"
     # Drop the remainder of the opening fence line, which may carry a language
     # tag. Left in place, a tag like `text` parses as a path and fails absurdly.
     rest = rest.split("\n", 1)[1] if "\n" in rest else ""
     block, closed, _ = rest.partition("```")
-    assert closed, "the Repository tree fence is never closed"
+    assert closed, f"the {doc} Repository tree fence is never closed"
     return block
 
 
-def _tree_paths() -> list[str]:
+def _tree_paths(doc: str) -> list[str]:
     """Repo-relative paths named by the tree, rebuilt from its indentation.
 
     Directories keep their trailing slash so the trackedness predicate can tell
@@ -101,7 +127,7 @@ def _tree_paths() -> list[str]:
     """
     stack: list[tuple[int, str]] = []
     found: list[str] = []
-    for raw in _tree_block().splitlines():
+    for raw in _tree_block(doc).splitlines():
         if not raw.strip():
             continue
         indent = len(raw) - len(raw.lstrip(" "))
@@ -154,26 +180,29 @@ def _is_tracked(path: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# The forward arms - everything the tree names is really there
+# The forward arms - everything a tree names is really there
 # ---------------------------------------------------------------------------
 
 
-def test_the_tree_roots_itself_at_the_repository():
+@pytest.mark.parametrize("doc", _DOCS)
+def test_the_tree_roots_itself_at_the_placeholder(doc: str):
     """`resin-compute/` was neither the repo name nor any real checkout."""
-    first = next(line.strip() for line in _tree_block().splitlines() if line.strip())
-    assert first.split()[0] == TREE_ROOT, f"the tree roots itself at {first.split()[0]!r}"
+    first = next(line.strip() for line in _tree_block(doc).splitlines() if line.strip())
+    assert first.split()[0] == TREE_ROOT, f"{doc} tree roots itself at {first.split()[0]!r}"
 
 
-def test_every_path_the_tree_names_exists():
-    missing = sorted(p for p in _tree_paths() if not (REPO_ROOT / p).exists())
-    assert not missing, f"the README tree names paths that do not exist: {missing}"
+@pytest.mark.parametrize("doc", _DOCS)
+def test_every_path_the_tree_names_exists(doc: str):
+    missing = sorted(p for p in _tree_paths(doc) if not (REPO_ROOT / p).exists())
+    assert not missing, f"the {doc} tree names paths that do not exist: {missing}"
 
 
-def test_every_path_the_tree_names_is_tracked_by_git():
+@pytest.mark.parametrize("doc", _DOCS)
+def test_every_path_the_tree_names_is_tracked_by_git(doc: str):
     """The arm that existence cannot provide. A path present only on the machine
     that wrote it is a path every clone is missing."""
-    untracked = sorted(p for p in _tree_paths() if not _is_tracked(p))
-    assert not untracked, f"the README tree names paths git does not store: {untracked}"
+    untracked = sorted(p for p in _tree_paths(doc) if not _is_tracked(p))
+    assert not untracked, f"the {doc} tree names paths git does not store: {untracked}"
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +210,8 @@ def test_every_path_the_tree_names_is_tracked_by_git():
 # ---------------------------------------------------------------------------
 
 
-def test_every_top_level_directory_is_named():
+@pytest.mark.parametrize("doc", _DOCS)
+def test_every_top_level_directory_is_named(doc: str):
     """Bounded on purpose, and the bound is the point.
 
     The reported defect was whole limbs missing - `surface/`, `shell/` and
@@ -196,9 +226,9 @@ def test_every_top_level_directory_is_named():
     work and speaks only when a limb appears or disappears.
     """
     tracked_dirs = {entry.split("/", 1)[0] for entry in _tracked() if "/" in entry}
-    named = {p.rstrip("/").split("/", 1)[0] for p in _tree_paths()}
+    named = {p.rstrip("/").split("/", 1)[0] for p in _tree_paths(doc)}
     missing = sorted(tracked_dirs - named)
-    assert not missing, f"top-level directories absent from the README tree: {missing}"
+    assert not missing, f"top-level directories absent from the {doc} tree: {missing}"
 
 
 # ---------------------------------------------------------------------------
@@ -206,22 +236,35 @@ def test_every_top_level_directory_is_named():
 # ---------------------------------------------------------------------------
 
 
-def test_the_parser_actually_finds_the_tree():
+@pytest.mark.parametrize("doc", _DOCS)
+def test_the_parser_actually_finds_the_tree(doc: str):
     """A parser that quietly stopped recognising lines would pass every arm
     above forever. This is the arm that notices."""
-    paths = _tree_paths()
-    assert len(paths) >= 40, f"only parsed {len(paths)} paths out of the README tree"
-    for expected in ("core/types.py", "surface/", "shell/", "tests/"):
-        assert expected in paths, f"the parser did not recover {expected!r}"
+    floor, expected_paths = TREE_DOCS[doc]
+    paths = _tree_paths(doc)
+    assert len(paths) >= floor, f"only parsed {len(paths)} paths out of the {doc} tree"
+    for expected in expected_paths:
+        assert expected in paths, f"the parser did not recover {expected!r} from {doc}"
 
 
 def test_the_parser_discards_the_description_column():
     """Proof that rewording a description cannot break this file."""
-    stack_free = [p for p in _tree_paths() if p.endswith("README.md")]
-    assert "README.md" in stack_free
-    # The word "this" opens README.md's own description in the block. If the
-    # parser were reading past the first token it would surface here as a path.
-    assert not any(p.endswith("/this") or p == "this" for p in _tree_paths())
+    paths = _tree_paths("docs/OVERVIEW.md")
+    assert "README.md" in paths
+    # The word "the" opens README.md's own description in the OVERVIEW block.
+    # If the parser read past the first token it would surface here as a path.
+    assert not any(p.endswith("/the") or p == "the" for p in paths)
+    # README entry lines open their description with `ENTRY:`; a parser reading
+    # past the first token would reattach it as a child path.
+    assert not any("ENTRY" in p for p in _tree_paths("README.md"))
+
+
+def test_the_readme_tree_is_the_short_form():
+    """Item 4 of the order: the README tree stays short. The per-file listing
+    lives in docs/OVERVIEW.md and must be the larger of the two."""
+    short, full = _tree_paths("README.md"), _tree_paths("docs/OVERVIEW.md")
+    assert len(short) < 30, f"the README tree has grown back to {len(short)} paths"
+    assert len(full) > len(short)
 
 
 def test_trackedness_is_stricter_than_existence():
