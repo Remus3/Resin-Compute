@@ -363,14 +363,14 @@ def test_a_divergence_between_two_spellings_is_untrusted_from_either_side(rsp, t
         json.dumps(
             {
                 "projects": {
-                    "C:/Resin Compute": {"hasTrustDialogAccepted": False},
-                    "C:" + chr(92) + "Resin Compute": {"hasTrustDialogAccepted": True},
+                    "C:/checkout dir": {"hasTrustDialogAccepted": False},
+                    "C:" + chr(92) + "checkout dir": {"hasTrustDialogAccepted": True},
                 }
             }
         )
     )
 
-    for spelling in (Path("C:/Resin Compute"), Path("C:" + chr(92) + "Resin Compute")):
+    for spelling in (Path("C:/checkout dir"), Path("C:" + chr(92) + "checkout dir")):
         trusted, why = rsp.workspace_trust(spelling, config=config)
         assert trusted is False, f"{spelling} read as trusted despite the divergence"
         assert "untrusted" in why.lower()

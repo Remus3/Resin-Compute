@@ -32,7 +32,7 @@ A note is INGESTED when its actionable content is recorded in this tree -
 in code, in a test, in `ROADMAP.md` or in `docs/LEDGER.md` - INCLUDING when it
 is recorded as an OPEN roadmap row. APPLICABLE-AND-NOT-DONE is reserved for
 content that has reached NOTHING in this tree. Stating this because 22 of the
-28 were already bucketed in `docs/INBOX_TRIAGE_2026-09-08-1834.md`, whose
+28 were already bucketed in `docs/_archive/2026-09/INBOX_TRIAGE_2026-09-08-1834.md`, whose
 applicable rows reached `ROADMAP.md:1305-1331`; they read as unread only
 because `--mark` was never run.
 
@@ -55,7 +55,7 @@ because `--mark` was never run.
 
 4. `2026-09-07-1834-from-LW-two-config-spellings`. `ROADMAP.md:1324-1327`.
    RE-MEASURED 2026-09-09 from `~/.claude.json`: two spellings for this
-   checkout, `'C:/Resin Compute'` and `'C:\Resin Compute'`, both with
+   checkout, `'<drive>:/<checkout>'` and `'<drive>:\<checkout>'`, both with
    `hasTrustDialogAccepted` True. The disagreeing-trust half still does not
    reproduce; the two spellings remain and nothing asserts they agree.
 

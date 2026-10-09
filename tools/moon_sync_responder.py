@@ -1585,8 +1585,8 @@ def workspace_trust(cwd: Path, config: Path | None = None) -> tuple[bool, str]:
     RSC reproduced on this disk, that `~/.claude.json` carries TWO path
     spellings for this checkout with DISAGREEING trust:
 
-        'C:/Resin Compute'   hasTrustDialogAccepted = False
-        'C:' + chr(92) + 'Resin Compute'   hasTrustDialogAccepted = True
+        'C:/checkout dir'    hasTrustDialogAccepted = False
+        'C:' + chr(92) + 'checkout dir'    hasTrustDialogAccepted = True
 
     Those keys are separator- and case-sensitive, and an UNTRUSTED workspace
     makes a headless run DISCARD its permissions silently. It does not error. It
