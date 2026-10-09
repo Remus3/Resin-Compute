@@ -739,6 +739,9 @@ def test_the_session_cache_lives_under_the_runtime_directory(watch, monkeypatch)
     UNREDIRECTED module, because the fixture rewrites every `DEFAULT_` path and
     would make this arm a statement about `tmp_path`.
     """
+    # The kit v12 test guard points RESINCOMPUTE_RUNTIME_DIR at tmp_path for
+    # every test; this arm is about the unredirected default.
+    monkeypatch.delenv("RESINCOMPUTE_RUNTIME_DIR", raising=False)
     spec = importlib.util.spec_from_file_location("watch_inbox_live_paths", SCRIPT)
     assert spec is not None and spec.loader is not None
     live = importlib.util.module_from_spec(spec)

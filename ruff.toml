@@ -79,6 +79,12 @@ exclude = [
 "ops/fleet_kit/fleet_inbox.py" = ["UP017"]
 "ops/fleet_kit/fleet_done.py" = ["UP017", "UP032"]
 "ops/fleet_kit/fleet_subagent_first.py" = ["BLE001"]
+# Kit v12 (MAIN 2031 ORDER of 2026-10-08), measured 2026-10-08 under this
+# config: fleet_claims.py UP032 x1 and BLE001 x1 (its never-fail-closed hook
+# `except Exception`); fleet_gitlock.py UP032 x3; fleet_suite_gate.py UP032 x2.
+"ops/fleet_kit/fleet_claims.py" = ["UP032", "BLE001"]
+"ops/fleet_kit/fleet_gitlock.py" = ["UP032"]
+"ops/fleet_kit/fleet_suite_gate.py" = ["UP032"]
 "agents/pity_engine/tests/*.py" = ["B011"]
 
 [lint.isort]

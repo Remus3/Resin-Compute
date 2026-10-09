@@ -117,7 +117,10 @@ MAX_HOOK_TIMEOUT = 5
 #: SUBAGENT-FIRST hook at timeout 10. It runs before a tool call, not before
 #: the operator can type, and on any exception it exits 0 with no output, so a
 #: slow run degrades to "no decision", never to a blocked session.
-MAX_HOOK_TIMEOUT_BY_EVENT = {"PreToolUse": 10}
+#: SubagentStop and the second PreToolUse entry: FLEET-KIT v12 (MAIN 2031 ORDER
+#: of 2026-10-08, s3.3) declares `fleet_claims.py hook` and `release-hook` at
+#: timeout 10. Both swallow every exception and exit 0 (never fail closed).
+MAX_HOOK_TIMEOUT_BY_EVENT = {"PreToolUse": 10, "SubagentStop": 10}
 
 #: Claude Code substitutes the project root for these. Accepted and unwrapped
 #: so a later edit to the self-locating form keeps resolving, and so the
@@ -279,6 +282,19 @@ SUBAGENT_FIRST_SHAPE = re.compile(
     r'"SUBAGENT-FIRST: dispatch this to a sub-agent"\}\}\r?\n)\Z'
 )
 
+#: What the kit v12 claims hook (`ops/fleet_kit/fleet_claims.py hook`, MAIN
+#: 2031 ORDER of 2026-10-08) prints: NOTHING (allow, log mode, off, or any
+#: exception), else ONE JSON line carrying a PreToolUse deny whose reason the
+#: kit composes per case. Whole-body anchored. Its `release-hook` prints
+#: nothing at all. Graded on their wiring in
+#: `tests/test_fleet_kit_v12_adoption.py`.
+CLAIMS_HOOK_SHAPE = re.compile(
+    r'\A(?:|\{"hookSpecificOutput": \{"hookEventName": "PreToolUse", '
+    r'"permissionDecision": "deny", "permissionDecisionReason": '
+    r'"[^"\n]*"\}\}\r?\n)\Z'
+)
+RELEASE_HOOK_SHAPE = re.compile(r"\A\Z")
+
 #: The EXACT declared command -> the shape its stdout must carry.
 #:
 #: Keyed on the whole command rather than on a script basename, because two
@@ -312,6 +328,8 @@ EXPECTED_SHAPE = {
     'python "$CLAUDE_PROJECT_DIR/tools/session_checklist.py"': SESSION_COUNTER_SHAPE,
     'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_done.py" stop-hook': STOP_HOOK_SHAPE,
     'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_subagent_first.py"': SUBAGENT_FIRST_SHAPE,
+    'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py" hook': CLAIMS_HOOK_SHAPE,
+    'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py" release-hook': RELEASE_HOOK_SHAPE,
 }
 
 #: sha256 of the `_BANNER` string literal in `tools/caveman_default.py`, and its
@@ -1287,6 +1305,10 @@ def test_this_file_stamps_nothing_into_the_live_runtime_records(monkeypatch):
         pytest.skip("nested run - see NESTED_MARKER, this arm must not re-enter itself")
 
     watcher = _watcher_module()
+    # FLEET-KIT v12 test guard (tests/conftest.py) points this variable at
+    # tmp_path for EVERY test, which also overwrites any shell value. This arm
+    # measures the LIVE records, so it drops the guard's redirect first.
+    monkeypatch.delenv(watcher.ENV_RUNTIME_DIR, raising=False)
     # HOISTED DELIBERATELY - do NOT inline this back into the assert below.
     # Comparing a bool renders `assert not True`; comparing against the mapping
     # renders the mapping. Rationale and the measured byte counts live in

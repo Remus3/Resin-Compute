@@ -197,3 +197,20 @@ def skip_module_without_git() -> None:
     reason = git_unusable_reason()
     if reason is not None:
         pytest.skip(reason, allow_module_level=True)
+
+
+# FLEET-KIT v12 RACE GUARDS (MAIN 2031 ORDER s3.6, FLEET-COMMON 16d): a suite
+# that changes live state (control files, inbox, outbox) fails, and the one
+# env var this tree reads to locate its runtime root - RESINCOMPUTE_RUNTIME_DIR,
+# defined in ops/health.py - points at tmp_path for every test. RC_DATA_DIR is
+# NOT declared: it locates the hand-authored fixtures, not runtime state.
+import sys as _sys  # noqa: E402
+
+_sys.path.insert(0, str(REPO_ROOT / "ops" / "fleet_kit"))
+import fleet_test_guard  # noqa: E402
+
+fleet_test_guard.install(
+    globals(),
+    root=REPO_ROOT,
+    env_roots={"RESINCOMPUTE_RUNTIME_DIR": "runtime"},
+)
