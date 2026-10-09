@@ -85,6 +85,11 @@ exclude = [
 "ops/fleet_kit/fleet_claims.py" = ["UP032", "BLE001"]
 "ops/fleet_kit/fleet_gitlock.py" = ["UP032"]
 "ops/fleet_kit/fleet_suite_gate.py" = ["UP032"]
+# Kit v13 (MAIN bundle 2128 of 2026-10-08), measured 2026-10-08: the v12
+# entries above still hold (fleet_gitlock.py now UP032 x4); new files
+# fleet_identity.py UP032 x4 and fleet_rewrite.py UP032 x4.
+"ops/fleet_kit/fleet_identity.py" = ["UP032"]
+"ops/fleet_kit/fleet_rewrite.py" = ["UP032"]
 "agents/pity_engine/tests/*.py" = ["B011"]
 
 [lint.isort]
