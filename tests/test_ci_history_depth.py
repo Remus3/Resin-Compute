@@ -1,21 +1,25 @@
-"""ci.yml must not return to a shallow checkout while a history sweep ships.
+"""ci.yml must keep FULL history on the schedule while a history sweep ships.
 
 WHAT THIS GUARD CLAIMS, narrow on purpose. It reads the TEXT of
 `.github/workflows/ci.yml` and asserts that its `actions/checkout` step
-declares `fetch-depth: 0`. That is the whole claim. It CANNOT claim the flag
-reaches the runner - a variable, a composite action, a reusable workflow or a
-`uses:` indirection would all be invisible to a line scanner - and it does not
-model YAML. It is a spelling guard over one key, which is the right instrument
-here because the failure it prevents is an EDIT TO THIS FILE, not a runtime
-behaviour.
+declares a `fetch-depth` that is 0 whenever the event is the nightly
+`schedule`: either a literal 0, or the one expression shape this tree ships,
+`${{ (github.event_name == 'schedule' || ...) && '0' || '<N>' }}`. It CANNOT
+claim the value reaches the runner - a variable, a composite action or a
+`uses:` indirection would all be invisible to a line scanner - and it does
+not model YAML or evaluate expressions beyond that one shape. It is a
+spelling guard over one key, because the failure it prevents is an EDIT TO
+THIS FILE, not a runtime behaviour.
 
 WHY THE DEPTH IS LOAD-BEARING. `tests/test_commit_trailers.py` sweeps
-`git log` over the whole history and fails if any commit carries a banned
-agent trailer. On a depth-1 clone git answers with one commit rather than
-erroring, so that sweep would pass BY CONSTRUCTION; the module detects the
-shallow clone and skips instead, with a reason naming this very flag. Honest,
-and it left CI enforcing none of a rule CLAUDE.md states as hard. Depth 0 is
-what makes those arms run on the runner.
+`git log` and fails if any commit carries a banned agent trailer. On a
+shallow clone with no range exported git answers with a truncated history,
+so that sweep would pass BY CONSTRUCTION; the module detects the shallow
+clone and skips instead. Since MAIN 2246 ORDER s2 (PERF-AUDIT item 10) a push
+or pull-request job checks out shallow and sweeps ONLY the pushed range
+(`RSC_TRAILER_RANGE`); the schedule sweeps everything at depth 0. So two
+things must hold together: the schedule is full-depth, and a shallow push
+checkout ships the range step. Both are pinned below.
 
 TIED TO ITS PREMISE, as its own arm. If that sweep ever stops reading history,
 this guard becomes a rule about nothing while still LOOKING like protection,
@@ -50,7 +54,7 @@ DOCS_GUARDS = REPO_ROOT / ".github" / "workflows" / "docs-guards.yml"
 TRAILER_SWEEP = REPO_ROOT / "tests" / "test_commit_trailers.py"
 
 _CHECKOUT = re.compile(r"^uses:\s*actions/checkout@", re.IGNORECASE)
-_FETCH_DEPTH = re.compile(r"^fetch-depth:\s*(\S+)")
+_FETCH_DEPTH = re.compile(r"^fetch-depth:\s*(.+?)\s*$")
 #: The SHA-pinned checkout ref with its `# vX.Y.Z` tag comment.
 _PINNED_CHECKOUT = re.compile(r"^uses:\s*actions/checkout@[0-9a-f]{40}\s+#\s+v\d+(?:\.\d+){0,2}$")
 
@@ -111,14 +115,36 @@ def parse_checkout_steps(text: str) -> list[CheckoutStep]:
     return steps
 
 
+#: The one expression shape accepted for a depth that varies by event. The
+#: condition must name the schedule; the fallback must be a positive depth.
+_EVENT_DEPTH = re.compile(
+    r"""^\$\{\{\s*\(?(?P<cond>[^&]*?)\)?\s*&&\s*'0'\s*\|\|\s*'(?P<n>\d+)'\s*\}\}$"""
+)
+_SCHEDULE_TERM = re.compile(r"""github\.event_name\s*==\s*'schedule'""")
+
+
+def depth_is_full_on_schedule(depth: str) -> bool:
+    """True for a literal 0, or for the accepted event expression that yields
+    '0' when the event is the schedule."""
+    if depth == "0":
+        return True
+    match = _EVENT_DEPTH.match(depth)
+    if not match:
+        return False
+    cond = match.group("cond")
+    if not _SCHEDULE_TERM.search(cond) or "&&" in cond or "!=" in cond or "!" in cond.replace("!=", ""):
+        return False
+    return int(match.group("n")) >= 1
+
+
 def full_history_problems(text: str) -> list[str]:
-    """Every reason `text` fails to declare a full-history checkout.
+    """Every reason `text` fails to fetch full history on the schedule.
 
     An empty list means all three of: at least one `actions/checkout` step was
     FOUND, every such step carries an explicit `fetch-depth`, and every value
-    is 0. A workflow with no checkout step is a problem rather than a pass -
-    that is the anti-vacuity floor, and it lives here so the guard below can
-    grade census and judgement in a single assertion.
+    is 0 on the schedule. A workflow with no checkout step is a problem rather
+    than a pass - that is the anti-vacuity floor, and it lives here so the
+    guard below can grade census and judgement in a single assertion.
     """
     steps = parse_checkout_steps(text)
     problems: list[str] = []
@@ -134,10 +160,10 @@ def full_history_problems(text: str) -> list[str]:
                 f"line {step.line}: `{step.ref}` declares no fetch-depth key, and the "
                 f"action defaults to 1 - a shallow clone"
             )
-        elif step.depth != "0":
+        elif not depth_is_full_on_schedule(step.depth):
             problems.append(
-                f"line {step.line}: `{step.ref}` declares fetch-depth {step.depth!r} - "
-                f"a shallow clone"
+                f"line {step.line}: `{step.ref}` declares fetch-depth {step.depth!r}, which "
+                f"is not 0 on the schedule - a shallow nightly sweep"
             )
     return problems
 
@@ -262,6 +288,30 @@ jobs:
         with:
           fetch-depth: 0
 """,
+    "an event expression that is shallow on the schedule": """
+jobs:
+  check:
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: ${{ github.event_name == 'schedule' && '1' || '0' }}
+""",
+    "an event expression keyed on push, not the schedule": """
+jobs:
+  check:
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: ${{ github.event_name == 'push' && '0' || '100' }}
+""",
+    "an event expression negating the schedule": """
+jobs:
+  check:
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: ${{ github.event_name != 'schedule' && '0' || '100' }}
+""",
     "one full checkout and one shallow": """
 jobs:
   check:
@@ -317,6 +367,22 @@ steps:
 - uses: actions/checkout@v6
   with:
     fetch-depth: 0
+""",
+    "the shipped event expression": """
+jobs:
+  check:
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '0' || '100' }}
+""",
+    "a schedule-only event expression without parentheses": """
+jobs:
+  check:
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: ${{ github.event_name == 'schedule' && '0' || '50' }}
 """,
     "a pinned sha rather than a tag": """
 jobs:
@@ -431,3 +497,62 @@ def test_the_parser_recovers_the_real_workflows_own_step():
         f"the scan read {[s.ref for s in steps]} out of ci.yml, which is not the single "
         f"checkout step this module was written against"
     )
+
+
+# ---------------------------------------------------------------------------
+# The push-job half: a shallow push checkout must ship the range sweep
+# ---------------------------------------------------------------------------
+
+
+def range_sweep_problems(text: str) -> list[str]:
+    """Why a workflow whose checkout is shallow on push does not sweep the range.
+
+    Executable lines only, so a comment naming the variable cannot satisfy it.
+    """
+    steps = parse_checkout_steps(text)
+    if steps and all(step.depth == "0" for step in steps):
+        return []
+    executable = [
+        line for line in text.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    body = "\n".join(executable)
+    problems = []
+    if "RSC_TRAILER_RANGE=" not in body:
+        problems.append("no executable line exports RSC_TRAILER_RANGE")
+    if not re.search(r"-m pytest\b[^\n]*tests/test_commit_trailers\.py", body):
+        problems.append("no executable line runs tests/test_commit_trailers.py")
+    return problems
+
+
+def test_a_shallow_push_checkout_ships_the_range_sweep():
+    """Without the range step a shallow push job enforces none of the ban:
+    the sweep would skip, and the whole-history run is nightly only."""
+    from tests.test_commit_trailers import TRAILER_RANGE_ENV
+
+    assert TRAILER_RANGE_ENV == "RSC_TRAILER_RANGE", (
+        "the trailer module renamed its range variable; re-point this guard"
+    )
+    problems = range_sweep_problems(CI.read_text(encoding="utf-8"))
+    assert not problems, "ci.yml checks out shallow on push but: " + " | ".join(problems)
+
+
+def test_the_range_detector_fires_and_spares():
+    """Non-vacuity in both directions over hand-typed workflow text."""
+    shallow = (
+        "      - uses: actions/checkout@v6\n"
+        "        with:\n"
+        "          fetch-depth: ${{ github.event_name == 'schedule' && '0' || '100' }}\n"
+    )
+    assert range_sweep_problems(shallow), "a shallow push with no range step passed"
+    commented = shallow + (
+        "          # export RSC_TRAILER_RANGE=x; python -m pytest tests/test_commit_trailers.py\n"
+    )
+    assert range_sweep_problems(commented), "a comment satisfied the range detector"
+    shipped = shallow + (
+        '            *[!0]*) export RSC_TRAILER_RANGE="${base}..HEAD" ;;\n'
+        "          python -m pytest -rs tests/test_commit_trailers.py\n"
+    )
+    assert not range_sweep_problems(shipped)
+    full = "      - uses: actions/checkout@v6\n        with:\n          fetch-depth: 0\n"
+    assert not range_sweep_problems(full), "a full-depth checkout needs no range step"

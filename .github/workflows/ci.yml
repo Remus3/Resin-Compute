@@ -37,6 +37,14 @@ on:
       - '**/*.md'
   # paths-ignore does not apply to a schedule, so the nightly run covers the
   # whole tree including anything a docs-only push skipped.
+  #
+  # NIGHTLY, GATED ON NEW COMMITS (MAIN 2246 ORDER s2, PERF-AUDIT item 3). The
+  # `freshness` job below lets the schedule run the suite only when the
+  # default branch gained a commit in the last 24 h. Gated rather than weekly
+  # because push runs now deselect the `plumbing` marker when no plumbing root
+  # changed, so the schedule is where a product edit that breaks a plumbing
+  # test is caught - a week of latency there is too long, and a quiet day
+  # costs one API call instead of a full run.
   schedule:
     - cron: '0 8 * * *'
   workflow_dispatch:
@@ -55,8 +63,34 @@ permissions:
   contents: read
 
 jobs:
+  freshness:
+    # Schedule only. No checkout: one read of the commits API. Fails OPEN - any
+    # error answers "fresh", so a broken probe costs a run and never skips one.
+    name: nightly gate - any commit in the last 24 h
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      fresh: ${{ steps.decide.outputs.fresh }}
+    steps:
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          since="$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)"
+          count="$(gh api "repos/${GITHUB_REPOSITORY}/commits?sha=${GITHUB_REF_NAME}&since=${since}&per_page=1" --jq 'length' 2>/dev/null)" || count=""
+          if [ "${count}" = "0" ]; then fresh=false; else fresh=true; fi
+          echo "commits since ${since}: '${count:-unknown}' -> fresh=${fresh}"
+          echo "fresh=${fresh}" >> "$GITHUB_OUTPUT"
+
   check:
     name: lint, types, dual suite, headless smoke
+    needs: freshness
+    # `freshness` is SKIPPED for every non-schedule event, and a dependent of
+    # a skipped job is skipped too unless its `if` opts out of that. So: not
+    # cancelled, and either not the schedule or the schedule found a commit.
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.freshness.outputs.fresh == 'true') }}
     runs-on: ubuntu-latest
     # The JOB ceiling must exceed every STEP ceiling below with room to spare.
     # A step killed by its own timeout is marked FAILED; a job killed by the
@@ -94,17 +128,22 @@ jobs:
           # somewhere it still runs - do not drop this back to 1 and leave two
           # arms skipping green.
           #
-          # tests/test_ci_history_depth.py goes red if this returns to a
-          # shallow depth while that sweep still ships.
+          # FULL HISTORY ON THE SCHEDULE ONLY, SINCE MAIN 2246 ORDER s2
+          # (PERF-AUDIT item 10). The sweep reads the WHOLE history on the
+          # nightly schedule and on a manual dispatch, at depth 0. A push or
+          # pull-request job fetches the last 100 commits and runs the sweep
+          # over ONLY the range that event brought (`RSC_TRAILER_RANGE`, set by
+          # the trailer step below) - and that sweep FAILS, never skips, if the
+          # range base was not fetched, so a push of more than 100 commits
+          # reds here and the fix is a deeper fetch, not a skip.
           #
-          # docs-guards.yml stays at depth 1 on purpose, and saying it only
-          # runs `git ls-files` would be incomplete: it ALSO invokes pytest,
-          # over a list derived from every test module that mentions a
-          # markdown path, which includes tests/test_commit_trailers.py. So
-          # that module still runs shallow on the docs lane and its two
-          # shallow-clone skips still fire there. They are live code with a
-          # true reason, not residue of this change.
-          fetch-depth: 0
+          # tests/test_ci_history_depth.py goes red if the schedule stops
+          # fetching full history while that sweep still ships, or if the
+          # range step goes away.
+          #
+          # docs-guards.yml stays at depth 1 on purpose: it runs `git
+          # ls-files` and the `reads_docs` modules, and reads no history.
+          fetch-depth: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '0' || '100' }}
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
@@ -302,6 +341,12 @@ jobs:
         # ADVISORY, deliberately, and this is the one line to change when that
         # should stop being true.
         #
+        # SCHEDULE AND DISPATCH ONLY until it is blocking (MAIN 2246 ORDER s2,
+        # PERF-AUDIT item 10): an advisory result nobody reads was costing a
+        # step on every push. Drop this `if` in the same commit that drops
+        # `continue-on-error`.
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        #
         # docs/SPEC_SCAFFOLD.md section 7 defines slice acceptance as
         # py_compile + ruff + the slice's own pytest + no banned glyph. mypy is
         # NOT in it. Making it blocking here would impose a requirement on
@@ -351,13 +396,93 @@ jobs:
       # continuation, and on a reordering - four false reds on correct code.
       # The guard reads the `-r` SPEC and asks whether its characters report
       # skips, and it FAILS rather than guesses on a shape it cannot read.
+      #
+      # PLUMBING RUNS WHEN PLUMBING CHANGES (MAIN 2246 ORDER s2, PERF-AUDIT
+      # item 2). Most application items test fleet, responder, hook and CI
+      # plumbing. On a push or pull request whose diff touches no plumbing
+      # root (tools/, headless/, scripts/, ops/, .githooks/, .github/,
+      # .claude/) and no FULL trigger, the application suite runs
+      # `-m "not plumbing"`; the marker is applied from tests/_markers.py.
+      # The schedule and a dispatch always run every module, and any failure
+      # to compute the diff runs every module too.
+      #
+      # TIMINGS (item 4): both suites print their 25 slowest phases and copy
+      # that block into the job summary, so a slow arm is visible without
+      # downloading a log.
+      - name: Decide whether plumbing modules run
+        id: scope
+        env:
+          BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          base=""
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            base="${BEFORE}"
+          elif [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            base="${PR_BASE}"
+          fi
+          mark="$(python scripts/prepush_select.py --ci-mark ${base:+--base "$base"})"
+          echo "application suite marker expression: '${mark:-none - every module runs}'"
+          echo "mark=${mark}" >> "$GITHUB_OUTPUT"
+
       - name: Application suite (tests/)
         timeout-minutes: 10
-        run: python -m pytest -rs tests
+        env:
+          RSC_MARK: ${{ steps.scope.outputs.mark }}
+        run: |
+          set +e
+          python -m pytest -rs tests -m "${RSC_MARK}" --durations=25 > "${RUNNER_TEMP}/app-suite.log"
+          status=$?
+          set -e
+          cat "${RUNNER_TEMP}/app-suite.log"
+          {
+            echo "### Application suite - 25 slowest (marker: '${RSC_MARK:-all}')"
+            echo '```'
+            sed -n '/slowest 25 durations/,/^=/p' "${RUNNER_TEMP}/app-suite.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
       - name: Engine suite (agents/pity_engine)
         timeout-minutes: 10
-        run: python -m pytest -rs agents/pity_engine
+        run: |
+          set +e
+          python -m pytest -rs agents/pity_engine --durations=25 > "${RUNNER_TEMP}/engine-suite.log"
+          status=$?
+          set -e
+          cat "${RUNNER_TEMP}/engine-suite.log"
+          {
+            echo "### Engine suite - 25 slowest"
+            echo '```'
+            sed -n '/slowest 25 durations/,/^=/p' "${RUNNER_TEMP}/engine-suite.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      - name: Agent-trailer sweep over the range this event brought
+        # The push-job half of tests/test_commit_trailers.py's history sweep
+        # (PERF-AUDIT item 10). It runs here unconditionally because that
+        # module is `plumbing` and the application step above may have
+        # deselected it. An all-zero `before` (a new branch) leaves no range,
+        # and the module's shallow-clone skip then applies, named by -rs.
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        env:
+          BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          base=""
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            base="${BEFORE}"
+          elif [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            base="${PR_BASE}"
+          fi
+          case "${base}" in
+            *[!0]*) export RSC_TRAILER_RANGE="${base}..HEAD" ;;
+          esac
+          echo "trailer sweep range: ${RSC_TRAILER_RANGE:-none}"
+          python -m pytest -rs tests/test_commit_trailers.py
 
       - name: Headless lane smoke test
         timeout-minutes: 5

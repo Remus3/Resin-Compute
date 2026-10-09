@@ -17,14 +17,10 @@
 #      automated routine that never installs hooks, is seen by CI or by nobody.
 #
 # So this workflow fires on exactly what ci.yml declines, and runs two things:
-# the banned-glyph sweep over tracked .md, and the SUBSET of test modules that
-# read tracked .md off disk. The minute saver survives in the shape that
-# matters - a prose edit skips the compile sweep, ruff, mypy, the headless
-# smoke and every test module that does not read a .md - but the guard subset
-# is not small, and saying it was would be the kind of comment that reads as
-# reassurance while describing something else. It is derived from the index on
-# every run, so its size is whatever the tree currently justifies; the log
-# prints the count.
+# the banned-glyph sweep over tracked .md, and the test modules that read
+# tracked .md - those marked `reads_docs` in tests/_markers.py, plus the small
+# engine suite whole. A prose edit skips the compile sweep, ruff, mypy, the
+# headless smoke and every module that reads no document.
 #
 # THE TWO SUITES ARE INVOKED SEPARATELY HERE, exactly as pytest.ini and
 # CLAUDE.md require. Until 2026-09-06 the guard selection reached into
@@ -37,10 +33,10 @@
 # complementary: an entry added to ci.yml's `paths-ignore` needs the matching
 # entry in `paths` here, in the same commit.
 #
-# THE GUARD LIST IS NOT WRITTEN HERE. A hand-maintained universe in YAML is
-# green over every module added after it was written. It is derived from
-# `git ls-files` at CI time instead, so a guard added tomorrow is selected
-# tomorrow.
+# THE GUARD LIST IS NOT WRITTEN HERE. It is the `reads_docs` marker, applied
+# from tests/_markers.py, and a guard in tests/test_test_markers.py fails on
+# any module that mentions a markdown path and is neither marked nor exempted -
+# so a guard added tomorrow is classified tomorrow, not forgotten.
 #
 # Paths are repo-root relative - see the header of ci.yml.
 
@@ -54,12 +50,14 @@ on:
       # Edits to the mechanism itself must re-run the mechanism.
       - '.github/workflows/docs-guards.yml'
       - 'tools/precommit_gate.py'
+      - 'tests/_markers.py'
   pull_request:
     branches: [main]
     paths:
       - '**/*.md'
       - '.github/workflows/docs-guards.yml'
       - 'tools/precommit_gate.py'
+      - 'tests/_markers.py'
   workflow_dispatch:
 
 # A newer docs push supersedes an in-flight one, same shape as ci.yml.
@@ -132,110 +130,34 @@ jobs:
           echo "tracked .md files: ${expected}"
           python tools/precommit_gate.py --expect-count "${expected}" --scan-tracked docs
 
-      - name: Select the guards that read tracked .md
+      - name: Run the reads_docs guards - the two suites SEPARATELY
         run: |
           set -euo pipefail
-          # Derived, never hardcoded. Any test module that mentions a .md path
-          # is a candidate; the set is recomputed on every run from the index.
+          # THE SELECTION IS THE `reads_docs` MARKER (MAIN 2246 ORDER s2,
+          # PERF-AUDIT item 3). It used to be every test module whose TEXT
+          # matched a markdown-path grep - 68 of 129 modules, two thirds of
+          # the suite, most of them mentioning a .md only in prose. The marker
+          # is applied centrally from tests/_markers.py READS_DOCS, and the
+          # old grep survives as a GUARD in tests/test_test_markers.py: every
+          # module it matches must be marked or listed as exempt, so a new
+          # module that reads a document cannot fall off this lane silently.
           #
-          # NUL-delimited throughout, matching the ASCII step above: `git
-          # ls-files` without -z separates on newline and quotes unusual paths,
-          # neither of which survives a filename carrying a space or a quote.
-          #
-          # SPLIT BY SUITE, and that is the point of this step rather than an
-          # aside. pytest.ini and CLAUDE.md both say the two suites are run
-          # SEPARATELY and never as one root-level collection; this job used to
-          # select '*/tests/*.py' and 'tests/*.py' into ONE list and hand the
-          # lot to a single pytest, which reached into agents/pity_engine/tests
-          # and collected both suites together. It was green on every docs push,
-          # which is exactly why it went unnoticed for as long as it did.
-          #
-          # THE INTERMEDIATES LIVE OUTSIDE THE WORKSPACE. This step used to
-          # drop candidate_tests.txt and md_guards.txt into the repo root,
-          # where anyone who ran these steps by hand would leave them for the
-          # next `git add -A` to stage as junk. RUNNER_TEMP is provided by the
-          # runner and is not the checkout; the fallback keeps a local hand-run
-          # equally clean. Nothing in .gitignore has to know about this.
-          WORK="${RUNNER_TEMP:-/tmp}/rc-docs-guards"
-          rm -rf "$WORK"
-          mkdir -p "$WORK"
-          git ls-files -z '*/tests/*.py' 'tests/*.py' > "$WORK/candidate_tests.z"
-          : > "$WORK/app_guards.z"
-          : > "$WORK/engine_guards.z"
-          : > "$WORK/unbucketed.txt"
-          while IFS= read -r -d '' f; do
-            grep -qE '\.md([^a-zA-Z0-9]|$)' "$f" || continue
-            case "$f" in
-              agents/pity_engine/tests/*) printf '%s\0' "$f" >> "$WORK/engine_guards.z" ;;
-              tests/*)                    printf '%s\0' "$f" >> "$WORK/app_guards.z" ;;
-              # A candidate belonging to NEITHER suite is not dropped quietly.
-              # A silent skip here would rebuild the same coverage hole one
-              # directory over.
-              *)                          printf '%s\n' "$f" >> "$WORK/unbucketed.txt" ;;
-            esac
-          done < "$WORK/candidate_tests.z"
-          app_n="$(tr -cd '\0' < "$WORK/app_guards.z" | wc -c)"
-          engine_n="$(tr -cd '\0' < "$WORK/engine_guards.z" | wc -c)"
-          echo "md-reading guards: ${app_n} in tests/, ${engine_n} in agents/pity_engine/tests/"
-          tr '\0' '\n' < "$WORK/app_guards.z"
-          tr '\0' '\n' < "$WORK/engine_guards.z"
-          if [ -s "$WORK/unbucketed.txt" ]; then
-            echo "::error::these md-reading guards belong to neither suite, so neither invocation below would run them:"
-            cat "$WORK/unbucketed.txt"
-            exit 1
-          fi
-
-      - name: Run the md-reading guards - the two suites SEPARATELY
-        run: |
-          set -euo pipefail
           # Two invocations, never one. See pytest.ini: the engine package is
           # self-validating and is mirrored as a standalone unit, so collecting
           # it alongside tests/ is how a sibling project earned its
-          # import-file-mismatch incident. Two steps' worth of output in one
-          # step, so the log names which half failed.
+          # import-file-mismatch incident. The engine suite runs WHOLE: it is a
+          # handful of modules, it carries a module that reads a document, and
+          # tests/conftest.py (which applies the marker) does not reach it.
           #
           # No -q. pytest.ini already carries `addopts = -q`; adding a second
-          # one doubles it to -qq, which SUPPRESSES the summary line - the one
-          # step in this job that runs assertions would log a wall of dots and
-          # no count.
+          # one doubles it to -qq, which SUPPRESSES the summary line.
           #
-          # -rs, and it is the other half of the same complaint. With no `-r`
-          # spec a skip reaches the log as a bare `s` and nothing else, so
-          # ran-and-found-nothing and not-present-at-all - two different
-          # outcomes - become one indistinguishable character. .githooks/pre-push
-          # and ci.yml both pass -rs to both of their invocations already; this
-          # job was the last place in the tree that did not.
-          #
-          # ATTACHED TO THE FLAG on purpose. A detached `-r s` is correct
-          # pytest, but a token scan cannot tell it from an `-r` followed by a
-          # target, so tests/test_ci_workflow_complement.py reports that shape
-          # UNPARSEABLE and FAILS rather than guessing. Keep the spec welded to
-          # the flag and the guard can read it.
-          #
-          # Same path the selection step computed. RUNNER_TEMP is stable for
-          # the whole job, so the two steps agree without leaving anything in
-          # the checkout for a later `git add -A` to pick up.
-          WORK="${RUNNER_TEMP:-/tmp}/rc-docs-guards"
-          app=()
-          engine=()
-          mapfile -d '' -t app    < "$WORK/app_guards.z"
-          mapfile -d '' -t engine < "$WORK/engine_guards.z"
-          if [ "${#app[@]}" -eq 0 ] && [ "${#engine[@]}" -eq 0 ]; then
-            # Legitimately possible while the tree is young. Say so loudly
-            # rather than reporting a silent green over zero assertions.
-            echo "::notice::no test module reads tracked .md yet - nothing to run"
-            exit 0
-          fi
-          # The arrays are expanded directly. Never `xargs`, which splits on
-          # whitespace and would turn one guard module whose path contains a
-          # space into two nonexistent ones - and pytest handed a nonexistent
-          # path is an error, while pytest handed NO path collects the whole
-          # tree and reports a green this job did not earn.
-          if [ "${#app[@]}" -gt 0 ]; then
-            echo "--- application suite: ${#app[@]} md-reading module(s) ---"
-            python -m pytest -rs --tb=short "${app[@]}"
-          fi
-          if [ "${#engine[@]}" -gt 0 ]; then
-            echo "--- engine suite: ${#engine[@]} md-reading module(s) ---"
-            python -m pytest -rs --tb=short "${engine[@]}"
-          fi
+          # -rs, attached to the flag: with no `-r` spec a skip reaches the log
+          # as a bare `s`, so ran-and-found-nothing and not-present-at-all
+          # become one character. tests/test_ci_workflow_complement.py reads
+          # the spec and reports a detached `-r s` UNPARSEABLE rather than
+          # guessing, so keep it welded to the flag.
+          echo "--- application suite: modules marked reads_docs ---"
+          python -m pytest -rs --tb=short tests -m reads_docs
+          echo "--- engine suite: whole ---"
+          python -m pytest -rs --tb=short agents/pity_engine

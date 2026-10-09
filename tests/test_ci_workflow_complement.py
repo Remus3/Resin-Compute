@@ -123,7 +123,7 @@ def test_every_path_ci_ignores_is_covered_by_docs_guards():
     )
 
 
-@pytest.mark.parametrize("mechanism", ["docs-guards.yml", "precommit_gate.py"])
+@pytest.mark.parametrize("mechanism", ["docs-guards.yml", "precommit_gate.py", "tests/_markers.py"])
 def test_docs_guards_reruns_itself_when_its_own_mechanism_changes(mechanism: str):
     """An edit to the checker must re-run the checker.
 
@@ -470,28 +470,26 @@ def test_the_comment_prose_is_not_what_the_detector_reads():
 def test_docs_guards_never_hands_one_pytest_both_suites():
     """pytest.ini and CLAUDE.md both forbid a root-level dual collection.
 
-    docs-guards.yml selected the engine's tests alongside the application's
+    docs-guards.yml once selected the engine's tests alongside the application's
     into ONE list and ran the lot in a single invocation. It had been green on
     every docs push since it was written, which is exactly why nobody noticed -
-    a rule broken inside a passing job stays broken.
+    a rule broken inside a passing job stays broken. Since the `reads_docs`
+    marker (MAIN 2246 ORDER s2) the job names each suite literally, so the rule
+    is graded on the targets: exactly one invocation per suite, neither line
+    naming both.
     """
     lines = _executable_lines(DOCS_GUARDS)
-    body = "\n".join(lines)
-    assert "app_guards.z" in body, "docs-guards.yml has no application-suite bucket"
-    assert "engine_guards.z" in body, "docs-guards.yml has no engine-suite bucket"
-
-    mixed = [ln for ln in lines if "app_guards" in ln and "engine_guards" in ln]
-    assert not mixed, f"one line handles both buckets, so they can still be merged: {mixed}"
-
     invocations = [ln for ln in lines if "-m pytest" in ln]
-    assert len(invocations) >= 2, (
+    assert len(invocations) == 2, (
         f"docs-guards.yml runs pytest {len(invocations)} time(s); the two suites need "
         f"one invocation each. Lines: {invocations}"
     )
     for line in invocations:
-        assert not ("app[@]" in line and "engine[@]" in line), (
+        assert not ("agents/pity_engine" in line and " tests" in line), (
             f"one pytest invocation covers both suites: {line}"
         )
+    targets = sorted(inv.target for inv in parse_pytest_invocations(chr(10).join(invocations)))
+    assert targets == sorted(DOCS_GUARDS_SUITE_TARGETS), targets
 
 
 def test_no_workflow_writes_its_intermediates_into_the_checkout():
@@ -536,30 +534,27 @@ def test_the_intermediate_detector_fires_on_the_shipped_form():
 
 
 def test_the_suite_split_is_load_bearing_and_not_decoration():
-    """The derived guard set must actually span both suites TODAY.
+    """Both halves of the docs lane must have something to run TODAY.
 
-    Otherwise the split above is a no-op that would keep passing after someone
-    reintroduced the merged invocation. Re-derives the selection with the same
-    pathspec and the same regex the workflow uses.
+    The application half is the `reads_docs` marker; the engine half is the
+    whole engine suite, which is only worth running on a docs push while some
+    engine module still reads a tracked .md. Re-derives that with the same
+    content pattern the lane used to select by.
     """
-    candidates = _git_z("ls-files", "-z", "*/tests/*.py", "tests/*.py")
+    from tests import _markers
+
+    assert _markers.READS_DOCS, "no application module is marked reads_docs; the lane runs nothing"
+    assert all(m.startswith("tests/") for m in _markers.READS_DOCS), (
+        "a reads_docs entry lies outside tests/, where the marker is never applied"
+    )
     pattern = re.compile(r"\.md([^a-zA-Z0-9]|$)")
-    selected = [
-        p for p in candidates
+    engine = [
+        p for p in _git_z("ls-files", "-z", "agents/pity_engine/tests/*.py")
         if pattern.search((REPO_ROOT / p).read_text(encoding="utf-8", errors="replace"))
     ]
-    engine = {p for p in selected if p.startswith("agents/pity_engine/tests/")}
-    app = {p for p in selected if p.startswith("tests/")}
     assert engine, (
-        "no engine test reads tracked .md any more, so the suite split in "
-        "docs-guards.yml is currently vacuous - still correct to keep, but this arm "
-        "no longer proves it works. Re-read the workflow before trusting it."
-    )
-    assert app, "no application test reads tracked .md; docs-guards.yml would run nothing"
-    assert not engine & app, "a path landed in both buckets"
-    assert engine | app == set(selected), (
-        f"selected guards fall outside both buckets and would be dropped: "
-        f"{sorted(set(selected) - engine - app)}"
+        "no engine test mentions a tracked .md any more, so running the whole engine "
+        "suite on a docs-only push buys nothing - re-read docs-guards.yml before keeping it"
     )
 
 
@@ -694,25 +689,17 @@ def test_both_workflows_cross_check_the_count_they_sweep():
 # never taught the same thing. These arms are that guard's twin for CI.
 #
 # SCOPE, STATED RATHER THAN IMPLIED. These arms read BOTH workflows.
-# docs-guards.yml also invokes pytest twice, on a DERIVED list of md-reading
-# modules expanded from a shell array (`"${app[@]}"`), and until 2026-09-09
-# neither of those invocations carried an `-r` spec. That was a real instance
-# of the same blind spot, left open because docs-guards.yml sat outside the
-# write-list of the slice that added the ci.yml arms - applicable-and-not-done
-# rather than not-applicable. It is closed below, and this paragraph no longer
-# describes the tree as it was.
+# docs-guards.yml also invokes pytest twice, and until 2026-09-09 neither of
+# those invocations carried an `-r` spec - a real instance of the same blind
+# spot, closed below.
 #
-# THE TWO FLOORS ARE NOT THE SAME SHAPE, and that is forced rather than
-# chosen. ci.yml names its suites literally, so CI_SUITE_TARGETS can be typed
-# by hand and compared against what the scan reads. docs-guards.yml cannot be
-# graded that way: its guard list is derived at CI time from `git ls-files`
-# and reaches pytest as a shell array expansion, so the operand on each
-# command line is the literal text `${app[@]}` and no hand-typed path could
-# ever match it. The floor there claims only what the mechanism can actually
-# claim - exactly two invocations, each targeting the expansion it is meant to
-# be - and claims NOTHING about which modules the runner finally collects.
-# A path-shaped floor there would not be a stronger guard; it would be a
-# permanent red dressed as one.
+# BOTH FLOORS ARE NOW THE SAME SHAPE. docs-guards.yml used to hand pytest a
+# shell array derived at CI time, so its operand was the literal text of the
+# expansion and no hand-typed path could match it. Since the `reads_docs`
+# marker (MAIN 2246 ORDER s2) it names `tests` and `agents/pity_engine`
+# literally, so DOCS_GUARDS_SUITE_TARGETS is typed by hand exactly like
+# CI_SUITE_TARGETS. It still claims NOTHING about which modules the marker
+# finally selects; tests/test_test_markers.py owns that.
 # ---------------------------------------------------------------------------
 
 # THE PARSER IS SHARED, NOT REIMPLEMENTED, and that is deliberate rather than
@@ -753,7 +740,7 @@ CI_SUITE_TARGETS = ("tests", "agents/pity_engine")
 #: NOT paths, and not a typo - see the scope paragraph above. MEASURED by
 #: running `parse_pytest_invocations` over the shipped workflow on 2026-09-09
 #: rather than assumed; the scan strips the quotes and keeps the expansion.
-DOCS_GUARDS_SUITE_TARGETS = ("${app[@]}", "${engine[@]}")
+DOCS_GUARDS_SUITE_TARGETS = ("tests", "agents/pity_engine")
 
 
 def _skip_reporting_problems(text: str, source: str) -> list[str]:
@@ -877,9 +864,7 @@ def test_the_shared_parser_reads_the_real_docs_guards_workflow():
     """NON-VACUITY for the import against the SECOND subject, not a duplicate.
 
     The ci.yml arm above proves the scan can see THAT file. It says nothing
-    about this one, and this one has the harder shape: two `if` blocks nested
-    inside a single `run: |`, each expanding a shell array that an earlier step
-    built. If a future edit moved that into a composite action, a matrix, a
+    about this one. If a future edit moved that into a composite action, a matrix, a
     `uses:` or a helper script, the scan would find zero invocations and the
     guard below would pass over an empty list forever - the exact vacuous pass
     this module exists to catch elsewhere.
@@ -901,16 +886,10 @@ def test_every_docs_guards_pytest_invocation_names_its_skips():
     invocation reports skips" is trivially true of zero invocations. So the
     census and the judgement are ONE assert.
 
-    THE FLOOR IS DIFFERENT IN KIND, and deliberately weaker than ci.yml's.
-    There the targets are literal suite paths. Here they are shell array
-    expansions of a list derived at CI time, so the strongest TRUE statement
-    available is that the workflow still runs pytest exactly twice and that
-    each invocation still targets the expansion it is meant to be - one per
-    bucket, never merged. Whether those arrays are non-empty, and what they
-    contain, is a runtime property this scan cannot reach; that is graded
-    instead by `test_the_suite_split_is_load_bearing_and_not_decoration`, and
-    the workflow itself prints a `::notice::` rather than a silent green when
-    both come back empty.
+    THE FLOOR IS THE SAME KIND AS ci.yml's: literal suite targets, one
+    invocation per suite, never merged. Which modules the `reads_docs` marker
+    selects is graded by `test_the_suite_split_is_load_bearing_and_not_decoration`
+    and by tests/test_test_markers.py, not by this scan.
 
     ORDER IS NOT ASSERTED. Running the engine bucket first would be a correct
     workflow, so the comparison is over the multiset.
@@ -923,9 +902,9 @@ def test_every_docs_guards_pytest_invocation_names_its_skips():
     if targets != sorted(DOCS_GUARDS_SUITE_TARGETS):
         problems.append(
             f"{DOCS_GUARDS.name} should invoke pytest exactly "
-            f"{len(DOCS_GUARDS_SUITE_TARGETS)} times, once per derived bucket, targeting "
+            f"{len(DOCS_GUARDS_SUITE_TARGETS)} times, once per suite, targeting "
             f"{sorted(DOCS_GUARDS_SUITE_TARGETS)}; the token scan found {targets}. If the "
-            f"buckets were renamed, update DOCS_GUARDS_SUITE_TARGETS in the same commit - "
+            f"targets changed, update DOCS_GUARDS_SUITE_TARGETS in the same commit - "
             f"do not delete this floor, or the rule below becomes a rule about zero "
             f"invocations"
         )

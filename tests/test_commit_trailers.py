@@ -29,16 +29,17 @@ coverage. The history arm therefore DETECTS a shallow clone and skips with the
 reason stated, rather than quietly sweeping a single commit and calling it
 clean.
 
-CI NOW CHECKS OUT AT DEPTH 0 on that lane, so the sweep runs there and the
-Co-Authored-By hard rule is enforced by something other than a hook for the
-first time. `tests/test_ci_history_depth.py` goes red if that depth returns to
-a shallow value while this sweep still ships.
+CI NOW SWEEPS IN TWO SHAPES (MAIN 2246 ORDER s2, PERF-AUDIT item 10). The
+nightly schedule and a manual dispatch check out at depth 0 and sweep the WHOLE
+history. A push or pull-request job checks out shallow and exports
+RSC_TRAILER_RANGE - the pushed range, `<before>..<sha>` - so the sweep reads
+exactly the commits that push brought, and FAILS rather than skips when the
+range base was not fetched. `tests/test_ci_history_depth.py` pins both halves
+of that workflow shape while this sweep still ships.
 
-THE SKIP BRANCHES BELOW ARE NOT DEAD, and deleting them would break a lane.
-`.github/workflows/docs-guards.yml` deliberately keeps depth 1, and its
-selection is DERIVED at CI time from every test module mentioning a markdown
-path - which is this module, twice. So it is collected and run SHALLOW on every
-docs-only push, both branches fire there, and both are correct there.
+THE SHALLOW SKIP BELOW IS NOT DEAD. With no range exported, a shallow clone
+still skips with the reason stated: `.github/workflows/docs-guards.yml` keeps
+depth 1 on purpose, and a local shallow clone is a real shape.
 
 AND A `git archive` EXTRACT IS NOT THE SAME POPULATION, though an earlier
 draft of this paragraph said it was. Measured: an extract never reaches the
@@ -50,7 +51,6 @@ from __future__ import annotations
 
 import ast
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -96,8 +96,41 @@ def banned_trailers_in(body: str) -> list[str]:
     ]
 
 
-def _history() -> list[tuple[str, str, str]]:
-    raw = _git("log", f"--format=%H{FIELD_SEP}%s{FIELD_SEP}%b{RECORD_SEP}")
+#: Exported by ci.yml's push and pull-request jobs: the commit range that event
+#: brought, `<base>..<head>`. Unset means sweep the whole history.
+TRAILER_RANGE_ENV = "RSC_TRAILER_RANGE"
+
+
+def _sweep_range() -> str | None:
+    value = os.environ.get(TRAILER_RANGE_ENV, "").strip()
+    return value or None
+
+
+def range_problem(rev_range: str) -> str | None:
+    """Why `rev_range` cannot be swept on this clone, or None when it can.
+
+    A range whose base was never fetched would make `git log` error, or worse,
+    on some spellings read the whole reachable history as the range. Either
+    way the sweep would not be grading what the push brought, so it FAILS.
+    """
+    base, sep, head = rev_range.partition("..")
+    if not sep or not base or not head or head.startswith("."):
+        return f"{TRAILER_RANGE_ENV}={rev_range!r} is not a `<base>..<head>` range"
+    for end in (base, head):
+        try:
+            _git("rev-parse", "--verify", "-q", f"{end}^{{commit}}")
+        except subprocess.CalledProcessError:
+            return (
+                f"{TRAILER_RANGE_ENV}={rev_range!r}: {end!r} is not a commit in this clone. "
+                "The checkout is too shallow for the pushed range - raise ci.yml's push "
+                "fetch-depth rather than skipping"
+            )
+    return None
+
+
+def _history(rev_range: str | None = None) -> list[tuple[str, str, str]]:
+    extra = [rev_range] if rev_range is not None else []
+    raw = _git("log", f"--format=%H{FIELD_SEP}%s{FIELD_SEP}%b{RECORD_SEP}", *extra)
     records = []
     for chunk in raw.split(RECORD_SEP):
         chunk = chunk.strip()
@@ -114,7 +147,11 @@ def _history() -> list[tuple[str, str, str]]:
 
 
 def test_no_commit_in_history_carries_an_agent_trailer():
-    if _is_shallow():
+    rev_range = _sweep_range()
+    if rev_range is not None:
+        problem = range_problem(rev_range)
+        assert problem is None, problem
+    elif _is_shallow():
         pytest.skip(
             "shallow clone - a full-history sweep here would pass by construction, so "
             "this arm DECLINES TO MEASURE rather than sweeping one commit and calling it "
@@ -125,7 +162,7 @@ def test_no_commit_in_history_carries_an_agent_trailer():
         )
 
     offenders = []
-    for sha, subject, body in _history():
+    for sha, subject, body in _history(rev_range):
         hits = banned_trailers_in(body)
         if hits:
             offenders.append(f"{sha[:7]} {subject[:50]} -> {'; '.join(hits)}")
@@ -134,7 +171,17 @@ def test_no_commit_in_history_carries_an_agent_trailer():
 
 
 def test_the_history_sweep_is_not_vacuous():
-    """A sweep that stopped seeing commits would pass forever."""
+    """A sweep that stopped seeing commits would pass forever.
+
+    Under a range the floor is one commit: a push that brought none would not
+    have fired the job.
+    """
+    rev_range = _sweep_range()
+    if rev_range is not None:
+        problem = range_problem(rev_range)
+        assert problem is None, problem
+        assert len(_history(rev_range)) >= 1, f"{rev_range!r} swept zero commits"
+        return
     if _is_shallow():
         pytest.skip(
             "shallow clone - the history is truncated, so this non-vacuity floor would "
@@ -142,6 +189,39 @@ def test_the_history_sweep_is_not_vacuous():
             "for the same reason as the arm above, and takes the same remedy"
         )
     assert len(_history()) >= 10
+
+
+def test_a_range_sweep_reads_the_range_and_not_the_whole_history(monkeypatch):
+    """The push-job shape, graded on this clone where the range is reachable."""
+    require_git_repository()
+    if _is_shallow():
+        pytest.skip("shallow clone - the whole-history count this arm compares against is truncated")
+    head = _git("rev-parse", "HEAD").strip()
+    parent = _git("rev-parse", "HEAD~1").strip()
+    monkeypatch.setenv(TRAILER_RANGE_ENV, f"{parent}..{head}")
+    rev_range = _sweep_range()
+    assert rev_range == f"{parent}..{head}"
+    assert range_problem(rev_range) is None
+    ranged = _history(rev_range)
+    assert 1 <= len(ranged) < len(_history()), (
+        f"the range swept {len(ranged)} commit(s) against {len(_history())} in all"
+    )
+    assert head in {sha for sha, _subject, _body in ranged}
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["", "HEAD", "..HEAD", "HEAD..", "HEAD...HEAD~1", "0" * 40 + "..HEAD"],
+)
+def test_an_unsweepable_range_is_a_failure_not_a_skip(bad, monkeypatch):
+    """An unreachable or malformed range reports a problem; it never skips."""
+    require_git_repository()
+    monkeypatch.setenv(TRAILER_RANGE_ENV, bad)
+    rev_range = _sweep_range()
+    if rev_range is None:
+        assert bad == "", "only an empty value may mean 'no range'"
+        return
+    assert range_problem(rev_range) is not None, rev_range
 
 
 # ---------------------------------------------------------------------------
@@ -846,13 +926,14 @@ def test_the_exempt_arm_launches_no_git_and_every_launch_here_names_a_gate() -> 
 # `tests/test_conftest_skip_path_pinned.py` forces the shape from outside.
 #
 # So the branch is NOT structurally dead, and an earlier hand-off saying so was
-# wrong. It is dead under ISOLATED SELECTION - and one real lane selects this
-# module in isolation. `.github/workflows/docs-guards.yml` derives its selection
-# from tracked test modules that mention a markdown path; this module matches
-# that pattern twice and the pinning module matches it zero times, so on every
-# docs-only push the `else:` arm ships collected and unexercised. Those line
-# numbers are a record of one measurement at one commit and will decay - the
-# branch is named by its function above, not by its line.
+# wrong. It is dead under ISOLATED SELECTION, and isolated selection is real:
+# `.githooks/pre-push` runs only the modules `scripts/prepush_select.py` maps
+# from the pushed diff, so a push that touches this module and not the pinning
+# module runs this one alone. (The docs-only CI lane used to be the isolated
+# selector; since the `reads_docs` marker it does not select this module at
+# all - pinned at the bottom of this file.) Those line numbers are a record of
+# one measurement at one commit and will decay - the branch is named by its
+# function above, not by its line.
 #
 # The technique below is the pinning module's, RE-IMPLEMENTED rather than
 # imported. Importing it would make this file depend on the file whose job is
@@ -1070,200 +1151,30 @@ def test_a_reason_with_no_disk_dot_git_is_a_pass_and_not_a_false_red(
 
 
 # ---------------------------------------------------------------------------
-# The selector of the docs-only lane, reproduced and asserted
+# The docs-only lane, as it now selects
 # ---------------------------------------------------------------------------
 #
-# THE RATIONALE FOR THE SECTION ABOVE RESTS ON AN INCIDENTAL STRING, and until
-# these two arms landed nothing anywhere guarded it.
-#
-# `.github/workflows/docs-guards.yml` builds its test selection in two moves: at
-# its `git ls-files -z` line, and at the `grep -qE` line inside the loop that
-# reads the result. A tracked module under a `tests/` directory is a CANDIDATE,
-# and a candidate is SELECTED if and only if some LINE of it matches the
-# workflow's markdown-path pattern. That is a filter on TEXT and on nothing
-# else.
-#
-# This module matches that pattern exactly twice, and BOTH matches are
-# incidental prose naming the operator-policy document - one in the docstring at
-# the top of this file, one inside a fixture's commit-message string further
-# down. NEITHER of them opens that document, or any document. Reword either
-# mention and this module silently leaves the lane; the two arms above then
-# guard a lane they no longer ship on, and the section header above becomes a
-# false statement with nothing anywhere to say so.
-#
-# The proposition worth pinning is therefore the CONDITIONAL one, and it has two
-# halves. This module IS in that lane, AND the module that drives the `else:`
-# arm cross-module IS NOT - which is exactly why the two forced-shape arms above
-# have to exist at all. The second half is MEASURED below, by running the same
-# selector over that module, rather than taken on the word of the comment above.
-#
-# THE WORKFLOW IS THE SOURCE. Everything here is a transcription of it. If the
-# two ever disagree, the workflow wins and this section is what changes.
-
-#: The lane's content filter, transcribed from the workflow's `grep -qE` line.
-#:
-#: BUILT BY CONCATENATION, AND THAT IS NOT A STYLE CHOICE. Written as a single
-#: literal, this pattern's own source text contains a match for it: a dot, the
-#: two letters, then an open parenthesis, which is not alphanumeric. The module
-#: would then be selected by the lane BECAUSE THIS SECTION IS IN IT, the first
-#: arm below would pass no matter what the rest of the file said, and the
-#: fragility it exists to report would be concealed by the report. Splitting the
-#: literal keeps that adjacency out of these bytes, and the second arm below
-#: MEASURES that it stayed out rather than trusting this comment.
-_LANE_CONTENT_PATTERN = re.compile(r"\." + "md" + r"([^a-zA-Z0-9]|$)")
-
-#: The two pathspecs the lane hands `git ls-files`, from the same workflow step.
-#: The `-z` is preserved for the workflow's own reason: without it a path
-#: carrying a space or a quote does not survive the split.
-_LANE_PATHSPECS = ("*/tests/*.py", "tests/*.py")
-
-#: The module whose arms drive this module's archive branch cross-module. The
-#: entire justification for the two forced-shape arms above is that this module
-#: is NOT selected by the lane, so on a docs-only push that branch ships
-#: collected and unexercised.
-_CROSS_MODULE_DRIVER = "tests/test_conftest_skip_path_pinned.py"
-
-#: Its FIRST occurrence in this file is the section header a few lines up, so
-#: partitioning the source on it splits the file into everything written before
-#: this section and everything written as part of it. The self-reference arm
-#: asserts the marker was found, so rewording the header reddens that arm rather
-#: than silently splitting at nothing.
-_LANE_SECTION_MARKER = "The selector of the docs-only lane, reproduced and asserted"
+# `.github/workflows/docs-guards.yml` used to select every test module whose
+# TEXT mentioned a markdown path, which put this module on that lane through two
+# incidental prose mentions. Since MAIN 2246 ORDER s2 (PERF-AUDIT item 3) the
+# lane runs `-m reads_docs`, applied from `tests/_markers.py`, and this module
+# reads no document: it is listed in DOCS_GREP_EXEMPT there. The old grep
+# survives as a guard in `tests/test_test_markers.py`.
 
 
-def _lane_candidates() -> list[str]:
-    """The lane's candidate list, re-derived from the tracked index.
+def test_this_module_and_its_cross_module_driver_are_off_the_docs_lane() -> None:
+    """The lane membership this file's prose relies on, pinned in both halves."""
+    from tests import _markers
 
-    GIT_DIR AND GIT_WORK_TREE ARE SCRUBBED FROM THE CHILD ENVIRONMENT. Exported,
-    either one points `git ls-files` at a different index entirely - the
-    disposition in which git answers successfully about a tree that is not this
-    one - and these arms would grade some other file list while reporting on
-    this module. The lane runs on a fresh checkout with neither variable set, so
-    scrubbing is what makes the reproduction FAITHFUL rather than what makes it
-    differ.
-    """
-    require_git_repository()
-    env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE")}
-    completed = subprocess.run(
-        ["git", "ls-files", "-z", *_LANE_PATHSPECS],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
+    here = Path(__file__).resolve().relative_to(REPO_ROOT).as_posix()
+    driver = "tests/test_conftest_skip_path_pinned.py"
+    assert here not in _markers.READS_DOCS, (
+        f"{here} is now marked reads_docs, so the docs-only lane runs it SHALLOW and its "
+        "two history arms skip there; update the module docstring in the same commit"
     )
-    assert completed.returncode == 0, (
-        f"`git ls-files` exited {completed.returncode} once GIT_DIR and GIT_WORK_TREE "
-        f"were scrubbed, though the shared helper reports git as usable here. That "
-        f"combination means the ambient environment was deciding what this tree's index "
-        f"contains: {completed.stderr.strip()!r}"
+    assert here in _markers.DOCS_GREP_EXEMPT, (
+        f"{here} left DOCS_GREP_EXEMPT; either it stopped mentioning markdown or it was "
+        "reclassified - re-read the docstring's lane claims"
     )
-    return [path for path in completed.stdout.split(chr(0)) if path]
-
-
-def _lane_selects(text: str) -> bool:
-    """Apply the lane's content filter to `text` the way `grep -qE` does.
-
-    LINE BY LINE, and the split is load-bearing. The pattern's `$` alternative
-    anchors at the end of a LINE for grep, while one `re.search` over an entire
-    file body would anchor it only at the end of the FILE. Splitting first is
-    what makes the two agree.
-    """
-    return any(_LANE_CONTENT_PATTERN.search(line) for line in text.splitlines())
-
-
-def _module_relative_path() -> str:
-    """This module's path, spelled the way the tracked index spells it."""
-    return Path(__file__).resolve().relative_to(REPO_ROOT).as_posix()
-
-
-def test_this_module_is_in_the_docs_lane_and_its_cross_module_driver_is_not() -> None:
-    """Both halves of the conditional the section above depends on, measured.
-
-    Reword either incidental mention in this file and the third assertion below
-    goes red - which is the entire point, because that reword is silent
-    everywhere else in the tree.
-    """
-    candidates = _lane_candidates()
-    here = _module_relative_path()
-
-    assert here in candidates, (
-        f"{here} is not in the lane's candidate list. Either it is untracked, or the "
-        f"workflow's pathspecs stopped covering it - and either way the arms above are "
-        f"guarding a lane this module never reaches"
-    )
-    assert _CROSS_MODULE_DRIVER in candidates, (
-        f"{_CROSS_MODULE_DRIVER} is not a candidate at all, so the interesting half "
-        f"below - that the CONTENT filter is what excludes it - would be satisfied for "
-        f"the wrong reason. Measured rather than assumed, precisely so that cannot pass "
-        f"quietly"
-    )
-
-    selected = []
-    for path in candidates:
-        candidate = REPO_ROOT / path
-        if not candidate.is_file():
-            # `grep -qE` against an unreadable path exits non-zero, and the
-            # workflow's `|| continue` treats that as "not selected". Mirrored
-            # here so a tracked-but-absent path cannot make this list disagree
-            # with the lane's.
-            continue
-        if _lane_selects(candidate.read_text(encoding="utf-8", errors="replace")):
-            selected.append(path)
-
-    assert here in selected, (
-        f"{here} no longer matches the lane's content filter, so the docs-only lane has "
-        f"stopped collecting it. The two forced-shape arms above exist ONLY because that "
-        f"lane runs this module in ISOLATION, without the module that drives the branch "
-        f"cross-module, and that rationale is now false"
-    )
-    assert _CROSS_MODULE_DRIVER not in selected, (
-        f"{_CROSS_MODULE_DRIVER} is now selected by the lane as well, so it runs "
-        f"alongside this module there and drives the archive branch itself. The "
-        f"forced-shape arms above are not wrong, but the reason recorded for them is"
-    )
-    assert len(selected) < len(candidates), (
-        f"control: all {len(candidates)} candidates came back selected, so the content "
-        f"filter transcribed here is filtering nothing and the assertions above say "
-        f"nothing about the lane"
-    )
-
-
-def test_the_lane_membership_of_this_module_is_not_manufactured_by_this_section() -> None:
-    """The self-reference control, and it is not optional.
-
-    An arm asserting something about its OWN source file can make its assertion
-    true merely by containing the text it looks for. Here that failure would be
-    total: the lane's filter reads TEXT, this section is text inside the file
-    the filter reads, and one unsplit copy of the pattern anywhere below would
-    select the module by itself. The arm above would then stay green through any
-    reword of the two prose mentions it was written to protect.
-
-    So the source is split at this section's header and the halves are graded
-    separately. Everything written BEFORE the section must carry the membership;
-    everything written AS PART OF the section must carry none of it.
-    """
-    text = Path(__file__).resolve().read_text(encoding="utf-8")
-    head, marker, tail = text.partition(_LANE_SECTION_MARKER)
-
-    assert marker, (
-        f"the section header {_LANE_SECTION_MARKER!r} is not in this file, so the split "
-        f"would put the whole source in one half and grade nothing"
-    )
-    assert _lane_selects(head), (
-        "the incidental mentions that put this module in the lane are gone from "
-        "everything above this section, so whatever keeps it in the lane now is this "
-        "section itself"
-    )
-    assert not _lane_selects(tail), (
-        "this section's own text matches the lane's content filter. The arm above is "
-        "then true because it exists rather than because of the two incidental mentions "
-        "it was written to protect, and a reword of either would no longer redden "
-        "anything"
-    )
-
-    poisoned = tail + "\n# a mention of README" + "." + "md" + " and nothing else\n"
-    assert _lane_selects(poisoned), (
-        "control, and without it the assertion above is satisfied by a filter welded to "
-        "False: the same call must answer True once a matching line is present"
-    )
+    assert driver not in _markers.READS_DOCS
+    assert _markers.READS_DOCS, "control: an empty lane would make both halves vacuous"
