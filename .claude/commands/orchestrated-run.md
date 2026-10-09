@@ -31,7 +31,8 @@ sub-agent from `.claude/agents/`. The orchestration itself cannot be handed to
 one sub-agent: a sub-agent has no Agent tool, so it could not dispatch the
 planner, builders, verifier, adjudicator and adversaries this protocol needs.
 Each sub-agent's prompt carries everything it needs, because sub-agent context
-does not inherit the main thread's. Each sub-agent reports to the main
+does not inherit the main thread's; every agent file tells its agent to Read
+`.claude/session-default.md` first, where the shared doctrine lives once. Each sub-agent reports to the main
 session, not into chat; the main session relays to chat only results, verdict
 lines and anything the operator must act on, one line each (FLEET-COMMON
 item 2).
@@ -324,6 +325,16 @@ discrepancies: <one line each, or none>
   done-claim, each **defaulting to REFUTED when uncertain**.
 - Vocabulary: `REFUTED` / `NOT REFUTED` / `REFUTED (UNCERTAIN)`. **NOT REFUTED
   is the strongest thing an adversary may ever say. It never says confirmed.**
+- **Scale by risk** (MAIN 2246 ORDER section 2 PERF-AUDIT item 6; the rule
+  lives once in `.claude/session-default.md`). The full lens set - the five
+  below, one adversary each - runs ONLY when the diff touches
+  `agents/pity_engine/`, `engines/`, `ingest/` or `core/`. Plumbing -
+  `tools/`, `headless/`, `scripts/`, `ops/`, `tests/`, docs, `.claude/`,
+  `.github/`, `.githooks/` - gets one adversary lens or a verifier only. A
+  diff touching both is graded at the higher tier.
+- **Cap: at most 2 refute rounds per finding or done-claim,
+  then the adjudicator decides** on the record of those rounds. Do not dispatch a
+  third adversary at the same claim; the adjudicator's ruling is recorded.
 - **Spawn DISTINCT LENSES, never N identical skeptics.** Diversity catches
   failure modes redundancy cannot. The five that fit this tree:
   - **correctness** - does the change do what the spec said, on the edge cases;

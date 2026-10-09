@@ -17,11 +17,14 @@ in a way that no reader and no runtime error would ever flag:
    restrictive list would disarm the only two agents that are supposed to write.
 
 2. SUBAGENT CONTEXT DOES NOT INHERIT THE MAIN THREAD'S. The session-shape
-   doctrine in CLAUDE.md reaches a subagent only because every agent file repeats
-   it inline. Delete that block and nothing errors - the agent runs, sounds
-   plausible, and grades its own work. This file asserts on the load-bearing
-   PHRASES rather than on a whole block, so the prose can still be improved
-   without breaking the guard.
+   doctrine in CLAUDE.md reaches a subagent only through its own definition.
+   Since MAIN 2246 ORDER section 2 item 6 the doctrine lives ONCE, in
+   `.claude/session-default.md`, and every agent file carries an explicit
+   instruction to Read it first plus the two load-bearing phrases inline, and
+   stays under AGENT_BYTE_CAP. Delete the pointer and nothing errors - the agent
+   runs, sounds plausible, and grades its own work. This file asserts on the
+   load-bearing PHRASES rather than on a whole block, so the prose can still be
+   improved without breaking the guard.
 
 3. THE VERDICT VOCABULARIES ARE STRING-MATCHED BY THE ORCHESTRATOR. A verdict
    the agent was never told to emit reads downstream as no objection, which is
@@ -674,6 +677,9 @@ READ_ONLY_PROGRESS_RULING = "NOT a repo edit"
 
 DISPATCH_PROTOCOL = REPO_ROOT / ".claude" / "commands" / "orchestrated-run.md"
 
+#: The one shared session default every agent points at (Guard 9).
+SHARED_DEFAULT = REPO_ROOT / ".claude" / "session-default.md"
+
 #: FLEET-COMMON item 3 as amended by kit v7 item 13: status on request is the
 #: remaining checklist (item 13 b), with -retracted on one short line. Re-pinned
 #: 2026-10-05; the superseded kit-v2 shape is SUPERSEDED_STATUS_VOCABULARY.
@@ -705,12 +711,23 @@ def _missing_progress_tokens(text: str) -> list[str]:
     return [token for token in (PROGRESS_DIR, *PROGRESS_TOKENS) if token not in text]
 
 
+def _effective_text(agent: str) -> str:
+    """What the agent is actually told: its own file, plus the shared session
+    default ONLY when its file carries the pointer. An agent without the pointer
+    is judged on its own bytes alone, so dropping the pointer cannot borrow the
+    shared file's tokens."""
+    own = _read_agent(agent)
+    if SHARED_DEFAULT_POINTER not in own:
+        return own
+    return own + "\n" + SHARED_DEFAULT.read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize("agent", sorted(EXPECTED_AGENTS))
 def test_every_agent_states_the_progress_file_requirement(agent: str):
-    missing = _missing_progress_tokens(_read_agent(agent))
+    missing = _missing_progress_tokens(_effective_text(agent))
     assert not missing, (
-        f"{agent}.md never states {missing} - FLEET-COMMON item 12 reaches a subagent "
-        "only through its own definition"
+        f"{agent}.md (with the shared default it points at) never states {missing} - "
+        "FLEET-COMMON item 12 reaches a subagent only through its own definition"
     )
 
 
@@ -780,3 +797,141 @@ def test_the_ignore_probe_distinguishes_the_progress_directory_from_a_tracked_ne
     """Non-vacuity for the gitignore arm: a tracked sibling under ops/loop/ is
     NOT ignored, so the arm above cannot pass by ignoring everything."""
     assert not _git_ignores("ops/loop/slots.py")
+
+
+# ---------------------------------------------------------------------------
+# Guard 9 - one shared session default, small agent files (MAIN 2246 ORDER
+# section 2 PERF-AUDIT item 6)
+# ---------------------------------------------------------------------------
+#
+# Seven agent files of 9 to 12 KB each repeated the session default inline.
+# The order: one shared file referenced by each agent, each agent under 3 KB,
+# risk-scaled adversary lenses, and refute rounds capped at 2 before the
+# adjudicator decides. The shared file sits OUTSIDE `.claude/agents/`, because
+# every `.md` in that directory registers an agent (Guard 1). It is matched by
+# the `.claude/*` ignore rule, so it reaches a fresh clone only by being
+# TRACKED - asserted below with ls-files, not check-ignore.
+
+#: Under 3 KB, strictly. Bytes on disk, not characters.
+AGENT_BYTE_CAP = 3072
+
+#: Repo-root-relative, because subagent context does not inherit the main
+#: thread's and the agent must be able to Read it from the root.
+SHARED_DEFAULT_POINTER = ".claude/session-default.md"
+
+#: The tokens the shared file must state. The risk roots name where the FULL
+#: distinct-lens set applies; the cap is the round limit and its hand-off.
+RISK_ROOTS = ("agents/pity_engine/", "engines/", "ingest/", "core/")
+REFUTE_CAP_TOKENS = ("at most 2 refute rounds", "then the adjudicator decides")
+RISK_SCALING_TOKENS = ("full lens set", "one adversary lens or a verifier only", *RISK_ROOTS)
+
+#: Docs that dispatch adversaries and so must apply the same scaling and cap.
+RISK_SCALED_DOCS = (DISPATCH_PROTOCOL, REPO_ROOT / "CLAUDE.md")
+
+
+def _over_cap(path: Path) -> int:
+    """Bytes at or over the cap, or 0. Raw bytes, so CRLF cannot hide."""
+    return max(0, len(path.read_bytes()) - AGENT_BYTE_CAP + 1)
+
+
+def _missing_shared_tokens(text: str) -> list[str]:
+    return [t for t in (*RISK_SCALING_TOKENS, *REFUTE_CAP_TOKENS) if t not in text]
+
+
+def _read_instruction_missing(text: str) -> bool:
+    """True when no line naming the shared file also tells the agent to Read it."""
+    return not any(SHARED_DEFAULT_POINTER in line and "Read" in line for line in text.splitlines())
+
+
+def _git_tracks(relative_path: str) -> bool:
+    require_git_repository()
+    completed = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "--", relative_path],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return completed.returncode == 0
+
+
+@pytest.mark.parametrize("agent", sorted(EXPECTED_AGENTS))
+def test_every_agent_file_is_under_the_byte_cap(agent: str):
+    path = _agent_path(agent)
+    assert path.is_file(), f"{_rel(path)} does not exist"
+    assert not _over_cap(path), (
+        f"{_rel(path)} is {len(path.read_bytes())} bytes, cap is under {AGENT_BYTE_CAP} - "
+        "shared doctrine belongs in .claude/session-default.md, not repeated inline"
+    )
+
+
+@pytest.mark.parametrize("agent", sorted(EXPECTED_AGENTS))
+def test_every_agent_tells_itself_to_read_the_shared_session_default(agent: str):
+    assert not _read_instruction_missing(_read_agent(agent)), (
+        f"{agent}.md has no line telling it to Read {SHARED_DEFAULT_POINTER} - subagent "
+        "context does not inherit the main thread's, so the pointer must be explicit"
+    )
+
+
+def test_the_shared_session_default_exists_outside_the_agent_directory():
+    assert SHARED_DEFAULT.is_file(), f"{SHARED_DEFAULT_POINTER} is missing"
+    assert SHARED_DEFAULT.parent != AGENT_DIR, "an .md under .claude/agents/ registers an agent"
+    raw = SHARED_DEFAULT.read_bytes()
+    assert not _bad_bytes(raw), f"{SHARED_DEFAULT_POINTER} carries non-ASCII or control bytes"
+    assert not raw.count(CRLF), f"{SHARED_DEFAULT_POINTER} carries CRLF"
+
+
+def test_the_shared_session_default_reaches_a_fresh_clone():
+    """`.claude/*` ignores it, so only the index carries it to a clone."""
+    assert _git_tracks(SHARED_DEFAULT_POINTER), (
+        f"{SHARED_DEFAULT_POINTER} is not tracked - `.claude/*` ignores it, so a fresh "
+        "clone would have seven agents pointing at nothing"
+    )
+
+
+def test_the_shared_session_default_carries_the_doctrine_scaling_and_cap():
+    assert SHARED_DEFAULT.is_file(), f"{SHARED_DEFAULT_POINTER} is missing"
+    text = SHARED_DEFAULT.read_text(encoding="utf-8")
+    assert _missing_doctrine(text) == [], "the shared default lost a doctrine phrase"
+    assert _missing_progress_tokens(text) == [], "the shared default lost a progress token"
+    assert READ_ONLY_PROGRESS_RULING in text
+    missing = _missing_shared_tokens(text)
+    assert not missing, f"{SHARED_DEFAULT_POINTER} never states {missing}"
+
+
+@pytest.mark.parametrize("doc", RISK_SCALED_DOCS, ids=lambda path: path.name)
+def test_the_dispatching_docs_apply_risk_scaling_and_the_round_cap(doc: Path):
+    text = doc.read_text(encoding="utf-8")
+    assert SHARED_DEFAULT_POINTER in text, f"{doc.name} never points at {SHARED_DEFAULT_POINTER}"
+    missing = [t for t in ("full lens set", *REFUTE_CAP_TOKENS) if t not in text]
+    assert not missing, f"{doc.name} never states {missing}"
+
+
+def test_the_inline_repeat_claim_is_retired_from_claude_md():
+    """The sentence the order replaces must not survive beside its pointer."""
+    text = (REPO_ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "Every agent file repeats this section inline" not in text
+
+
+def test_the_cap_pointer_and_token_sweeps_fire(tmp_path):
+    """Non-vacuity for Guard 9, each detector on a planted case plus a survivor."""
+    at_cap = tmp_path / "at_cap.md"
+    at_cap.write_bytes(b"x" * AGENT_BYTE_CAP)
+    assert _over_cap(at_cap) == 1, "exactly the cap is NOT under the cap"
+    under = tmp_path / "under.md"
+    under.write_bytes(b"x" * (AGENT_BYTE_CAP - 1))
+    assert _over_cap(under) == 0
+
+    assert _read_instruction_missing("see .claude/session-default.md\n")
+    assert _read_instruction_missing("Read the shared file first.\n")
+    assert not _read_instruction_missing("Read `.claude/session-default.md` first.\n")
+
+    full = "\n".join((*RISK_SCALING_TOKENS, *REFUTE_CAP_TOKENS))
+    assert _missing_shared_tokens(full) == []
+    assert _missing_shared_tokens(full.replace("at most 2 refute rounds", "two rounds")) == [
+        "at most 2 refute rounds"
+    ]
+    assert _missing_shared_tokens(full.replace("ingest/", "inge5t/")) == ["ingest/"]
+
+    assert not _git_tracks(".claude/agents/scratch-notes.md"), "the ls-files probe answers yes to everything"
+    assert _git_tracks("CLAUDE.md")
