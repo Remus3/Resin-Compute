@@ -21,7 +21,7 @@ leaves the machine.
 
 ## A path with a space in it is supported and tested
 
-Clone anywhere. `E:\Resin Compute` is itself a working checkout, exercised with
+Clone anywhere. A `<checkout>` whose path holds a space is exercised with
 ruff, both suites, the headless smoke test and the supervisor dry-run. Four
 pieces make that work, so do not "simplify" them:
 
@@ -122,9 +122,7 @@ curl -s -X POST http://127.0.0.1:8790/forecast \
 Nothing in the Quickstart installs either of these and nothing needs them. But
 this repository ships TWO scheduled-task installers, and a registered task
 OUTLIVES THE CLONE: the definition lives in the Windows Task Scheduler store,
-not in the checkout, so **deleting the repository does not remove it.** The
-desktop shortcut written by `scripts/make_shortcut.py` outlives it too, and is
-the only other thing here that does.
+not in the checkout, so **deleting the repository does not remove it.**
 
 **`ops/install_scheduled_task.ps1` registers `ResinCompute-Supervisor`** from
 `ops/ResinCompute-Supervisor.xml`, so the supervisor comes up unattended. Read
