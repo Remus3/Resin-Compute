@@ -32,8 +32,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # ---------------------------------------------------------------------------
 
 
-def test_runtime_dir_defaults_to_ops_runtime() -> None:
+def test_runtime_dir_defaults_to_ops_runtime(monkeypatch) -> None:
     """The default lives under the repo root, mirroring Sibling-C's ops/runtime."""
+    # The kit v12 test guard points the override at tmp_path for every test.
+    monkeypatch.delenv(health_mod.ENV_RUNTIME_DIR, raising=False)
     assert health_mod.runtime_dir(None).parts[-2:] == ("ops", "runtime")
 
 
