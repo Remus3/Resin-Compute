@@ -70,7 +70,9 @@ def _settings() -> dict:
 
 
 def test_the_pre_tool_use_hook_runs_the_kit_hook_on_the_order_matcher():
-    rows = _pre_tool_use(_settings())
+    # Kit v12 (MAIN 2031 ORDER s3.3) adds the claims hook beside it; the
+    # subagent-first row must still be the ONLY one naming its script.
+    rows = [r for r in _pre_tool_use(_settings()) if "fleet_subagent_first" in str(r[1])]
     assert rows == [(MATCHER, HOOK_COMMAND, HOOK_TIMEOUT)], f"PreToolUse hooks: {rows}"
     assert HOOK.is_file()
 

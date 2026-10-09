@@ -486,9 +486,12 @@ def _write_flags() -> int:
 
 
 def _live(name: str) -> Path:
+    """The LIVE record, never the redirect: the kit v12 test guard
+    (tests/conftest.py) sets RESINCOMPUTE_RUNTIME_DIR to tmp_path for every
+    test, while the fence resolved the live directory once at import."""
     from ops.health import runtime_dir
 
-    return runtime_dir() / name
+    return runtime_dir(Path(_root_conftest().__file__).resolve().parent / "ops" / "runtime") / name
 
 
 def test_the_fence_refuses_an_in_process_write_to_a_live_record(runtime_fence_ledger):

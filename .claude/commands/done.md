@@ -80,6 +80,13 @@ python -m mypy
 ```
 
 - Two Python suites SEPARATELY - never `pytest .` from the root.
+- FLEET-COMMON 16c (kit v12): each WHOLE suite above (`tests`,
+  `agents/pity_engine`, `node --test`) runs through the machine-wide gate,
+  `python ops/fleet_kit/fleet_suite_gate.py run --owner <id> -- <suite cmd>`,
+  where `<id>` is the caller's own claims owner id (`<session_id>.<agent_id>`;
+  the claims hook's deny reason names it). Pass the interpreter as an
+  absolute path (`sys.executable`) after `--`. A gate timeout fails closed: a
+  suite that did not run is not a passing suite.
 - `python -m mypy` is ADVISORY: `.github/workflows/ci.yml` runs it with
   `continue-on-error: true` and `docs/SPEC_SCAFFOLD.md` section 7 leaves it out
   of slice acceptance. Record its result; do not block on it.
@@ -98,12 +105,17 @@ Green gate means commit. Do not leave authored work uncommitted.
   as a defect.
 - 7-bit ASCII, imperative subject. Use `git commit -F <file in the session
   scratchpad>`; never a double-quoted here-string or a piped string.
+- FLEET-COMMON 16a (kit v12): every commit runs through the per-tree git lock,
+  `python ops/fleet_kit/fleet_gitlock.py run --owner <id> -- git commit -F <file>`.
+  A bare `git commit` is denied by the claims hook.
 - If a hook rejects the commit, fix it and make a NEW commit. Never `--amend`,
   never `--no-verify`.
 
 ## 3. Push
 
-`git push origin main`. The pre-push hook runs ruff plus both suites. A push
+`python ops/fleet_kit/fleet_gitlock.py run --owner <id> -- git push origin main`
+(FLEET-COMMON 16a; a bare `git push` is denied). The pre-push hook runs ruff
+plus both suites. A push
 that printed an error is not a push - that is the failure line.
 
 `RESIN_SKIP_PREPUSH=1` exists for a docs-only push; using it makes CI the only
