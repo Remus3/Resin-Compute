@@ -10,7 +10,7 @@ the module docstring of `_inbox_triage`.
 RULE 2 - TRIAGE FIRST, on every armed fire, before the work lane:
   skip / ack -> one seen-ledger line and a `firedetail` line; no note, no spawn;
   work       -> ORDER / FIX / RULING, the existing provenance + reply path;
-  triage     -> ONE sonnet/low/bare spawn (`fleet_inbox.TRIAGE_SPAWN`), kind
+  triage     -> ONE sonnet/low/bare spawn (`fleet_inbox.triage_spawn_kwargs`), kind
                 "triage"; NOREPLY / ACK are marked seen, ANSWER bodies go out in
                 ONE batched note per destination.
 RULE 3 - `OutboundCap.allow` before any note, `.record` after.
@@ -480,10 +480,42 @@ def test_every_spawn_carries_a_label_and_a_kind(rsp, tmp_path, monkeypatch, note
     assert seen["note"] and seen["kind"] == "triage", seen
     assert seen["model"] == fi.TRIAGE_SPAWN["model"]
     assert seen["effort"] == fi.TRIAGE_SPAWN["effort"]
-    assert seen["bare"] is fi.TRIAGE_SPAWN["bare"]
+    # Kit v11 (MAIN 1840 ORDER, ruling R1): TRIAGE_SPAWN no longer carries
+    # "bare"; the shape comes from triage_spawn_kwargs(floors_in_hooks). This
+    # tree keeps no floor in a hook (SPAWN_BARE), so triage stays bare.
+    expected = fi.triage_spawn_kwargs(not rsp.SPAWN_BARE)
+    assert "bare" not in fi.TRIAGE_SPAWN
+    assert seen["bare"] is expected["bare"] is True
+    assert seen["floors_in_hooks"] is expected["floors_in_hooks"] is False
     assert seen["timeout"] == fi.TRIAGE_SPAWN["timeout"]
     assert seen["governor"] is None
     assert seen["rules_file"] is None
+
+
+def test_the_triage_shape_is_taken_from_the_kit_helper(rsp, tmp_path, monkeypatch):
+    """Non-vacuity arm for the v11 seam: a helper answer that differs from the
+    SPAWN_BARE fallback must reach spawn(), so a responder that bypassed
+    triage_spawn_kwargs and fell back to its own constant would go red."""
+    from tests.test_headless_env import kit_route
+
+    kit_route(rsp, monkeypatch, tmp_path)
+    seen: dict = {}
+    calls: list = []
+
+    def fake_spawn(*args, **kwargs):
+        seen.update(kwargs)
+        raise kit.Refused("stop here")
+
+    def fake_kwargs(floors_in_hooks):
+        calls.append(floors_in_hooks)
+        return {**fi.TRIAGE_SPAWN, "bare": False, "floors_in_hooks": True}
+
+    monkeypatch.setattr(kit, "spawn", fake_spawn)
+    monkeypatch.setattr(fi, "triage_spawn_kwargs", fake_kwargs)
+    with pytest.raises(rsp.HeadlessRefused):
+        rsp._spawn_triage("a prompt", rsp.Bounds(), "2026-10-05-from-RC-QUESTION-x.md")
+    assert calls == [False]
+    assert seen["bare"] is False and seen["floors_in_hooks"] is True, seen
 
 
 # ---------------------------------------------------------------- live fence
