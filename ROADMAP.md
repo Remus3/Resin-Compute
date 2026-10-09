@@ -39,7 +39,14 @@ version. What follows is everything the scaffold deliberately did not do.
   selects ~17 hook-heavy modules, about 95 s against the 30 s target -
   trim the selector or move those modules to CI-only; (4b) hash-pinned
   pytest-timeout and xdist need the licence gate first (new dependency);
-  the 10.4 GB process is still unexplained. (s1) The hand-off Desktop
+  the 10.4 GB process is still unexplained. (2d, session 64) A whole-suite
+  run waited about 21 min for a `fleet_suite_gate.py` slot this session
+  (observed by the attended session); no RSC outbound note named it when
+  grepped at /done, so put it in the next batched note to MAIN as a kit
+  observation. (s4 count) `fleet_identity.py check HEAD` at /done refused
+  4 violations on 2 commits, all ai-or-bot author/committer class and NO
+  claude-trailer class - unlike SS (its 0025 note, section 1b, 28
+  trailer refusals), so the rewrite scope here stays 2 commits. (s1) The hand-off Desktop
   `.lnk` itself is outside the repo root (halt clause a); it read absent on
   the current profile, so nothing to remove.
 - **NEW 2026-10-08 (session 63 /done). Small residue.** (a) The leftover
@@ -67,7 +74,10 @@ version. What follows is everything the scaffold deliberately did not do.
   ops/loop/control; an absent mode file means deny). Switch to deny after 3
   interactive sessions (62, 63, 64) show no un-routable would-deny row;
   target 2026-10-11. Session 63 read 0 would-deny rows (621 rows, all
-  sub-thread allow): 2 of 3.
+  sub-thread allow): 2 of 3. Session 64 /done read 0 would-deny and 0
+  main-thread rows (1361 rows, all sub-thread allow): 3 of 3, so the mode
+  file was set to deny at session 64 /done (read back `deny`). Still OPEN:
+  say so in the next batched note to MAIN.
 
 - **E: move follow-through (session 59).** Steps a-c DONE session 60 (see
   `docs/LEDGER.md`): session started at E:, C: copy recycled and replaced by
