@@ -22,6 +22,39 @@ move - bumping it would have signalled a compute change that did not happen and
 invalidated correct caches. A change that alters a number this engine returns
 bumps the revision and gets its own section above this one.
 
+### POST /by-when answers "by when" from a caller-supplied schedule
+
+`forecast` answers "given N pulls". `POST /by-when` answers "by what date" over
+a banner schedule the CALLER supplies, a wallet (`pulls_on_hand`), a velocity
+(`pulls_per_day`) and the date the question is asked from (`as_of`, required -
+the engine reads no clock). No calendar is vendored and no real banner name,
+date or duration lives in this tree; the request carries the windows.
+
+The model: `B(d) = pulls_on_hand + floor(pulls_per_day * (d - as_of).days)`;
+a pull is spendable only on a day inside some window, on or after `as_of`;
+pity and the wallet persist across windows; `P(d)` is the forecaster's own
+`absorbed_by_pull` curve read at `B(d)`; `by_date` is the earliest eligible day
+with `P(d) >= confidence` (default 0.9). Both window ends are inclusive;
+overlapping windows, an empty schedule and a window already closed at `as_of`
+are rejected; an unreachable schedule is a 200 with `reachable=false` and the
+`best_*` fields, never a 400.
+
+Request: the `/forecast` fields minus `pull_budget`, plus `as_of`
+(`YYYY-MM-DD`, strict), `schedule` (`[{start, end, label}]`), `pulls_on_hand`,
+`pulls_per_day`, `confidence`. Response keys: `status`, `engine_version`,
+`banner`, `target_count`, `as_of`, `confidence`, `pulls_on_hand`,
+`pulls_per_day`, `pulls_needed`, `reachable`, `by_date`, `by_date_label`,
+`by_date_pulls_available`, `by_date_probability`, `best_date`, `best_label`,
+`best_pulls_available`, `best_probability`, `pulls_short`, `windows`.
+Library: `BannerWindow`, `WindowOutcome`, `ByWhenResult`, `by_when(...)` in
+`agents/pity_engine/timeline.py`, exported from the package.
+
+The revision did NOT move: every existing `/health`, `/forecast`, 400 and 404
+body is byte-identical - a golden dump of 23 existing cases taken before and
+after the change diffed empty, and that measurement is recorded in the commit
+that landed the route rather than by a test - and a 404 on `/by-when` is the
+feature detector an older engine gives.
+
 ### The port is now bound EXCLUSIVELY, and a second bind fails loudly
 
 `ThreadingHTTPServer` inherits `allow_reuse_address = True`, which sets

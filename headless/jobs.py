@@ -559,11 +559,265 @@ def reconcile_state(context: JobContext) -> JobResult:
                   roster_size=len(roster))
 
 
+# ---------------------------------------------------------------------------
+# Income observations - the operator-typed input reconcile_ledger folds
+# ---------------------------------------------------------------------------
+
+#: The hand-recorded observations file, resolved under the data dir unless
+#: `context.options["observations_path"]` names another path. `.json`, NOT
+#: `.jsonl`: `core.provenance.sweep_data_dir` grades every `.jsonl` under the
+#: data dir as a receipted provenance row, and this file is operator INPUT with
+#: no artefact to receipt. Gitignored - it is typed per machine and is never
+#: source.
+OBSERVATIONS_FILENAME = "income_observations.json"
+#: The only wrapper version this job reads. Any other version is an unexpected
+#: shape and a FAIL, never a best-effort parse.
+OBSERVATIONS_SCHEMA_VERSION = 1
+#: `LedgerEntry.source` on every folded row, and the in-pass idempotency mark:
+#: a ledger already carrying one such entry has been folded in this pass.
+OBSERVATION_SOURCE = "observation"
+
+
+@dataclass(frozen=True)
+class _Observation:
+    """One validated row of the observations file, ready to record."""
+
+    row_id: str
+    occurred_at: datetime
+    currency: Any
+    delta: int
+    reason: str
+
+
+@job(
+    name="reconcile_ledger",
+    description="Fold hand-recorded income observations into the ledger and re-estimate velocity.",
+    cadence=CADENCE_PER_PASS,
+    depends_on=("reconcile_state",),
+)
+def reconcile_ledger(context: JobContext) -> JobResult:
+    """Fold the operator's income observations into this pass's ledger.
+
+    WHY THIS EXISTS. `core.ledger.estimate_velocity` derives income per day
+    from observed ledger entries, but `reconcile_state` rebuilds the account
+    with an EMPTY ledger every pass, so nothing ever fed it and every snapshot
+    reported `sampled_over_days = 0`. This job is the feed: an operator records
+    what they saw in a small JSON file and the pass folds it before
+    `persist_state` writes the snapshot.
+
+    DEFAULT-OFF. No file means SKIP, so a tree that never heard of this job
+    behaves exactly as before - the CI smoke test changes by one SKIP line.
+
+    INPUT COMES FROM THE OPERATOR AND NOWHERE ELSE. The file is typed by hand
+    or supplied by the caller through `options["observations_path"]`. Nothing
+    here calls an upstream endpoint, runs a capture tool, or reads the display
+    snapshot back - the last of those is the live-state-first rule, asserted
+    structurally by tests/test_headless_persist_state.py.
+
+    IDEMPOTENT BY REBUILD. The ledger is fresh each pass and the WHOLE file is
+    folded each pass, so two passes give the same ledger and no watermark has
+    to be read back. Inside one pass a second call finds the fold already
+    present and SKIPs rather than doubling it.
+
+    VALIDATE EVERYTHING, THEN APPEND. A bad row anywhere fails the file and
+    records nothing, so a FAIL leaves the ledger empty rather than half-folded.
+    The raw reason goes to the log, never into the message.
+
+    Row shape, version 1::
+
+        {"schema_version": 1,
+         "observations": [
+           {"id": "2026-10-01-dailies", "at": "2026-10-01T12:00:00Z",
+            "currency": "primogem", "delta": 60, "note": "daily commissions"}]}
+
+    `id` is a non-empty string unique in the file; `at` is ISO-8601 and a naive
+    value is UTC; `currency` is a `CurrencyKind` wire value; `delta` is a
+    non-zero int, negative for a spend; `note` is optional and becomes the
+    entry's reason (else the id does).
+    """
+    name = "reconcile_ledger"
+    state = context.state
+    if state is None:
+        return skipped(name, "no reconciled state in this pass - nothing to fold into")
+
+    target = _observations_path(context)
+    if not target.is_file():
+        return skipped(
+            name,
+            f"no observations file - add {OBSERVATIONS_FILENAME} to the data dir "
+            "or set observations_path",
+        )
+
+    from core.atomic_io import read_json
+
+    unreadable = object()
+    payload = read_json(target, default=unreadable)
+    if payload is unreadable:
+        # read_json has already logged the raw parse error against the path.
+        return failed(name, "observations file is not valid JSON - see the log")
+
+    rows = _observation_rows(payload)
+    if rows is None:
+        return failed(
+            name,
+            "observations file has an unexpected shape - expected schema_version 1 "
+            "with an observations list",
+        )
+
+    from core.types import CurrencyKind
+
+    observations, problems = _validate_observations(rows, CurrencyKind)
+    if problems:
+        for index, row_id, why in problems:
+            log.error(
+                "reconcile_ledger: %s observations[%d] id=%r: %s", target.name, index, row_id, why
+            )
+        return failed(
+            name,
+            f"observations file has {len(problems)} invalid rows - see the log",
+            invalid_rows=len(problems),
+        )
+
+    if not observations:
+        return skipped(name, "observations file is empty - nothing to fold")
+
+    ledger = state.ledger
+    if any(getattr(entry, "source", None) == OBSERVATION_SOURCE for entry in ledger.entries):
+        return skipped(name, "observations already folded into this pass - nothing to add")
+
+    if context.dry_run:
+        return skipped(name, f"dry run - would fold {len(observations)} observations into the ledger")
+
+    from core.ledger import estimate_velocity, record
+
+    baseline = len(ledger.entries)
+    try:
+        for row in observations:
+            record(
+                ledger,
+                row.currency,
+                row.delta,
+                row.reason,
+                source=OBSERVATION_SOURCE,
+                occurred_at=row.occurred_at,
+            )
+        state.velocity = estimate_velocity(ledger)
+    except Exception as exc:  # noqa: BLE001 - a job MUST NOT abort the pass
+        # Unreachable for validated rows; kept so a defect below can never
+        # leave a half-folded ledger for persist_state to write down.
+        del ledger.entries[baseline:]
+        log.exception("reconcile_ledger failed for uid %s", context.uid)
+        return failed(name, "ledger fold failed - see the log", error_type=type(exc).__name__)
+
+    return passed(
+        name,
+        f"folded {len(observations)} observations into the ledger",
+        observations=len(observations),
+        sampled_over_days=int(state.velocity.sampled_over_days),
+    )
+
+
+def _observations_path(context: JobContext) -> Path:
+    """Where the observations file lives: the option, else the data dir.
+
+    Mirrors `persist_state`'s `state_path` resolution so the two files sit side
+    by side and no new env var or config field is needed.
+    """
+    override = context.options.get("observations_path")
+    if override:
+        return Path(str(override))
+    config_mod = _try_import("core.config")
+    load_config = getattr(config_mod, "load_config", None) if config_mod else None
+    data_dir = Path(load_config().data_dir) if callable(load_config) else Path("data")
+    return data_dir / OBSERVATIONS_FILENAME
+
+
+def _observation_rows(payload: Any) -> list[Any] | None:
+    """The `observations` list out of a version-1 wrapper; None for any other shape."""
+    if not isinstance(payload, dict):
+        return None
+    version = payload.get("schema_version")
+    if isinstance(version, bool) or version != OBSERVATIONS_SCHEMA_VERSION:
+        return None
+    rows = payload.get("observations")
+    if not isinstance(rows, list):
+        return None
+    return rows
+
+
+def _validate_observations(
+    rows: list[Any], currency_cls: Any
+) -> tuple[list[_Observation], list[tuple[int, str, str]]]:
+    """Validate EVERY row before any is recorded.
+
+    Returns the parsed rows and the problems, each `(index, id, reason)`. The
+    caller records nothing when there is any problem, which is what makes a
+    FAIL leave the ledger exactly as it found it.
+    """
+    parsed: list[_Observation] = []
+    problems: list[tuple[int, str, str]] = []
+    seen: set[str] = set()
+    for index, raw in enumerate(rows):
+        if not isinstance(raw, dict):
+            problems.append((index, "", "row is not an object"))
+            continue
+        row_id = raw.get("id")
+        if not isinstance(row_id, str) or not row_id.strip():
+            problems.append((index, "" if row_id is None else str(row_id), "id must be a non-empty string"))
+            continue
+        if row_id in seen:
+            problems.append((index, row_id, "duplicate id"))
+            continue
+        seen.add(row_id)
+        observation, why = _parse_observation(row_id, raw, currency_cls)
+        if observation is None:
+            problems.append((index, row_id, why or "invalid row"))
+            continue
+        parsed.append(observation)
+    return parsed, problems
+
+
+def _parse_observation(
+    row_id: str, raw: dict[str, Any], currency_cls: Any
+) -> tuple[_Observation | None, str | None]:
+    """One row to an `_Observation`, or `(None, reason)` naming the first defect."""
+    moment = raw.get("at")
+    if not isinstance(moment, str):
+        return None, "at must be an ISO-8601 timestamp string"
+    try:
+        occurred_at = datetime.fromisoformat(moment)
+    except ValueError:
+        return None, "at is not an ISO-8601 timestamp"
+    if occurred_at.tzinfo is None:
+        occurred_at = occurred_at.replace(tzinfo=UTC)
+
+    currency_value = raw.get("currency")
+    if not isinstance(currency_value, str):
+        return None, "currency must be a string"
+    try:
+        currency = currency_cls(currency_value)
+    except ValueError:
+        return None, f"unknown currency {currency_value!r}"
+
+    delta = raw.get("delta")
+    if isinstance(delta, bool) or not isinstance(delta, int):
+        return None, "delta must be an integer"
+    if delta == 0:
+        return None, "delta is zero - a zero delta carries no information"
+
+    note = raw.get("note")
+    if note is not None and not isinstance(note, str):
+        return None, "note must be a string"
+    reason = note.strip() if isinstance(note, str) and note.strip() else row_id
+
+    return _Observation(row_id, occurred_at, currency, delta, reason), None
+
+
 @job(
     name="persist_state",
     description="Write the reconciled account down so the dashboard can start cold.",
     cadence=CADENCE_PER_PASS,
-    depends_on=("reconcile_state",),
+    depends_on=("reconcile_state", "reconcile_ledger"),
 )
 def persist_state(context: JobContext) -> JobResult:
     """Persist the reconciled account as a DISPLAY snapshot.

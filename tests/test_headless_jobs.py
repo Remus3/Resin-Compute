@@ -31,6 +31,7 @@ from headless import jobs as jobs_mod
 EXPECTED_ORDER = [
     "sync_profile",
     "reconcile_state",
+    "reconcile_ledger",
     "persist_state",
     "recompute_plan",
     "forecast_pity",

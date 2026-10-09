@@ -2131,6 +2131,32 @@ class _SubprocessSpy:
         return subprocess.CompletedProcess(argv, self._returncode, self._stdout, "")
 
 
+#: A name NO host resolves, following the file's ZZ-no-such-* convention, so
+#: an arm can tell a stubbed argv[0] from one the real lookup produced.
+_STUBBED_POWERSHELL = "ZZ-stubbed-powershell-for-argv-grading"
+
+
+@pytest.fixture
+def stubbed_powershell_lookup(monkeypatch):
+    """Replace the interpreter lookup with a name no host resolves.
+
+    The argv-shape arms below spy on subprocess.run and never launch anything,
+    yet collect_facts resolves the interpreter through shutil.which BEFORE it
+    reaches the spy, so without this they depend on a PowerShell they never
+    execute and go red on every machine with none on PATH. That is a defect of
+    the arms and not of the host: the file already stubs this same lookup in
+    _powershell_text_reaching_argv and in _collect_facts_over_a_stubbed_launcher
+    for exactly this reason. Here it is applied UNCONDITIONALLY, not only where
+    the real lookup raises, so the load-bearing arm can assert argv[0] IS the
+    sentinel on every host, Windows included.
+
+    The three refusal arms do NOT take this fixture. They prove the name and
+    path gates fire before the lookup is ever reached, with no stub in the way.
+    """
+    monkeypatch.setattr(liveness, "_powershell_executable", lambda: _STUBBED_POWERSHELL)
+    return _STUBBED_POWERSHELL
+
+
 def test_collect_facts_refuses_a_metacharacter_name_before_any_subprocess(monkeypatch):
     spy = _SubprocessSpy()
     monkeypatch.setattr(liveness.subprocess, "run", spy)
@@ -2139,7 +2165,7 @@ def test_collect_facts_refuses_a_metacharacter_name_before_any_subprocess(monkey
     assert spy.calls == [], "the gate must fire BEFORE PowerShell is launched, not after"
 
 
-def test_positive_control_a_clean_name_does_reach_the_subprocess(monkeypatch):
+def test_positive_control_a_clean_name_does_reach_the_subprocess(monkeypatch, stubbed_powershell_lookup):
     # Same stub, same call site. Proves the arm above measures the GATE and not
     # a subprocess that never runs anyway.
     spy = _SubprocessSpy()
@@ -2167,7 +2193,7 @@ def test_the_task_path_is_gated_too_since_it_reaches_the_same_literal(monkeypatc
     assert spy.calls == []
 
 
-def test_positive_control_a_real_task_path_is_accepted_and_interpolated(monkeypatch):
+def test_positive_control_a_real_task_path_is_accepted_and_interpolated(monkeypatch, stubbed_powershell_lookup):
     spy = _SubprocessSpy()
     monkeypatch.setattr(liveness.subprocess, "run", spy)
     liveness.collect_facts("RunPlatformExperienceHelper_Metrics", task_path="\\GoogleUserPEH\\")
@@ -2187,7 +2213,7 @@ def test_positive_control_the_real_task_name_validates():
 # --- The PowerShell INVOCATION itself is part of the contract -------------
 
 
-def test_the_interpreter_is_launched_with_no_profile_and_non_interactive(monkeypatch):
+def test_the_interpreter_is_launched_with_no_profile_and_non_interactive(monkeypatch, stubbed_powershell_lookup):
     # A profile can print a banner into stdout and break the JSON parse, and an
     # interactive prompt can hang until the timeout. Both flags are load
     # bearing and neither is visible in any payload, so they are asserted here.
@@ -2206,7 +2232,7 @@ def test_non_vacuity_the_flag_assertion_would_catch_their_absence():
     assert "-NonInteractive" not in stripped
 
 
-def test_the_timeout_argument_actually_reaches_the_subprocess(monkeypatch):
+def test_the_timeout_argument_actually_reaches_the_subprocess(monkeypatch, stubbed_powershell_lookup):
     # main -> collect_facts -> subprocess.run, with nothing stubbed between.
     spy = _SubprocessSpy()
     monkeypatch.setattr(liveness.subprocess, "run", spy)
@@ -2214,12 +2240,45 @@ def test_the_timeout_argument_actually_reaches_the_subprocess(monkeypatch):
     assert spy.calls[0][1]["timeout"] == 7
 
 
-def test_positive_control_the_default_timeout_is_used_when_none_is_given(monkeypatch):
+def test_positive_control_the_default_timeout_is_used_when_none_is_given(monkeypatch, stubbed_powershell_lookup):
     spy = _SubprocessSpy()
     monkeypatch.setattr(liveness.subprocess, "run", spy)
     liveness.main(["ResinCompute-Responder"])
     assert spy.calls[0][1]["timeout"] == liveness.DEFAULT_TIMEOUT_SECONDS
     assert liveness.DEFAULT_TIMEOUT_SECONDS != 7, "the arm above would be vacuous if these collided"
+
+
+def test_the_lookup_stub_is_load_bearing_for_the_argv_arms(monkeypatch, stubbed_powershell_lookup):
+    # The argv-shape arms above grade the GATE and the argv, never a launch, so
+    # they must not depend on a PowerShell this host may not carry. The fixture
+    # replaces the interpreter lookup with a name NO host resolves; this arm
+    # proves the stub is what put argv[0] there, and that the real flags and
+    # the real template still follow it through the real collect_facts.
+    spy = _SubprocessSpy()
+    monkeypatch.setattr(liveness.subprocess, "run", spy)
+    liveness.collect_facts("ResinCompute-Responder")
+    assert len(spy.calls) == 1
+    argv = spy.calls[0][0]
+    assert argv[0] == stubbed_powershell_lookup
+    assert liveness.shutil.which(stubbed_powershell_lookup) is None, (
+        "the sentinel resolves on PATH, so argv[0] could have come from the real lookup"
+    )
+    assert argv[1:6] == ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"]
+    assert argv[-1] == liveness._PS_TEMPLATE.format(task_name="ResinCompute-Responder", task_path="")
+
+
+def test_without_a_resolvable_interpreter_the_lookup_raises_before_any_subprocess(monkeypatch):
+    # Paired negative control, and it takes NO fixture: the condition the stub
+    # exists for, reproduced hermetically on every host. With nothing on PATH
+    # the lookup raises ProbeError and the spy never sees a call - exactly how
+    # the five arms above failed on a machine with no PowerShell before the
+    # fixture was threaded through them.
+    spy = _SubprocessSpy()
+    monkeypatch.setattr(liveness.subprocess, "run", spy)
+    monkeypatch.setattr(liveness.shutil, "which", lambda *_a, **_k: None)
+    with pytest.raises(liveness.ProbeError):
+        liveness.collect_facts("ResinCompute-Responder")
+    assert spy.calls == []
 
 
 # --- THE PROBE AND THE PARSER MUST AGREE ----------------------------------

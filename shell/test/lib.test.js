@@ -36,8 +36,10 @@ test("endpoint refuses a non-loopback host", () => {
   }
 });
 
-test("endpoint accepts every spelling of loopback", () => {
-  for (const host of ["127.0.0.1", "localhost", "::1", "[::1]"]) {
+test("endpoint accepts the two loopback spellings the surface can bind", () => {
+  // "::1" and "[::1]" are loopback too, but surface/server.py is AF_INET only,
+  // so they are refused; endpoint.test.js pins that refusal.
+  for (const host of ["127.0.0.1", "localhost"]) {
     assert.ok(endpoint.isLoopback(host), host);
   }
 });

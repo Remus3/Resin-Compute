@@ -170,9 +170,14 @@ def fold_talent_levels(
     2. A direct key hit - the bonus key is already a skillId present in
        `skillLevelMap`.
     3. `positional_fallback`, DEFAULT-OFF: pair the sorted bonus keys with the
-       sorted skill keys when the two maps are the same length. This is an
-       approximation that is only correct when every talent received a bonus, so
-       it is opt-in rather than a silent guess.
+       sorted skill keys ONLY when nothing could be placed by steps 1-2 and the
+       two maps are the same length - every nonzero bonus is still pending, so
+       "same length" is literally true of the nonzero maps. This is an approximation
+       that is only correct when every talent received a bonus, so it is opt-in
+       rather than a silent guess. Once any bonus has been placed directly, the
+       remainder is never paired onto the unbonused talents: that would be a new
+       guess this contract does not license, and it would bonus the directly
+       hit talent twice.
 
     Anything still unresolved is RETURNED rather than guessed at or dropped
     silently. This repository vendors no skill-depot data (see
@@ -194,6 +199,7 @@ def fold_talent_levels(
         return effective, base, unresolved
 
     pending: dict[int, int] = {}
+    placed = 0
     for key, value in raw_extra.items():
         group_id = _as_int(key)
         bonus = _as_int(value)
@@ -206,11 +212,15 @@ def fold_talent_levels(
             target = group_id
         if target is not None and target in effective:
             effective[target] += bonus
+            placed += 1
         else:
             pending[group_id] = bonus
 
-    if pending and positional_fallback and len(pending) == len(base) and base:
-        # Opt-in approximation. Correct only when every talent got a bonus.
+    if placed == 0 and pending and positional_fallback and len(pending) == len(base) and base:
+        # Opt-in approximation. Correct only when every talent got a bonus, which
+        # requires that NO bonus was placed directly: a direct hit already consumed
+        # one talent, so pairing the remainder onto sorted(base) would bonus that
+        # talent twice and launder unresolved bonuses into placements.
         for group_id, target in zip(sorted(pending), sorted(base)):
             effective[target] += pending[group_id]
         pending = {}
