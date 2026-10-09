@@ -148,9 +148,10 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
         "Python.",
     ),
     "ops/fleet_kit/fleet_gitlock.py": (
-        2,
-        "FLEET-KIT v12, vendored and never edited; triaged 2026-10-08 by "
-        "reading each site. _git_out: env FLEET_GIT or the literal git. run: "
+        3,
+        "FLEET-KIT v13, vendored and never edited; triaged 2026-10-08 by "
+        "reading each site. _git_out: env FLEET_GIT or the literal git. The "
+        "v13 identity probe (`git var`): the same FLEET_GIT-or-git head. run: "
         "the caller's argv after `--`, which the module parses as a git "
         "command (commit or push). Never a Python.",
     ),
