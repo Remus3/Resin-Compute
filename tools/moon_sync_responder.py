@@ -5870,8 +5870,8 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "", kind: str 
     ITEM 14 rule 5: every run carries a non-empty note label (`SPAWN_LABEL`
     when the caller names no note) and a kind - "inbox" for the work lane's
     draft, "triage" for `_spawn_triage`, which takes the kit's
-    `fleet_inbox.TRIAGE_SPAWN` shape (sonnet, effort low, bare, 300 s) and no
-    brief. Both pass governor=None explicitly (ruling (i), CLAUDE.md). `kind`
+    `fleet_inbox.triage_spawn_kwargs(not SPAWN_BARE)` shape (sonnet, effort
+    low, bare, 300 s; kit v11) and no brief. Both pass governor=None explicitly (ruling (i), CLAUDE.md). `kind`
     is APPENDED AT THE END with a default.
 
     ARMING IS A SEPARATE ACT FROM BUILDING and this function existing does not
@@ -5952,7 +5952,13 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "", kind: str 
     # start, and a sentinel that landed since must still mean no spawn.
     if _halt_requested():
         raise HaltedBeforeSpawn("the operator's HALT sentinel is present")
-    shape: dict[str, Any] = dict(inbox_kit.TRIAGE_SPAWN) if kind == "triage" else {}
+    # Kit v11 (MAIN 1840 ORDER, ruling R1): TRIAGE_SPAWN lost its "bare" key;
+    # triage_spawn_kwargs(floors_in_hooks) supplies bare = not floors_in_hooks.
+    # No floor of this responder lives in a hook (SPAWN_BARE), so triage stays
+    # bare and check_door sees floors_in_hooks=False.
+    shape: dict[str, Any] = (
+        inbox_kit.triage_spawn_kwargs(not SPAWN_BARE) if kind == "triage" else {}
+    )
     # ITEM 13: the fire's checklist moves on, and the block is logged once.
     _on_spawn(kind)
     try:
@@ -5963,6 +5969,7 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "", kind: str 
             note=note_name or SPAWN_LABEL,
             writes_code=False,
             bare=shape.get("bare", SPAWN_BARE),
+            floors_in_hooks=shape.get("floors_in_hooks", not SPAWN_BARE),
             rules_file=None if shape else RESPONDER_BRIEF,
             timeout=shape.get("timeout", bounds.spawn_timeout_seconds),
             extra=SPAWN_FLOOR,
@@ -6013,7 +6020,7 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "", kind: str 
 
 def _spawn_triage(prompt: str, bounds: Bounds, note_name: str) -> str:
     """ONE triage session for one note (item 14 rule 2): the kit's
-    `TRIAGE_SPAWN` shape, kind "triage", every budget, halt and route check of
+    `triage_spawn_kwargs` shape (kit v11), kind "triage", every budget, halt and route check of
     `_spawn_headless`. Returns the raw text `fleet_inbox.parse_verdict` reads."""
     return _spawn_headless(prompt, bounds, note_name=note_name, kind="triage")
 
