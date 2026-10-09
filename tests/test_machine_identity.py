@@ -25,11 +25,12 @@ first would go on quietly deciding what the second is allowed to see - which is
 the failure this file was written in response to.
 
 WHAT IS DELIBERATELY NOT CHECKED. Machine names, checkout locations and project
-directories. `README.md` documents `C:\\Resin Compute` as the canonical clone
-target and names the host it sits on, on purpose, as install instructions. The
-predicate here is narrower and stateable in one line: an absolute path whose
-ACCOUNT SEGMENT names a real account. Widening it to "any absolute path" would
-flag the install docs and would be argued away within a session.
+directories, in general. The install docs are the one exception, guarded by
+their own arm below: they name no checkout path at all. The account
+predicate is narrower and stateable in one line: an absolute path whose
+ACCOUNT SEGMENT names a real account. Widening it to "any absolute path" tree
+wide would flag every fixture that discusses a path and would be argued away
+within a session.
 
 BREADTH COVERED, and it is a choice rather than an accident. The Windows drive
 form is the measured live risk and is the form the actual leak took. The Linux
@@ -489,16 +490,37 @@ def test_every_allowlisted_placeholder_still_occurs_in_the_tree(placeholder: str
     )
 
 
-def test_the_install_documentation_is_not_collateral_damage():
-    """`README.md` names the canonical checkout path on purpose.
+#: A drive-qualified absolute path: a drive letter, a colon, a separator, then
+#: a real segment. `<checkout>` style placeholders do not match, because the
+#: segment class excludes `<`.
+_DRIVE_PATH = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]+[A-Za-z0-9_][^`'\"\s]*")
 
-    It has a drive letter and a real directory but no account segment, so the
-    predicate must leave it entirely alone. If a future widening of the regex
-    starts flagging install instructions, it fails here first.
-    """
-    text = _read("README.md")
-    assert "E:" + "\\" + "Resin Compute" in text
-    assert leaked_accounts(text) == []
+#: The install documentation. MAIN 2246 ORDER s3 item 1: these named this
+#: machine's absolute checkout path, which no longer matched the machine. Any
+#: path works for a checkout, so the docs say so and name none.
+_INSTALL_DOCS = ("README.md", "docs/OPERATIONS.md")
+
+
+def _drive_paths(text: str) -> list[str]:
+    return _DRIVE_PATH.findall(text)
+
+
+def test_the_install_documentation_names_no_machine_checkout_path():
+    """README and OPERATIONS name no drive-qualified checkout path at all."""
+    for name in _INSTALL_DOCS:
+        text = _read(name)
+        assert _drive_paths(text) == [], f"{name} names an absolute machine path"
+        assert leaked_accounts(text) == []
+
+
+def test_the_drive_path_detector_fires_and_spares_placeholders():
+    """Non-vacuity: the detector catches the old README spelling, both
+    separators, and leaves placeholders and the MSYS artefact alone."""
+    assert _drive_paths("one here is `E:" + "\\" + "Resin Compute`.")
+    assert _drive_paths("at C:/checkout dir now")
+    assert _drive_paths("Clone anywhere. A `<checkout>` with a space.") == []
+    assert _drive_paths("`<drive>:/<checkout>`") == []
+    assert _drive_paths("http://127.0.0.1:8790/forecast") == []
 
 
 # ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@ Commit 3964544 added a `--source` flag to two of the hook commands in
 `tests/test_session_hooks.py` grades the settings file. `tests/test_docs_consistency.py`
 grades the docs against the TREE - it asks whether a cited path resolves and
 whether git stores it. Nothing in this tree graded a DOCUMENT against the
-settings file, so `docs/INBOX_TRIAGE_2026-09-07-0710.md` went on reproducing the
+settings file, so `docs/_archive/2026-09/INBOX_TRIAGE_2026-09-07-0710.md` went on reproducing the
 pre-3964544 command strings, in a sentence whose whole job was to enumerate what
 the settings file declares. The doc was not wrong when it was written. It became
 wrong when the declaration moved and nothing connected the two.
