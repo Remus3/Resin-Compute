@@ -9,6 +9,7 @@ Routes:
     GET  /health     engine version, pid, uptime
     POST /forecast   {pity_5star, has_guarantee, consecutive_5050_losses,
                       fate_points, banner, target_count, pull_budget}
+    POST /by-when    {as_of, schedule: [{start, end, label}], pulls_on_hand, pulls_per_day, confidence, + the /forecast fields minus pull_budget}
 
 FAIL-SOFT is a hard rule, inherited verbatim (SPEC section 2): a malformed
 request returns HTTP 400 with a friendly JSON message and the raw exception goes
@@ -27,6 +28,7 @@ import os
 import socket
 import sys
 import time
+from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlsplit
@@ -36,6 +38,7 @@ from core.types import BannerKind, PityState
 
 from . import ENGINE_VERSION
 from .forecast import probability_of_success
+from .timeline import BannerWindow, by_when
 
 DEFAULT_HOST = "127.0.0.1"
 
@@ -82,6 +85,33 @@ def _coerce_int(body: dict[str, Any], key: str, default: int = 0) -> int:
     raise ValueError(f"{key} must be an integer")
 
 
+def _coerce_float(body: dict[str, Any], key: str, default: float = 0.0) -> float:
+    raw = body.get(key, default)
+    if isinstance(raw, bool):
+        raise ValueError(f"{key} must be a number, not a boolean")
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str) and raw.strip():
+        return float(raw.strip())
+    raise ValueError(f"{key} must be a number")
+
+
+def _coerce_date(mapping: dict[str, Any], key: str) -> date:
+    """Strict `YYYY-MM-DD`, required.
+
+    `date.fromisoformat` also accepts `YYYYMMDD` and ISO week dates such as
+    `YYYY-Www-D` (measured on 3.11), so parsing alone is not the check: the
+    parsed value must render back to exactly the string that arrived.
+    """
+    raw = mapping.get(key)
+    if not isinstance(raw, str):
+        raise ValueError(f"{key} must be a YYYY-MM-DD string")
+    parsed = date.fromisoformat(raw)
+    if parsed.isoformat() != raw:
+        raise ValueError(f"{key} must be a YYYY-MM-DD string")
+    return parsed
+
+
 def _coerce_banner(body: dict[str, Any]) -> BannerKind:
     raw = body.get("banner", BannerKind.CHARACTER_EVENT.value)
     if isinstance(raw, BannerKind):
@@ -125,6 +155,87 @@ def forecast_payload(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def by_when_payload(body: dict[str, Any]) -> dict[str, Any]:
+    """Translate one `/by-when` request body into one response body.
+
+    Same contract as `forecast_payload`: pure, raises `ValueError` on nonsense
+    and never formats an error itself. The schedule is the caller's - the
+    engine vendors no calendar - and `as_of` is required because the engine
+    reads no clock. `weapon_increment` and `carry_radiance_through_guarantee`
+    are library-only and deliberately not read from the body, matching
+    `/forecast`. The four `by_date_*` keys are null exactly when `reachable` is
+    false; the `best_*` keys are never null.
+    """
+    banner = _coerce_banner(body)
+    state = PityState(
+        banner=banner,
+        pity_5star=_coerce_int(body, "pity_5star"),
+        pity_4star=_coerce_int(body, "pity_4star"),
+        has_guarantee=bool(body.get("has_guarantee", False)),
+        consecutive_5050_losses=_coerce_int(body, "consecutive_5050_losses"),
+        fate_points=_coerce_int(body, "fate_points"),
+    )
+    target_count = _coerce_int(body, "target_count", 1)
+    as_of = _coerce_date(body, "as_of")
+    raw_schedule = body.get("schedule")
+    if not isinstance(raw_schedule, list):
+        raise ValueError("schedule must be a list of windows")
+    schedule: list[BannerWindow] = []
+    for entry in raw_schedule:
+        if not isinstance(entry, dict):
+            raise ValueError("each schedule window must be an object with start and end")
+        label = entry.get("label", "")
+        if not isinstance(label, str):
+            raise ValueError("a window label must be a string")
+        schedule.append(
+            BannerWindow(start=_coerce_date(entry, "start"), end=_coerce_date(entry, "end"), label=label)
+        )
+    pulls_on_hand = _coerce_int(body, "pulls_on_hand", 0)
+    pulls_per_day = _coerce_float(body, "pulls_per_day", 0.0)
+    confidence = _coerce_float(body, "confidence", 0.9)
+    result = by_when(
+        state,
+        target_count=target_count,
+        schedule=schedule,
+        as_of=as_of,
+        pulls_on_hand=pulls_on_hand,
+        pulls_per_day=pulls_per_day,
+        confidence=confidence,
+        banner=banner,
+    )
+    return {
+        "status": "ok",
+        "engine_version": ENGINE_VERSION,
+        "banner": banner.value,
+        "target_count": target_count,
+        "as_of": as_of.isoformat(),
+        "confidence": confidence,
+        "pulls_on_hand": pulls_on_hand,
+        "pulls_per_day": pulls_per_day,
+        "pulls_needed": result.pulls_needed,
+        "reachable": result.reachable,
+        "by_date": result.by_date.isoformat() if result.by_date is not None else None,
+        "by_date_label": result.by_date_label,
+        "by_date_pulls_available": result.by_date_pulls_available,
+        "by_date_probability": result.by_date_probability,
+        "best_date": result.best_date.isoformat(),
+        "best_label": result.best_label,
+        "best_pulls_available": result.best_pulls_available,
+        "best_probability": result.best_probability,
+        "pulls_short": result.pulls_short,
+        "windows": [
+            {
+                "start": window.start.isoformat(),
+                "end": window.end.isoformat(),
+                "label": window.label,
+                "pulls_available_at_end": window.pulls_available_at_end,
+                "probability_at_end": window.probability_at_end,
+            }
+            for window in result.windows
+        ],
+    }
+
+
 def handle_request(method: str, path: str, raw_body: bytes) -> tuple[int, dict[str, Any]]:
     """Route one request and guarantee a JSON answer for every input.
 
@@ -140,6 +251,12 @@ def handle_request(method: str, path: str, raw_body: bytes) -> tuple[int, dict[s
             if not isinstance(body, dict):
                 raise ValueError("request body must be a JSON object")
             return 200, forecast_payload(body)
+        if method == "POST" and path == "/by-when":
+            text = raw_body.decode("utf-8").strip() or "{}"
+            body = json.loads(text)
+            if not isinstance(body, dict):
+                raise ValueError("request body must be a JSON object")
+            return 200, by_when_payload(body)
         return 404, _error_payload(_NOT_FOUND_MESSAGE)
     except Exception:
         LOGGER.exception("pity_engine request failed: %s %s", method, path)

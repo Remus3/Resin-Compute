@@ -460,6 +460,20 @@ def _run_sh(
     keeps the stub interpreters winning the name lookup.
     """
     environ = dict(os.environ)
+    # An ambient PYTHON never reaches the child. The selector probes $PYTHON
+    # FIRST, so a caller whose shell exports one pointing at a real interpreter
+    # that carries pytest bypasses the stubbed PATH entirely, and the pre-push
+    # arms then run the REAL hook, which runs the REAL full suite, which reaches
+    # those same arms again. Measured 2026-10-04 on a Linux box: an unbounded
+    # recursion, 11 nested pytest processes deep before it was stopped. A test
+    # that wants an override passes it through `env`, which is applied AFTER
+    # this scrub, so only the ambient one is dropped.
+    environ.pop("PYTHON", None)
+    # Same root cause, the hook's other input. An ambient RESIN_SKIP_PREPUSH
+    # left over from a docs-only push would have every pre-push arm grade the
+    # SKIPPED branch and blame the hook for it. The escape-hatch arm passes it
+    # explicitly through `env`, so that route survives this scrub too.
+    environ.pop("RESIN_SKIP_PREPUSH", None)
     if env:
         environ.update(env)
     if path_prefix is not None:
@@ -913,6 +927,40 @@ def test_the_candidate_list_names_an_explicit_PYTHON_first():
         _source_helper() + "resin_python_candidates", env={"PYTHON": "/opt/pyX"}
     )
     assert listing.stdout.split() == ["/opt/pyX", "python3", "python", "py"]
+
+
+def test_an_ambient_python_never_reaches_the_selector_under_test(
+    monkeypatch, barren_path: Path,
+):
+    """The harness is hermetic against the CALLER'S environment.
+
+    MEASURED 2026-10-04 on a Linux box whose login shell exports PYTHON. The
+    selector probes $PYTHON FIRST, so a harness that copied the caller's
+    environment into the child handed it a real interpreter carrying pytest,
+    and the stubbed PATH the fixtures build was never consulted. The pre-push
+    arms below then ran the REAL hook, which ran the REAL full `tests` suite,
+    which reached those same arms again - an unbounded recursion, 11 nested
+    pytest processes deep before it was stopped.
+
+    Graded on the SELECTOR rather than on the hook deliberately: in the red
+    state a hook-based arm IS the recursion. The override here names this very
+    interpreter, which demonstrably carries pytest, and the PATH carries only
+    dead-end stubs. If the override reaches the child the pick is FOUND after
+    probing none of the stubs; if the harness scrubs it the pick is NONE after
+    probing all three. The explicit `env=` route stays open - the two arms
+    above use it - so a test that WANTS an override still gets one, and only
+    the ambient one is dropped.
+    """
+    monkeypatch.setenv("PYTHON", sys.executable)
+    picked = _pick("pytest", path_prefix=barren_path)
+    assert picked.status == "NONE", (
+        "the caller's ambient PYTHON reached the selector, so the stubbed PATH "
+        f"was bypassed and the arms are not hermetic: {picked.detail}"
+    )
+    assert picked.chosen is None
+    assert "probed 3 candidate" in picked.detail, (
+        f"the stubs were not the candidates consulted: {picked.detail}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1982,6 +2030,79 @@ def test_the_escape_hatch_still_skips_the_whole_gate(shimmed_path: Path):
     assert result.returncode == 0, result.stderr
     assert "SKIPPED" in result.stdout
     assert "pre-push: OK" not in result.stdout
+
+
+def test_an_ambient_escape_hatch_never_reaches_the_hook_under_test(
+    monkeypatch, barren_path: Path,
+):
+    """The same root cause as the ambient PYTHON, on the hook's other input.
+
+    The hook reads RESIN_SKIP_PREPUSH from its environment, and a harness that
+    forwards the caller's environment hands it whatever the caller's shell
+    exported. An operator who set the escape hatch for a docs-only push and
+    left it set would turn every pre-push arm here into a grade of the SKIPPED
+    branch - loudly, since the arms assert on the other branch, but for a
+    reason that names the machine rather than the hook. The arm above passes
+    the hatch EXPLICITLY through `env=`, and that route stays open; only the
+    ambient one is scrubbed.
+
+    Safe to grade on the hook even when red: `barren_path` carries no pytest
+    and the ambient PYTHON is scrubbed independently, so the real suites are
+    never reached - the hook fails open instead, and that is what is asserted.
+    """
+    monkeypatch.setenv("RESIN_SKIP_PREPUSH", "1")
+    result = _run_prepush(barren_path)
+    assert result.returncode == 0, result.stderr
+    assert "SKIPPED" not in result.stdout, (
+        "the caller's ambient RESIN_SKIP_PREPUSH reached the hook, so the arms "
+        "are grading the escape hatch rather than the gate:\n" + result.stdout
+    )
+    assert "pre-push: OK" in result.stdout
+    assert "ruff not importable" in result.stderr
+    assert "pytest not importable" in result.stderr
+
+
+def test_an_ambient_python_never_reaches_the_hook_under_test(
+    monkeypatch, tmp_path: Path, barren_path: Path,
+):
+    """The PYTHON scrub pinned on the HOOK route, not only on the selector's.
+
+    The selector arm above grades `_pick`, and `_pick` is one caller of
+    `_run_sh`. A regression that scrubbed PYTHON inside `_pick` alone and let
+    `_run_sh` forward it again would keep that arm green while every pre-push
+    arm was once more handed the caller's interpreter - which is the recursion,
+    reopened on the route that actually runs the suites. Refuted 2026-10-04 by
+    exactly that mutant: both ambient arms passed while the hook demonstrably
+    picked the ambient PYTHON. This arm drives the real hook.
+
+    Safe to grade even when red: the ambient PYTHON points at an `sh` stub that
+    claims every import and runs nothing, so if it does reach the hook the
+    hook "runs" both halves through a stub that exits 0 and never touches a
+    real pytest. The signal is the absence of the fail-open WARNINGs that the
+    barren PATH must otherwise produce.
+
+    RESIDUAL, recorded and not fixed. Where `sh` is bash - the Git for Windows
+    shape - an EXPORTED SHELL FUNCTION named python3, python or py in the
+    caller's environment is imported by the hook's shell and shadows the
+    stubbed PATH on this route, because unlike `_pick_script` the hook does
+    not re-declare those names through `command`. Not reproducible under a
+    dash `sh`, where exported functions are not imported.
+    """
+    stub = tmp_path / "ambient-python"
+    stub.write_text(STUB_WITH_MODULES, encoding="ascii", newline="\n")
+    stub.chmod(0o755)
+    monkeypatch.setenv("PYTHON", stub.as_posix())
+    result = _run_prepush(barren_path)
+    assert result.returncode == 0, result.stderr
+    assert "ruff not importable" in result.stderr, (
+        "the caller's ambient PYTHON reached the hook, which ran the lint half "
+        "through it instead of failing open on the barren PATH:\n" + result.stderr
+    )
+    assert "pytest not importable" in result.stderr, (
+        "the caller's ambient PYTHON reached the hook, which ran the suite half "
+        "through it instead of failing open on the barren PATH:\n" + result.stderr
+    )
+    assert "pre-push: OK" in result.stdout
 
 
 # ---------------------------------------------------------------------------

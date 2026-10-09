@@ -48,6 +48,7 @@ data/*.tmp
 # and read by surface/. It carries a player UID and a roster, it changes on every
 # pass, and it is a display cache rather than source - see core/state_io.py.
 data/account_state.json
+data/income_observations.json
 
 # --- Python bytecode + tool caches --------------------------------------
 __pycache__/

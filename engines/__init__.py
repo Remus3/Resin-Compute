@@ -7,6 +7,13 @@ structural constant pinned by docs/SPEC_SCAFFOLD.md rather than farmable data.
 """
 from __future__ import annotations
 
+from engines.artifact_score import (
+    ArtifactScore,
+    RollCount,
+    WeightedStat,
+    rank_artifacts,
+    score_artifact,
+)
 from engines.objectives import (
     ASCENSION_LEVEL_CAPS,
     MAX_ASCENSION_PHASE,
@@ -74,17 +81,20 @@ __all__ = [
     "WEIGHT_NEAR_COMPLETION",
     "WEIGHT_UNBLOCKS",
     "WEIGHT_VALUE_PER_RESIN",
+    "ArtifactScore",
     "Candidate",
     "CyclicObjectiveError",
     "DuplicateObjectiveError",
     "NodeCost",
     "ObjectiveGraph",
     "ObjectiveGraphError",
+    "RollCount",
     "ScheduleOutcome",
     "ScoredAxis",
     "UnknownDependencyError",
     "UnknownObjectiveError",
     "UnknownScheduleNodeError",
+    "WeightedStat",
     "build_graph",
     "character_ascension_id",
     "character_level_id",
@@ -95,9 +105,11 @@ __all__ = [
     "min_ascension_for_talent",
     "naive_days",
     "plan",
+    "rank_artifacts",
     "recommend",
     "required_ascension_for_level",
     "schedule",
+    "score_artifact",
     "score_candidate",
     "solve",
     "talent_id",

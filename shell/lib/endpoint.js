@@ -41,9 +41,13 @@ class EndpointError extends Error {
  * that decision rests entirely on it never being reachable off the box. So a
  * non-loopback host is REFUSED rather than accepted with a warning: a warning
  * printed to a stream nobody reads is not a control.
+ *
+ * The IPv6 spellings "::1" and "[::1]" are loopback too but are REFUSED: the
+ * surface (surface/server.py) binds AF_INET only and cannot answer on either,
+ * so accepting them here would only defer the failure past this friendly refusal.
  */
 function isLoopback(host) {
-  return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]";
+  return host === "127.0.0.1" || host === "localhost";
 }
 
 /**

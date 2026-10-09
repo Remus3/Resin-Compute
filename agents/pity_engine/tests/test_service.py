@@ -20,7 +20,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from agents.pity_engine import ENGINE_VERSION
+from agents.pity_engine import CHRONICLED_DESIGNATED_P, ENGINE_VERSION
 from agents.pity_engine.__main__ import (
     DEFAULT_HOST,
     DEFAULT_PORT,
@@ -30,6 +30,8 @@ from agents.pity_engine.__main__ import (
     health_payload,
     main,
 )
+from agents.pity_engine.forecast import probability_of_success
+from core.types import BannerKind, PityState
 
 # Substrings that would betray a raw exception or parser complaint. None of
 # these may ever appear in a response body.
@@ -237,6 +239,93 @@ def test_live_forecast_endpoint() -> None:
     payload = json.loads(blob)
     assert payload["probability"] == 1.0
     assert payload["banner"] == "weapon_event"
+
+
+def test_live_chronicled_forecast_is_byte_identical_to_the_library_call() -> None:
+    """The Chronicled route over a REAL socket, pinned to the library byte for byte.
+
+    The roadmap row "Chronicled Wish support in the service route" was closed by
+    MEASUREMENT rather than by work: the service builds its banner map from every
+    `BannerKind` member, so the route has accepted `chronicled` since the map was
+    written. What that closure left open was this test - the route was exposed
+    and untested at the HTTP layer. Every other chronicled test in this package
+    calls the solver directly and never crosses a socket.
+
+    THE STATE DISCRIMINATES. At pity 89 with a budget of one pull, chronicled
+    pays out at exactly `CHRONICLED_DESIGNATED_P` - no Capturing Radiance on
+    this banner, SPEC section 3.7 - while character_event gives about 0.52106
+    and standard gives 1.0, and weapon hard pity is 77 so pity 89 is unreachable
+    there. A mis-map that sent `chronicled` down a sibling's curve therefore
+    changes the number, not just the echoed label.
+
+    THE EXPECTATION IS BUILT FROM THE LIBRARY, NOT FROM `forecast_payload`. That
+    function shares `_coerce_banner` with the route under test, so building the
+    expected bytes through it would let a mis-map on both sides agree - the
+    shared-input trap. The dict below reproduces the service's response literal
+    key for key from a direct `probability_of_success` call, and is serialised
+    the way the transport serialises: a bare `json.dumps(...).encode("utf-8")`,
+    so key order, separators and float repr are all part of what is compared.
+    The closing `approx` against the SPEC constant is the anchor byte-equality
+    alone cannot supply: it stays red if a refactor ever hollows the expectation
+    out into the same path the service takes.
+    """
+    request = {
+        "pity_5star": 89,
+        "banner": "chronicled",
+        "target_count": 1,
+        "pull_budget": 1,
+    }
+    result = probability_of_success(
+        PityState(banner=BannerKind.CHRONICLED, pity_5star=89),
+        target_count=1,
+        pull_budget=1,
+        banner=BannerKind.CHRONICLED,
+    )
+    expected = {
+        "status": "ok",
+        "engine_version": ENGINE_VERSION,
+        "probability": result.probability,
+        "pull_budget": result.pull_budget,
+        "target_count": result.target_count,
+        "banner": result.banner.value,
+        "distribution": list(result.distribution),
+        "expected_pulls": result.expected_pulls,
+    }
+    expected_bytes = json.dumps(expected).encode("utf-8")
+
+    with _running_server() as base:
+        status, blob = _post(base, "/forecast", json.dumps(request).encode("utf-8"))
+
+    assert status == 200
+    assert blob.encode("utf-8") == expected_bytes
+    payload = json.loads(blob)
+    assert payload["probability"] == pytest.approx(CHRONICLED_DESIGNATED_P, abs=1e-12)
+    assert payload["banner"] == "chronicled"
+
+
+def test_live_bogus_banner_returns_400_without_raw_exception() -> None:
+    """An unknown banner over a REAL socket: the friendly 400 and nothing else.
+
+    `test_malformed_forecast_fails_soft` already carries this body, but it calls
+    `handle_request` in-process. The transport is where a leak would actually
+    reach a caller, so this arm crosses the socket and pins two things the
+    in-process arm does not: the body is EXACTLY the three-key error dict, and
+    the sorted valid-banner list that `_coerce_banner` puts in its ValueError
+    stays in the log. "These strings are the ONLY thing a caller ever sees."
+    """
+    with _running_server() as base:
+        status, blob = _post(base, "/forecast", b'{"banner": "not_a_banner"}')
+
+    assert status == 400
+    _assert_no_raw_error_text(blob)
+    payload = json.loads(blob)
+    assert payload == {
+        "status": "error",
+        "error": "forecast request could not be processed - check the request fields and try again",
+        "engine_version": ENGINE_VERSION,
+    }
+    for kind in BannerKind:
+        assert kind.value not in blob, f"the valid-banner list leaked {kind.value!r} into a 400 body"
 
 
 def test_live_malformed_forecast_returns_400_without_raw_exception() -> None:

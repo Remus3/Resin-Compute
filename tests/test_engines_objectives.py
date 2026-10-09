@@ -5,6 +5,7 @@ a character name, because the engine under test does not know any.
 """
 from __future__ import annotations
 
+import math
 import random
 
 import pytest
@@ -13,6 +14,10 @@ from core.types import MaterialCost, ObjectiveKind, ObjectiveNode
 from engines.objectives import (
     ASCENSION_LEVEL_CAPS,
     MAX_ASCENSION_PHASE,
+    MAX_TALENT_LEVEL,
+    MIN_TALENT_LEVEL,
+    TALENT_MAX_ASCENSION,
+    TALENT_MIN_ASCENSION,
     CyclicObjectiveError,
     DuplicateObjectiveError,
     NodeCost,
@@ -350,3 +355,225 @@ def test_expansion_is_deterministic():
 def test_expand_rejects_a_nonsense_target_level():
     with pytest.raises(ValueError):
         expand_character_goal(SUBJECT, 0)
+
+
+# ---------------------------------------------------------------------------
+# Boundary arms - each pins a branch the tests above leave unproven.
+# ---------------------------------------------------------------------------
+
+
+# -- graph view helpers ------------------------------------------------------
+
+
+def test_graph_membership_and_direct_edge_views():
+    graph = build_graph(expand_character_goal(SUBJECT, 40))
+    level_20 = character_level_id(SUBJECT, 20)
+    level_40 = character_level_id(SUBJECT, 40)
+    ascension_1 = character_ascension_id(SUBJECT, 1)
+
+    assert level_20 in graph
+    assert "nope" not in graph
+    assert len(graph) == 3
+    assert graph.dependencies_of(level_40) == (ascension_1, level_20)
+    assert graph.dependencies_of(level_20) == ()
+    assert graph.dependents_of(level_20) == (ascension_1, level_40)
+    assert graph.dependents_of(level_40) == ()
+    assert graph.transitive_dependents(level_20) == (ascension_1, level_40)
+    assert graph.transitive_dependents(ascension_1) == (level_40,)
+
+
+def test_graph_views_reject_unknown_ids():
+    graph = build_graph(expand_character_goal(SUBJECT, 40))
+    for view in (graph.dependencies_of, graph.dependents_of, graph.transitive_dependents):
+        with pytest.raises(UnknownObjectiveError) as caught:
+            view("nope")
+        assert caught.value.goal_id == "nope"
+
+
+def test_unmet_prerequisites_rejects_unknown_goal():
+    with pytest.raises(UnknownObjectiveError):
+        unmet_prerequisites(diamond(), "nope")
+
+
+# -- gate arithmetic edges ---------------------------------------------------
+
+
+def test_required_ascension_honours_a_custom_cap_table():
+    caps = (10, 30)
+    assert required_ascension_for_level(10, caps) == 0
+    assert required_ascension_for_level(11, caps) == 1
+    assert required_ascension_for_level(30, caps) == 1
+    with pytest.raises(ValueError):
+        required_ascension_for_level(31, caps)
+
+
+def test_talent_gate_table_is_the_ceiling_interpolation_between_the_pinned_points():
+    """Pins the FORMULA, not a sourced table.
+
+    ROADMAP Known gaps: intermediate gates are interpolated, not sourced. This
+    arm re-derives the expected table from the three pinned points and the
+    stated rule - monotone ceiling interpolation - using float math.ceil, so
+    it is an independent computation of the same definition rather than a
+    transcription of the engine's integer trick. No per-level number here is
+    presented as a game fact.
+    """
+    span = MAX_TALENT_LEVEL - MIN_TALENT_LEVEL
+    derived = [0] + [
+        max(TALENT_MIN_ASCENSION, min(TALENT_MAX_ASCENSION, math.ceil((level - MIN_TALENT_LEVEL) * TALENT_MAX_ASCENSION / span)))
+        for level in range(MIN_TALENT_LEVEL + 1, MAX_TALENT_LEVEL + 1)
+    ]
+    actual = [min_ascension_for_talent(level) for level in range(MIN_TALENT_LEVEL, MAX_TALENT_LEVEL + 1)]
+
+    assert actual == derived
+    # The three pinned points, exactly.
+    assert actual[0] == 0
+    assert actual[1] == TALENT_MIN_ASCENSION == 1
+    assert actual[-1] == TALENT_MAX_ASCENSION == 6
+    # Monotone and never a repeat of level 1's zero above level 1.
+    assert actual == sorted(actual)
+    assert all(gate >= 1 for gate in actual[1:])
+
+
+def test_talent_gate_endpoint_overrides_are_honoured():
+    """Docstring: every caller may override the two endpoints."""
+    # A longer talent scale keeps both pins and stays monotone.
+    wide = [min_ascension_for_talent(level, max_talent_level=15) for level in range(1, 16)]
+    assert wide[0] == 0
+    assert wide[1] == TALENT_MIN_ASCENSION
+    assert wide[-1] == TALENT_MAX_ASCENSION
+    assert wide == sorted(wide)
+
+    # A lower ceiling and a higher floor both bind.
+    assert min_ascension_for_talent(MAX_TALENT_LEVEL, max_ascension=4) == 4
+    assert min_ascension_for_talent(2, min_ascension=2) == 2
+
+    # A one-level scale has only the baseline: level 1 is 0, level 2 is out of range.
+    assert min_ascension_for_talent(1, max_talent_level=1) == 0
+    with pytest.raises(ValueError):
+        min_ascension_for_talent(2, max_talent_level=1)
+
+
+# -- expand_character_goal: explicit talent_gate path -----------------------
+
+
+def test_explicit_talent_gate_replaces_the_derived_one():
+    """With a caller table saying level 2 needs no ascension, the talent node hangs free."""
+    nodes = expand_character_goal(SUBJECT, 20, {1: 2}, talent_gate={2: 0})
+    by_id = {n.node_id: n for n in nodes}
+    assert set(by_id) == {character_level_id(SUBJECT, 20), talent_id(SUBJECT, 1, 2)}
+    assert by_id[talent_id(SUBJECT, 1, 2)].depends_on == ()
+    # The derived gate would have demanded ascension 1 here.
+    assert min_ascension_for_talent(2) == 1
+
+
+def test_explicit_talent_gate_missing_an_entry_is_rejected():
+    with pytest.raises(ValueError) as caught:
+        expand_character_goal(SUBJECT, 20, {1: 3}, talent_gate={2: 1})
+    assert "talent level 3" in str(caught.value)
+
+
+def test_intermediate_gate_deeper_than_the_chain_is_rejected_naming_the_depth():
+    """The chain is sized by the TARGET level's gate; a deeper intermediate gate cannot be wired.
+
+    This is NOT a monotonicity check - the code performs none. A non-monotone
+    table whose intermediate gates all fit inside the chain, e.g. {2: 3, 3: 1}
+    for a level 60 target, is accepted. Only an intermediate gate that exceeds
+    the chain's depth is rejected, and the message names that depth.
+    """
+    with pytest.raises(ValueError) as caught:
+        expand_character_goal(SUBJECT, 60, {1: 3}, talent_gate={2: 6, 3: 1})
+    message = str(caught.value)
+    assert "talent level 2" in message
+    assert "chain only reaches 3" in message
+
+
+# -- expand_character_goal: argument validation -----------------------------
+
+
+def test_expand_rejects_a_talent_target_below_one():
+    with pytest.raises(ValueError) as caught:
+        expand_character_goal(SUBJECT, 60, {1: 0})
+    assert "slot 1" in str(caught.value)
+
+
+def test_expand_rejects_an_empty_cap_table():
+    with pytest.raises(ValueError) as caught:
+        expand_character_goal(SUBJECT, 60, level_caps=())
+    assert "level_caps" in str(caught.value)
+
+
+# -- expand_character_goal: level targets off the cap table -----------------
+
+
+def test_non_cap_target_emits_a_trailing_level_node_on_its_phase():
+    nodes = expand_character_goal(SUBJECT, 45)
+    ids = [n.node_id for n in nodes]
+    assert ids[-1] == character_level_id(SUBJECT, 45)
+    by_id = {n.node_id: n for n in nodes}
+    assert by_id[character_level_id(SUBJECT, 45)].depends_on == (
+        character_ascension_id(SUBJECT, 2),
+        character_level_id(SUBJECT, 40),
+    )
+    assert character_level_id(SUBJECT, 50) not in by_id
+    build_graph(nodes)  # still acyclic and fully wired
+
+
+def test_default_target_is_a_single_level_one_node():
+    nodes = expand_character_goal(SUBJECT)
+    assert [n.node_id for n in nodes] == [character_level_id(SUBJECT, 1)]
+    assert nodes[0].depends_on == ()
+    assert nodes[0].target_value == 1
+
+
+def test_a_deepened_chain_subsumes_a_non_cap_level_target():
+    """Level 55 needs phase 3; talent 10 forces phase 6 and level 80 on the way.
+
+    The chain's final level is the deeper of the target and the last cap it
+    reached, so the subsumed 55 emits no node of its own.
+    """
+    nodes = expand_character_goal(SUBJECT, 55, {1: 10})
+    ids = {n.node_id for n in nodes}
+    assert character_level_id(SUBJECT, 80) in ids
+    assert character_level_id(SUBJECT, 55) not in ids
+    assert character_ascension_id(SUBJECT, 6) in ids
+
+
+def test_weapon_target_level_zero_emits_no_weapon_chain():
+    nodes = expand_character_goal(SUBJECT, 20, weapon_subject_id=WEAPON, weapon_target_level=0)
+    assert [n.node_id for n in nodes] == [character_level_id(SUBJECT, 20)]
+
+
+def test_prefix_is_applied_to_every_node_id_and_edge():
+    nodes = expand_character_goal(SUBJECT, 40, {1: 2}, weapon_subject_id=WEAPON, weapon_target_level=20, prefix="p/")
+    assert nodes  # non-vacuous
+    assert all(n.node_id.startswith("p/") for n in nodes)
+    assert all(dep.startswith("p/") for n in nodes for dep in n.depends_on)
+    assert character_level_id(SUBJECT, 40, "p/") in {n.node_id for n in nodes}
+    build_graph(nodes)  # every prefixed edge resolves
+
+
+def test_worked_example_decomposes_into_thirty_nodes_reaching_phase_four():
+    """ROADMAP: level 60 with 6/6/6 and a weapon at 60 is exactly 30 nodes.
+
+    The character chain reaches ascension phase 4 because the talent gate
+    demands it, not because level 60 does.
+    """
+    nodes = expand_character_goal(SUBJECT, 60, {1: 6, 2: 6, 3: 6}, weapon_subject_id=WEAPON, weapon_target_level=60)
+    ids = {n.node_id for n in nodes}
+    assert len(nodes) == 30
+    assert character_ascension_id(SUBJECT, 4) in ids
+    assert character_ascension_id(SUBJECT, 5) not in ids
+    assert required_ascension_for_level(60) == 3
+    assert min_ascension_for_talent(6) == 4
+
+
+# -- generated labels --------------------------------------------------------
+
+
+def test_generated_labels_are_the_display_name_fallback():
+    nodes = expand_character_goal(SUBJECT, 40, {1: 2}, weapon_subject_id=WEAPON, weapon_target_level=20)
+    by_id = {n.node_id: n for n in nodes}
+    assert by_id[character_level_id(SUBJECT, 20)].display_name == f"character {SUBJECT} to level 20"
+    assert by_id[character_ascension_id(SUBJECT, 1)].display_name == f"character {SUBJECT} ascension phase 1"
+    assert by_id[talent_id(SUBJECT, 1, 2)].display_name == f"character {SUBJECT} talent 1 to level 2"
+    assert by_id[weapon_level_id(WEAPON, 20)].display_name == f"weapon {WEAPON} to level 20"

@@ -8,8 +8,11 @@ does not spend somebody's rate limit.
 """
 from __future__ import annotations
 
+import io
 import json
 import os
+import urllib.error
+import urllib.request
 
 import pytest
 
@@ -19,12 +22,15 @@ from ingest.enka_client import (
     MESSAGE_CACHED,
     MESSAGE_MALFORMED,
     MESSAGE_OK,
+    MESSAGE_UNEXPECTED,
     STATUS_MESSAGES,
     STATUS_UNREACHABLE,
     EnkaClient,
     EnkaConfig,
     EnkaConfigError,
     EnkaUsageError,
+    _urllib_transport,
+    iter_status_messages,
 )
 
 UID = "000000000"
@@ -167,6 +173,10 @@ def test_undocumented_status_gets_a_generic_friendly_message(tmp_path):
     assert result.ok is False
     assert result.status == 418
     assert result.friendly_message not in ("", None)
+    # Exactly the documented constant, not merely something non-empty.
+    assert result.friendly_message == MESSAGE_UNEXPECTED
+    # And an undocumented status is not on the retry set, so no wait is advised.
+    assert result.retry_after_seconds == 0.0
 
 
 def test_bad_uid_is_answered_locally_without_spending_rate_limit(tmp_path):
@@ -301,9 +311,12 @@ def test_retries_are_bounded_and_exponential(tmp_path):
 def test_non_transient_statuses_are_not_retried(tmp_path):
     for status in (400, 404, 424, 500):
         client, transport, _clock, slept = _client(tmp_path, [(status, b"")], max_retries=3)
-        client.fetch_profile("111111111")
+        result = client.fetch_profile("111111111")
         assert len(transport.calls) == 1, f"status {status} must not be retried"
         assert slept == []
+        # Off the retry set there is no backoff to report either.
+        assert result.retries == 0
+        assert result.retry_after_seconds == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +351,263 @@ def test_module_docstring_records_the_upstream_prohibition():
 
     assert "don't try to enumerate UIDs" in enka_client.__doc__
     assert "massive query jobs" in enka_client.__doc__
+
+
+# ---------------------------------------------------------------------------
+# Boundary arms - each pins a branch the tests above leave unproven.
+# ---------------------------------------------------------------------------
+
+
+# -- local UID shape check: what is sent upstream and what is answered here --
+
+
+def test_uid_shape_check_bounds_are_six_to_twelve_digits(tmp_path):
+    """Pins the client's own band. A change here changes what spends rate limit.
+
+    The 6..12 band is UNDOCUMENTED outside enka_client.py:268-269 - not in
+    SPEC section 4 or 5, CLAUDE.md or the README. This arm is its only record;
+    it pins the implementation, not a sourced fact about UID lengths.
+    """
+    client, transport, _clock, _slept = _client(tmp_path, [(200, _body(ttl=1))])
+
+    assert client.fetch_profile("12345").status == 400
+    assert client.fetch_profile("1234567890123").status == 400
+    assert transport.calls == []  # both answered locally
+
+    assert client.fetch_profile("123456").ok is True
+    assert client.fetch_profile("123456789012").ok is True
+    assert len(transport.calls) == 2
+
+
+def test_int_and_padded_uids_are_normalised_before_the_request(tmp_path):
+    client, transport, _clock, _slept = _client(tmp_path, [(200, _body(ttl=1))])
+
+    by_int = client.fetch_profile(100000005)
+    assert by_int.ok is True
+    assert by_int.uid == "100000005"
+    assert transport.calls[-1][0] == "https://enka.network/api/uid/100000005/"
+
+    padded = client.fetch_profile(" 100000004 ")
+    assert padded.uid == "100000004"
+    assert transport.calls[-1][0] == "https://enka.network/api/uid/100000004/"
+
+
+def test_base_url_trailing_slash_is_normalised(tmp_path):
+    client, transport, _clock, _slept = _client(tmp_path, [(200, _body())], base_url="https://example.invalid/")
+    client.fetch_profile(UID)
+    assert transport.calls[0][0] == f"https://example.invalid/api/uid/{UID}/"
+    assert "//api" not in transport.calls[0][0]
+
+
+# -- body handling edges ---------------------------------------------------
+
+
+def test_json_body_that_is_not_an_object_is_malformed(tmp_path):
+    client, _transport, _clock, _slept = _client(tmp_path, [(200, b"[]")])
+    result = client.fetch_profile(UID)
+    assert result.ok is False
+    assert result.status == 200
+    assert result.profile_json is None
+    assert result.friendly_message == MESSAGE_MALFORMED
+
+
+def test_invalid_utf8_body_is_malformed_and_leaks_nothing(tmp_path):
+    client, _transport, _clock, _slept = _client(tmp_path, [(200, b"\xff\xfe")])
+    result = client.fetch_profile(UID)
+    assert result.ok is False
+    assert result.friendly_message == MESSAGE_MALFORMED
+    for marker in LEAK_MARKERS:
+        assert marker not in result.friendly_message
+
+
+@pytest.mark.parametrize(
+    ("raw_ttl", "expected"),
+    [
+        ("300", 300),
+        (-5, DEFAULT_TTL_SECONDS),
+        ("abc", DEFAULT_TTL_SECONDS),
+        ([1], DEFAULT_TTL_SECONDS),
+    ],
+)
+def test_ttl_coercion_edges(tmp_path, raw_ttl, expected):
+    """A string-coded ttl is read; a negative or unreadable one falls back to the default.
+
+    Not pinned: what a float ttl truncates to, and what a ttl of exactly 0
+    becomes. Both are implementation choices at enka_client.py:346-349 with no
+    documented contract (DEFAULT_TTL_SECONDS is documented as the fallback when
+    upstream OMITS ttl, and SPEC section 4 says ttl is honoured as sent).
+    """
+    client, _transport, _clock, _slept = _client(tmp_path, [(200, _body(ttl=raw_ttl))])
+    result = client.fetch_profile(UID)
+    assert result.ok is True
+    assert result.ttl_seconds == expected
+
+
+# -- cache edges -----------------------------------------------------------
+
+
+def test_force_still_rearms_ttl_suppression(tmp_path):
+    """Docstring: force bypasses the cache READ, not the ttl WRITE."""
+    client, transport, clock, _slept = _client(tmp_path, [(200, _body(ttl=300))])
+
+    client.fetch_profile(UID)  # expires at t+300
+    clock.advance(200)
+    forced = client.fetch_profile(UID, force=True)  # re-arms to t+500
+    assert forced.from_cache is False
+    clock.advance(200)  # t+400: past the FIRST expiry, inside the re-armed one
+
+    third = client.fetch_profile(UID)
+    assert third.from_cache is True
+    assert third.ttl_seconds == 100
+    assert len(transport.calls) == 2
+
+
+def test_cache_expiry_at_exactly_zero_remaining_refetches(tmp_path):
+    client, transport, clock, _slept = _client(tmp_path, [(200, _body(ttl=300))])
+    client.fetch_profile(UID)
+    clock.advance(300)
+    result = client.fetch_profile(UID)
+    assert result.from_cache is False
+    assert len(transport.calls) == 2
+
+
+@pytest.mark.parametrize(
+    "envelope",
+    [
+        "[]",
+        json.dumps({"expires_at": "soon", "body": {}}),
+        json.dumps({"expires_at": 2000, "body": []}),
+        json.dumps({"expires_at": 2000}),
+    ],
+)
+def test_malformed_cache_envelopes_are_ignored(tmp_path, envelope):
+    client, transport, _clock, _slept = _client(tmp_path, [(200, _body(ttl=300))])
+    cache_file = client.cache_path_for(UID)
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(envelope, encoding="utf-8")
+
+    result = client.fetch_profile(UID)
+    assert result.ok is True
+    assert result.from_cache is False
+    assert len(transport.calls) == 1
+
+
+def test_unwritable_cache_dir_does_not_fail_the_fetch(tmp_path):
+    """A cache that cannot be written is a degraded optimisation, never a failed fetch."""
+    client, transport, _clock, _slept = _client(tmp_path, [(200, _body(ttl=300))])
+    (tmp_path / "cache").write_text("a regular file where the cache dir should be", encoding="utf-8")
+
+    result = client.fetch_profile(UID)
+    assert result.ok is True
+    assert result.friendly_message == MESSAGE_OK
+    assert (tmp_path / "cache").is_file()  # nothing was clobbered to make room
+    # And with no cache, the next call goes upstream again rather than failing.
+    assert client.fetch_profile(UID).from_cache is False
+    assert len(transport.calls) == 2
+
+
+# -- retry edges -----------------------------------------------------------
+
+
+def test_negative_max_retries_is_clamped_to_zero(tmp_path):
+    client, transport, _clock, slept = _client(tmp_path, [(429, b"")], max_retries=-3, backoff_base_seconds=2.0)
+    result = client.fetch_profile(UID)
+    assert len(transport.calls) == 1
+    assert slept == []
+    assert result.retries == 0
+    assert result.retry_after_seconds == 2.0  # base * 2**0
+
+
+# -- the default transport, with urlopen monkeypatched: NO socket is opened --
+
+
+class _FakeResponse:
+    status = 200
+
+    def read(self) -> bytes:
+        return b'{"ok": 1}'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+
+class _UnreadableBody:
+    """A response body whose read() fails, standing in for a dropped connection."""
+
+    def read(self, *args):
+        raise OSError("read failed")
+
+    def close(self):
+        return None
+
+
+def test_urllib_transport_success_passes_url_headers_method_and_timeout(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(request, timeout):
+        seen["request"] = request
+        seen["timeout"] = timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    url = f"https://example.invalid/api/uid/{UID}/"
+    result = _urllib_transport(url, {"User-Agent": "resin-compute/0.1 (test)"}, 7.5)
+
+    assert result == (200, b'{"ok": 1}')
+    assert seen["request"].full_url == url
+    assert seen["request"].get_method() == "GET"
+    assert seen["request"].get_header("User-agent") == "resin-compute/0.1 (test)"
+    assert seen["timeout"] == 7.5
+
+
+def test_urllib_transport_converts_http_error_to_its_code_and_body(monkeypatch):
+    def fake_urlopen(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", None, io.BytesIO(b"rate limited"))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert _urllib_transport("https://example.invalid/", {}, 1.0) == (429, b"rate limited")
+
+
+def test_urllib_transport_tolerates_an_unreadable_http_error_body(monkeypatch):
+    def fake_urlopen(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, 503, "Unavailable", None, _UnreadableBody())
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert _urllib_transport("https://example.invalid/", {}, 1.0) == (503, b"")
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        urllib.error.URLError("name resolution failed"),
+        TimeoutError("timed out"),
+        ConnectionResetError("connection reset by peer"),
+    ],
+    ids=["URLError", "TimeoutError", "ConnectionResetError"],
+)
+def test_urllib_transport_converts_connection_failures_to_unreachable(monkeypatch, failure):
+    """The exception text names the URL; only the sentinel status travels up."""
+
+    def fake_urlopen(request, timeout):
+        raise failure
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    status, body = _urllib_transport("https://example.invalid/", {}, 1.0)
+    assert status == STATUS_UNREACHABLE
+    assert body == b""
+
+
+# -- the status table export -----------------------------------------------
+
+
+def test_iter_status_messages_is_sorted_and_complete():
+    listed = list(iter_status_messages())
+    assert listed == sorted(STATUS_MESSAGES.items())
+    assert listed[0][0] == STATUS_UNREACHABLE
+    assert len(listed) == len(STATUS_MESSAGES)
 
 
 # ---------------------------------------------------------------------------
