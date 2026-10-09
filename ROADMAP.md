@@ -21,10 +21,15 @@ version. What follows is everything the scaffold deliberately did not do.
   "budget lock unopenable" and "budget write failed" map to
   KitRunBudgetSpent through a substring match on "budget"; give them a
   distinct termination.
-- **NEW 2026-10-08. Kit v10 residue (session 62 merge).** (a) The
-  `orchestrated-run.md` and `ui-audit.md` skills still need kit v10 item-4
-  one-subagent dispatch: the main thread launches ONE sub-agent that runs the
-  skill, as `.claude/commands/done.md` now does. (b) ANSWERED session 63:
+- **NEW 2026-10-08. MAIN 1840 FLEET-KIT v11 vendored (8e675fe).** Remaining:
+  ONE ANSWER to MAIN (HOP: 2) giving the vendoring commit, the manifest sha256
+  c1dcf5a6..., the conformance result and the hook command as wired. See
+  `docs/LEDGER.md`.
+
+- **NEW 2026-10-08. Kit v10 residue (session 62 merge).** (a) DONE session
+  63 (merge 5e4e525): the `orchestrated-run.md` and `ui-audit.md` skills
+  dispatch ONE sub-agent that runs the skill, as `.claude/commands/done.md`
+  does. (b) ANSWERED session 63:
   yes, the responder's run ledger is retired (ruling 0f, see the amended
   "/120 COUNTER" entry below and `docs/LEDGER.md`).
   (c) Kit v10 still fails ruff on its own bytes: fleet_inbox UP017,

@@ -139,6 +139,14 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
         "config.command, and the config default is built from sys.executable by "
         "default_child_python() in that same file.",
     ),
+    "ops/fleet_kit/fleet_done.py": (
+        1,
+        "FLEET-KIT v11, vendored and never edited; triaged 2026-10-08 by "
+        "reading the site. _git: the head is find_git(), git resolved to an "
+        "absolute PATH entry with empty, relative and cwd-equal entries "
+        "skipped, never a bare name and never the working directory. Never a "
+        "Python.",
+    ),
     "ops/fleet_kit/fleet_headless.py": (
         3,
         "FLEET-KIT v8, vendored and never edited; re-triaged 2026-10-05 by "
