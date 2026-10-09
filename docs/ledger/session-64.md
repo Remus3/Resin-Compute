@@ -46,3 +46,13 @@
   7b80f5d plus the paperwork edits: `tests` 4449 passed 6 skipped;
   `agents/pity_engine` 191 passed; ruff clean; mypy 43 files clean; kit
   check `13 []`; shell node 110 pass 0 fail; `tools/check_handoff.py` ok.
+- Post-push CI at 775fd12: ci RED on one arm,
+  `tests/test_git_env_scrub.py` GIT_SHALLOW_FILE row - slice B's bounded
+  fetch depth makes the CI checkout shallow, so the row's one-line shallow
+  file no longer moved `--is-shallow-repository`. Fixed by exporting a
+  nonexistent shallow file when the checkout is already shallow; red then
+  green measured in a depth-5 clone, green on the full local clone.
+  docs-guards, codeql green at 775fd12.
+- ANSWER `2026-10-09-0019-from-RSC-ANSWER-to-MAIN-2246-...` delivered 2/2
+  (MAIN inbox and this inbox), both copies re-hashed equal (sha256
+  80c616c8...); OutboundCap 1/6 for 2026-10-09.

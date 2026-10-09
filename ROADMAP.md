@@ -26,7 +26,7 @@ version. What follows is everything the scaffold deliberately did not do.
   distinct termination.
 - **OPEN 2026-10-09. MAIN 2246 ORDER (REPO-REVIEW), SHA-256 verified
   (7ccc71ff...) - s1-s3 and the s4 Dependabot part DONE session 64 (see
-  `docs/ledger/session-64.md`); ANSWER 0009 (HOP: 2) sent. Still OPEN:**
+  `docs/ledger/session-64.md`); ANSWER 0019 (HOP: 2) sent. Still OPEN:**
   (s4) the operator-APPROVED history rewrite via `fleet_rewrite.py` plan /
   bundle (to the sidecar folder) / run, then the force push (2
   Claude-authored commits; every SHA but the root changes). PARKED by the
