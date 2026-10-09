@@ -46,7 +46,7 @@ Questions it is built to answer:
 
 ## Status
 
-As of 2026-10-04. [`ROADMAP.md`](ROADMAP.md) is the live source; the full
+As of 2026-10-08. [`ROADMAP.md`](ROADMAP.md) is the live source; the full
 table is in [`docs/OVERVIEW.md`](docs/OVERVIEW.md#status-in-full).
 
 | | Area |
@@ -154,42 +154,24 @@ Removal commands are in
   task for an agreed window; its definition also outlives the clone.
 - `tools/screen_capture.py` (with `tools/first_run_capture.py` and
   `tools/capture_supervisor.py`) writes **full-screen** screenshots to disk.
-- `scripts/make_shortcut.py` writes a Desktop shortcut outside the repository.
 - `tools/wish_authkey.py` handles a short-lived Wish History credential; see
   [`SECURITY.md`](SECURITY.md).
 
 ## How it is built
 
-ResinCompute is developed with Claude Code agents, under rules
-that live in the repository and are enforced by tests and hooks rather than by
-good intentions.
+Developed with Claude Code agents under rules that live in the repository and
+are enforced by tests and hooks.
 
-- **Multi-agent sessions by default** (ADR-007). A session plans, then
-  dispatches disjoint slices to a roster in `.claude/agents/` - planner,
-  builder, adversary, adjudicator, verifier, researcher, ui-auditor. The agent
-  that produced a change never grades it: an adversary tries to refute it, and
-  a separate adjudicator decides. Refutations and their fixes are recorded in
-  [`docs/LEDGER.md`](docs/LEDGER.md).
-- **Gates that a fresh clone installs.** Three git hooks (banned glyphs,
-  net-new lint, commit message shape, both suites before a push) plus CI on
-  Python 3.11. Guards check the docs too: every path a governing doc cites must
-  exist and be tracked by git.
-- **Cross-repo note sync, end to end.** This tree is one of several sibling
-  repositories that coordinate through plain-file notes (conventions in
-  [`docs/CHANNEL.md`](docs/CHANNEL.md)). `scripts/watch_inbox.py` reports new
-  notes at session start, and `tools/moon_sync_responder.py` answers them with
-  nobody present: a scheduled task fires it every five minutes, it runs a
-  headless agent that may only write a draft inside this repository, then
-  validates the draft itself (ASCII, LF, no account paths, no tracebacks) and delivers
-  it only to the sender. Notes from the supervising repository are checked by
-  SHA-256 against the sender's outbox copy (ADR-011), and delivery counts only
-  once the recipient's copy hashes equal.
-- **Headless background lanes.** Every unattended agent run goes through one
-  vendored spawn helper (`ops/fleet_kit/`, byte-pinned by
-  `tests/test_fleet_kit.py`) that fails closed, shows no console window, caps
-  runs at 120 per rolling 24 hours and publishes a live status file. The
-  application's own lane runs the same way under the supervisor, slotted by the
-  concurrency governor.
+- **Multi-agent by default.** Disjoint slices, and the agent that produced a
+  change never grades it -
+  [`docs/adr/ADR-007-orchestration-doctrine.md`](docs/adr/ADR-007-orchestration-doctrine.md).
+- **Gates a fresh clone installs.** Git hooks for glyphs, lint, message shape
+  and both suites, plus CI on Python 3.11 - [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- **Cross-repo notes.** Answered unattended, SHA-256 checked, delivered only to
+  the sender - [`docs/CHANNEL.md`](docs/CHANNEL.md).
+- **Headless lanes.** One vendored, fail-closed spawn helper and a slotted
+  supervisor -
+  [`docs/OPERATIONS.md`](docs/OPERATIONS.md#the-engine-the-lane-the-supervisor-and-the-dashboard).
 
 ## Documentation
 
@@ -205,98 +187,34 @@ good intentions.
 
 ## Repository tree
 
-Guarded by `tests/test_readme_tree.py`: every path named here must exist on
-disk and be stored by git.
-
-<details>
-<summary>Expand the tree</summary>
+Top-level folders and the four entry points. The per-file tree is in
+[`docs/OVERVIEW.md`](docs/OVERVIEW.md#repository-tree). Both are guarded by
+`tests/test_readme_tree.py`: every path named must exist and be stored by git.
 
 ```
-Resin-Compute/
-  README.md                        this file
-  CLAUDE.md                        agent context, hard rules, session workflow
-  ROADMAP.md                       open work, newest priorities first
-  CONTRIBUTING.md                  the gates, and what may not be vendored
-  LICENSE                          GPL-3.0-or-later, verbatim and hash-pinned
-  pytest.ini                       dual-suite config, never run pytest . at root
-  .claude/                         the agent roster and the session commands
-  .githooks/                       AUTHORITATIVE gate, inert until installed
-    pre-commit                     banned glyphs, py_compile, net-new ruff
-    commit-msg                     subject shape and the trailer policy
-    pre-push                       runs BOTH suites before a push leaves
-  .github/
-    workflows/                     ci.yml, and docs-guards.yml for what it declines
-
-  core/                            the shared contract and the primitives
-    types.py                       every dataclass the other packages agree on
-    atomic_io.py                   the ONLY sanctioned state-write path
-    state_io.py                    AccountState snapshot serialization
-    resin.py                       resin regeneration, caps, condensed, fragile
-    domains.py                     weekday rotation and weekly boss resets
-    ports.py                       the single owner of this project's port block
-    provenance.py                  the row-scoped receipt every data/ value carries
+<checkout>/
+  .claude/                 agent roster and session commands
+  .githooks/               the authoritative gate, inert until installed
+  .github/                 CI workflows
   agents/
-    pity_engine/                   PityEngine - pure deterministic forecaster
-      banners.py                   hazard tables and soft-pity ramps, all four
-      markov.py                    absorbing Markov chain DP
-      forecast.py                  public API
-      timeline.py                  "by when" over a caller-supplied banner schedule
-      __main__.py                  stdlib HTTP service on 8790
-      tests/                       the engine validates itself
-  engines/                         planning and optimization, mechanism only
-    objectives.py                  goal DAG, cycle detection, critical path
-    scheduler.py                   resin, rotation and weekly lockout aware
-    recommend.py                   what to get / who to build solver
-    artifact_score.py              substat weights and roll counts, caller-supplied tables
-  ingest/                          external data, re-implemented from protocol
-    enka_client.py                 stdlib urllib, ttl-honouring, policy bound
-    enka_mapper.py                 raw payload to EnkaMappedProfile
-    static_data.py                 the ONLY place character and material ids live
-  headless/                        THE headless lane
-    runner.py                      non-interactive entrypoint, CLI and daemon
-    jobs.py                        job registry, per-job isolation
-
-  surface/                         the dashboard, served on 8791
-    model.py                       pure model, decides panel readiness
-    render.py                      HTML rendering
-  shell/                           Electron companion with a tray, ADR-005
-    main.js                        window, tray and supervisor lifecycle
-    lib/                           endpoint, geometry, state, supervisor, tray
-    test/                          node --test suite, no electron
-  ops/                             supervision and operational state
-    supervisor.py                  watchdog, restart trigger, bounded backoff
-    ResinCompute-Supervisor.xml    hidden ONLOGON task, elevated, no time limit
-    install_scheduled_task.ps1     registers it - removal is documented above
-    ResinCompute-Responder.xml     hidden windowed task, least privilege, PT30M
-    install_responder_task.ps1     registers it - -Remove is its kill switch
-    loop/                          sha256-pinned; two separately measured carrier populations, never edit alone
-  scripts/
-    install_hooks.py               FIRST thing to run in a fresh clone
-    bootstrap_data.py              runnable data bootstrap
-    make_shortcut.py               writes a Desktop shortcut OUTSIDE the checkout
-  tools/
-    precommit_gate.py              banned-glyph and net-new-ruff gate
-    wish_authkey.py                Wish History capture, credential-aware
-    screen_capture.py              screenshot cadence, writes FULL-SCREEN images
-    first_run_capture.py           watches the one-time first-launch artefacts
-    capture_supervisor.py          keeps the capture lane alive, reports to a file
-  data/
-    fixtures/                      hand-authored fixtures, nothing vendored
-    costs/                         empty on purpose, first-hand tables only
-  docs/
-    OVERVIEW.md                    full status, the model, data posture
-    OPERATIONS.md                  running, scheduled tasks, ports, conventions
-    SPEC_SCAFFOLD.md               the build contract, verified constants
-    LEDGER.md                      append-only completion history, newest first
-    GOAL_SPEC_SEED_TEAM.md         the seed-team goal, every claim stamped
-    LICENSE_NOTES.md               inbound posture, read before adding a source
-    PROVENANCE_SCHEMA.md           the receipt every data/ value carries
-    adr/                           architectural decisions, indexed
-  tests/                           the application suite
-    _parked/                       quarantined tests, deliberately not collected
+    pity_engine/
+      __main__.py          ENTRY: PityEngine HTTP service on 8790
+  core/                    the shared contract and the primitives
+  data/                    hand-authored fixtures, empty cost tables
+  docs/                    overview, operations, ADRs, ledger
+  engines/                 goal DAG, scheduler, recommendation solver
+  headless/
+    runner.py              ENTRY: the headless lane, once or as a daemon
+  ingest/                  Enka client and mapper
+  ops/
+    supervisor.py          ENTRY: lane watchdog, writes the health file
+  scripts/                 install_hooks.py first, then the data bootstrap
+  shell/                   Electron tray companion
+  surface/
+    __main__.py            ENTRY: the dashboard on 8791
+  tests/                   the application suite
+  tools/                   gates, capture lane, Wish History tool
 ```
-
-</details>
 
 `ops/loop/` is digest-pinned against copies in other repositories; why a single
 count over that directory is the wrong summary is in
@@ -318,6 +236,3 @@ That licence covers this project's own code only. It grants nothing over
 Genshin Impact's data, names, statistics or assets, which belong to HoYoverse;
 what this project may consume is a separate question, answered in
 `docs/LICENSE_NOTES.md`.
-
-<sub>Two workflow badges, because `ci` ignores Markdown-only pushes and
-`docs-guards` covers exactly those.</sub>
