@@ -2,11 +2,12 @@
 
 The landing page is `README.md`. This file holds the detail that used to live
 there: the full status table, the direction of travel, the forecaster's model,
-what the project deliberately refuses to do, the third-party data posture and
-the stack decision. Running and operating the tree is in `docs/OPERATIONS.md`.
+what the project deliberately refuses to do, the third-party data posture,
+the stack decision and the per-file repository tree. Running and operating the
+tree is in `docs/OPERATIONS.md`.
 
 `ROADMAP.md` is the live source for status and open work. Everything below is
-its shape as of 2026-10-04, not a second source of truth.
+its shape as of 2026-10-08, not a second source of truth.
 
 ## Status in full
 
@@ -131,3 +132,95 @@ engineering discipline - lint config, dual-suite test layout, git hooks, CI
 shape, and the supervisor and health-file model - from an existing Python tree
 by the same author, and that inheritance is only real in Python. The interfaces
 ship as Python dataclasses in `core/types.py`.
+
+## Repository tree
+
+Every file and directory worth naming. `README.md` carries the short form,
+top-level folders plus the entry points. Both are guarded by
+`tests/test_readme_tree.py`: every path named here must exist on disk and be
+stored by git.
+
+```
+<checkout>/
+  README.md                        the landing page
+  CLAUDE.md                        agent context, hard rules, session workflow
+  ROADMAP.md                       open work, newest priorities first
+  CONTRIBUTING.md                  the gates, and what may not be vendored
+  LICENSE                          GPL-3.0-or-later, verbatim and hash-pinned
+  pytest.ini                       dual-suite config, never run pytest . at root
+  .claude/                         the agent roster and the session commands
+  .githooks/                       AUTHORITATIVE gate, inert until installed
+    pre-commit                     banned glyphs, py_compile, net-new ruff
+    commit-msg                     subject shape and the trailer policy
+    pre-push                       runs BOTH suites before a push leaves
+  .github/
+    workflows/                     ci.yml, and docs-guards.yml for what it declines
+
+  core/                            the shared contract and the primitives
+    types.py                       every dataclass the other packages agree on
+    atomic_io.py                   the ONLY sanctioned state-write path
+    state_io.py                    AccountState snapshot serialization
+    resin.py                       resin regeneration, caps, condensed, fragile
+    domains.py                     weekday rotation and weekly boss resets
+    ports.py                       the single owner of this project's port block
+    provenance.py                  the row-scoped receipt every data/ value carries
+  agents/
+    pity_engine/                   PityEngine - pure deterministic forecaster
+      banners.py                   hazard tables and soft-pity ramps, all four
+      markov.py                    absorbing Markov chain DP
+      forecast.py                  public API
+      timeline.py                  "by when" over a caller-supplied banner schedule
+      __main__.py                  stdlib HTTP service on 8790
+      tests/                       the engine validates itself
+  engines/                         planning and optimization, mechanism only
+    objectives.py                  goal DAG, cycle detection, critical path
+    scheduler.py                   resin, rotation and weekly lockout aware
+    recommend.py                   what to get / who to build solver
+    artifact_score.py              substat weights and roll counts, caller-supplied tables
+  ingest/                          external data, re-implemented from protocol
+    enka_client.py                 stdlib urllib, ttl-honouring, policy bound
+    enka_mapper.py                 raw payload to EnkaMappedProfile
+    static_data.py                 the ONLY place character and material ids live
+  headless/                        THE headless lane
+    runner.py                      non-interactive entrypoint, CLI and daemon
+    jobs.py                        job registry, per-job isolation
+
+  surface/                         the dashboard, served on 8791
+    model.py                       pure model, decides panel readiness
+    render.py                      HTML rendering
+  shell/                           Electron companion with a tray, ADR-005
+    main.js                        window, tray and supervisor lifecycle
+    lib/                           endpoint, geometry, state, supervisor, tray
+    test/                          node --test suite, no electron
+  ops/                             supervision and operational state
+    supervisor.py                  watchdog, restart trigger, bounded backoff
+    ResinCompute-Supervisor.xml    hidden ONLOGON task, elevated, no time limit
+    install_scheduled_task.ps1     registers it - removal is in OPERATIONS.md
+    ResinCompute-Responder.xml     hidden windowed task, least privilege, PT30M
+    install_responder_task.ps1     registers it - -Remove is its kill switch
+    loop/                          sha256-pinned; two separately measured carrier populations, never edit alone
+  scripts/
+    install_hooks.py               FIRST thing to run in a fresh clone
+    bootstrap_data.py              runnable data bootstrap
+  tools/
+    precommit_gate.py              banned-glyph and net-new-ruff gate
+    wish_authkey.py                Wish History capture, credential-aware
+    screen_capture.py              screenshot cadence, writes FULL-SCREEN images
+    first_run_capture.py           watches the one-time first-launch artefacts
+    capture_supervisor.py          keeps the capture lane alive, reports to a file
+  data/
+    fixtures/                      hand-authored fixtures, nothing vendored
+    costs/                         empty on purpose, first-hand tables only
+  docs/
+    OVERVIEW.md                    full status, the model, data posture
+    OPERATIONS.md                  running, scheduled tasks, ports, conventions
+    SPEC_SCAFFOLD.md               the build contract, verified constants
+    LEDGER.md                      append-only completion history, newest first
+    GOAL_SPEC_SEED_TEAM.md         the seed-team goal, every claim stamped
+    LICENSE_NOTES.md               inbound posture, read before adding a source
+    PROVENANCE_SCHEMA.md           the receipt every data/ value carries
+    adr/                           architectural decisions, indexed
+    _archive/                      dated channel housekeeping, out of the docs root
+  tests/                           the application suite
+    _parked/                       quarantined tests, deliberately not collected
+```
