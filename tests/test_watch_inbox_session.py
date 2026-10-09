@@ -275,22 +275,33 @@ def test_a_stdin_that_never_arrives_returns_inside_the_wait(watch, monkeypatch):
     with a sleep longer than the wait, so the arm measures the WAIT rather than
     any platform's pipe semantics - and it cannot itself hang the suite the way
     an undrained real pipe already did once in this module's history.
+
+    THE STALL IS AN EVENT, NOT A 30 s SLEEP (MAIN 2246 ORDER s2, PERF-AUDIT
+    item 4). The read blocks until this arm releases it, which is strictly
+    longer than any wait the reader could take while the arm is measuring,
+    and the release in `finally` means the stalled reader thread does not
+    outlive the arm by half a minute.
     """
+    import threading as _threading
     import time as _time
 
     slept: list[float] = []
+    release = _threading.Event()
 
     def never(fd: int, size: int) -> bytes:
         slept.append(size)
-        _time.sleep(30.0)
+        release.wait(30.0)
         return b"too late"
 
     monkeypatch.setattr(watch.os, "read", never)
     monkeypatch.setattr(watch.sys, "stdin", _FakeStdinWithFd(0))
 
     started = _time.monotonic()
-    got = watch._read_stdin_budget()
-    elapsed = _time.monotonic() - started
+    try:
+        got = watch._read_stdin_budget()
+        elapsed = _time.monotonic() - started
+    finally:
+        release.set()
 
     assert slept, "os.read was never called, so nothing was being waited on"
     assert got == b"", f"a payload that never arrived was returned anyway: {got!r}"

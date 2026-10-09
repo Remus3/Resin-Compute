@@ -143,7 +143,7 @@ def _run_live(dirs: dict[str, Path], dry_run: bool = False) -> int:
 # ---------------------------------------------------------------------------
 
 _CHILD = r"""
-import pathlib, sys, time
+import pathlib, sys, threading
 from pathlib import Path
 repo, work = sys.argv[1], Path(sys.argv[2])
 sys.path.insert(0, repo)
@@ -160,7 +160,11 @@ def _stalled_replace(self, dest):
     # where os._exit catches an abandoned writer.
     if Path(dest).name == "victim.json":
         started.write_text("1", encoding="utf-8")
-        time.sleep(30)
+        # Stall until the runner abandons the job and os._exits this whole
+        # process. No 30 s sleep (MAIN 2246 ORDER s2, PERF-AUDIT item 4): an
+        # event nobody sets never returns, and the parent's child.wait(60) is
+        # the bound if the abandon ever stops firing.
+        threading.Event().wait()
     return _real_replace(self, dest)
 
 pathlib.Path.replace = _stalled_replace
