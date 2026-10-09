@@ -1,6 +1,6 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-08 (session 62), gates measured at commit 1caa1a9 on main by the /done
-ritual; this paperwork commit landed after it. Everything below is a
+Stamped 2026-10-08 (session 63), gates measured at commit afa7fc7 on main
+by the /done ritual; this paperwork commit landed after it. Everything below is a
 READING taken that day, not a promise about now. Re-measure before citing.
 
 BOOTSTRAP - READ IN THIS ORDER
@@ -11,7 +11,7 @@ BOOTSTRAP - READ IN THIS ORDER
   ROADMAP.md
   docs/LEDGER.md
   git log --oneline -10
-  gh pr list   (the cloud PR, see OPEN WORK 3)
+  gh pr list   (cloud PR #1 is MERGED at afa7fc7; expect none open)
 Before planning any character build: docs/GOAL_SPEC_SEED_TEAM.md.
 Before adding any data source: docs/LICENSE_NOTES.md.
 Before re-litigating a past choice: docs/adr/README.md.
@@ -42,126 +42,90 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/publish_next_session.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 10 [].
+must print 11 [].
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
 shared pytest temp dir: pass a private --basetemp whose PARENT EXISTS and
 which sits OUTSIDE the repo. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures.
 
-STATE OBSERVED 2026-10-08 AT 1caa1a9 (session 62 /done gate run, at E:)
-  Python 3.14: licence 52; docs 42; qa 17 passed 2 skipped 3 noted; ruff
-  clean; tests 1 failed 4184 passed 6 skipped (the failure is item 15, host
-  scheduler probe); pity_engine 80; node 52 pass 0 fail; dry run 0 pass 0
-  fail 6 skip; mypy 41 files clean; kit check 10 [].
-  LANDED (session 62): kit v9+v10 vendored (merge e475a09, branch tip
-  c3bed4a); roster 0230+2305 merged (e39a065, tip c1a0ecd; the live
-  gitignored roster's EW root fixed to an existing path; retired-flag
-  consistency test tests/test_roster_retired.py); follow-ups 6db7e17,
-  fd4fb42; paperwork 82c2f16, 1caa1a9 pushed with RESIN_SKIP_PREPUSH=1
-  because item 15 reproduced solo. CI at fd4fb42: ci 37835448263 success,
-  docs-guards 37835448162 success; at 1caa1a9 docs-guards 37837137253
-  success. ANSWER 1454 to MAIN (covers 0839, 2354, 0230, 2305) delivered,
-  sha256 6aba8fe7..., 1/1 reached.
-  /done housekeeping read back: the four merged session-62 worktrees
-  (agent-af2a0f85823855fa5, rsc-roster-fix, agent-a975dc7a0b2da117f,
-  agent-a1e9b30d680cc4883), each an ancestor of main with a clean status,
-  recycled and pruned; git worktree list reads 1 entry. Inbox triage
-  (a gitignored runtime triage file, session 62: 460 entries, 323 ingested,
-  5 equivalent, 125 n/a, 7 applicable-not-done, all handled but MAIN 0300)
-  then watch_inbox --mark; read back "unread: none".
-  ops/loop/control/inbox_status.json read: kit 10, state limit, runs 6 against cap 3, frees
-  22:51 (item 0c). Hook mode file reads log.
-PRIOR READING 2026-10-08 AT 1988b41 (session 61, /done only)
-  licence 52; docs 42; qa 17/2/3; ruff clean; tests 4134 passed 6 skipped
-  (item 15 PASSED that run); pity_engine 80; node 52/0; dry run 0/0/6;
-  mypy 41 clean. CI ci 37735387706 success.
-PRIOR READING 2026-10-08 AT 8a1907d (session 60 /done gate run, at E:)
-  tests 1 failed (item 15) 4133 passed 6 skipped; the 6th skip comes from
-  the volume (test_responder_uniform_budget:705, 8.3 names off on E:).
-  LANDED (session 60): E: move steps a-c. C: copy recycled, junction
-  C:\Resin Compute -> E:\Resin Compute read back (Junction, target E:).
-  RSC-InboxResponder re-armed: schtasks Ready, Start In E:\Resin Compute,
-  window 2026-10-08T00:45 to 2026-11-07T00:45, liveness rc 0. core.hooksPath
-  had drifted absolute again; install_hooks re-run, read back .githooks.
-PRIOR READINGS sessions 57-58 (2026-10-07) and 2026-10-05: see
-  docs/LEDGER.md (MAIN 1927 FIX, MAIN 2155 answered 2225, per-sender cap
-  MAIN bypass a487d15, kit v8 adoption bed3725). Five host skip reasons
-  then: no exec bit, live fetch opt-in, bare python 3.14, POSIX half,
-  denied dir still lists. A worktree shows MORE skips (no POSIX sh on PATH),
-  and a worktree under the AppData scratchpad fails
-  test_the_session_cache_lives_under_the_runtime_directory - the location
-  trap, not a regression. Cloud PR #1 last read 2026-10-04: OPEN, 14
-  commits, mergeable; it predates kit v8, v9 and v10 - expect conflicts in
-  CLAUDE.md, the responder and the hand-off.
+STATE OBSERVED 2026-10-08 AT afa7fc7 (session 63 /done gate run, at E:)
+  Python 3.14: licence 52; docs 42; qa 17 passed 0 failed 2 skipped 3
+  noted; ruff clean; tests 4344 passed 6 skipped (six host reasons: no exec
+  bit, live fetch opt-in, bare python 3.14, POSIX half, 8.3 names off on E:,
+  denied dir still lists); pity_engine 191 (PR #1 added the by-when and
+  timeline suites); node 110 pass 0 fail; dry run 0 pass 0 fail 7 skip;
+  mypy 43 files clean; kit check 11 [].
+  CI at afa7fc7: ci 37865404279, docs-guards 37865404256, codeql
+  37865404240, all success. origin/main read back afa7fc7 before the /done
+  paperwork commit.
+  LANDED (session 63): item 15 liveness int64 cast (fix 8c9e35c, merge
+  89528a4) - the pre-push hook passes on this host again, so the session-62
+  RESIN_SKIP_PREPUSH=1 workaround is retired; 0d command dispatch (merge
+  5e4e525; one-orchestrator-sub-agent shape REFUTED, sub-agents have no
+  Agent tool); 0f ruling C + 0c + item-14 minors (merge 80ab899); MAIN 0300
+  supply chain (merge 70e031d, Scorecard 4.7 -> 6.6); FLEET-KIT v11 (merge
+  9d89b26, manifest sha c1dcf5a6...); cloud PR #1 as real merge afa7fc7
+  (GitHub reads MERGED). ANSWER 1925 to MAIN delivered 1/1, sha256
+  7fb22a61... re-read at /done; OutboundCap 3/6 that day. MIG-1 residue (14
+  dirs, 42 files, 0 unique) recycled; the residue dir reads absent.
+  Inbox marked, unread none. ops/loop/control/inbox_status.json read: kit 11, state idle,
+  runs 7 against cap 120. Hook mode file reads log; the hook log held 621
+  rows, all sub-thread allow, 0 would-deny (0e: 2 of 3).
+  git worktree list: the session-63 worktrees were removed.
+PRIOR READING 2026-10-08 AT 1caa1a9 (session 62 /done)
+  tests 1 failed (item 15, now fixed) 4184 passed 6 skipped; pity_engine
+  80; node 52/0; dry run 0/0/6; mypy 41 clean; kit 10 []. Pushed with
+  RESIN_SKIP_PREPUSH=1 because of item 15.
+PRIOR READINGS sessions 57-61: see docs/LEDGER.md. A worktree shows MORE
+  skips (no POSIX sh on PATH), and a worktree under the AppData scratchpad
+  fails test_the_session_cache_lives_under_the_runtime_directory - the
+  location trap, not a regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
-  0. RENEW THE RESPONDER BEFORE 2026-11-07T00:45 LOCAL (renewed session 60).
-     Re-run ops/install_responder_task.ps1 -TaskName RSC-InboxResponder
-     -InstallRoot 'E:\Resin Compute', fresh gitignored agreement record,
-     then ops/check_task_liveness.py must exit 0. The PT43200M repeat may
-     stop about 1 h early (DST ends Nov 1): renew before 2026-11-06T23:00.
-  0a. THE MOVE TO E: - DONE except residue. E:\Resin Compute is canonical;
-     C:\Resin Compute is a JUNCTION to E:. Step d (kit v9) DONE session 62.
-     REMAINING: review and discard the MIG-1 residues of the 14 pruned
-     worktrees at ops/runtime/mig1_residue/<wt>/ (tracked.diff,
-     untracked.tar, HEAD; 14 folders read session 62); deletes go to the
-     Recycle Bin.
+  0. RENEW THE RESPONDER BEFORE 2026-11-06T23:00 LOCAL (window ends
+     2026-11-07T00:45; the PT43200M repeat may stop about 1 h early because
+     DST ends Nov 1). Re-run ops/install_responder_task.ps1 -TaskName
+     RSC-InboxResponder -InstallRoot 'E:\Resin Compute', fresh gitignored
+     agreement record, then ops/check_task_liveness.py must exit 0.
   0b. WATCH THE HELD MAIN BACKLOG DRAIN. Since a487d15 old MAIN ORDERs the
      cap held get auto-replies (2251 ACKed MAIN 0020, kit v5). The 1454
      ANSWER asked MAIN for the 2354 and 0020 stamps for
      SUPERSEDED_MAIN_STAMPS - AWAIT THE REPLY; add only stamps a verified
      MAIN note names.
-  0c. Cap-hold status label: ROADMAP Next "Responder tick label on a cap
-     hold" (limit / Turn Limit Reached shown while the log says empty).
-     Session 62 read inbox_status limit with runs 6 against cap 3.
-  0d. Kit v10 item 4: give .claude/commands/orchestrated-run.md and
-     .claude/commands/ui-audit.md the one-subagent dispatch that
-     .claude/commands/done.md now has (main thread
-     launches ONE sub-agent that runs the skill).
   0e. Subagent-first hook (fleet_subagent_first) is wired in LOG mode;
      gitignored ops/loop/control/subagent_first.mode reads log (an ABSENT
      mode file means deny). Switch to deny after 3 interactive sessions
      (62, 63, 64) with no un-routable would-deny row in
-     ops/loop/control/subagent_first.jsonl; target 2026-10-11.
-  0f. Open question: does the responder's own budget ledger retire now
-     that kit v10 frees dead-holder locks? Answer (adjudicate) before
-     touching tools/moon_sync_responder.py budget code.
+     ops/loop/control/subagent_first.jsonl; target 2026-10-11. Session 63:
+     0 would-deny rows, counts as 2 of 3. If session 64 also reads 0, flip
+     the mode file to deny and say so in the next batched note to MAIN.
   0g. Residual kit ruff ignores in ruff.toml: fleet_inbox UP017, fleet_done
      UP017+UP032, fleet_subagent_first BLE001 - reported to MAIN in 1454.
-     Drop each when a kit version ships clean; never patch kit bytes.
+     Re-measure against the v11 bytes; drop each when a kit version ships
+     clean; never patch kit bytes.
   0h. Unexplained one-off failure in the session 62 build run:
      tests/test_conftest_git_gate_sites.py::
      test_the_run_half_reports_a_module_welded_to_skip_unconditionally
-     (passed solo and on re-run; passed in the /done gate). Watch for a
-     repeat; root-cause if it recurs.
-  2. MAIN ORDER 0300 SUPPLY-CHAIN HARDENING (sha256 MATCH, 50d24f11...):
-     a dependabot config under .github (pip at root for both requirements files, npm at
-     shell/, github-actions; weekly, one group each); SHA-pin the 4 uses:
-     lines (resolve from release tags via gh api); hash-pin requirements.txt
-     and requirements-dev.txt and install with --require-hashes (docs-guards
-     included; list every unhashed line with its reason); a CodeQL workflow
-     (python, javascript-typescript, actions; build-mode none; job-level
-     security-events write); top-level permissions contents read on every
-     workflow; record fuzzing RULED OUT with its reversal. Scorecard v5.5.0
-     LINUX binary, checksum-verified, run INSIDE WSL before the first push
-     and after the last (token only in the process env). One ANSWER to MAIN.
-     SS's 0438 note reports CodeQL upload refused on a private repo without
-     code scanning - check this repo's visibility first.
-  3. CLOUD PR #1 - REVIEW AND MERGE. A cloud session (Fable, ultracode)
-     worked 9 product items and opened ONE PR, #1 (by-when forecast, ledger
-     reconciliation, artifact scoring, two new ADRs, guard hardening).
-     Re-run gh pr list first. Review under the session default (distinct
-     refuter lenses, the producer never grades), land with a REAL merge
-     commit (no squash, no rebase, no force), resolve against the v8-v10
-     merges, run every gate, push, read CI, record each item in
-     docs/LEDGER.md. After it lands, keep exactly one SESSION line in this
-     file and the current kit row.
-  4. Item-14 residuals (round-5 refuter, MINOR, filed in ROADMAP): a MAIN note
-     with BOTH its inbox and the work-attempts record unwritable retries
-     every fire up to the 120/day budget; no test kills deletion of the
-     triage-lane _release_outbound; _safe_note_label redundant behind
-     _log_safe; _release_outbound/record_outbound read-modify-write unlocked.
+     (passed solo and on re-run; passed in the session 62 and 63 /done
+     gates). Watch for a repeat; root-cause if it recurs.
+  1. requirements-dev.txt WAS COMPILED ON WINDOWS and lists colorama
+     unconditionally. The first Dependabot Linux recompile drops it, and
+     Windows installs then fail the --require-hashes check. Fix: recompile
+     with platform markers (or a universal resolver) and update the README
+     and CONTRIBUTING install lines. Do it before a Dependabot pip PR merges.
+  2. Kit refusals "budget lock unopenable" and "budget write failed" map by
+     the "budget" substring to KitRunBudgetSpent in
+     tools/moon_sync_responder.py. Give them a distinct termination (it
+     must join TERMINATIONS, with an `in` test).
+  3. Report to MAIN in the next batched note (kit defect, never patch kit
+     bytes): fleet_inbox.scan tracks notes by name only, so a re-sent note
+     under an old name is hidden. Its FYI was in the 1925 ANSWER.
+  4. Housekeeping: review the leftover gitignored
+     .claude/worktrees/conftest_backup.bytes (an old conftest copy dated
+     2026-09-09), then Recycle Bin it. Fix the stale comments about the
+     retired responder run record in conftest.py and
+     tests/test_responder_no_console_window.py.
   5. Future MAIN supersessions: the stamp list is closed by design. A new
      superseded MAIN order needs a verified MAIN note naming its stamps; add
      them to SUPERSEDED_MAIN_STAMPS. Not watched live yet: confirm the next
@@ -179,7 +143,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
      never exercised live.
   8. Roots-map common-mode risk (ROADMAP "TEST THE ROOTS-MAP"): both MAIN
      provenance checks trust the same roots row; only partly testable; needs
-     its own adjudication before code (git calls were rejected by ADR-011).
+     its own adjudication before code (git calls were rejected by ADR-011;
+     PR #1 landed ADR-013 as Proposed).
   9. Commit-msg gate known FALSE BLOCKS, each worked around with
      git commit -F <file>: a localised git; an editor commit with
      --no-status or commit.status=false after a merge conflict on a
@@ -188,6 +153,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
      line (predates, reasoned not measured). RESIDUAL under-block: -F/-m
      with commit.cleanup=strip configured plus an explicit keeping flag. The
      commit-msg hook also rejects a comma inside the scope: feat(a,b): fails.
+     The PR #1 merge subject is 106 chars, over the 100 warning (warn only;
+     recorded, not rewritten).
   10. Orphan-temp sweep notes (round 2 NOT REFUTED): halt clause (a) also
      covers WRITES - with RESINCOMPUTE_RUNTIME_DIR or RC_DATA_DIR pointing
      outside the repo the health file and other atomic writes still land
@@ -197,59 +164,67 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md under Now
      a fresh first_seen (each hold still bounded at 900 s); entries for notes
      that leave the candidates unanswered stay until pruned at 24 h; a
      scheduled tick and a manual --once can lose one record update (no lock).
-  12. /120 counter notes, not defects: the MAIN-replies printability check
+  12. /120 counter notes, not defects (re-read against ruling 0f, which
+     retired the responder run ledger): the MAIN-replies printability check
      is unreachable; an idle status over a non-oldest epoch-ms row reads
-     120/120 while reserve_run still counts it as one; a one-off kit read
-     error with the responder ledger full reads Backing Off, not the limit.
-  13. Inbox: the session watcher's watermark WAS MARKED at session 62 /done
-     after the full session-62 triage (read back "unread: none"). Each
-     session: triage new entries into the four buckets, then --mark only
-     what was triaged. Open from the triage: MAIN 0300 (item 2).
-  15. tests/test_task_liveness.py::test_the_real_probe_answers_for_a_task_
-     outside_the_root_task_path probes a live foldered task on this host
-     ("the scheduler refused the query"). FAILED sessions 58 (twice), 60,
-     62 (build and /done gate, also solo); PASSED session 61. It blocks the
-     pre-push hook, so session 62 docs pushes used RESIN_SKIP_PREPUSH=1.
-     Host-dependent, not a code regression; root-cause or make it skip on
-     a refused query with a stated reason.
-  16. Raise the _MIN_TRACKED_* floor literals (tests/test_line_endings.py,
-     tests/test_machine_identity.py, tests/test_licence_posture.py) to the
-     post-v10 tracked-path count before more test modules land.
-  Item 14 (old worktree housekeeping) RETIRED session 62: MIG-1 pruned the
-  older worktrees and session 62 /done recycled the last four; git worktree
-  list reads 1 entry. Items 0a.d, 0d (old) and 1 DONE session 62, see
-  docs/LEDGER.md.
-  DO NOT REDO: v3/v4/v7/v8/v9/v10 vendoring and provenance (reversed only
-  by a new MAIN FLEET-KIT-vN note); the roster 0230/2305 landing (reversed
-  by a verified MAIN roster note); the CLAUDE.md condense (reversed only by
-  a MAIN kit change); Bash removed from the responder child floor (reversed
-  only by a live probe proving a Bash floor cannot write); the --once slot,
-  the spawn cwd, the C4 landing, the test-leak fence; the /120 two-ledger
-  decision (reversed by a kit version whose lock is OS-held, freed on holder
-  death and never unlinked - kit v10 may qualify, see 0f); ADR-011
-  outbox-hash provenance (reversed by a verified MAIN note ordering
-  verify_main for runtime notes, or a measured hash-match MAIN never
-  committed that mattered); the firedetail log label (reversed only by a
-  drift-check redesign that ends fires on terminals); the README landing
-  page and the OVERVIEW/OPERATIONS split (reversed only by an operator or
-  verified MAIN instruction to restore the long README); responder
-  governor=None for every class (reversed by the child gaining a write tool,
-  a MAIN ruling, or proxy 429s while acks overlap lanes); the parent owns the
-  responder checklist (reversed by the child gaining a write tool and a
-  non-draft output channel); the checklist block logged only on spawning
-  fires (reversed by a MAIN ruling or a raised log cap); LANE_CAP 3 (reversed
-  by a measured reason for fewer lanes or a MAIN order); a MAIN note cools 6 h
-  instead of parking (reversed by a MAIN ruling); the kit per-file ruff
-  ignores (reversed per rule when a kit version ships it clean); superseded
-  MAIN notes by TRACKED STAMP ONLY, no kit-version inference (reversed by a
-  MAIN ruling that defines supersession by version, plus a rule that can
-  never drop a live FIX or RULING, refuter-tested); the per-sender cap
-  exemption is MAIN-only, one-parse, provenance-MATCH-gated (reversed by a
-  MAIN ruling, or a sibling ORDER parked over 24 h blocking real work); the
+     120/120 while the kit still counts it as one; a one-off kit read error
+     reads Backing Off, not the limit.
+  13. Inbox: the session watcher's watermark WAS MARKED at session 63 (read
+     back "unread: none"). Each session: triage new entries into the four
+     buckets, then --mark only what was triaged.
+  DONE OR RETIRED session 63 (see docs/LEDGER.md): 0a (MIG-1 residue
+  recycled), 0c (cap-hold label), 0d (command dispatch), 0f (ruling C,
+  responder run ledger retired), old 2 (MAIN 0300 supply chain), old 3
+  (cloud PR #1, merge afa7fc7), old 4 (item-14 minors), 15 (liveness int64
+  cast; RESIN_SKIP_PREPUSH no longer needed), v11 vendoring and ANSWER 1925.
+  16 RETRACTED: the _MIN_TRACKED_* floors were already 135 since c3bed4a;
+  corpus 317, widest dir tests/ at 124, so the floor exceeds the widest dir
+  and floor*2 fits the corpus - no change needed. Reopen only if tests/
+  grows past 134 tracked files or the corpus drops below 270.
+  DO NOT REDO: v3/v4/v7/v8/v9/v10/v11 vendoring and provenance (reversed
+  only by a new MAIN FLEET-KIT-vN note); the roster 0230/2305 landing
+  (reversed by a verified MAIN roster note); the CLAUDE.md condense
+  (reversed only by a MAIN kit change); Bash removed from the responder
+  child floor (reversed only by a live probe proving a Bash floor cannot
+  write); the --once slot, the spawn cwd, the C4 landing, the test-leak
+  fence; ruling 0f DECISION C, responder run ledger retired in favour of
+  kit RunBudget, per-sender cap, MAX_HOPS and DEFAULT_RUNS kept (reversed by
+  a kit version dropping the OS-held lock, or the kit not counting every
+  spawn in this tree); the main session as orchestrator in
+  .claude/commands/orchestrated-run.md (reversed by sub-agents gaining an Agent tool, or a
+  MAIN ruling); the pip-compile pair for dev deps (reversed by Dependabot
+  dropping pip-compile support); ADR-011 outbox-hash provenance (reversed
+  by a verified MAIN note ordering verify_main for runtime notes, or a
+  measured hash-match MAIN never committed that mattered); the firedetail
+  log label (reversed only by a drift-check redesign that ends fires on
+  terminals); the README landing page and the OVERVIEW/OPERATIONS split
+  (reversed only by an operator or verified MAIN instruction to restore the
+  long README); responder governor=None for every class (reversed by the
+  child gaining a write tool, a MAIN ruling, or proxy 429s while acks
+  overlap lanes); the parent owns the responder checklist (reversed by the
+  child gaining a write tool and a non-draft output channel); the checklist
+  block logged only on spawning fires (reversed by a MAIN ruling or a
+  raised log cap); LANE_CAP 3 (reversed by a measured reason for fewer
+  lanes or a MAIN order); a MAIN note cools 6 h instead of parking
+  (reversed by a MAIN ruling); the kit per-file ruff ignores (reversed per
+  rule when a kit version ships it clean); superseded MAIN notes by TRACKED
+  STAMP ONLY, no kit-version inference (reversed by a MAIN ruling that
+  defines supersession by version, plus a rule that can never drop a live
+  FIX or RULING, refuter-tested); the per-sender cap exemption is
+  MAIN-only, one-parse, provenance-MATCH-gated (reversed by a MAIN ruling,
+  or a sibling ORDER parked over 24 h blocking real work); the
   subagent-first hook in log mode until 0e's criterion (reversed by a
-  verified MAIN note or the criterion met).
+  verified MAIN note or the criterion met); fuzzing ruled out (reversed by
+  the tree parsing untrusted input or an operator order).
 
 TRAPS MEASURED - none are hypothetical
+  A DOC THAT CITES A GITIGNORED PATH NO TRACKED FILE NAMES turns
+  tests/test_docs_consistency.py red (session 63 /done, the recycled MIG-1
+  residue dir). Once a runtime path is gone, describe it in prose.
+
+  A SUB-AGENT HAS NO Agent TOOL (session 63, refuted 0d shape). Only the
+  main session can dispatch planner, builders, verifier and adversaries.
+
   core.hooksPath DRIFTS TO AN ABSOLUTE PATH (seen sessions 58 and 60). Read
   it back at session start; python scripts/install_hooks.py restores it.
 
@@ -333,4 +308,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   DELIVERED with the recipient copy hashed; under item 14 one batched note
   per destination, HOP line in the head, never answer an answer. Silence
   reads as DISSENT. CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 63
+SESSION: 64
