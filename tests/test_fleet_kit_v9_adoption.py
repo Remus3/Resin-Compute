@@ -166,8 +166,8 @@ def test_done_marks_the_session_as_its_last_act():
     final = _section_before_safety(text)
     assert MARK_DONE in final, f"the mark is not in /done's final section: {final[:200]!r}"
     assert CHAT_LINE in final
-    # The mark comes after every other act: the hand-off and the shortcut.
-    assert text.index(MARK_DONE) > text.index("python tools/publish_next_session.py")
+    # The mark comes after every other act: the hand-off and its gate.
+    assert text.index(MARK_DONE) > text.index("python tools/check_handoff.py")
     assert text.index(MARK_DONE) > text.index("## 7. Rewrite `RSC-NEXT-SESSION.txt`")
 
 

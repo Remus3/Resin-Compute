@@ -45,10 +45,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DARK_BY_DESIGN = {
     "tests": "39 files. Test bodies are untyped by convention here.",
     "scripts": (
-        "7 files. BLOCKED rather than chosen: mypy refuses the tree with "
-        "'Source file found twice under different module names' for "
-        "scripts/make_shortcut.py, which needs an __init__.py or "
-        "--explicit-package-bases before the directory can be added at all."
+        "6 files, 1 error when added (scripts/watch_inbox.py), re-measured "
+        "2026-10-08. The earlier 'Source file found twice under different "
+        "module names' block left with the deleted shortcut script."
     ),
     "surface": "5 files, 1 error when added.",
     "ops": "5 files, 8 errors when added.",
@@ -58,7 +57,7 @@ DARK_BY_DESIGN = {
 }
 
 #: Roots that `mypy.ini` must keep in `files=`. `tools/` is here because it
-#: holds the guards - the gates, the hand-off writer, the claim gate - and
+#: holds the guards - the gates, the hand-off gate, the claim gate - and
 #: because adding it cost nothing: it was measured clean at 0 errors.
 REQUIRED_ROOTS = ("core/", "engines/", "ingest/", "agents/pity_engine/", "tools/")
 

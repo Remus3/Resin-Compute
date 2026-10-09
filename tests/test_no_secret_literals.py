@@ -61,7 +61,7 @@ from pathlib import Path
 import pytest
 
 from tests.conftest import require_git_repository
-from tools import publish_next_session as pns
+from tools import check_handoff as pns
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -72,7 +72,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: `SECRET_PREFIXES` tuple were the last surviving pair, and they had already
 #: drifted in EIGHT cases with every arm green - three of which leaked through
 #: the real publish path. See the single-source section at the foot of this
-#: module, and `VENDOR_TOKENS` in `tools/publish_next_session.py` for how the
+#: module, and `VENDOR_TOKENS` in `tools/check_handoff.py` for how the
 #: unified length rule was derived.
 VENDOR_TOKEN = pns.VENDOR_TOKEN
 
@@ -102,7 +102,7 @@ SECRET_NAMES = pns.SECRET_NAMES
 #: over the tracked tree at all. A backtick-wrapped name, a bold name, a
 #: markdown table row, a single-quoted key, `?=`, `+=` and `->` were all missed
 #: by BOTH, identically. One object cannot drift from itself. See
-#: `NAME_VALUE_SEPARATOR` in `tools/publish_next_session.py` for how its
+#: `NAME_VALUE_SEPARATOR` in `tools/check_handoff.py` for how its
 #: character population was derived, and the section at the foot of this module
 #: for what is deliberately still out of its scope.
 SECRET_BINDING = re.compile(
@@ -149,7 +149,7 @@ VARIABLE_VALUE = pns.VARIABLE_VALUE
 #: being load-bearing is reported rather than left standing.
 SELF_EXEMPT = {
     "tests/test_no_secret_literals.py",
-    "tests/test_publish_next_session.py",
+    "tests/test_check_handoff.py",
 }
 
 
@@ -276,7 +276,7 @@ def test_the_self_exemption_is_narrow_and_real():
     """This module names the patterns, so it is exempt - and only it is."""
     assert SELF_EXEMPT == {
         "tests/test_no_secret_literals.py",
-        "tests/test_publish_next_session.py",
+        "tests/test_check_handoff.py",
     }
     tracked = set(_tracked_text_files())
     for rel in SELF_EXEMPT:
@@ -401,7 +401,7 @@ def test_a_variable_followed_by_a_literal_is_still_a_literal():
 # `tests/` would be a tool depending on tests to run - but it constrains the
 # DIRECTION, not the count. The test importing the tool breaks nothing: the
 # publisher still runs standalone with no test module on the path. So the
-# patterns live in `tools/publish_next_session.py` and this module imports
+# patterns live in `tools/check_handoff.py` and this module imports
 # them. One object cannot drift from itself, and a detector would only have
 # told us AFTER the next divergence what an import makes unrepresentable.
 #
@@ -491,7 +491,7 @@ def test_the_sweep_and_the_publisher_agree_that_a_literal_is_a_literal(literal):
 # the publisher's flat tuple had thrown it away.
 #
 # THE UNIFIED RULE, and it is neither list's rule. See `MIN_BODY` and
-# `LEFT_BOUNDARY` in `tools/publish_next_session.py` for the derivation and for
+# `LEFT_BOUNDARY` in `tools/check_handoff.py` for the derivation and for
 # the measured regression that replaced the first attempt at it; both detectors
 # are built from that one table and this module imports the compiled result.
 # The section at the foot of THIS module is where that regression is recorded
@@ -663,7 +663,7 @@ def test_no_vendor_prefix_is_rostered_that_the_single_source_has_dropped():
     table = {entry.prefix for entry in pns.VENDOR_TOKENS}
     missing = sorted(set(VENDOR_PREFIX_ROSTER) - table)
     assert missing == [], (
-        "vendor prefix(es) dropped from tools/publish_next_session.py without "
+        "vendor prefix(es) dropped from tools/check_handoff.py without "
         "the roster moving: " + ", ".join(missing) + ". Both detectors are "
         "built from that table, so a deletion there blinds BOTH of them."
     )
@@ -772,7 +772,7 @@ def test_no_secret_name_may_be_dropped_from_the_single_source():
     """The conservation assertion. This is the arm the deletion defeated."""
     missing = sorted(set(SECRET_NAME_ROSTER) - set(pns.SECRET_NAMES))
     assert missing == [], (
-        "secret variable name(s) dropped from tools/publish_next_session.py: "
+        "secret variable name(s) dropped from tools/check_handoff.py: "
         + ", ".join(missing)
         + ". That list is the single source for BOTH detectors, so a deletion "
         "there blinds the tracked-tree sweep AND the publish gate at once."

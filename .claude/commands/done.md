@@ -183,7 +183,13 @@ first. Rewrite it, then commit it with the rest of the paperwork.
   commits had touched the hand-off under either name since 9e2bf0b), not a
   count of sessions.
 - **Raw text, no markdown wrapper, no fence.** 7-bit ASCII, at least 2000 bytes,
-  enforced by `tools/publish_next_session.py`.
+  no credential or account path, one readable counter line - enforced by
+  `tools/check_handoff.py`. Run it on the rewritten file; any refusal is the
+  failure line - fix `RSC-NEXT-SESSION.txt` and re-run:
+
+  ```
+  python tools/check_handoff.py
+  ```
 - **The file is tracked and the repository is public.** It is swept by
   `tests/test_machine_identity.py`, `tests/test_no_sibling_names.py` and
   `tests/test_task_state_claims.py`. No real account, sibling project name or
@@ -194,21 +200,7 @@ first. Rewrite it, then commit it with the rest of the paperwork.
 Check `~/.claude/projects/C--Resin-Compute/memory/` for anything written this
 session and confirm `MEMORY.md` indexes it.
 
-## 9. Converge the Desktop shortcut
-
-```
-python tools/publish_next_session.py
-```
-
-It converges `RSC-NEXT-SESSION.lnk` onto the tracked `RSC-NEXT-SESSION.txt` - a
-pointer, never a second copy (operator ruling 2026-09-19; the one sanctioned
-write outside the repo root). Run it from the canonical checkout: from a linked
-worktree `main()` refuses by exit code, which is correct and not a ritual
-failure. `--check` reports drift and writes nothing. Any other refusal is the
-failure line - fix `RSC-NEXT-SESSION.txt` and re-run. Never hand-write anything
-onto the Desktop.
-
-## 10. The done marker, then the one line
+## 9. The done marker, then the one line
 
 The LAST act of the ritual (FLEET-KIT v9, FLEET-COMMON item 15, MAIN 2354
 ORDER of 2026-10-07). Only after the commit and the hand-off have been READ
