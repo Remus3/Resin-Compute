@@ -1,6 +1,52 @@
 # Session 64
 
-## 2026-10-09 - MAIN 2246 ORDER sections 1 (rest), 2, 3 and the s4 Dependabot part
+## 2026-10-09 - /done: gates, inbox triage, subagent-first hook to deny
+
+- Session checklist, all DONE except O8: K12 kit v12 (89fe0d9, merge
+  93bab89); K13 kit v13 (3438a82, bb51879, 1b3e860, merge a695f93; see
+  `docs/ledger/archive-2026-10.md`); GATE; ANS (2301 to MAIN); VER
+  (independent verification of the adoption); O1 shortcut tooling (merge
+  68b32fa); O2 2246 s2-s7 (entry below); ANS2 (0019, HOP 2, corrects 2301).
+  O8 (2246 s4 history rewrite + force push, and s8) NOT DONE: it waits
+  for the operator in person; carried as the top item of
+  `RSC-NEXT-SESSION.txt` and in the ROADMAP 2246 entry.
+- Gate measured 2026-10-09 at 4cf15be, Python 3.14, by the /done
+  sub-agent: licence 52 passed; docs 46 passed; qa_companion 16 passed 0
+  failed 2 skipped 3 noted; ruff clean; tests 4449 passed 6 skipped in run 1
+  with 1 teardown error (fleet_test_guard caught the /done agent's own
+  mid-run write of the hook mode file, not a test defect); run 2 4448 passed
+  1 failed 6 skipped (test_docs_consistency: the rewritten hand-off cited
+  bare kit filenames; fixed, test_docs_consistency re-run 46 passed,
+  hand-off sweeps 159 passed); same six host skip reasons; pity_engine 191
+  passed; node 110 pass 0 fail (the
+  three whole suites through `fleet_suite_gate.py run`); dry run 0 pass 0
+  fail 7 skip; mypy 43 files clean (advisory); kit check `13 []`.
+- CI at 4cf15be read green: ci 37888329042, docs-guards 37888329012,
+  codeql 37888329039.
+- `core.hooksPath` read an absolute path at /done start;
+  `scripts/install_hooks.py` restored `.githooks` (read back).
+- `fleet_identity.py check HEAD` refuses 4 violations on 2 commits
+  (9c2817d8bc, 569f9dc630), ai-or-bot author and committer only, no
+  trailer class. SS's 0025 note (section 1b) found 28 claude-trailer
+  refusals in its own history; RSC has none, so the 2246 s4 rewrite scope
+  here stays 2 commits.
+- Inbox: `2026-10-09-0025-from-SS-ANSWER-to-MAIN-2246-...` triaged
+  not-applicable (an SS ANSWER addressed to MAIN, information only; never
+  answer an answer, no reply). Its 1b finding was measured against RSC
+  above. `scripts/watch_inbox.py --mark` then read back "unread: none".
+- 0e: `ops/loop/control/subagent_first.jsonl` read 1361 rows, all
+  sub-thread allow, 0 main-thread, 0 would-deny. Third clean session, so
+  the gitignored mode file was set to `deny` (read back `deny`).
+  DECISION per the session-62 rule; alternative of staying on log until
+  2026-10-11 rejected because the criterion is sessions, not the date.
+  Still to tell MAIN in the next batched note.
+- Suite gate slot contention (a whole-suite run waited about 21 min this
+  session, observed by the attended session): no RSC outbound note named
+  it when grepped at /done; filed for the next batched note (ROADMAP 2246
+  entry, 2d).
+
+## 2026-10-09 - MAIN 2246 ORDER sections 1 (rest), 2, 3 and the s4
+Dependabot part
 
 - Provenance: the 2246 ORDER re-verified against MAIN's outbox by the
   responder's `load_roots()` (sha256 7ccc71ff..., byte-identical).
@@ -23,7 +69,8 @@
 - s2 item 5 (slice C 90572af, merge 466a4aa): ROADMAP.md 463487 -> 336007
   bytes (91 closed entries to `docs/roadmap-archive/`); docs/LEDGER.md
   553438 -> 985 bytes (index; body to `docs/ledger/archive-<YYYY-MM>.md`).
-  DECISION: keep `docs/LEDGER.md` as the index so every pointer to it (CLAUDE.md,
+  DECISION: keep `docs/LEDGER.md` as the index so every pointer to it
+  (CLAUDE.md,
   tests) stays valid; alternative of deleting it rejected for that reason.
 - s2 item 6 (slice D 613592d, merge 7c059ae): `.claude/session-default.md`
   shared; seven agent files 71.3 KB -> 20.1 KB, each under 3 KB; risk
