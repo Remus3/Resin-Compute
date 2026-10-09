@@ -1729,6 +1729,9 @@ ARCHIVED_DOCS = {
 #: The only documents allowed to keep citing an archived document by its old
 #: path. Everything else must cite the archive path directly.
 HISTORY_DOCS = ("ROADMAP.md", "docs/LEDGER.md", "docs/claude-md-history.md")
+# The month archives split out of ROADMAP.md and docs/LEDGER.md (MAIN 2246
+# s2 item 5) are history too: verbatim bytes of the two files above.
+HISTORY_PREFIXES = ("docs/ledger/", "docs/roadmap-archive/")
 
 
 def _old_archive_citations(text: str) -> list[str]:
@@ -1747,7 +1750,7 @@ def test_only_history_docs_cite_an_archived_doc_by_its_old_path():
     offenders = []
     for path in _governing_and_docs():
         rel = path.relative_to(REPO_ROOT).as_posix()
-        if rel in HISTORY_DOCS:
+        if rel in HISTORY_DOCS or rel.startswith(HISTORY_PREFIXES):
             continue
         found = _old_archive_citations(path.read_text(encoding="utf-8"))
         if found:
