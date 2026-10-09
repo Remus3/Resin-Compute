@@ -147,6 +147,20 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
         "skipped, never a bare name and never the working directory. Never a "
         "Python.",
     ),
+    "ops/fleet_kit/fleet_gitlock.py": (
+        2,
+        "FLEET-KIT v12, vendored and never edited; triaged 2026-10-08 by "
+        "reading each site. _git_out: env FLEET_GIT or the literal git. run: "
+        "the caller's argv after `--`, which the module parses as a git "
+        "command (commit or push). Never a Python.",
+    ),
+    "ops/fleet_kit/fleet_suite_gate.py": (
+        2,
+        "FLEET-KIT v12, vendored and never edited; triaged 2026-10-08 by "
+        "reading each site. The dirty probe: env FLEET_GIT or the literal git. "
+        "run: the caller's suite argv after `--`; this tree's /done passes "
+        "sys.executable as its head, so it never reaches a bare interpreter.",
+    ),
     "ops/fleet_kit/fleet_headless.py": (
         3,
         "FLEET-KIT v8, vendored and never edited; re-triaged 2026-10-05 by "

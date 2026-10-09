@@ -108,7 +108,7 @@ def test_a_mutated_claude_md_is_reported(tmp_path, old, new, expected):
     assert expected in KIT.conformance(root)
 
 
-#: The files kit v11 pins, per the MAIN 1840 ORDER of 2026-10-08, sorted as
+#: The files kit v12 pins, per the MAIN 2031 ORDER of 2026-10-08, sorted as
 #: `sorted()` orders them. v4 added LICENSE and NOTICE (Apache-2.0, holder the
 #: operator); v5 added fleet_watch.py, fleet_secrets.py and the two token
 #: files; v6 added fleet_lanes.py; v7 added fleet_checklist.py; v8 added
@@ -120,14 +120,19 @@ def test_a_mutated_claude_md_is_reported(tmp_path, old, new, expected):
 #: fleet_done.py, fleet_headless.py, fleet_inbox.py, fleet_lanes.py and
 #: fleet_watch.py besides; v11 added no file and changed fleet_done.py,
 #: fleet_headless.py, fleet_inbox.py, fleet_lanes.py, fleet_subagent_first.py
-#: and fleet_watch.py (FLEET-COMMON.md unchanged).
+#: and fleet_watch.py (FLEET-COMMON.md unchanged); v12 added fleet_claims.py,
+#: fleet_gitlock.py, fleet_suite_gate.py and fleet_test_guard.py and changed
+#: FLEET-COMMON.md (item 12 sentence, item 16), NOTICE, fleet_checklist.py
+#: and fleet_headless.py.
 PINNED_FILES = (
     "FLEET-COMMON.md",
     "LICENSE",
     "NOTICE",
     "cli_display.json",
     "fleet_checklist.py",
+    "fleet_claims.py",
     "fleet_done.py",
+    "fleet_gitlock.py",
     "fleet_headless.py",
     "fleet_inbox.py",
     "fleet_lanes.py",
@@ -135,6 +140,8 @@ PINNED_FILES = (
     "fleet_statusline.js",
     "fleet_subagent_first.py",
     "fleet_subagent_status.js",
+    "fleet_suite_gate.py",
+    "fleet_test_guard.py",
     "fleet_watch.py",
     "tokens.css",
     "tokens.json",
@@ -142,21 +149,21 @@ PINNED_FILES = (
 
 #: MANIFEST.json is not in its own `files` map, so conformance() cannot notice
 #: a file and the manifest edited TOGETHER (its own docstring says MAIN's drift
-#: sweep catches that). Pinning the manifest's digest here, as the MAIN 1840
+#: sweep catches that). Pinning the manifest's digest here, as the MAIN 2031
 #: ORDER section 1 states it, closes that gap inside this tree.
-PINNED_KIT_VERSION = 11
-MANIFEST_SHA256 = "c1dcf5a613b7d765bc1f917d7844ad58e272dd7984f97a632c62f911072259a7"
+PINNED_KIT_VERSION = 12
+MANIFEST_SHA256 = "781996ac966c11cb83d357afc39ac634d7d9ae6cdd39e7282b0ddb2309bd600d"
 
 
 def test_the_vendored_kit_is_the_pinned_version_and_pins_its_licence_files():
-    """The ORDER adopted is v11; a v12 drop must update this arm deliberately."""
+    """The ORDER adopted is v12; a v13 drop must update this arm deliberately."""
     raw = (KIT_DIR / "MANIFEST.json").read_bytes()
     manifest = json.loads(raw.decode("ascii"))
     assert KIT.KIT_VERSION == PINNED_KIT_VERSION
     assert manifest["version"] == PINNED_KIT_VERSION
     assert tuple(sorted(manifest["files"])) == PINNED_FILES
     assert hashlib.sha256(raw).hexdigest() == MANIFEST_SHA256, (
-        "ops/fleet_kit/MANIFEST.json is not MAIN's v11 manifest byte-for-byte"
+        "ops/fleet_kit/MANIFEST.json is not MAIN's v12 manifest byte-for-byte"
     )
 
 
@@ -190,9 +197,9 @@ def test_a_manifest_version_mismatch_is_reported(tmp_path):
     root = _scratch_copy(tmp_path)
     path = root / "ops" / "fleet_kit" / "MANIFEST.json"
     data = path.read_bytes()
-    assert b'"version": 11' in data, "mutation target absent - this mutant would be a no-op"
-    path.write_bytes(data.replace(b'"version": 11', b'"version": 10', 1))
-    assert "manifest v10 != kit v11" in KIT.conformance(root)
+    assert b'"version": 12' in data, "mutation target absent - this mutant would be a no-op"
+    path.write_bytes(data.replace(b'"version": 12', b'"version": 11', 1))
+    assert "manifest v11 != kit v12" in KIT.conformance(root)
 
 
 #: U+2610 as UTF-8, built from the code point so this file stays 7-bit.

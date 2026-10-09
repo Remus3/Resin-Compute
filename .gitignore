@@ -138,3 +138,11 @@ ops/loop/control/session_done.seen
 # runtime state: the merger writes `log` in the main checkout.
 ops/loop/control/subagent_first.mode
 ops/loop/control/subagent_first.jsonl
+# FLEET-KIT v12 RACE GUARDS runtime (MAIN 2031 ORDER s3.4): the claims
+# registry, the git lock, their ledgers and the claims mode file. Covered by
+# the directory rule above; named so they stay ignored if it is narrowed.
+ops/loop/control/claims/
+ops/loop/control/locks/
+ops/loop/control/claims.jsonl
+ops/loop/control/claims.mode
+ops/loop/control/gitlock.jsonl

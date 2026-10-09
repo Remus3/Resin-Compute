@@ -14,6 +14,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py\" hook",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -55,6 +65,17 @@
             "type": "command",
             "command": "python \"$CLAUDE_PROJECT_DIR/scripts/watch_inbox.py\" --quiet-when-empty --source userpromptsubmit",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py\" release-hook",
+            "timeout": 10
           }
         ]
       }
