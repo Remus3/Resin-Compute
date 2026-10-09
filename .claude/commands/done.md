@@ -131,19 +131,30 @@ gate, and the ledger entry says so.
 record it as green, red or pending in the ledger entry. Do not dispatch a second
 run of something the push already started, and do not predict a running result.
 
-## 5. Append to `docs/LEDGER.md`
+## 5. Write `docs/ledger/session-<n>.md` and index it in `docs/LEDGER.md`
 
-Newest first, at the TOP of the body, in the existing entry format. One entry per
-landed unit of work: what changed and what was MEASURED, the verification
-pointer (file and test name), any decision with its reasoning. A count appears
-only stamped with its measurement date. Never put a per-item entry in
+n is this session's `SESSION:` counter from `RSC-NEXT-SESSION.txt`. Write the
+session's entries to `docs/ledger/session-<n>.md`, newest first, in the
+existing entry format (see `docs/ledger/README.md`). One entry per landed unit
+of work: what changed and what was MEASURED, the verification pointer (file and
+test name), any decision with its reasoning. A count appears only stamped with
+its measurement date. Then add one line for the file at the TOP of the
+"Session files" list in `docs/LEDGER.md`, which is an index only - never append
+an entry body to it, and never rewrite an older session's file or a
+`docs/ledger/archive-<YYYY-MM>.md` month archive. Never put a per-item entry in
 `CLAUDE.md` - that file is loaded every turn.
 
 ## 6. Update `ROADMAP.md`
 
-Flip what shipped and cite the path that proves it
-(`tests/test_docs_consistency.py` fails a DONE line naming a missing path). Add
-items this session opened. Do not touch items nobody worked on.
+`ROADMAP.md` holds OPEN work only. Add items this session opened. An item this
+session closed with no open residue MOVES, verbatim, to the top of
+`docs/roadmap-archive/<YYYY-MM>.md` for the month of its closing date (create the
+file with the same 3-line header the existing month files carry); an item with
+residue stays, its closed sub-items may move with a one-line pointer left
+behind. Cite the path that proves a closure (`tests/test_docs_consistency.py`
+fails a DONE line in `ROADMAP.md` naming a missing path). An entry another file
+points at by heading keeps a stub heading and a pointer. Do not touch items
+nobody worked on.
 
 ## 7. Rewrite `RSC-NEXT-SESSION.txt` - CARRY FORWARD EVERY ITEM NOT ACTED ON
 
