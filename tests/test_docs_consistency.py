@@ -141,7 +141,7 @@ def _backticked_paths(text: str) -> set[str]:
         tail = candidate.rstrip("/").rsplit("/", 1)[-1]
         if "." in tail and not any(tail.endswith(suffix) for suffix in KNOWN_SUFFIXES):
             continue
-        if candidate.rstrip("/") in RUNTIME_ARTIFACTS or candidate in RUNTIME_ARTIFACTS:
+        if candidate in RETIRED_PATHS or candidate.rstrip("/") in RUNTIME_ARTIFACTS:
             continue
         found.add(ARCHIVED_DOCS.get(candidate, candidate))
     return found
@@ -1770,3 +1770,28 @@ def test_the_archive_redirect_has_teeth():
     # The history files really do still carry old paths, so the redirect is
     # load-bearing rather than dead code.
     assert any(_old_archive_citations(_read(doc)) for doc in HISTORY_DOCS)
+
+
+# Read at call time by `_backticked_paths` above; kept at the END of the
+# module so line citations into this file (CLAUDE.md) do not move.
+#: Paths DELETED from the tree on purpose that history documents (the roadmap,
+#: the ledger and their month archives) still cite verbatim. FLEET-COMMON item 5
+#: (kit v13) dropped the hand-off Desktop shortcut and MAIN's 2246 ORDER s1
+#: removed the tooling that created and checked it; the hand-off content checks
+#: moved to tools/check_handoff.py. Exempt by name, never by pattern, and
+#: `test_retired_paths_are_really_gone` keeps the list honest.
+RETIRED_PATHS = frozenset(
+    {
+        "tools/publish_next_session.py",
+        "scripts/make_shortcut.py",
+        "tests/test_publish_next_session.py",
+        "tests/test_make_shortcut.py",
+    }
+)
+
+
+def test_retired_paths_are_really_gone():
+    """A retired path that came back is a live file, and must be checked again."""
+    for rel in sorted(RETIRED_PATHS):
+        assert not (REPO_ROOT / rel).exists(), f"{rel} is retired but exists - drop it from RETIRED_PATHS"
+

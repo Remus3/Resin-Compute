@@ -1787,7 +1787,7 @@ def _credential_hits(text: str) -> int | None:
     scrub already existed; measured, it did not - `validate_draft` checked
     ascii, size, tracebacks and account paths, and nothing for credentials.
     It reuses `VENDOR_TOKENS` and `SECRET_NAMES` through
-    `tools/publish_next_session.scan_for_leaks`, the tree's single source for
+    `tools/check_handoff.scan_for_leaks`, the tree's single source for
     credential shapes, rather than restating them. Imported lazily so the
     module's import cost and its child-process copies are unchanged.
 
@@ -1799,12 +1799,12 @@ def _credential_hits(text: str) -> int | None:
     bounced or delivered.
     """
     # BY importlib AND NOT A STATIC IMPORT: mypy already checks that file as
-    # top-level `publish_next_session`, and a `tools.` import here made it
+    # top-level `check_handoff`, and a `tools.` import here made it
     # "found twice under different module names", which stopped mypy dead.
     import importlib
 
     try:
-        scan_for_leaks = importlib.import_module("tools.publish_next_session").scan_for_leaks
+        scan_for_leaks = importlib.import_module("tools.check_handoff").scan_for_leaks
     except Exception as exc:  # noqa: BLE001 - fail closed on ANY import failure
         log.warning("credential scan unavailable: %s", exc.__class__.__name__)
         return None

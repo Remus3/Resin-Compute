@@ -383,47 +383,16 @@ def check_snapshot(report: Report) -> None:
 
 
 def check_runtime(report: Report) -> None:
-    """Artefacts outside the repository: the Electron binary and the shortcut."""
+    """Artefacts outside the repository: the Electron binary.
+
+    The desktop-shortcut row was removed 2026-10-08 with
+    `scripts/make_shortcut.py` (MAIN 2246 ORDER section 1, FLEET-COMMON item 5).
+    """
     electron = REPO_ROOT / "shell" / "node_modules" / "electron" / "dist" / "electron.exe"
     if electron.is_file():
         report.add(OK, "electron runtime", f"{electron.stat().st_size // (1024 * 1024)} MB")
     else:
         report.add(SKIP, "electron runtime", "absent - install with: npm install --prefix shell")
-
-    import os
-
-    profile = os.environ.get("USERPROFILE")
-    if not profile:
-        report.add(SKIP, "desktop shortcut", "no user profile on this platform")
-        return
-
-    # LOOKED UP BY TARGET, NOT BY NAME, and reusing make_shortcut's own
-    # comparison so the two cannot disagree. The operator renamed the shortcut
-    # this project created; a name-only check reported it absent, which is a
-    # false negative, and false negatives are how a QA report stops being read.
-    # The FILE is named in the output, never the directory: a profile path
-    # carries the Windows account name.
-    from scripts import make_shortcut
-
-    desktop = Path(profile) / "Desktop"
-    canonical = desktop / (make_shortcut.DEFAULT_SHORTCUT_NAME + make_shortcut.SHORTCUT_SUFFIX)
-    desired = make_shortcut.desired_state()
-
-    powershell = make_shortcut._resolve_powershell()
-    if powershell is None:
-        report.add(SKIP, "desktop shortcut", "no PowerShell to read a shortcut with")
-        return
-
-    observed = make_shortcut.observe(powershell, canonical)
-    if observed is not None and make_shortcut.matches(observed, desired):
-        report.add(OK, "desktop shortcut", canonical.name)
-        return
-
-    twin = make_shortcut.find_renamed_twin(powershell, desktop, desired, skip=canonical)
-    if twin is not None:
-        report.add(OK, "desktop shortcut", f"{twin.name} (renamed from the default)")
-    else:
-        report.add(SKIP, "desktop shortcut", "absent - create with: python scripts/make_shortcut.py")
 
 
 def check_live_dashboard(report: Report) -> None:

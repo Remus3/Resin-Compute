@@ -39,7 +39,7 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   cd shell && node --test
   python -m headless.runner --once --dry-run
   python -m mypy
-  python tools/publish_next_session.py
+  python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
 must print 11 [].

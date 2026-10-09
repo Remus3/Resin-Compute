@@ -101,7 +101,7 @@ def _windows_path(drive: str, separator: str, account: str, *tail: str) -> str:
     `separator` is passed in rather than fixed because both forms occur on disk
     and both must be caught. A Windows path written inside a Python string
     literal carries DOUBLED backslashes in the file's actual bytes, and
-    tests/test_make_shortcut.py is exactly that case.
+    tools/stop_claim_gate.py's docstring example is exactly that case.
     """
     return separator.join([drive + ":", _USERS_SEGMENT, account, *tail])
 
@@ -183,9 +183,10 @@ _TRAILING_PUNCTUATION = ".,;:!?)]}"
 #: relax `_ACCOUNT` and do not add a wildcard.
 PLACEHOLDER_ACCOUNTS: dict[str, str] = {
     "x": (
-        "The deliberate synthetic account in the make-shortcut fixture, "
-        "tests/test_make_shortcut.py. A one-letter stand-in chosen to be "
-        "obviously fictional; it names no account on any machine."
+        "The deliberate synthetic account in an interpreter-path example "
+        "in tools/stop_claim_gate.py (the make-shortcut fixture that also "
+        "used it was deleted 2026-10-08). A one-letter stand-in chosen to "
+        "be obviously fictional; it names no account on any machine."
     ),
     "<account>": (
         "The documentation placeholder ROADMAP.md and RSC-NEXT-SESSION.txt "
@@ -194,8 +195,8 @@ PLACEHOLDER_ACCOUNTS: dict[str, str] = {
     ),
     "someoperator": (
         "The deliberately fictional account in the hand-off leak fixtures, "
-        "tests/test_publish_next_session.py. Those arms prove that "
-        "tools/publish_next_session.py REFUSES to publish a block naming a "
+        "tests/test_check_handoff.py. Those arms prove that "
+        "tools/check_handoff.py REFUSES a hand-off naming a "
         "real user profile, so they must contain an account-shaped path or "
         "they assert nothing. Chosen to be obviously invented; it names no "
         "account on this or any machine, and the real one is never used - "
@@ -442,20 +443,21 @@ def test_no_tracked_file_carries_an_absolute_path_naming_a_real_account():
 # explanation republishes the thing the decision was about.
 
 
-def test_the_synthetic_account_in_the_shortcut_fixture_survives():
-    """tests/test_make_shortcut.py must keep its deliberately fictional path.
+def test_the_synthetic_account_in_the_stop_claim_gate_example_survives():
+    """tools/stop_claim_gate.py must keep its deliberately fictional path.
 
-    It is a fixture argument. A sweep that rewrote it would be editing the
-    thing under test to make the guard quiet.
+    Moved here 2026-10-08 from the deleted make-shortcut fixture: the same
+    one-letter account, the same doubled-separator shape. A sweep that
+    rewrote it would be editing an example to make the guard quiet.
     """
-    fixture = "tests/test_make_shortcut.py"
-    text = _read(fixture)
-    # Doubled separators: the file is Python source, so one backslash in the
-    # path is two backslashes in the bytes on disk.
-    expected = _windows_path("C", "\\\\", "x", "Desktop", "ResinCompute.lnk")
+    source = "tools/stop_claim_gate.py"
+    text = _read(source)
+    # Doubled separators: the example sits in Python source, so one
+    # backslash in the path is two backslashes in the bytes on disk.
+    expected = _windows_path("C", "\\\\", "x", "Python314")
     assert expected in text, (
-        f"the synthetic account path is gone from {fixture}. It is a "
-        "deliberate fictional fixture value, not a leak, and removing it "
+        f"the synthetic account path is gone from {source}. It is a "
+        "deliberate fictional example, not a leak, and removing it "
         "means a sweep went too wide."
     )
     assert leaked_accounts(text) == []
