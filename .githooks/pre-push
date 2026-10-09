@@ -48,17 +48,25 @@ set -e
 # working checkout.
 PUSH_REFS="$(cat)"
 
-if [ "${RESIN_SKIP_PREPUSH:-0}" = "1" ]; then
-    echo "pre-push: SKIPPED via RESIN_SKIP_PREPUSH=1 - CI is now your only gate."
-    exit 0
-fi
-
 ROOT="$(git rev-parse --show-toplevel)"
 
 # Interpreter selection is SHARED with pre-commit and commit-msg. Sourced
 # rather than restated, because three private copies of one selector is how a
 # defect gets fixed in one place and left live in two.
 . "$ROOT/scripts/hook_python.sh"
+
+# FLEET-COMMON 17 (kit v13, MAIN 2246 ORDER s1.4): the identity check runs
+# FIRST, before the RESIN_SKIP_PREPUSH escape and before the tree's gates, so
+# no skip can push a non-operator author, committer or AI trailer. It reads
+# the operator set from LOCAL git config fleet.operatorIdent only, and needs
+# the ref lines git gave this hook on stdin, which were consumed above.
+ID_PY="$(resin_pick_python)" || ID_PY=python
+printf '%s\n' "$PUSH_REFS" | "$ID_PY" "$ROOT/ops/fleet_kit/fleet_identity.py" pre-push "$@" || exit 1
+
+if [ "${RESIN_SKIP_PREPUSH:-0}" = "1" ]; then
+    echo "pre-push: SKIPPED via RESIN_SKIP_PREPUSH=1 - CI is now your only gate."
+    exit 0
+fi
 
 cd "$ROOT"
 

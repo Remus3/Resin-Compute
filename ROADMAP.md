@@ -21,13 +21,24 @@ version. What follows is everything the scaffold deliberately did not do.
   "budget lock unopenable" and "budget write failed" map to
   KitRunBudgetSpent through a substring match on "budget"; give them a
   distinct termination.
-- **NEW 2026-10-08. FLEET-KIT v13 tree-side residue (ruling C).** v12
-  vendored (89fe0d9) and v13 vendored ahead of its ORDER (3438a82,
-  bb51879); see `docs/LEDGER.md`. OPEN, waits for MAIN's v13 ORDER: wire
-  `fleet_identity.py commit-msg` into `.githooks/commit-msg` and
-  `pre-push` into `.githooks/pre-push`, set the local
-  `fleet.operatorIdent`, re-verify the bundle against 1311801a...74e0.
-  Reversed by: the ORDER, a changed bundle, or the operator.
+- **DONE 2026-10-08. FLEET-KIT v12 and v13 (MAIN 2031 and 2246 s1).** v12
+  89fe0d9, v13 3438a82 + bb51879, identity hooks and the local
+  fleet.operatorIdent after the 2246 ORDER reversed ruling C. ANSWER 2301
+  to MAIN covers 2031; see `docs/LEDGER.md`.
+- **NEW 2026-10-08. MAIN 2246 ORDER (REPO-REVIEW), SHA-256 verified -
+  sections 1 (rest) and 2-8 OPEN; ONE ANSWER (HOP: 2) owed after them.**
+  (s1) remove `.claude/commands/done.md` section 9 "Converge the Desktop
+  shortcut" and everything that creates or checks the hand-off .lnk
+  (`tools/publish_next_session.py`, `scripts/make_shortcut.py`, their tests
+  and the /done gate line; that tool also enforces the hand-off size and
+  ASCII rule, so move that check first); optionally make core.hooksPath
+  the relative `.githooks`. (s2) PERF-AUDIT items 1-8 and 10, ranked in the
+  note. (s3) README-AUDIT 1-6. (s4) GH-HYGIENE: operator-APPROVED history
+  rewrite via `fleet_rewrite.py` plan / bundle / run, then force push
+  (2 Claude-authored commits; every SHA but the root changes); delete 3
+  dependabot remote branches; land 3 Dependabot PRs locally as operator
+  commits. (s5, s6, s7) nothing to do. (s8) queue ONE headless repo-review
+  driver through the kit spawn (kind build, progress repo-review.json).
 - **DONE 2026-10-08. MAIN 1840 FLEET-KIT v11 vendored (8e675fe, merge
   9d89b26).** ANSWER 1925 to MAIN delivered 1/1 (sha256 7fb22a61...). See
   `docs/LEDGER.md`.
