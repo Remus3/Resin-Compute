@@ -201,7 +201,6 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
         "working directory excluded. No caller in this tree passes a command "
         "ref today; a caller that does chooses its own executable.",
     ),
-    "scripts/make_shortcut.py": (1, "PowerShell argv built by a helper."),
     "tests/test_commit_trailers.py": (1, "shutil.which of a shell, not a Python."),
     "tests/test_git_env_scrub.py": (2, "argv is a test-local fixture value."),
     "tests/test_headless_env.py": (
@@ -238,7 +237,6 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
         "not depend on site-packages the way mypy's file count does. See "
         "_ruff_candidates() in that file.",
     ),
-    "tools/publish_next_session.py": (1, "PowerShell argv built by a helper."),
 }
 
 #: The `.js` lane, triaged 2026-09-20 rather than fixed, with the measurement.

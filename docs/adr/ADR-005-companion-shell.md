@@ -36,7 +36,10 @@ Three parts, and the split is the decision:
 2. **`shell/`** - an Electron main process that opens a frameless window onto
    that surface, plus a system tray so closing the window hides it rather than
    quitting.
-3. **`scripts/make_shortcut.py`** - an idempotent desktop shortcut.
+3. **A desktop shortcut script** - an idempotent desktop shortcut. REMOVED
+   2026-10-08 (MAIN 2246 ORDER section 1, FLEET-KIT v13): FLEET-COMMON item 5
+   dropped the Desktop shortcut, and the script, its test and its
+   `scripts/qa_companion.py` row went with it. Parts 1 and 2 stand.
 
 **ADR-001 is NOT reopened.** Its subject was the language of the compute tree,
 and that answer is unchanged: every calculation stays in Python, and the surface

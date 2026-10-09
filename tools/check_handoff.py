@@ -1,155 +1,64 @@
-"""Converge the operator's Desktop SHORTCUT to the next-session hand-off.
+"""Gate the next-session hand-off's CONTENT before `/done` calls it ready.
 
-THE TRACKED FILE IS THE HAND-OFF. `RSC-NEXT-SESSION.txt` in the repo root is
-the one copy, and the Desktop artifact is a `.lnk` that RESOLVES to it. The two
-therefore cannot disagree, because there is only one of them.
+`RSC-NEXT-SESSION.txt` in the repo root is the hand-off (FLEET-COMMON item 5),
+TRACKED IN A PUBLIC REPOSITORY, read by every cold session and quoted into
+notes to sibling trees. This module reads it and refuses it when it is:
 
-THIS MODULE USED TO WRITE A DETACHED BYTE COPY, and that is the defect being
-removed rather than a style being changed. A copy is correct at the instant it
-is written and stale from the next edit onward, and a stale hand-off READS AS
-CURRENT - the same silent failure the truncation floor below exists to stop,
-arriving by a different route. Measured on 2026-09-19: the Desktop copy was
-already stale, and a sibling tree's second copy was twelve days behind its
-`.txt`. Operator ruling 2 of that date replaced the copy with a shortcut and is
-the explicit authorization for this one write outside the repo root.
+- TRUNCATED - under `MIN_BYTES`. A truncated hand-off and a complete one both
+  read as current; only one is missing the context that makes it useful.
+- NON-ASCII - the CLAUDE.md hard rule, named by codepoint.
+- AMBIGUOUS - more than one fenced block. A raw, fence-less file is the whole
+  hand-off; a single fenced block is unwrapped.
+- LEAKING - a credential or an absolute path naming a real user profile. The
+  refusal never echoes what it caught.
+- MISCOUNTED - no single readable column-0 `SESSION: <n>` line (FLEET-COMMON
+  item 13). `/done` writes n+1, so a guessed counter would become permanent.
+  The parser is `tools/session_checklist.py`'s own, imported, never restated.
 
-This module NEVER accepts prompt text as an argument. It reads the source file
-or it refuses, so the tracked file and whatever the shortcut opens are the same
-bytes by construction. `/done` never prints the hand-off into chat (FLEET-COMMON
-rule 5 in `CLAUDE.md`); the shortcut is how the operator reads it.
-
-WHY A `.lnk` AND NOT A FILESYSTEM LINK, measured on this host from an ordinary
-Python process rather than assumed. `os.symlink` to a file SUCCEEDS only where
-the account is elevated or Developer Mode is on, so a tool cannot rely on it.
-`os.link` succeeds unprivileged on one volume, but a hardlink to a TRACKED file
-is the drift being removed and not a fix: git replaces a checked-out file
-rather than writing through it, so the next checkout leaves the link holding
-the OLD content. A `.url` needs no privilege and opens in a browser rather than
-in the default `.txt` handler. A `.lnk` written through `WScript.Shell` needs
-no privilege, resolves BY PATH so no checkout can orphan it, opens in Notepad,
-and is the shape the sibling trees already keep - read back through the COM
-object on 2026-09-20, each sibling's `.lnk` targets that sibling's own repo
-root with an empty argument string.
-
-THE SHORTCUT WRITER IS NOT RE-IMPLEMENTED HERE. `scripts/make_shortcut.py`
-carries the proven converge table - absent create, present-and-correct change
-nothing, present-and-different rewrite, `--no-clobber` refuse - and this module
-imports `ShortcutState`, `matches` and `decide` from it. Two copies of that
-table would drift and then disagree about whether a shortcut needs rewriting,
-which is the worst outcome an idempotent tool can have.
-
-EVERY VALIDATION GUARD STAYS, and each is re-justified rather than inherited
-from the version that wrote a copy. The hand-off text no longer leaves the
-toolchain by this path, but `RSC-NEXT-SESSION.txt` is TRACKED IN A PUBLIC
-REPOSITORY and the shortcut opens it in Notepad to be pasted into a cold
-session and quoted into sibling repos. A credential or an account path in that
-file is published either way, and this is still the gate that runs at the
-moment the operator is told the hand-off is ready:
-
-- The Desktop is SHARED with sibling projects, which own the `CS-`, `EW-`,
-  `LL-` (retired 2026-10-04, file kept), `LW-`, `RC-` and `RM-` prefixed
-  hand-offs sitting beside ours. The link
-  basename is a module constant and no function takes a filename parameter, so
-  a path bug cannot reach a neighbour's file.
-- A TRUNCATED block is refused. A stale hand-off and a truncated one both read
-  as current; only one of them is missing the context that makes it useful.
-- NON-ASCII is refused. Notepad is where the CLAUDE.md hard rule earns itself.
-- A CREDENTIAL or an ACCOUNT PATH in the block is refused, unchanged.
-- THE SHORTCUT IS READ BACK before it is called done. Written is not the same
-  as correct, and a `.lnk` pointing at nothing looks exactly like one pointing
-  at the file.
-- NO MESSAGE NAMES A DIRECTORY. The Desktop sits under the user profile, so its
-  path carries the Windows account name. Reports carry the basename and a byte
-  count. Same rule as `scripts/make_shortcut.py`, pinned by the same shape of
-  test.
-- THERE IS NO FALLBACK TO A COPY. When no shell is available or the write
-  fails, this refuses with fixed remedy text and writes nothing. A quiet
-  fallback would restore the exact artifact the ruling removed, under a report
-  that said it had succeeded.
-
-`core/atomic_io.py` is the sanctioned state-write path and is deliberately NOT
-used here: it writes inside the repository, and this writes outside it. It is
-NOT the only thing in the tree that does. An earlier version of this docstring
-claimed it was, which made an audit-by-docstring miss two real siblings:
-
-- `scripts/make_shortcut.py` writes a `.lnk` under the Desktop, building a
-  PowerShell script that drives the `WScript.Shell` COM object and calls
-  `.Save()`, then running it.
-- `ops/install_scheduled_task.ps1` writes into the Windows Task Scheduler store
-  via `Register-ScheduledTask`. That one OUTLIVES THE CHECKOUT - deleting the
-  clone does not remove the task - so README carries the removal command next
-  to the install.
-
-A third route opens only when an operator asks for it: `RC_DATA_DIR` can point
-`data/` anywhere, through `_env_path` in `core/config.py`.
-
-Those are what a sweep for Desktop, `USERPROFILE` and scheduler writes turned
-up. Treat the list as the known set, not as a proof of exhaustiveness - the
-mistake corrected here was precisely a claim of exhaustiveness that nothing
-checked. This module is now a THIRD member of that set by the same mechanism as
-the first: it drives `WScript.Shell` through PowerShell to write one `.lnk`.
+MOVED HERE 2026-10-08 from `tools/publish_next_session.py`, which also
+converged an operator shortcut onto this file. MAIN's 2246 ORDER (FLEET-KIT v13,
+section 1) retired that shortcut with FLEET-COMMON item 5; the content rules
+were moved first and are byte-for-byte the same detectors, so the sweep in
+`tests/test_no_secret_literals.py` still imports its single source from here.
+This module READS ONE FILE AND WRITES NOTHING.
 
 Usage:
-    python tools/publish_next_session.py               # converge the shortcut
-    python tools/publish_next_session.py --check       # report drift, write nothing
-    python tools/publish_next_session.py --no-clobber  # refuse to repoint one
+    python tools/check_handoff.py            # gate RSC-NEXT-SESSION.txt
+    python tools/check_handoff.py <file>     # gate another file (tests)
+
+Exit 0 and one `check_handoff: ok ...` line when clean; exit 1 and one
+`check_handoff: REFUSED <reason> - <detail>` line otherwise. No message names
+a directory.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
-import os
+import importlib
 import re
-import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
 REPO = Path(__file__).resolve().parents[1]
 SOURCE = REPO / "RSC-NEXT-SESSION.txt"
 
-# THE BOOTSTRAP IS LOAD-BEARING, not defensive. Under pytest the repo root is
-# already on `sys.path`, so the import below resolves and every arm in
-# `tests/test_publish_next_session.py` passes. Run the module the way the
-# ritual actually runs it - `python tools/publish_next_session.py` - and
-# `sys.path[0]` is `tools/`, `scripts` is not a package anywhere on the path,
-# and the import raises `ModuleNotFoundError` before `main` is reached.
-# MEASURED 2026-09-20 with a green suite in hand: the first converted draft
-# crashed on both `--check` and a bare run while 200 arms said it was fine.
-# `tests/test_publish_next_session.py` now drives the real command line in a
-# subprocess for exactly this, because no in-process arm can see it.
+# THE BOOTSTRAP IS LOAD-BEARING. Run as `python tools/check_handoff.py`,
+# `sys.path[0]` is `tools/` and the package import below would raise
+# `ModuleNotFoundError`; under pytest the root is already on the path and no
+# in-process arm can see that. `tests/test_check_handoff.py` drives the real
+# command line from another directory for exactly this.
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from scripts.make_shortcut import (  # noqa: E402 - must follow the bootstrap above
-    Action,
-    ShortcutState,
-    _resolve_powershell,
-    decide,
-    matches,
-    powershell_argv,
-    ps_quote,
-    read_script,
-)
-
-# Never derived from an argument. `RC-` belongs to a sibling on this same
-# Desktop, so ResinCompute cannot have it; `RSC-` is the disambiguation.
-#
-# THE SUFFIX IS THE WHOLE CORRECTION. Until 2026-09-20 one constant spelled
-# `RSC-NEXT-SESSION.txt` and meant TWO things - the tracked source and the
-# Desktop artifact - which is precisely the confusion that let a detached copy
-# look like the hand-off. They are now two names with two suffixes.
-LINK_NAME = "RSC-NEXT-SESSION.lnk"
-
-# The artifact this module used to write and now only ever DETECTS. A copy
-# sitting beside the shortcut is stale by definition, so `--check` reports it
-# and `--remove-stale-copy` is the deliberate, opt-in delete. Nothing removes
-# it silently: it is an operator file on an operator's Desktop.
-DETACHED_COPY_NAME = "RSC-NEXT-SESSION.txt"
-
-# Matches what the sibling trees carry, read back from their own shortcuts.
-LINK_DESCRIPTION = "ResinCompute next-session hand-off"
+# BY importlib AND NOT A STATIC IMPORT: mypy checks `tools/` files as top-level
+# modules, so a static `tools.session_checklist` import makes that file "found
+# twice under different module names" and stops mypy dead (measured
+# 2026-10-08). `tools/moon_sync_responder.py` imports this module the same way.
+session_number: Callable[[str], int | None] = importlib.import_module(
+    "tools.session_checklist"
+).session_number
 
 FENCE = "`" * 3
 
@@ -160,7 +69,7 @@ MIN_BYTES = 2000
 #: THE HAND-OFF IS A PUBLICATION SURFACE, and until 2026-09-07 this gate did
 #: not treat it as one. It refused non-ASCII and truncation - both real - and
 #: passed a live API key and an absolute path naming the operator's account
-#: straight through to the Desktop. Measured, not theorised: a block carrying
+#: straight through to publication. Measured, not theorised: a block carrying
 #: an inline Nimble key, and one carrying
 #: `C:\Users\<account>\AppData\...` were each published clean.
 #:
@@ -171,7 +80,7 @@ MIN_BYTES = 2000
 #: tree's honest answer was no. `tests/test_machine_identity.py` sweeps tracked
 #: files and `tests/test_no_secret_literals.py` sweeps them for credentials,
 #: but both run over the COMMITTED tree - neither sees a block on its way out
-#: to the Desktop, which is the one path that leaves the toolchain.
+#: for publication, which is the one path that leaves the toolchain.
 #:
 #: Vendor prefixes only, deliberately. A digest, a git SHA and a base64 blob
 #: all look random; only a real credential carries one of these.
@@ -579,46 +488,8 @@ ACCOUNT_PATH = re.compile(
     re.IGNORECASE,
 )
 
-# Fixed remedies. These are the strings a refusal shows the operator, and none
-# of them may name a path. That constraint is why PowerShell's own stderr is
-# never rendered: a failed `CreateShortcut` names the `.lnk` it could not write,
-# and that path sits under the user profile.
-NO_DESKTOP = (
-    "the Desktop directory does not exist - pass --desktop to point at it, "
-    "or run this on the machine that has one"
-)
-NO_POWERSHELL = (
-    "no PowerShell was found on PATH, and it is what writes the shortcut file. "
-    "The hand-off itself is unaffected - it is the tracked file in the repo "
-    "root. Install Windows PowerShell or PowerShell 7, then run this again."
-)
-WRITE_FAILED = (
-    "the shortcut could not be written. The hand-off itself is unaffected - it "
-    "is the tracked file in the repo root. Check that the Desktop exists and "
-    "is writable, then run this again."
-)
-REFUSED_EXISTS = (
-    "a shortcut of that name is already there and points somewhere else. "
-    "Re-run without --no-clobber to repoint it."
-)
-VERIFY_FAILED = (
-    "the shortcut was written but does not read back as pointing at the "
-    "hand-off, so it has not been called done"
-)
-WORKTREE_CHECKOUT = (
-    "this is a linked git worktree and not the canonical checkout, so the file "
-    "a shortcut would point at disappears when the worktree is cleaned up. "
-    "Nothing was written and the existing shortcut was not touched. Run this "
-    "from the main checkout."
-)
-STALE_COPY = (
-    "a detached copy of the hand-off is sitting beside the shortcut and is "
-    "stale by definition. Re-run with --remove-stale-copy to delete it."
-)
-
-
 class Refusal(Exception):
-    """A refusal to publish, carrying a machine-readable reason."""
+    """A refusal of the hand-off, carrying a machine-readable reason."""
 
     def __init__(self, reason: str, detail: str) -> None:
         super().__init__(f"{reason}: {detail}")
@@ -635,7 +506,7 @@ def extract_prompt(source_text: str) -> str:
     block, so this function's job was to find that block and refuse if the page
     carried zero or several. The new source is the RAW hand-off with no wrapper
     and no fence - which is what the sibling trees keep, and what the operator
-    actually reads when the Desktop shortcut opens the file in Notepad. A
+    actually reads when the file is opened in Notepad. A
     wrapper and a pair of fences are noise in that window.
 
     A FENCED SOURCE IS STILL ACCEPTED AND STILL UNWRAPPED, deliberately. The
@@ -766,286 +637,55 @@ def scan_for_leaks(block: str) -> list[tuple[str, str]]:
 
     return found
 
+SESSION_COUNTER = (
+    "the hand-off has no single readable column-0 SESSION: <n> line, so the "
+    "next /done would write a guess plus one. Restore exactly one such line."
+)
+UNREADABLE = "the hand-off file could not be read as UTF-8 text"
 
-class PowerShellLinker:
-    """The real shortcut layer: read and write one `.lnk` through PowerShell.
 
-    A SEAM RATHER THAN A HELPER. The leak arms in
-    `tests/test_publish_next_session.py` drive `publish` several hundred times
-    and each real call costs two PowerShell round trips, so they substitute a
-    recording stand-in. That substitution is not only a speed fix: it turns
-    "no bytes reached the Desktop" into "the writer was never reached", which
-    is a stronger statement than a directory listing can make.
+def check_text(source_text: str) -> dict:
+    """Every content rule over `source_text`, in order, or a `Refusal`.
 
-    POWERSHELL IS NEVER INVOKED THROUGH A SHELL. Through Git Bash, MSYS path
-    conversion rewrites arguments before the tool sees them. Every call passes
-    a list argv with `shell=False`, which is immune. Same rule and same
-    `powershell_argv` builder as `scripts/make_shortcut.py`.
+    The block rules run first, so a truncated file is refused for its size
+    whatever its counter says. The counter is read from the WHOLE source, not
+    from a fenced block, because that is where `/done` and the SessionStart
+    hook read it.
     """
-
-    def __init__(self) -> None:
-        self._powershell = _resolve_powershell()
-
-    def available(self) -> bool:
-        """Whether THIS PROCESS can actually write a Windows shortcut.
-
-        BOTH CONDITIONS, and the platform one is not redundant. A resolvable
-        shell is necessary and not sufficient: the writer goes through
-        `New-Object -ComObject WScript.Shell`, and that COM object exists only
-        on Windows. Measured on CI, ubuntu-latest, 2026-09-20 - the runner
-        carries `pwsh` on PATH, so a presence-only answer said True, the arms
-        that guard on this did not skip, the COM call failed, and `publish`
-        raised `Refusal: write_failed` on three of them. A shell that is
-        present but cannot do the job is not availability.
-        """
-        return self._powershell is not None and os.name == "nt"
-
-    def _run(self, script: str) -> subprocess.CompletedProcess[bytes]:
-        assert self._powershell is not None
-        return subprocess.run(  # noqa: S603 - argv is a list and shell is False
-            powershell_argv(self._powershell, script),
-            capture_output=True,
-            shell=False,
-            check=False,
-            timeout=60,
-        )
-
-    def read(self, link_path: Path) -> ShortcutState | None:
-        """The existing shortcut, or None when there is not a readable one.
-
-        PowerShell's stderr is NEVER echoed - see the remedy block above. A
-        failure here reports as "no readable shortcut", which drives a create,
-        which then fails loudly if the real problem was permissions.
-        """
-        if not self.available() or not link_path.exists():
-            return None
-        completed = self._run(read_script(str(link_path)))
-        if completed.returncode != 0:
-            return None
-        lines = completed.stdout.decode("utf-8", errors="replace").splitlines()
-        while len(lines) < 3:
-            lines.append("")
-        return ShortcutState(
-            target=lines[0].strip(),
-            arguments=lines[1].strip(),
-            working_dir=lines[2].strip(),
-        )
-
-    def write(self, link_path: Path, desired: ShortcutState, description: str) -> bool:
-        """Write the shortcut. True on success, False on any tool failure.
-
-        The COM sequence is `scripts/make_shortcut.py`'s, rebuilt here only
-        because its `create_script` hardcodes that script's own description -
-        which would label the hand-off shortcut as the companion window. The
-        DECISION logic, which is the part that drifts, is imported rather than
-        restated; this is five assignments and a `Save()`.
-        """
-        if not self.available():
-            return False
-        script = (
-            "$s = (New-Object -ComObject WScript.Shell).CreateShortcut("
-            + ps_quote(str(link_path))
-            + ");"
-            " $s.TargetPath = " + ps_quote(desired.target) + ";"
-            " $s.Arguments = " + ps_quote(desired.arguments) + ";"
-            " $s.WorkingDirectory = " + ps_quote(desired.working_dir) + ";"
-            " $s.Description = " + ps_quote(description) + ";"
-            " $s.Save()"
-        )
-        return self._run(script).returncode == 0
-
-
-def is_linked_worktree(repo: Path) -> bool:
-    """True when `repo` is a LINKED git worktree rather than the main checkout.
-
-    THE DISCRIMINATOR IS GIT'S OWN ON-DISK SHAPE, not a path spelling. A main
-    checkout carries `.git` as a DIRECTORY; a linked worktree carries it as a
-    regular FILE holding a `gitdir:` pointer. Measured in an agent worktree of
-    this tree on 2026-09-20: a 64-byte regular file. A spelling test against
-    `.claude/worktrees` would be defeated by `git worktree add` anywhere else,
-    and would misfire on a directory that merely had that name.
-
-    WHY THIS EXISTS. `REPO` is `__file__`'s parent, so running this module from
-    a worktree makes `desired_link()` point at the WORKTREE's copy of the
-    hand-off. `decide()` would then see a shortcut pointing somewhere else,
-    call it an UPDATE, and repoint the operator's good Desktop shortcut at a
-    directory that is deleted the moment the slice is merged. Found by an
-    adversary 2026-09-20; there was no guard, and this session had several such
-    worktrees live.
-    """
-    return (repo / ".git").is_file()
-
-
-def link_path(desktop: Path) -> Path:
-    """The one file this module may write. The basename is not negotiable."""
-    return desktop / LINK_NAME
-
-
-def detached_copy_path(desktop: Path) -> Path:
-    """Where a pre-2026-09-20 copy would be sitting. Detected, never written."""
-    return desktop / DETACHED_COPY_NAME
-
-
-def desired_link() -> ShortcutState:
-    """The shortcut this tree wants: the tracked file, opened from the repo.
-
-    An EMPTY argument string, matching what the sibling trees carry. The
-    working directory is the repo root so a Save-As from Notepad lands next to
-    the file rather than wherever the shell happened to be.
-    """
-    return ShortcutState(target=str(SOURCE), arguments="", working_dir=str(REPO))
-
-
-def _require_desktop(desktop: Path) -> None:
-    if not desktop.is_dir():
-        raise Refusal("no_desktop", NO_DESKTOP)
-
-
-def _linker(linker: object | None) -> object:
-    return PowerShellLinker() if linker is None else linker
-
-
-def check(source_text: str, desktop: Path, *, linker: object | None = None) -> dict:
-    """Report whether the Desktop shortcut resolves to the source. Writes nothing.
-
-    `in_sync` is a statement about a POINTER, not about bytes. That is the
-    whole change of 2026-09-20: the old `check` compared a Desktop copy against
-    the block, so a copy that happened to agree on the day it was written read
-    as in sync while nothing held it in agreement afterwards.
-    """
-    _require_desktop(desktop)
     block = extract_prompt(source_text)
-    shortcuts = _linker(linker)
-    observed = shortcuts.read(link_path(desktop))  # type: ignore[attr-defined]
-    return {
-        "ok": True,
-        "present": observed is not None,
-        "in_sync": observed is not None and matches(observed, desired_link()),
-        "detached_copy": detached_copy_path(desktop).exists(),
-        "link": LINK_NAME,
-        "bytes": len(block.encode("ascii")),
-    }
-
-
-def publish(
-    source_text: str,
-    desktop: Path,
-    *,
-    linker: object | None = None,
-    no_clobber: bool = False,
-) -> dict:
-    """Converge the Desktop shortcut onto the tracked hand-off.
-
-    Validation runs BEFORE the shortcut layer is touched, so a refused run
-    leaves the destination directory exactly as it found it - which is what the
-    credential arms assert against a real directory.
-
-    THERE IS NO FALLBACK. Every failure below refuses with fixed remedy text.
-    Writing a copy instead would restore the artifact the ruling removed, and
-    would do it under a report saying the run had succeeded.
-    """
-    _require_desktop(desktop)
-    block = extract_prompt(source_text)
-
-    shortcuts = _linker(linker)
-    if not shortcuts.available():  # type: ignore[attr-defined]
-        raise Refusal("no_powershell", NO_POWERSHELL)
-
-    link = link_path(desktop)
-    desired = desired_link()
-    observed = shortcuts.read(link)  # type: ignore[attr-defined]
-    action = decide(observed, desired, no_clobber=no_clobber)
-
-    if action is Action.REFUSE:
-        raise Refusal("link_exists", REFUSED_EXISTS)
-
-    if action is not Action.UNCHANGED:
-        if not shortcuts.write(link, desired, LINK_DESCRIPTION):  # type: ignore[attr-defined]
-            raise Refusal("write_failed", WRITE_FAILED)
-        # Written is not the same as correct. A `.lnk` pointing at nothing looks
-        # exactly like one pointing at the file until it is read back.
-        written = shortcuts.read(link)  # type: ignore[attr-defined]
-        if written is None or not matches(written, desired):
-            raise Refusal("verify_failed", VERIFY_FAILED)
-
-    return {
-        "ok": True,
-        "action": action.value,
-        "detached_copy": detached_copy_path(desktop).exists(),
-        "link": LINK_NAME,
-        "bytes": len(block.encode("ascii")),
-    }
-
-
-def default_desktop() -> Path:
-    return Path.home() / "Desktop"
+    number = session_number(source_text)
+    if number is None:
+        raise Refusal("session_counter", SESSION_COUNTER)
+    return {"ok": True, "bytes": len(block.encode("ascii")), "session": number}
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Converge the Desktop shortcut to the next-session hand-off."
-    )
-    parser.add_argument("--check", action="store_true", help="report drift, write nothing")
-    parser.add_argument(
-        "--no-clobber",
-        action="store_true",
-        help="refuse if the shortcut points elsewhere, instead of repointing it",
+        description="Gate the next-session hand-off's content. Reads, never writes."
     )
     parser.add_argument(
-        "--remove-stale-copy",
-        action="store_true",
-        help="delete a pre-shortcut detached copy sitting beside the shortcut",
-    )
-    parser.add_argument(
-        "--desktop", type=Path, default=None, help="override the Desktop directory"
+        "path", nargs="?", type=Path, default=None, help="file to gate (default: the hand-off)"
     )
     args = parser.parse_args(argv)
-
-    # THE WORKTREE GUARD IS HARD AND IT IS HERE, at the command line, which is
-    # the only entry the ritual uses. Both parts of that are a decision.
-    #
-    # HARD rather than soft. The soft shape - publish anyway, but point the
-    # shortcut at the CANONICAL repo root instead of this one - was considered
-    # and rejected: it would validate THIS tree's bytes through every guard
-    # above and then publish a pointer to a DIFFERENT file that no guard had
-    # read. A gate that blesses one file and ships another is worse than one
-    # that declines, and a worktree is transient by construction, so there is
-    # no case where an operator wants the Desktop pointing into one.
-    #
-    # AT `main` rather than in `publish`. `publish` and `check` are driven
-    # several hundred times by the credential arms, from inside an agent
-    # worktree, against a `tmp_path` that is not anybody's Desktop. Enforcing
-    # there would refuse the test population wholesale and would need a bypass
-    # flag, which is a hole with a name. The predicate is public so a library
-    # caller can ask; the ritual cannot get past this line.
-    if is_linked_worktree(REPO):
-        print(json.dumps({"ok": False, "reason": "worktree_checkout", "detail": WORKTREE_CHECKOUT}))
-        return 1
-
-    desktop = args.desktop or default_desktop()
-    source_text = SOURCE.read_text(encoding="utf-8")
+    path = args.path or SOURCE
 
     try:
-        report = (
-            check(source_text, desktop)
-            if args.check
-            else publish(source_text, desktop, no_clobber=args.no_clobber)
-        )
-    except Refusal as refusal:
-        print(json.dumps({"ok": False, "reason": refusal.reason, "detail": refusal.detail}))
+        source_text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        print(f"check_handoff: REFUSED unreadable - {UNREADABLE} ({path.name})")
         return 1
 
-    # The delete is OPT-IN and happens only after a successful converge, so the
-    # shortcut is already in place before the copy it replaces goes away.
-    if args.remove_stale_copy and report["detached_copy"] and not args.check:
-        detached_copy_path(desktop).unlink(missing_ok=True)
-        report["detached_copy"] = False
-        report["removed_stale_copy"] = True
-    elif report["detached_copy"]:
-        report["note"] = STALE_COPY
+    try:
+        report = check_text(source_text)
+    except Refusal as refusal:
+        print(f"check_handoff: REFUSED {refusal.reason} - {refusal.detail}")
+        return 1
 
-    print(json.dumps(report))
-    return 0 if report.get("in_sync", True) and not report["detached_copy"] else 1
+    print(
+        f"check_handoff: ok - {path.name}, {report['bytes']} bytes, "
+        f"SESSION {report['session']}"
+    )
+    return 0
 
 
 if __name__ == "__main__":
