@@ -2,6 +2,8 @@
 
 Open work, newest priorities first. Aspirational items live at the bottom.
 Per-item completion history belongs in `docs/LEDGER.md`, never in `CLAUDE.md`.
+Closed entries are archived verbatim by month in `docs/roadmap-archive/`;
+a pointer to a ROADMAP entry by heading may now resolve there.
 
 ## Status
 
@@ -21,10 +23,6 @@ version. What follows is everything the scaffold deliberately did not do.
   "budget lock unopenable" and "budget write failed" map to
   KitRunBudgetSpent through a substring match on "budget"; give them a
   distinct termination.
-- **DONE 2026-10-08. FLEET-KIT v12 and v13 (MAIN 2031 and 2246 s1).** v12
-  89fe0d9, v13 3438a82 + bb51879, identity hooks and the local
-  fleet.operatorIdent after the 2246 ORDER reversed ruling C. ANSWER 2301
-  to MAIN covers 2031; see `docs/LEDGER.md`.
 - **NEW 2026-10-08. MAIN 2246 ORDER (REPO-REVIEW), SHA-256 verified -
   sections 1 (rest) and 2-8 OPEN; ONE ANSWER (HOP: 2) owed after them.**
   (s1) remove `.claude/commands/done.md` section 9 "Converge the Desktop
@@ -39,10 +37,6 @@ version. What follows is everything the scaffold deliberately did not do.
   dependabot remote branches; land 3 Dependabot PRs locally as operator
   commits. (s5, s6, s7) nothing to do. (s8) queue ONE headless repo-review
   driver through the kit spawn (kind build, progress repo-review.json).
-- **DONE 2026-10-08. MAIN 1840 FLEET-KIT v11 vendored (8e675fe, merge
-  9d89b26).** ANSWER 1925 to MAIN delivered 1/1 (sha256 7fb22a61...). See
-  `docs/LEDGER.md`.
-
 - **NEW 2026-10-08 (session 63 /done). Small residue.** (a) The leftover
   gitignored `.claude/worktrees/conftest_backup.bytes` (an old conftest copy,
   dated 2026-09-09): review, then Recycle Bin. (b) Stale comments about the
@@ -79,19 +73,10 @@ version. What follows is everything the scaffold deliberately did not do.
   63: the 14 MIG-1 residue dirs (42 files, 0 unique) went to the Recycle
   Bin; the residue dir reads absent (`docs/LEDGER.md`).
 
-- **DONE 2026-10-08. MAIN 0839 FLEET-KIT v10 and 2354 v9 vendored**
-  (merge e475a09), roster 0230 + 2305 merged (e39a065), ONE ANSWER 1454
-  delivered 1/1. See `docs/LEDGER.md`. Residue is the item above.
-
 - **NEW 2026-10-08. core.hooksPath drifts to an absolute path.** Read
   `E:\Resin Compute\.githooks` at session 60 /done (session 58 saw the same
   on C:); `python scripts/install_hooks.py` restored `.githooks`. Cause
   unknown - find what writes it (worktree creation, an agent, a hook).
-
-- **DONE 2026-10-07. MAIN 2155 C: PATH INVENTORY ANSWERED** (ANSWER 2225,
-  1/1 reached) and the **per-sender cap no longer parks verified MAIN
-  ORDER/FIX/RULING** (merge a487d15, `tests/test_responder_loop_breakers.py`).
-  See `docs/LEDGER.md`.
 
 - **NEW 2026-10-07. WATCH THE HELD MAIN BACKLOG DRAIN.** After a487d15 the
   responder auto-replied (2251) to MAIN 0020, an old kit-v5 ORDER the cap had
@@ -101,27 +86,6 @@ version. What follows is everything the scaffold deliberately did not do.
   SUPERSEDED_MAIN_STAMPS rather than an auto-reply each.
   Session 62: the 1454 ANSWER asked MAIN for the 2354 and 0020 stamps;
   await the reply.
-
-- **DONE 2026-10-08 (merge e39a065, `tests/test_roster_retired.py`). MAIN ORDER 0230 ROSTER CHANGE,
-  refined by MAIN 2305 RULING (both verified MATCH).** LL retired as
-  Sibling-D (block 8810-8819 kept reserved, nothing deleted, every LL needle
-  kept); EW joined as Sibling-K with ports 8940-8959 (`SK_BLOCK` in
-  `core/ports.py`). Lists, needles, port registry and route landed on the
-  roster branch (03a14a7) plus the refuter fixes; the gitignored per-host
-  roster carries EW's real root. Answered in the 1454 ANSWER, 1/1 reached.
-  See `docs/LEDGER.md`.
-
-- **DONE 2026-10-08 (merge 70e031d, `tests/test_supply_chain.py`). WAS NEW
-  2026-10-05. MAIN ORDER 0300 SUPPLY-CHAIN HARDENING (verified
-  MATCH).** Scorecard 4.7 before, 6.6 after; ANSWER 1925 delivered. dependabot.yml (pip root, npm shell/, github-actions); SHA-pin
-  the 4 `uses:` lines; hash-pin both requirements files and install with
-  --require-hashes; CodeQL workflow; top-level read-only token; record
-  fuzzing ruled out. Scorecard v5.5.0 Linux binary in WSL before and after
-  (a Windows-run number is rejected). One ANSWER to MAIN.
-
-- **DONE 2026-10-05. FLEET-KIT v8 ADOPTED (v6 lanes, v7 item 13, v8 item
-  14), responder flipped live at bed3725.** See `docs/LEDGER.md`,
-  `tests/test_fleet_kit.py`, `tests/test_responder_inbox_v8.py`.
 
 - **DONE 2026-10-08 (session 63). Item-14 residuals (1)-(4) from the
   round-5 refuter.** (1) The MAIN retry loop's bound is now the kit's
@@ -136,49 +100,13 @@ version. What follows is everything the scaffold deliberately did not do.
   OPEN: the kit `fleet_inbox.scan` keys seen-notes by name only, so a
   re-sent note under a seen name is hidden silently (kit, reported to MAIN).
 
-- **DONE 2026-10-07. MAIN 1927 FIX: superseded MAIN orders get no reply.**
-  `tools/moon_sync_responder.py` `SUPERSEDED_MAIN_STAMPS`, pinned by
-  `tests/test_responder_inbox_v8.py`; kit-version inference refuted and
-  dropped. Same note answered the item-13d question: the widget reads only
-  `lane-<i>.json` plus `inbox_status.json`, so no rename is needed.
 - **NEW 2026-10-07. Watch one armed responder fire** end with no reply to any
   of the 14 superseded MAIN stamps (not yet observed live).
-
-- **DONE 2026-10-08 (session 63, merge afa7fc7, `agents/pity_engine/timeline.py`).
-  WAS NEW 2026-10-04. REVIEW AND MERGE THE CLOUD PR #1.** CI green on ci,
-  docs-guards and codeql. The merge subject is 106 chars, over the 100
-  warning (warn only, recorded). A cloud session
-  worked 9 product items against GitHub and opened ONE pull request, #1
-  (by-when forecast, ledger reconciliation, artifact scoring, two new ADRs,
-  guard hardening; 40 files). Review it, land it with a real merge commit
-  (no squash, no rebase, no force), run every gate in `.claude/commands/done.md`
-  section 1, and record each landed item in `docs/LEDGER.md`.
 
 - **NEW 2026-10-04. MAIN ORDER 0020 (kit v5 inbound): DO NOT BUILD LOCAL
   COPIES** of the watcher, secret resolver, dashboard token palette or
   operator task engine as fleet-shared modules. A tree-local stopgap may stay
   but must not grow. Reversed only by a MAIN FLEET-KIT-v5 note shipping them.
-
-- **DONE 2026-10-03 (night). FLEET-KIT v4 WRAP-UP, INCLUDING THE /120
-  USAGE COUNTER.** (1) DONE in d8695e7 - see the adjudicated call below,
-  `tools/moon_sync_responder.py` `_status_budget` and `docs/LEDGER.md`.
-  (2) DONE: two RSC notes to MAIN (1540 v5 gap list, 1657 ANSWER to MAIN
-  1325 with a live status sample), each read back 2/2 by sha256 at the
-  recipient. The v5 gap list sent - should_skip damps quoted markers in
-  non-ORDER classes; spawn exposes no is_error/subtype; RunBudget lock
-  lifetime; halt_file read with exists() (dangling link reads as go);
-  `RunBudget` has no public single-read snapshot (`used`/`can_start`/
-  `frees_at` each re-read and swallow the error, so a caller cannot tell
-  unreadable from full without the private `_load`); and RunBudget readers
-  take no lock, so an unlocked reader can make the kit's atomic replace
-  raise PermissionError on Windows, which escapes `kit.spawn` as an OSError
-  and lands as `SpawnFailed` AFTER the responder run is reserved; and
-  `_iso` raises OverflowError on an Infinity or epoch-ms stamp while
-  `_status_quietly` suppresses only OSError, so such a stamp under the cap
-  escapes `kit.spawn` after its start is counted.
-  (3) DONE 2026-10-03, see `docs/adr/ADR-011-main-provenance.md`:
-  adjudicated - the responder keeps its direct outbox byte hash; kit
-  `verify_main` is adoption-only. No code change.
 
 - **DESIGNED 2026-10-04 AS ADR-013 (Proposed); CODE WAITS ON THE OPERATOR
   ASKS. WAS NEW 2026-10-03. TEST THE ROOTS-MAP COMMON-MODE RISK - ONLY PARTLY
@@ -283,29 +211,6 @@ version. What follows is everything the scaffold deliberately did not do.
   start per real spawn. REVERSE IF: a kit version (v5 gap list, item 2 above)
   ships an OS-held lock that frees on holder death and never unlinks.
 
-- **DONE 2026-10-03 (night). AN UNVERIFIABLE MAIN NOTE IS NO LONGER ANSWERED
-  ON ITS FIRST TICK AND LOST.** `defer_unverified` in
-  `tools/moon_sync_responder.py` holds a MAIN note whose verdict is
-  UNVERIFIABLE and `Provenance.retryable` (outbox copy or bundle twin absent
-  or unlistable, a copy that raised on read) out of the queue: no session, no
-  run, no hop, no reply slot. Released as UNVERIFIABLE data after 3 counted
-  checks at least 240 s apart or 900 s after first seen, logged
-  `provenance-deferred-expired-<class>`. A later MATCH or MISMATCH takes the
-  normal path. Not retryable: wrong-case sender name, missing roots row (host
-  config, adjudicated), empty bundle, oversize copy, MISMATCH, NOT-ADDRESSED.
-  Record `responder_provenance_deferred.json` under the runtime dir, name
-  keyed, at most 64 entries, released ones pruned 24 h after first seen, no
-  hashes; mid-fire detail lines written at once under `firedetail`, which
-  the root conftest's live-fire window neither opens nor closes on;
-  unreadable, unwritable, full or a
-  clock before `first_seen` releases at once, logged
-  `fail-closed:provenance-deferred-<cause>`. A deferral-only tick ends
-  `provenance-deferred`, status idle/Idle. Arms in
-  `tests/test_responder_main_provenance.py`. REVERSE IF: a held MAIN note is
-  measured lost or answered late in a way that mattered, or MAIN orders
-  first-tick answers; reverting is removing the one `defer_unverified`
-  assignment in `_run_once`.
-
 - **DONE 2026-10-03 (night). THE EDITOR `--cleanup=` GAP.** An explicit
   `--cleanup=whitespace` or `verbatim` on an editor commit no longer hides
   `#` lines from either commit-msg half. Git passes no flag to the hook, but
@@ -369,97 +274,12 @@ version. What follows is everything the scaffold deliberately did not do.
   cross-process in-flight registry, or a writer starts holding a temp open
   for longer than the age floor.
 
-- **DONE 2026-10-03 (evening), SUPERSEDED BY THE KIT. MAIN 0912: CUT THE
-  RESPONDER'S PER-SPAWN OVERHEAD.** The spawn now runs through
-  `ops/fleet_kit/fleet_headless.py` (bare, sonnet, effort by note class, json
-  usage); live per-spawn input about 1.4k-1.7k tokens, proven in
-  `tests/test_headless_env.py`. NOT measured: a before figure. WAS: Ordered by a
-  sha256-verified MAIN note. Not yet built: `--setting-sources project,local`;
-  `--bare` with a new responder brief file under `tools/` and an `ANTHROPIC_API_KEY`
-  placeholder set in `core/headless_env.py`; `--effort` chosen by note class;
-  `--model sonnet`; `--output-format json` with usage logging; and
-  `--no-session-persistence`. A planner spec exists and rules variant B safe
-  because no tool floor lives in hooks - the floor is the harness flags on
-  `SPAWN_COMMAND` in `tools/moon_sync_responder.py`. Done means landed PLUS
-  one live before/after measurement of the spawn's cost, not reasoning.
-
-- **DONE 2026-10-03 (evening). MAIN 0915: THE RESPONDER WRITES AN
-  INBOX STATUS FILE, SCHEMA 1.** Written every tick via the kit, task names
-  pinned to the 0915 set and caps reported from the binding ledger, proven in
-  `tests/test_headless_env.py`; read back live 3/3 frees 23:11. WAS: Not built. The target is
-  ops/loop/control/inbox_status.json (unbackticked: not a tracked path),
-  and that path is NOT yet gitignored - gitignore it in the same commit that
-  first writes it.
-
-- **DONE 2026-10-03 (evening). FLEET-KIT ADOPTED AT v4.** Vendored at
-  `ops/fleet_kit/MANIFEST.json`, conformance pinned by `tests/test_fleet_kit.py`.
-  WAS: MAIN 0955: FLEET-KIT v1 IS UNREAD. The
-  order note plus a three-file payload directory dated 2026-10-03-0955 from
-  MAIN in the inbox: condense `CLAUDE.md`, and route headless spawns through
-  the kit. Verify the note's sha256 against MAIN's outbox, read the payload
-  bytes rather than the note's description of them, then plan it.
-
-- **DONE 2026-10-03 (evening). RESPONDER RESIDUALS FROM THE `1829b9d` AND
-  `9061eb4` ADVERSARY ROUNDS.** All four fixed in S3, proven in
-  `tests/test_responder_main_provenance.py` and `tests/test_headless_env.py`.
-  WAS: (1) An ASCII
-  lookalike provenance token in a note body passes the token check; the real
-  verdict stays on line 2 of the deterministic `[RSC-PROVENANCE]` line, so the
-  exposure is a reader who skips line 2. (2) A byte-identical re-drop of an
-  unanswered MAIN note gets a fresh mtime and is answered again - bounded at
-  three per sender per day. (3) The `conftest.py` live-runtime fence misses
-  8.3 short-path spellings of the runtime directory. (4) The per-test drift
-  check excuses any live-record change that lands inside a real scheduled
-  fire window, so a leak during a real fire is not caught.
-
-- **DONE 2026-10-03 (evening), NOT A DEFECT. RE-CHECK THE FLAKY
-  SPAWNED-RESPONDER TEST.** 5 of 5 passes, `~/.claude.json` sampled 30 s with
-  0 changes; `tests/test_headless_env.py` unchanged for it. WAS:
-  `test_a_spawned_responder_writes_where_the_environment_points_and_nowhere_else`
-  snapshots the user-scope `~/.claude.json`, which a concurrent session can
-  rewrite. Now under the `9061eb4` fence; re-measure whether it still flakes
-  before deciding anything.
-
-- **DONE 2026-10-03 (evening). THE ARM-A LIVE-HOLDER TEST.**
-  `test_a_live_child_holder_past_stale_after_keeps_its_slot` in
-  `tests/test_loop_concurrency.py`. WAS: It was to ride with the re-pin (RC 1130 s6); C4 landed in
-  `3d62942`, so nothing blocks it. Prove a LIVE holder past
-  `DEFAULT_STALE_AFTER` but under the hard ceiling is NOT reaped by
-  `ops/loop/slots.py`.
-
-- **DONE 2026-10-03 (evening), in `tests/test_loop_concurrency.py`. WAS: STALE PIN COMMENTARY IN
-  `tests/test_loop_concurrency.py`.** The `SHARED_SHA256` pin moved to
-  `290cbf80` in `3d62942`, but the carrier-row comment block below it still
-  says the five `ops/loop/slots.py` carriers agree at `71fa2a68`, 9627 bytes,
-  and reads as unmoved. Re-stamp it as history with the C4 landing, and do not
-  restate other trees' carrier status without a fresh sweep.
-
-- **DONE 2026-10-03 (evening). UNTRIAGED INBOX SINCE 0915.** Triaged into
-  four buckets; owed MAIN replies sent (RSC 1254, RSC 1432). WAS: Includes SS
-  1015, SS 1105, SS 0935, SS 1000 and LL 0958. Four buckets per file, as
-  always; the filename stamps drift per sender, so order by content.
-
 - **NEW 2026-10-03, UNCHANGED, HARD DEADLINE. RENEW THE RESPONDER BEFORE
   2026-11-01T22:56 LOCAL.** The scheduled task RSC-InboxResponder and its
   gitignored agreement record ops/runtime/trial_confirmed.json both lapse then.
   `tools/moon_sync_responder.py` has no unbounded mode by design, so renewal is
   re-running `ops/install_responder_task.ps1` and writing a fresh agreement
   record, then re-running `ops/check_task_liveness.py` for exit 0.
-
-- **DONE 2026-10-03 in `1829b9d`, BY MAIN 0830 ORDER. MAIN PROVENANCE INSIDE
-  THE RESPONDER.** `tools/moon_sync_responder.py` now grades every MAIN note
-  MATCH, MISMATCH, UNVERIFIABLE or NOT-ADDRESSED against MAIN's outbox sha256
-  and emits one deterministic `[RSC-PROVENANCE]` line; proven by
-  `tests/test_responder_main_provenance.py`. The same commit added
-  `MAX_RUNS_PER_DAY` 120 under an OS lock (MAIN 0855), proven by
-  `tests/test_responder_uniform_budget.py`, and the harness-enforced tool floor
-  on `SPAWN_COMMAND`. Three adversary rounds. Residuals are the NEW
-  second-half row above. History of the open row follows.
-  WAS: THE UNATTENDED RESPONDER TREATS A VERIFIED MAIN ORDER AS
-  DATA. It does not check a MAIN note against MAIN's outbox sha256, which is
-  how this session verified MAIN's 2320 ruling by hand. Build that provenance
-  check only if the operator wants unattended ACTION on MAIN orders; until then
-  treating them as data is the safe default and not a defect.
 
 - **NEW 2026-10-03. THE USAGE-LIMIT DETECTION PHRASES ARE GUESSES.** The real
   CLI usage-limit text has never been captured, so the backoff in
@@ -478,15 +298,6 @@ version. What follows is everything the scaffold deliberately did not do.
   proven by `tests/test_responder_spawn_cwd.py`, where an adversary reverted
   each site separately and both arms went red.
 
-- **DONE AS AN AUDIT 2026-10-03. MAIN'S RC-GUARD RULING (MAIN 2320): VERIFY
-  TEARDOWN-DIGEST COVERAGE.** Reading of 2026-10-03: ZERO of the 13 responder
-  write targets is covered by any before/after digest guard; an AST walk and a
-  grep agree. That is deliberate - `conftest.py` rejects live-directory
-  snapshots because daemons write those directories concurrently. Protection
-  is PREVENTION instead: the `rsp` fixture redirects the `DEFAULT_*` paths and
-  subprocesses get `RESINCOMPUTE_RUNTIME_DIR`. The highest-stakes uncovered
-  target is a delivery into a sibling inbox OUTSIDE this repo.
-
 - **TRIAGED 2026-10-03, NOT MARKED. THE UNREAD INBOX.** About 420 files in
   five batches, every file in one of the four buckets; per-file verdicts live
   in the session scratchpad and are NOT tracked. Batch readings: B1 143
@@ -496,31 +307,6 @@ version. What follows is everything the scaffold deliberately did not do.
   plus 7 late. All nine MAIN notes dated 10-02/03 were sha256-verified against
   MAIN's outbox. `--mark` was NOT run. The applicable-and-not-done items are
   the NEW 2026-10-03 rows immediately below.
-
-- **DONE 2026-10-03 in `3d62942`. C4 `290cbf80` LANDED IN
-  `ops/loop/slots.py`** under the sha256-verified MAIN 0815 clause (b) ruling:
-  one commit, the `SHARED_SHA256` pin in `tests/test_loop_concurrency.py`
-  moved, `ops/loop/winmutex.py` untouched. Attestation note 0826 delivered to
-  all six codes, every recipient copy sha256-matched; RSC's row of the C4
-  round is CLOSED. History of the parked row follows.
-  WAS PARKED BEHIND HALT CLAUSE (b) - DEADLINE 2026-10-09. C4
-  `290cbf80` LANDED ON LW. LW 0700 says C4 landed there and asks RSC to copy
-  it by 2026-10-09. That diff touches `ops/loop/slots.py` (RSC still at
-  `71fa2a68`, 9627 bytes) and the `SHARED_SHA256` dict in
-  `tests/test_loop_concurrency.py`, so clause (b) halts it. MAIN 2320
-  (verified) explicitly does NOT rule it. Cleared only by the operator or a
-  sha256-verified MAIN note. RSC told LW: no objection to the text, not
-  attested from RSC disk.
-
-- **DONE 2026-10-03 at the `3d62942` landing, IN THE PAPERWORK. C4 LANDING
-  CHECKLIST.** The row "`ops/loop/slots.py` SHORT-CIRCUITS ON AGE" is
-  rewritten below as superseded. One item did NOT close: the carrier comment
-  block in `tests/test_loop_concurrency.py` still reads as unmoved - see the
-  NEW second-half OPEN row at the top of Now. Original text: when C4 lands
-  here, the row
-  "`ops/loop/slots.py` SHORT-CIRCUITS ON AGE" becomes false and must be
-  rewritten in the same commit (SS 2300). The stale freeze line naming
-  `da35f8b1` was annotated this session (LW 2355).
 
 - **NEW 2026-10-03. PROMISED ROWS NEVER WRITTEN, now recorded.** (1) A
   keep/prune policy for the first-run capture store, and a position on the
@@ -558,36 +344,6 @@ version. What follows is everything the scaffold deliberately did not do.
 
 - **NEW 2026-10-03, ATTENDED SESSION ONLY. REDACTION DECISION ON RSC'S COPY OF
   SS 2241,** plus a `git log -S` sweep for the same bytes in history (SS 2340).
-
-- **DONE 2026-10-03 in `a875e48`.** The admin and api03 key families are now
-  named in `VENDOR_TOKENS` in `tools/publish_next_session.py`, proven by
-  `tests/test_no_secret_literals.py`. Original row: THE SECRET SCANNER
-  CATCHES THE ANTHROPIC ADMIN-KEY FAMILY ONLY INCIDENTALLY, through the shared `sk-ant-` prefix rather than a rule
-  of its own (CS 1820 item 2).
-
-- **DONE 2026-10-04, BOTH HALVES. WAS NEW 2026-10-03. TWO TEST-INSTRUMENT GAPS
-  FROM THE CHANNEL.** `gate_mutation_runner` cannot mutate failure MESSAGES
-  (RSC 0830, conceded) - CLOSED BY MEASUREMENT 2026-10-04, NO NEW CODE:
-  `439bcc2` had already added the message lane to
-  `tools/gate_mutation_runner.py`; its two recorded survivors sit in
-  MESSAGE_MUTANTS with KNOWN_MESSAGE_SURVIVORS empty, 17 kill instances are
-  pinned, and `tests/test_gate_mutation_runner.py` read 87 passed on 2026-10-04
-  (Linux, Python 3.11.15), reproduced cold by a second agent. Recorded scope:
-  the lane grades the -F path; the editor flow is graded end to end in
-  `tests/test_hook_gate.py`. And `empty_parameter_set_mark` is not set to
-  `fail_at_collect`,
-  so an empty parametrize skips instead of failing (LL 0930) - DONE in
-  `bcbabc7`: `pytest.ini` sets it, proven by
-  `tests/test_empty_parametrize_policy.py`, verified on 3.11.9 with pytest
-  9.1.1.
-
-- **DONE 2026-10-03 in `be03565`.** The zero-hit worker arm
-  `test_a_worker_acknowledge_with_no_fence_hit_still_fails` is in
-  `tests/test_headless_runner_slots.py`. Original row: S1 ACK TEST-STRENGTH
-  GAP. Verifier mutant A: removing
-  refusal recording in `SlotFenceLedger.acknowledge` in `conftest.py` does not
-  turn `test_acknowledging_from_a_worker_thread_fails` red. Fix: a sibling arm
-  where a ZERO-hit worker thread calls `acknowledge(0)`.
 
 - **DONE 2026-10-03 in `6f7a629`. THE `--once` PATH IS UNGOVERNED - CLOSED.**
   A live `--once` pass now holds a machine-wide slot: `run_once` in
@@ -629,47 +385,6 @@ version. What follows is everything the scaffold deliberately did not do.
   a line that looked added was a context line, and that failure is the only
   reason the live attestation can be trusted.
 
-
-- **CLOSED 2026-10-04 BY MEASUREMENT, NO CODE. WAS NEW 2026-10-02. THREE SILENT
-  OVER-EXCLUSIONS IN `core/repo_sweep.py`.**
-  The new production owner of the repository-root sweep predicate can be
-  widened three ways that pass the ENTIRE suite unchanged, each measured by an
-  adversary against a clone: replacing the exact-name match with a PREFIX
-  match, making the predicate true when a directory NAME merely contains the
-  marker rather than when the directory CONTAINS one, and replacing the derived
-  union with a hand-written literal of the same names. The prefix defect is
-  the one `core/walkprune.py`'s own docstring already warns about - it names
-  `pycache/`, `git/`, `venv-notes/` and `node_modules_readme/` as the four a
-  prefix match would eat - and `tests/test_walkprune.py` has an arm for it AT
-  WALKPRUNE'S LAYER. The new layer has none. COMMON ROOT, and it is the part
-  worth keeping: the existing arm builds its fixtures from LITERAL skip names
-  and real markers, so it cannot see a widened match RULE, and no tracked
-  directory today has a skip name as a strict prefix or contains the marker
-  without a leading dot - so every arm is VACUOUS ON THAT AXIS. Over-exclusion
-  is the dangerous direction, because a guard that silently stops sweeping real
-  content passes every bad-thing-gone arm while being destroyed.
-  CLOSED 2026-10-04, measured on a clone by one agent and reproduced cold by
-  a second, no code: the prefix mutant reds
-  `test_the_foreign_name_rule_is_exact_and_never_a_prefix_or_a_substring` in
-  `tests/test_guard_worktree_exclusion.py` with 40 collateral names; the
-  name-contains-marker mutant reds 9 arms across 5 modules (`47ac112`, which
-  closed the vacuous axis this row named, said six - the sixth now derives
-  its corpus from git ls-files and does not red); the literal-union mutant
-  reds 2 arms in `tests/test_walkprune.py`. Every mutant killed.
-
-- **CLOSED 2026-10-04 BY MEASUREMENT, NO CODE. WAS NEW 2026-10-02. A HAND-LIST
-  OF DERIVING SITES CANNOT NOTICE A NEW ONE.**
-  `tests/test_walkprune.py::test_every_prune_site_derives_from_the_one_owner`
-  names three deriving sites. `core/repo_sweep.py` is now a fourth and is
-  unnamed there, and the arm does NOT red, because it is not exhaustive. That
-  is the same class as a register satisfiable by a shrunk population, which was
-  closed elsewhere in this tree the same day. Either derive the site list or
-  give it a structural check, so a fifth site cannot appear unnoticed.
-  CLOSED 2026-10-04: the register is derived now. A staged fifth importer of
-  `core/walkprune.py` reds `test_no_unregistered_module_imports_the_owner` in
-  `tests/test_walkprune.py` naming the path; an UNTRACKED importer is
-  invisible to it by design, because the corpus is git ls-files. Reproduced
-  cold by a second agent.
 
 - **NEW 2026-10-02. THE IGNORED-HALF CITATION HOLE IS NARROWED, NOT CLOSED.**
   A gitignored bare citation now needs a tracked file to NAME the path, but
@@ -771,26 +486,6 @@ version. What follows is everything the scaffold deliberately did not do.
   be this tree's to do: nothing here stops a killed pytest leaving a lock that
   outlives the run by up to 72 hours. The machine sweep ignores locks and is
   the only thing that currently reclaims them.
-
-- **DONE 2026-09-21 at `a0963ca`. CI IS GREEN.** The root cause was NOT "a Linux
-  runner has no Desktop", which is what the row below assumed and which is why
-  it proposed the wrong two remedies. `_POWERSHELL_NAMES` in
-  `scripts/make_shortcut.py` includes the bare name `pwsh`, ubuntu-latest
-  carries `pwsh` on PATH, so `_resolve_powershell` resolved and
-  `PowerShellLinker.available()` returned True; the `.lnk` is written through a
-  `WScript.Shell` COM object that exists only on Windows, so the write failed.
-  The availability guard was asking whether a SHELL was present, not whether the
-  host can write a SHORTCUT. `available()` now requires `os.name == "nt"` too,
-  and the two real-mechanism arms skip with a reason naming the condition
-  actually observed. The third arm asserted over report TEXT and had no business
-  driving the real writer; it uses the test double now. Proven by
-  `tests/test_publish_next_session.py`, arm
-  `test_available_is_false_where_no_windows_shortcut_can_be_written`. NOT
-  PREDICTED AND WORTH KEEPING: `docs-guards` was red for the same three arms,
-  because its md-reading guard subset includes that module - ONE root cause held
-  BOTH Linux gates down, and both reported `success` afterwards. The original
-  row follows, left standing because its SHAPE paragraph is still correct and
-  its proposed remedies are still the wrong ones.
 
 - **SUPERSEDED 2026-09-21, see above. CI IS RED AND WAS RED BEFORE THIS SESSION -
   THREE PLATFORM-DIVERGENT SHORTCUT ARMS.** Measured at `694cfbf`: 3 failed, 3093
@@ -908,37 +603,6 @@ version. What follows is everything the scaffold deliberately did not do.
   only then decide whether to mark the batch. Marking a batch that was listed
   but not fully carried inflates the watermark, which is worse than leaving it.
 
-- **DONE 2026-09-20 at `ef17cc8`. ROUND B WAS CALLED AND RSC HAS LANDED ITS
-  PART.** LW
-  authored the shared `ops/loop/winmutex.py` carrier-code repair and circulated
-  proposed bytes: 6184 bytes, sha256 `df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7`,
-  removing six bytes so the line reads "Found on review, 2026-07-26." RSC
-  re-hashed from its own disk and CONFIRMED that digest, ACCEPTED the wording,
-  and RULED the empty pin STRICTER by measurement - three re-entry mutants all
-  go red against an emptied pin, and the coupling control confirms neither half
-  may ship alone. WHAT RSC OWES: copy with `shutil.copyfile`, never a text-mode
-  write, hash from its own disk, and land the bytes together with BOTH pin
-  changes in ONE commit. RSC's pin coordinates are NOT the ones LW's note
-  states - `KNOWN_CODE_HITS` does not exist in this tree. RSC pins the digest in
-  `tests/test_loop_concurrency.py` and the code violation as
-  `_KNOWN_CHANNEL_CODE_VIOLATIONS` in `tests/test_no_sibling_names.py`, so RSC's
-  round-B commit touches TWO test files, not one. This trips halt clause (b) by
-  construction, which is expected and is what the round exists to authorise.
-  Silence from any carrier is recorded as PARKED, never as agreement.
-
-  LANDED 2026-09-20 AT `ef17cc8`, AND EVERYTHING ABOVE IS NOW RECORD RATHER
-  THAN AN OBLIGATION. RSC did exactly what it owed: `shutil.copyfile`, never a
-  text-mode write, re-hashed from its own disk at 6184 bytes and
-  `df0a7a40c28818130dfde25144c971c06060b4645e5eb5f679fbdaf55e2e08d7` with zero
-  CR bytes, and both pin changes in the one commit that moved the bytes. Both
-  halves of the coupling were proved by running rather than by reading - bytes
-  without the pin reddens the digest arm, pin without the bytes reddens the
-  channel-code arm. THE STRICTER RULING ON THE EMPTIED PIN WAS INCOMPLETE and
-  is corrected at `b18d6f1`; see the ledger entry headed "the channel-code
-  guard is given a subject it cannot lose". Halt clause (b) was tripped by
-  construction, as this row predicted, and that is what the round existed to
-  authorise.
-
 - **NEW 2026-09-21. A FOURTH POPULATION EXISTS AND NONE OF THE FOUR NESTS.**
   **SUPERSEDED IN ITS FIRST CLAUSE, 2026-09-21T00:50:57Z, and the heading is now
   wrong in a way worth leaving visible.** This row was written when `slots.py`
@@ -974,32 +638,6 @@ version. What follows is everything the scaffold deliberately did not do.
   dropping one, or CS's `winmutex.py` converging would all leave the tuples stale
   with every arm green. Those rows refresh only when a human re-runs the six-root
   hash. This is a STATED LIMIT, not a gap to close by reaching across trees.
-
-- **CLOSED 2026-09-20 at `15d98fa` and `4be449f`. `_check_staged` RETURNED 0 ON
-  AN EMPTY SUBJECT.** Separate
-  from the untracked-corpus work, which is done. `tools/precommit_gate.py`
-  already blocks on a zero scan corpus and on an unreadable diff, but with a
-  CLEAN INDEX `staged` is an empty dict rather than None, no violation
-  accumulates, and the gate exits 0. That is an EMPTY subject rather than an
-  INVISIBLE one - a different defect in the same vacuity family, and the
-  untracked reporter does not cover it.
-
-  CLOSED, AND ON DIFFERENT TERMS THAN THIS ROW PROPOSED. Emptiness is NOT
-  blocked and must not be: `git commit --allow-empty` fires
-  `.githooks/pre-commit` with exactly an empty index, so a refusal would wedge
-  a legitimate lane. The defect was SILENCE. `tools/precommit_gate.py` now
-  prints `staged=N added-lines=M` before the violation decision, so a BLOCKED
-  run states its subject too, and the non-commit lane in `main()` says the
-  staged half did not run while deliberately printing no `staged=` line. Four
-  counting arms in `tests/test_precommit_gate_corpus.py` parse the integers
-  back out and compare them against what the fixture really staged, so a
-  constant-printing mutant dies; measured this session, the set went 4 failed /
-  11 passed before the change to 15 passed after. `4be449f` then brought the
-  `_SITES` row in `tests/test_conftest_git_gate_sites.py` level with the three
-  new git-reaching nodes, proved by removing one id and watching the row name
-  exactly that id. THE FAMILY IS NOT FULLY CLOSED - `_check_message_file` is
-  its third member and has a row of its own above, because its repair moves a
-  line `CLAUDE.md` cites.
 
 - **NEW 2026-09-21. THE CLAUDE.md LINE CITATION INTO
   `tests/test_loop_concurrency.py` IS GUARDED ONLY BY A RANGE CHECK.** CLAUDE.md
@@ -1305,37 +943,6 @@ version. What follows is everything the scaffold deliberately did not do.
   the now-corrected known-gaps row further down. None of the three is
   interchangeable.
 
-- **CLOSED 2026-09-20 at `67bd2fd`. THE LATENT UNPRUNED DIRECTORY WALKER ON THE
-  PROMPT HOOK LANE IS PRUNED, BOUNDED AND GIVEN ONE OWNER.** The row said the
-  drop walker in `scripts/watch_inbox.py` appended EVERY child directory with no
-  skip set while its caller sha256s every file it hands back, reached from the
-  `UserPromptSubmit` hook and therefore a REPEATED TRIGGER rather than a timer.
-  The open question was whether a skip set or a depth bound was the right shape.
-  THE ANSWER WAS BOTH, and they do not subsume each other: `MAX_DROP_DEPTH`
-  refuses ONE BRANCH and leaves the rest of the drop an accurate measurement,
-  while the entry budget clears the pending list and makes the WHOLE DROP
-  PARTIAL.
-
-  THE MATCH IS CASEFOLDED AND THAT IS LOAD-BEARING HERE. Windows preserves case
-  on disk while comparing case-insensitively, so an exact-name Python match let
-  upper-cased `.git` and `__pycache__` directories straight through - measured,
-  the prune never fired and the digest was identical to the unpruned walk, which
-  is precisely the blow-up the skip set exists to stop.
-
-  A PRUNED DIRECTORY EMITS A LINE RATHER THAN SKIPPING SILENTLY, because a
-  silent skip COLLIDES DIGESTS: a drop holding only a cache directory and a drop
-  holding only a git directory both reduce to an empty body and key identically
-  to each other and to an empty drop.
-
-  ONE OWNER FOR THE NAME TABLE. `core/walkprune.py` now holds it on the
-  `core/ports.py` precedent, shared by three call sites - the walker,
-  `tools/first_run_capture.py` and `tools/gate_mutation_runner.py` - and
-  `tests/test_walkprune.py` asserts IDENTITY with the owner rather than equality
-  with literals, because equality passes forever while the sites silently
-  diverge. `gate_mutation_runner` derives a PRINCIPLED difference set: pruning
-  the cache directories would break the `purge_caches` that exists to delete
-  them.
-
 - **UPDATED 2026-09-20, REPLACING THE EARLIER NOT-ARMED ROW. `RSC-InboxResponder`
   IS REGISTERED AND PROVEN TO FIRE UNATTENDED, AND THE REMAINING BLOCKER IS AN
   EXPIRED COUNTERPARTY AGREEMENT.** This row supersedes the reading that the
@@ -1463,35 +1070,6 @@ version. What follows is everything the scaffold deliberately did not do.
   `python_version = 3.11`, so CI and this host are not running the same
   semantics. NOT DONE: decide whether the doc, the pin or the host is the thing
   that should move. Nothing was changed about it this session.
-
-- **DONE 2026-09-19, commit `2802447`. THE RAW-ERROR LEAK FROM
-  `core/atomic_io.py` IS CLOSED FOR EVERY CALLER, AND THIS ROW'S OWN
-  PRESCRIPTION WAS REFUTED ON THE WAY.** Shipped as
-  `_RedactingColorFormatter` in `core/log_setup.py`, which rewrites the
-  repo-root and user-profile prefixes to `<repo>` and `<user>` on the CONSOLE
-  handler only, leaving the file handler's plain formatter untouched so the day
-  log keeps the raw absolute path. Pinned by
-  `tests/test_log_setup_console_redaction.py`.
-
-  THIS ROW SAID THE FIX WAS TO ROUTE RAW ERROR TEXT TO THE FILE HANDLER ONLY,
-  FROM INSIDE THE LIBRARY. That is refuted on MECHANISM, not taste:
-  `core/log_setup.py` caches one console handler and one file handler in module
-  globals and shares both process-wide - verified by object identity across two
-  loggers - so `core/atomic_io.py` has no handle on either and cannot express
-  "console but not file". The counter-position in the docstring of
-  `_console_logging_muted` at `scripts/watch_inbox.py:479` is CONCEDED on its
-  library argument and overruled on its scope: the choice was never
-  library-versus-caller but `core/atomic_io.py` versus `core/log_setup.py`, and
-  the latter already owns a console-only rendering decision in
-  `_ColorFormatter`.
-
-  THIS ROW ALSO OVERSTATED THE SCOPE and the correction is kept so nobody
-  re-derives it. "Every other caller is still exposed" was wrong: measured six
-  importers, of which `core/provenance.py` has NO live caller - only
-  `tests/test_provenance.py` imports it - leaving four live-exposed importers
-  over seven call sites. The containment in `scripts/watch_inbox.py` was NOT
-  deleted and is still live; it also suppresses ANSI escapes on a hook lane
-  whose stdout is a parsed contract, which redaction does not replace.
 
 - **NEW 2026-09-19. THE `<user>` REDACTION IS BLIND TO THE 8.3 SHORT PATH
   FORM.** `tempfile.gettempdir()` returns the 8.3 SHORT form of the user
@@ -2428,72 +2006,6 @@ version. What follows is everything the scaffold deliberately did not do.
   residual is recorded rather than closed, and it is the FIFTH item in the
   operator row below.
 
-- **CLOSED 2026-09-11 AT `13c771f` - THE FIRST TRACKED WRITE TRACER LANDS, AND
-  THE HONEST SHAPE IS THAT THE BUILD WAS WRONG AND REFUTATION FOUND IT.** The
-  detail is in `docs/LEDGER.md` under this session's heading. What belongs here
-  is what the row asked for and what the answer cost.
-
-  WHAT THE ROW ASKED FOR IS `tools/write_tracer.py` WITH
-  `docs/adr/ADR-010-write-tracer-coverage.md`, both guarded by
-  `tests/test_write_tracer.py`. `os.open` plus `os.fdopen` is covered, and so are
-  deletion and truncation. The first build passed its own arms and was then
-  REFUTED by two independent lenses.
-
-  THE HEADLINE WAS IN NEITHER DECLARED LIST: EMPTY-FILE CREATION WAS INVISIBLE.
-  That is the live shape at `ops/loop/slots.py:189` - lock-file creation in the
-  machine-wide bucket the halt ruling names - so a "0 bytes written" reading over
-  that bucket would have read CLEAN while the lock files appeared. There is now a
-  fourth op, `create`, and the gap was closed by widening the OP SET rather than
-  coverage, which is why the instrument still cannot certify that nothing was
-  written.
-
-  TWO OVERSTATEMENTS, and an overstatement is the worst class for an instrument
-  whose whole purpose is to stop a negative reading becoming a false claim. A
-  pre-entry descriptor was said to lose only path attribution with the bytes
-  still recorded; TRUE for raw `os.write(fd, data)`, FALSE for a file object,
-  measured at 9 bytes on disk with zero events. The two sub-cases are declared
-  separately now and must not be refolded into one sentence. And `os.dup2`
-  emitted a POSITIVELY WRONG PATH off a stale descriptor entry, naming one file
-  while the bytes landed in another; a wrong path is worse than no path, so the
-  unknown-source case evicts to an unattributed-descriptor label instead.
-
-  SILENT ROUTES IN NEITHER LIST ARE NOW IN ONE OF THEM. Covered: `os.ftruncate`,
-  `os.link`, `os.symlink`, `Path.touch`, the exclusive-create open mode and the
-  `shutil` copy family - the last by NAME, because `shutil.copy2` on CPython
-  3.14.4 on Windows takes a native fast path and decomposes into nothing
-  observable. Declared UNCOVERED instead: `io.FileIO` constructed directly,
-  metadata-only operations, and directory-level operations.
-
-  THE HONESTY ARM WAS ONE-SIDED, which is the two-guards rule failed and then
-  fixed. Adding an unpatched name went red; REMOVING a patched name stayed green.
-  The arm derives the patched set from the implementation and asserts equality in
-  BOTH directions.
-
-  A NEGATIVE RESULT WORTH RECORDING. The interpreter hypothesis SURVIVED: the
-  arms pass on CPython 3.14.4 and on 3.11.9, and `Path.rename` on 3.11.9 calls
-  `os.rename` directly with no accessor indirection.
-
-  THIS ROW'S OWN CORPUS FIGURE HAD DECAYED, AND IT DECAYED AT THE VERY COMMIT
-  THAT CLOSES THE ROW. It said `unlink` appears in nine files. That was TRUE when
-  written and is FALSE at `13c771f`, and the reason is that staging this slice's
-  own two files changed the population. Re-derived here from `git ls-files` at
-  `13c771f`, and every number below carries BOTH its population and its pattern
-  because the two answers differ: over the 144 tracked `.py` files, a literal
-  substring sweep for `unlink(` answers 11 files and 19 occurrences and for
-  `rmtree(` answers 6 and 7, while a word-boundary call form answers 10 and 17
-  for `unlink` and 5 and 5 for `rmtree`. The whole difference is
-  `_wrap_path_unlink(` and `_wrap_rmtree(` in the new module, which a word
-  boundary rejects and a substring accepts. Over all 228 tracked files the same
-  four sweeps answer 13 and 21, 7 and 8, 12 and 19, and 6 and 6, and a bare
-  substring sweep for `unlink` with no parenthesis reaches 18 files. The nine was
-  the word-boundary call form over tracked `.py` at `37bc3bc`, verified by
-  re-running that sweep against that commit.
-
-  THE DURABLE RULE, and it is the reusable part: AN INSTRUMENT THAT DOES NOT NAME
-  ITS OWN BLIND SPOTS CONVERTS A NEGATIVE READING INTO A FALSE CLAIM. Two
-  artifacts describing one mechanism drifted apart at the seam and were caught
-  only because the ADR author never saw the module.
-
 - **OPEN 2026-09-11, INBOX, BUCKET APPLICABLE-AND-NOT-DONE, AND IT IS A
   CORRESPONDENCE DEBT RATHER THAN A CODE DEBT. CS ANSWERED ALL FIVE OF OUR
   QUESTIONS AND WE HAVE ANSWERED NONE OF THEM BACK.** CS's positions note - named
@@ -2684,57 +2196,6 @@ version. What follows is everything the scaffold deliberately did not do.
   WHETHER THE ARM EXISTS - and when the arm is new, mutate the implementation it
   defends before believing it.
 
-- **SWEPT 2026-09-11 AND THE ANSWER IS A LATENT CLASS, NOT A DEFECT. LW'S
-  BACKSLASH FINDING IS MEASURED HERE AT LAST, AND THE REPAIR IS DELIBERATELY NOT
-  MADE.** PowerShell 5.1 native-command marshalling on this host corrupts any
-  argument containing a SPACE and ending in BACKSLASHES: an odd trailing count
-  INJECTS a quote, and an even count silently HALVES the backslashes. The table was
-  measured twice by two agents, the second building its probe from the installers'
-  own bytes and passing the hostile strings through a JSON file so they never
-  crossed a shell - and a 13-of-13 clean control through the list form proves the
-  mangling is PowerShell's and not the probe's.
-
-  PER CARRIER. `ops/ResinCompute-Responder.xml` and
-  `ops/ResinCompute-Supervisor.xml` are ABSENT BY MECHANISM rather than by
-  inspection: the first substitutes only two DateTime placeholders whose value space
-  is digits, hyphen, colon and T, and the second's arguments are a literal constant.
-  Both installers hold the LATENT shape - each passes an unvalidated task-name
-  string to one native command - but `git grep` finds ZERO callers passing a task
-  name to either installer, both defaults are space-free and backslash-free, and the
-  only route to the native call requires a real registration, which is an arming act
-  and forbidden. `ops/check_task_liveness.py` accepts a trailing backslash through
-  `_TASK_NAME_RE` and rejects an injected quote, so the odd case fails closed at
-  exit 3 while the even case reaches exit 2.
-
-  WHY NO REPAIR. Reachability is nil, and this tree has already adjudicated a
-  do-not-widen ruling on a class whose reachability measured zero of eight. A
-  hardening with no reachable defect behind it is ceremony that then has to be kept
-  accurate. IF A CALLER EVER PASSES A NON-DEFAULT TASK NAME, THIS ROW BECOMES LIVE
-  AND THE VALIDATION GOES IN THEN.
-
-- **CLOSED 2026-09-11 at `7786955`, AND THE POPULATION WAS FIVE RATHER THAN THE
-  THREE THIS ROW NAMED.** All five now SKIP under an unreachable git instead of
-  failing, each armed by a skip-then-RUN pair in
-  `tests/test_conftest_git_gate_sites.py` where the RUN half is the load-bearing
-  one. The three named below were gated, and `tests/test_commit_trailers.py` and
-  `tests/test_precommit_gate_corpus.py` were gated with them. One further module
-  was ruled EXEMPT by an adjudicator working from criteria written before either
-  candidate was read: the rule's population is SITES THAT SHELL GIT, and that
-  module's failing arm shells nothing - it CONSUMES the gate helper in order to
-  AUDIT it. The ruling STANDS, and its citation was RE-DERIVED rather than carried
-  forward, because the census guard column is a MODULE-LEVEL walk that would have
-  answered GATED with every gate in the file deleted. The original row text
-  follows unaltered.
-
-  `tests/test_no_sibling_names.py`, `tests/test_ci_workflow_complement.py`
-  and `tests/test_responder_gate_census.py` shell git and carry no gate at the site,
-  so on a host without a reachable git they FAIL rather than skip - measured, not
-  inferred, with the failing counts observed per module. Gating them is a separate
-  slice because it touches files the arm slice did not own, and the arm that would
-  grade the repair already exists in `tests/test_conftest_git_gate_sites.py`, which
-  carries a pointer saying to add them to its site table once they are gated. DO NOT
-  ARM THEM IN THAT TABLE FIRST - that ships a permanently red test.
-
 - **OPEN 2026-09-11, SMALL, A RESIDUAL OF THE FAIL-CLOSED REPAIR AND NAMED SO IT IS
   NOT MISTAKEN FOR CLEANLINESS.** `scan_tree` in
   `tests/test_task_state_claims.py` skips a path whose `is_file()` is False, and
@@ -2743,28 +2204,6 @@ version. What follows is everything the scaffold deliberately did not do.
   and the fail-closed repair covers open failures rather than stat failures. The
   current arm PINS that skip as intended behaviour, so changing it is a deliberate
   decision and not a bug fix - hard-failing there would break a partial checkout.
-
-- **RETIRED 2026-09-11 - THIS ROW'S PREMISE IS FALSE, AND THE REAL DEFECT WAS
-  SHARED RATHER THAN ASYMMETRIC. FIXED AT `5d785f5`.** The claim below - that
-  `ops/install_responder_task.ps1` carries no unsubstituted-placeholder throw -
-  IS FALSE. That script has carried the guard since `1d80f8c` on 2026-09-07, four
-  days BEFORE this row was filed, and it fires. What was real is SHARED and
-  SYMMETRIC: PowerShell `-match` is case-INSENSITIVE, so the old character class
-  behaved as case-insensitive at runtime and lowercase never leaked. Only the
-  DIGIT axis leaked, and it leaked REGARDLESS OF CASE - measured 2026-09-11
-  against both scripts, a planted `__Slot1__` and a planted `__SLOT1__` both
-  returned 0 while `__pythonw_exe__` and `__PyThonW__` both returned 1. Second,
-  and responder-only: the UTF-16 declaration relabel ran BEFORE the guard, so a
-  token sitting inside the declaration was MASKED from it, fixed by reordering to
-  substitute, then guard, then relabel. Guards
-  `tests/test_responder_task_argv.py` and `tests/test_supervisor_task_argv.py`.
-  The false text follows, kept so the next reader sees what was refuted.
-
-  `ops/install_scheduled_task.ps1` throws on an unsubstituted placeholder left in
-  the task XML; `ops/install_responder_task.ps1` performs the same substitution
-  family and carries NO such throw. Found while refuting a different claim, so it is
-  recorded rather than fixed, and it is the kind of gap that only shows up when a
-  template gains a placeholder nobody wired.
 
 - **NEEDS THE OPERATOR 2026-09-11, NON-BLOCKING, AND IT IS THE NARROW CLAIM THAT
   SURVIVED A REFUTATION.** `ops/check_task_liveness.py` never reads a registered
@@ -2780,24 +2219,6 @@ version. What follows is everything the scaffold deliberately did not do.
   ON THE OPEN EXIT-CODE CALL below, because any new verdict on that surface is a
   compatibility change to the five codes that have callers.
 
-- **NOW DONE AT THE THREE SITES TOO, 2026-09-11 at `7786955` - the row below was
-  DONE at `390a831` and HARDENED at `1c8aab2` everywhere EXCEPT the three sites it
-  named, and those three plus two more are now gated and armed. The site table's
-  conservation went from ROWS to NODES, and its matcher was replaced by the census
-  resolver in `tools/git_subprocess_census.py` after a Name-bound argv and then a
-  splatted argv each defeated the hand-written one. Nothing below is repealed; the
-  RUN half is still the load-bearing half.** `tests/test_conftest_git_gate.py`
-  grades the HELPERS - `classify_git_probe`, `require_git_repository`,
-  `skip_module_without_git` - and it grades them well. What no arm does is take a
-  module that shells git, run it with git ABSENT, and assert the module SKIPS, then
-  run it with git PRESENT and assert the same module RUNS ITS ASSERTIONS rather
-  than skipping. That SKIP-then-RUN pair at the SITE is the arm that would catch a
-  repair which skips unconditionally, and a helper-level arm structurally cannot
-  see it. Candidate sites are the three that actually shell git:
-  `tests/test_no_sibling_names.py`, `tests/test_ci_workflow_complement.py` and
-  `tests/test_responder_gate_census.py`. THE RUN HALF IS THE LOAD-BEARING HALF - a
-  skip-only arm is satisfied by a guard that never lets anything run.
-
 - **SWEPT 2026-09-11, AND THE VERDICT IS A LATENT CLASS WITH REACHABILITY NIL -
   THE MEASURED TABLE AND THE PER-CARRIER VERDICTS ARE IN THE TOP BLOCK.** LW reported a
   backslash-handling finding on the schtasks and PowerShell argument path, where a
@@ -2812,19 +2233,6 @@ version. What follows is everything the scaffold deliberately did not do.
   adjacent and explains why a shell probe is the wrong instrument - under Git Bash
   MSYS path conversion rewrites a lone `/F` into a drive path, which is the same
   root cause in the opposite tool.
-
-- **DONE 2026-09-11 at `390a831` - THE POPULATION IS NOW COUNTED AND THE TOOL IS
-  TRACKED. THE COUNTS ARE IN THE TOP BLOCK AND THEY SUPERSEDE EVERY FIGURE IN
-  THIS ROW.**
-  Both false-red figures this tree has quoted - the 8 red arms over 7 modules, and
-  the 5-module candidate list - came from NAME-BASED ONE-TERM FILTERS, and the
-  second was already measured to over-report by roughly a factor of two thirds. An
-  AST ENUMERATION OF EVERY subprocess CALL WHOSE argv[0] IS git, across `tests/`,
-  `tools/`, `ops/`, `headless/` and `scripts/`, HAS NEVER BEEN RUN. Until it is,
-  three is a FLOOR and not a count, and any future "N to 0" claim here inherits
-  exactly the defect found in LW's own 43: a denominator produced by a filter
-  nobody validated. THE ROW IS THE ENUMERATION, not the repair - run it first,
-  publish the list, and only then size the work.
 
 - **NEEDS THE OPERATOR 2026-09-14, NON-BLOCKING, one question.** Does an
   interpreter that NEVER STARTED deserve its own CLI exit code from
@@ -2967,60 +2375,6 @@ version. What follows is everything the scaffold deliberately did not do.
   checking it against the RC upstream it claims to be inherited verbatim from. If
   RC has amended that paragraph, both were arguing from a stale quote.
 
-- **CLOSED 2026-09-12 AT `6216a82`, AND ON OTHER TERMS THAN ITS OWN WORDING. THE
-  ROW NAMED THE RECORD, AND THE OBJECT THAT GOVERNS THE WRITE IS THE DIRECTORY.**
-  The defect as described was real and reproduced. The first fix was wrong about
-  WHAT to probe, and a second pass was wrong about what it LEFT BEHIND. Three
-  commits, two of them written only because an adversary refuted the one before.
-
-  `411ba14` added `_writable_in_place`, opening the record `r+b`. REFUTED on
-  scope-and-siblings: `atomic_write_json` creates a TMP FILE IN THE PARENT and
-  then replaces, so the governing permission is the DIRECTORY's, on both
-  platforms, and the probe interrogated an object that does not decide the
-  question. Measured with the parent denied `(WD,AD)` by icacls: both an absent
-  record and a PRESENT writable record returned `(True, "the answered record is
-  readable and writable")` while `_remember_answered` returned False. The
-  `is_file()` guard also left the cold-start absent-record case unprobed. That
-  fix's own non-vacuity arm ASSERTED the absent case was usable, so the arm
-  encoded the defect.
-
-  `14017bd` replaced it with `_dir_accepts_new_file`: create with `"xb"`, unlink
-  in a `finally`, returned from `_ensure_dir`. `_ensure_dir` and `_ensure_parent`
-  were ruled the same class BY CALLER ENUMERATION rather than by docstring - all
-  six call sites create a file immediately after and read the bool as permission,
-  so `mkdir(exist_ok=True)` on an existing directory attempts nothing and answers
-  a question it never asked. REFUTED on resource lifetime: `finally` does not run
-  under `taskkill /F`, which is this repo's own sanctioned kill, and the `except
-  OSError: pass` swallowed a Windows unlink PermissionError and RETURNED TRUE
-  ANYWAY, so a directory that would not release the probe was reported healthy.
-  No reaper anywhere in the tree removes that prefix, and the litter lands in
-  `ops/runtime/`, gitignored at `.gitignore:31`, so no tracked guard can see it.
-  The no-selection proof in that commit was run on the WRONG POPULATION: it
-  checked `pending` and `hops_used`, which enumerate `inbox`, a directory the
-  probe never enters.
-
-  `152f61e` made the removal part of the verdict rather than a side effect, added
-  `_sweep_stale_dir_probes` with `_DIR_PROBE_STALE_SECONDS = 300.0`, and rewrote
-  the in-code sentence, which had been false in both halves. Staleness is age
-  plus prefix and deliberately NOT pid liveness: reading the pid out of the name
-  would reproduce the `reap()` defect this tree already has on record, and Windows
-  recycles pids. Being wrong destroys nothing - the file is zero bytes, no reader
-  opens it, and the verdict was already decided by the `"xb"` create.
-
-  VERIFIED AT THE SEAM BY THE MERGER, not taken from the slice report, on merged
-  `main`: a healthy directory returns True and leaves `[]`; with unlink forced to
-  raise, the verdict is False where it was True, and the leaked file is present;
-  after ageing that file past the threshold, the next probe leaves `[]`. The live
-  gap the extension declared open was closed by the adversary driving `run_once`
-  against a denied directory and observing `answered_usable -> (False, "the
-  answered record's directory cannot be created or written into, so no reply can
-  be recorded")` with `TERMINATION: answered-unusable | delivered: False`. Cost
-  measured at 182.1 us per call, about 1.1 ms per cycle over the six sites.
-
-  NOT CLOSED BY THIS ROW: the three-cycle `run_once` figures in the original
-  wording were never re-measured, and no slice re-ran the `taskkill /F` leak
-  measurement - the repair is structural and takes that claim as given.
-
 - **OPEN 2026-09-12. A RECOVERED ARM'S INDEPENDENT HALF WAS WEAKER THAN THE
   MODULE IT GRADES, AND TWO OF ITS LIMITS ARE DISCLOSED RATHER THAN CLOSED.**
   `tests/test_git_subprocess_census.py` borrowed its instrument from the module
@@ -3049,21 +2403,6 @@ version. What follows is everything the scaffold deliberately did not do.
   `tests/test_conftest_git_gate.py`, whose `accepts` arm grades `actual ==
   expected` and does not cover neighbour survival. Reported by the slice rather
   than edited, deliberately.
-
-- **CLOSED 2026-09-12 - THE WORKTREE POPULATION WENT 58 TO 1, AND THE DISPOSITION
-  TEST WAS BLOB REACHABILITY RATHER THAN A DIFF.** Fifty-eight worktrees and
-  fifty branches stood. Zero branches were ahead of `main`, so there was nothing
-  to merge and nothing to push from any of them. Forty-two were removed on a
-  MEASURED disposition: every uncommitted blob in them already existed somewhere
-  in `main`'s history, tested by `git hash-object` against `git rev-list
-  --objects main`, which is a stronger test than "the file differs from main"
-  because a differing file is usually an OLDER version rather than a novel one.
-  Fifteen held at least one blob main's history had never contained. An
-  adjudicator ruled fourteen SUPERSEDED and one LOST-WORK; an adversary then
-  REFUTED one of the fourteen with a surviving mutant, so TWO were recovered and
-  the remaining thirteen pruned. AGREEMENT WAS NOT TREATED AS EVIDENCE: two
-  worktrees holding the same path were checked for byte-identity first, and one
-  such pair proved to be a single artifact counted twice.
 
 - **OPEN 2026-09-12 UNDER CLAUSE (a), AND IT IS ONE DIRECTORY RATHER THAN A
   CLASS.** `C:/rsc-wt-atomic` is a worktree OF THIS REPO living OUTSIDE this repo
@@ -3217,17 +2556,6 @@ version. What follows is everything the scaffold deliberately did not do.
   engines/tmp/ would be hidden. No such directory exists today. All four LW
   digests reproduce BYTE-EXACT, and that proves TRANSPORT ONLY - we hashed LW's
   own bytes and we are the same carrier. We carry none of those four files.
-
-- **DONE 2026-09-11 at `390a831`, RECOMPUTE-AND-COMPARE CHOSEN OVER ADVISORY, AND
-  THE ARM THAT PROVED IT WAS ITSELF DEFECTIVE UNTIL `1c8aab2`.** `core/provenance.py` declares `sha256` and
-  `parent_sha256`, writes both into the record, and contains NO hashlib at all -
-  `grep -n hashlib core/provenance.py` returns nothing. The only validation is a
-  FORMAT REGEX, which is exactly this tree's recorded trap that a shape arm pins
-  FORMAT and not INPUT. The only importer is `tests/test_provenance.py` and the
-  only `SourceRef` construction site is provenance's own deserializer, so the
-  field is UNFED AND UNGATED BY CONSTRUCTION. ACTION BEFORE THE FIRST PRODUCTION
-  WRITER LANDS: either recompute-and-compare, or rename the field to say it is
-  ADVISORY.
 
 - **OPEN 2026-09-13, from LW section 5.4, bucket APPLICABLE-AND-NOT-DONE, SECOND
   QUESTION ONLY. FILED AS A REVIEW QUESTION, NOT AS CODE.** LW's first question -
@@ -3523,34 +2851,6 @@ version. What follows is everything the scaffold deliberately did not do.
   The fix is a rename across BOTH, which touches the fenced-off
   `refusals_usable` and therefore waits on the operator decision above.
 
-- **CLOSED 2026-09-11. THREE PANELS WENT LIVE OFF THE OPERATOR'S OWN ACCOUNT,
-  AND THE TWO CONSTANTS THIS TREE REFUSES TO RE-DERIVE WERE CONFIRMED BY THE
-  LIVE CLIENT.** With the in-game showcase opened, `avatarInfoList` arrived and
-  `surface/model.py` moved Roster NOT_WIRED to READY and Plan NOT_WIRED to
-  PARTIAL. The Plan panel now derives farmable-today from `core/domains.py`
-  rather than ignoring the rotation, graded by
-  `tests/test_surface_plan_rotation.py`. The Teams panel states elemental
-  IDENTITY only, graded by `tests/test_surface_teams.py`. The Resin panel
-  projects through `core/resin.py` `resin_at` instead of taking `now` and
-  ignoring it, graded by `tests/test_surface_resin.py`. Landed at `3c4bcb5` and
-  `2dc0965`.
-
-  TWO EXTERNAL VALIDATIONS, from a source this repository is licence-gated away
-  from holding, and NEITHER FIGURE ENTERED `data/`. The banner detail text
-  states the consolidated 5-star event-exclusive probability is 1.103%, and this
-  tree predicts 1.1034% from 55.000% consolidated Capturing Radiance and 1.600%
-  as `1 / E[wishes per 5-star]`. A talent-material tooltip names its domain as
-  Tuesday/Friday/Sunday, which is exactly `ROTATION_SLOT_WEEKDAYS[1]` in
-  `core/domains.py`. Recorded as verification, not as a data source.
-
-- **CLOSED 2026-09-11. A READ THAT DEGRADES TO EMPTY AND IS WRITTEN BACK DELETES
-  THE HISTORY IT COULD NOT READ.** Three sites in `scripts/watch_inbox.py`,
-  fixed together at `b3ff9fe` and graded by
-  `tests/test_watch_inbox_log_discard.py`. Reproduced on a copy of the live
-  record: 664 lines became 1 line of 29 bytes, taken by two bytes. NOT FIRING
-  TODAY - every in-tree writer is ASCII-closed, so all three are reachable by
-  external corruption of a runtime file only.
-
 - **OPEN 2026-09-11. THE RESIN PANEL NEEDS AN OBSERVATION AND NOTHING SUPPLIES
   ONE AUTOMATICALLY.** Original Resin is not in the Enka payload and never will
   be, so `surface/model.py` projects from a recorded observation. Today that
@@ -3598,55 +2898,6 @@ version. What follows is everything the scaffold deliberately did not do.
   plus indentation, and it pre-replaces the two common comment markers. Six
   other split shapes that NEITHER side can see are now recorded at the site.
 
-- **CLOSED 2026-09-12 at `6c351b3`, ALL THREE SITES PLUS THE AUTHORISED ROTATE -
-  BUT THE MIDDLE ONE DID NOT LAND AS THIS ROW SPECIFIED IT, AND THE DIFFERENCE
-  IS THE POINT.** `record_cycle` now splits absent from unreadable and refuses
-  the write, leaving the bytes byte-identical. `_trim_invocations` folds U+FFFD
-  to ASCII `?`, the threefold growth MEASURED across three fires at 273363,
-  273369 and 273387 bytes - plus six then plus eighteen - before the fix. The
-  metrics cap rotates to ONE bounded generation, written FIRST with the live file
-  LAST. `_remember_answered` did NOT become fail-closed: that instruction was
-  REFUTED by the adjudicated call recorded above, because it is the only thing
-  that heals a replaceable record, and `answered_usable` mirrors
-  `refusals_usable` instead. Graded by `tests/test_responder_degraded_write.py`;
-  the two new `# GATE:` tags moved `tests/test_gate_name_bindings.py` and
-  `tests/test_responder_gate_census.py`, both floors RAISED and every assertion
-  keeping its strength. Seam re-run 2146 passed 1 skipped, and CI `ci` green.
-  The original row follows, unedited, because the specification it got wrong is
-  the record worth keeping.
-
-  THE SHAPE IS a
-  read that returns empty on decode or parse failure, spliced with new data and
-  written BACK, which converts unreadable history into DELETED history. Each
-  line below was re-read at HEAD before filing, and none is fixed.
-  - `_remember_answered` at `tools/moon_sync_responder.py:1217` writes
-    `sorted(_answered(path) | {name})`. A degraded read makes the union start
-    from empty, so every previously answered note is erased and the call still
-    returns True. Same shape as `record_reported`, which this tree just fixed.
-  - `record_cycle` in `tools/moon_sync_responder.py` - CITED BY NAME, because
-    this row carried `:1102` and the block below carried `:969` for the SAME
-    definition and BOTH were wrong; measured 2026-09-11 it is at `:1067` - takes
-    `read_json(metrics, default=None)` and falls back to `rows = []`, so a
-    corrupt ledger is replaced by a one-row ledger and the call returns True.
-    THIS IS A DIFFERENT DEFECT FROM THE TRIM AT `:1135` and is not covered by
-    the bounded-rotate authorisation.
-  - `_trim_invocations` at `tools/moon_sync_responder.py:1204` reads
-    `encoding="ascii", errors="replace"` but never folds U+FFFD, while
-    `core/atomic_io.py` encodes UTF-8. One bad byte is written as three, re-read
-    as ASCII becomes three replacement characters, and is written as nine:
-    THREEFOLD GROWTH PER FIRE. Size-gated at 262144 bytes, so latent rather than
-    firing. `scripts/watch_inbox.py` avoids this by folding U+FFFD to ASCII `?`,
-    and an arm pins byte-stability across four fires.
-
-  NOT A REGRESSION AND NOT FIRING TODAY: every in-tree writer is ASCII-closed,
-  so all three are reachable by EXTERNAL corruption of a runtime file only.
-  RECORDED SEPARATELY, NOT FILED AS A DEFECT: `refusals_usable` at
-  `tools/moon_sync_responder.py:1264` deliberately does NOT fail closed on
-  corrupt content. That is now inconsistent with the rule
-  `scripts/watch_inbox.py` adopted, and the divergence is defensible on cost
-  rather than accidental. A later session should rule on it rather than
-  silently harmonising either side.
-
 - **OPERATOR RULING 2026-09-10 - THE SESSION SCRATCHPAD IS IN SCOPE, AND
   CLAUSE (a) DOES NOT REACH IT. NOT AN ADJUDICATED CALL - THE OPERATOR RULED
   DIRECTLY, SO THE TEN STAND AT TEN.** The halt boundary's clause (a) covers
@@ -3672,63 +2923,6 @@ version. What follows is everything the scaffold deliberately did not do.
   claim. AN ADJUDICATOR IS FOR A QUESTION MEASUREMENT CANNOT CLOSE. Reaching
   for one where a command would do is how a ruling gets made about nothing.
 
-- **CLOSED 2026-09-10. TWO INSTALLERS CARRIED THE SAME UNGRADED LIVENESS CALL,
-  AND THE SLICE THAT GRADED ONE OF THEM WAS REFUTED ON SCOPE BEFORE IT
-  MERGED.** `ops/install_scheduled_task.ps1` invokes the liveness checker at
-  line 198 and propagates its status at line 217. A carried row said that call
-  was graded by nothing, and a builder graded it - a `grade_installer_liveness`
-  helper that DERIVES every expectation from the installer text, ten
-  parametrised mutants, a set-equality control arm with no uncontrolled bucket,
-  and an arm asserting the module docstring's derivation claim is TRUE OF THE
-  MODULE rather than merely present.
-
-  A SCOPE-AND-SIBLINGS ADVERSARY THEN REFUTED IT, AND THE REFUTATION IS THE
-  VALUABLE PART. The tracked `.ps1` population is TWO, not one:
-  `git grep -n 'exit $livenessExit' -- ops/` answers
-  `ops/install_responder_task.ps1:254` and `ops/install_scheduled_task.ps1:217`.
-  The second installer carries the identical construct and ZERO tracked tests
-  named it. The row named one file and the dispatch inherited that narrowness.
-  A follow-on slice GENERALISED the grader to take a text and a label, so one
-  grader and one mutant table now cover both installers, and every one of the
-  ten mutant targets was independently counted as present EXACTLY ONCE in BOTH
-  files - a target present zero times would be a no-op mutant, which is an arm
-  that cannot fail.
-
-  TWO WORDINGS WERE CORRECTED BEFORE THEY REACHED A DOCSTRING, and both are
-  the kind that would have been re-refuted later. "Graded by nothing" is FALSE
-  of the file - `tests/test_task_state_claims.py:216` and
-  `tests/test_ci_workflow_complement.py:241` already pin it for NEGATIVE
-  properties. The true statement is that the liveness INVOCATION and its exit
-  propagation were ungraded. And these arms are A SHAPE GRADER OVER TEXT:
-  nothing registers or executes either installer, so a `.ps1` that is textually
-  perfect and runtime-broken under StrictMode, quoting or PATH still grades
-  clean. Both files now say so in those terms.
-
-- **CLOSED 2026-09-10. THE INVOCATION-LEDGER ROW NAMED THE WRONG WRITER, AND
-  THE SUITE IS WORTH KEEPING FOR A DIFFERENT REASON THAN THE ONE IT WAS
-  DISPATCHED FOR.** The row said `_trim_invocations` in
-  `tools/moon_sync_responder.py` destroys evidence with no archive and that its
-  destructive path was unexercised. BOTH HALVES WERE REFUTED FROM ARTIFACTS
-  ALREADY ON DISK: `docs/INBOX_TRIAGE_2026-09-09.md` and an earlier entry in
-  this file both scope the defect to the METRICS ledger and both say the
-  invocation-log trim is correct as it stands, its lines not being evidence
-  rows; and `tests/test_moon_sync_responder.py:1715` already drove it. FIVE
-  sites share the trim-and-discard root cause, not one - responder lines 1207,
-  1135, 1476 and 1492, plus `scripts/watch_inbox.py:876`, and that last one is
-  the only trim that actually fires here. The premise that the watcher's log is
-  uncapped is also false: `scripts/watch_inbox.py:237` caps it at 2000 lines.
-
-  THE SUITE MERGED ANYWAY, on a measured basis rather than on the row's.
-  `MAX_INVOCATION_BYTES` is the ONLY trigger; `MAX_INVOCATION_LINES` is merely
-  the keep-count applied after it fires, so over the line cap ALONE the ledger
-  is left byte for byte unchanged. The pre-existing arm drives a fixture over
-  BOTH caps at once and cannot tell them apart. Driven as a mutant, widening
-  the trigger to include the line cap kills ONLY the new arm and the
-  pre-existing one survives. THAT DISCRIMINATION IS THE SLICE'S WORTH, and it
-  is independent of the wrong premise it was dispatched on. A row can be wrong
-  about the defect and still point at a real gap - but only a mutation says
-  which.
-
 - **MEASURED 2026-09-10, AND NOT DONE. THE WORKTREE PRUNE IS NOT AVAILABLE
   UNATTENDED, AND "43 STALE WORKTREES" WAS A WRONG POPULATION.** The 43
   directory entries under `.claude/worktrees` are 42 worktrees plus ONE STRAY
@@ -3741,171 +2935,6 @@ version. What follows is everything the scaffold deliberately did not do.
   noise - among them `tools/gate_mutation_runner.py` in two separate trees.
   441M stands. `git worktree prune --dry-run -v` printing nothing is consistent
   and is not evidence of cleanliness: it reports only MISSING directories.
-
-- **CLOSED 2026-09-10. A SWEEP ASYMMETRY THAT TURNED OUT TO BE EXTENSIONALLY A
-  NO-OP, AND THE BUILDER REFUSED TO MANUFACTURE THE RED IT WAS ASKED FOR.**
-  Checking RC's report exposed that `tests/test_no_sibling_names.py` fed its
-  two matchers DIFFERENT VIEWS of a file - the paired matcher got the
-  comment-stripped text, the solo matcher the raw body. Two matchers in one
-  function, one hardened and one not, is the shape where a reader assumes the
-  whole function has the stronger property. The dispatch brief called that a
-  live blind spot and demanded a red-before arm proving a solo name broken by a
-  comment marker is now caught.
-
-  **THE BRIEF WAS WRONG AND THE BUILDER SAID SO RATHER THAN WIDENING A
-  MATCHER.** The stripper substitutes A SPACE, not nothing, and the solo
-  alternatives are single contiguous words with no separator class - so a
-  comment-broken solo name misses on BOTH views and the change alters no
-  behaviour. Proven three ways: 1176 constructed break cases with zero
-  disagreement while the same harness showed the paired matcher gaining in 384;
-  400000 randomised differential cases, 61961 carrying a real solo hit, ZERO
-  disagreements; and the demanded arm run against a copy mutated back to the
-  pre-slice view, `11 passed` exit 0 - green before and green after. THE
-  RED-THAT-NEVER-WAS IS THE RESULT. What landed instead is an asymmetry arm
-  proven non-vacuous by mutating the guarded mechanism itself, plus the six
-  measured blind-spot classes written at the site with a statement that says it
-  is a list of six that were measured and NOT a proof that no seventh exists.
-
-  Two further corrections the builder made to its own brief, AND THE FIRST OF
-  THEM WAS THEN RECONCILED WRONG IN THIS VERY ENTRY BEFORE A VERIFIER CAUGHT
-  IT. The brief's count of raw hits inside the module was 9; the builder
-  measured 13. The reconciliation first written here was that these are 9 LINES
-  carrying 13 MATCHES. THAT IS FALSE, and a verifier refuted it by counting
-  both populations directly: 13 is ALL match objects over the PRISTINE
-  `5b2027b` bytes, sitting on 7 distinct lines; 9 is SOLO-ONLY match objects
-  over the CURRENT bytes, sitting on 5. The current bytes carry 20 matches on
-  14 lines. THE TWO FIGURES DIFFER BY FILE VERSION AND BY MATCHER SUBSET, NOT
-  BY LINES VERSUS MATCHES. Record this one in full, because the failure is more
-  instructive than the number: a lines-versus-matches story is the OBVIOUS
-  reconciliation for two counts of one thing, it was reached for without being
-  measured, and it was wrong. AN UNMEASURED RECONCILIATION IS ANOTHER
-  UNMEASURED COUNT. That makes three instances this session of a figure
-  travelling further than the measurement behind it, and this third one was
-  authored by the merger rather than by any subagent.
-
-  The verifier also refuted the SHAPE of the no-op check, while confirming its
-  conclusion. Comparing the two versions' offender lists over the real corpus
-  is 0 against 0 and therefore VACUOUS - it would agree no matter what the
-  change did. The claim is substantiated instead by a differential that can
-  disagree: the solo matcher run over the raw body against the stripped view,
-  across all 213 tracked paths including the module itself, 9 matches against 9
-  matches, zero files differing. A COMPARISON THAT CANNOT DISAGREE IS NOT
-  EVIDENCE, EVEN WHEN ITS CONCLUSION IS RIGHT. And solo coverage
-  is NOT uniform: two of the five solo alternatives decompose into the paired
-  product, so a comment break in those two IS caught, by the paired matcher and
-  never by the solo one.
-
-  **LEFT UNENACTED, DELIBERATELY, FOR THE OPERATOR.** The change that would
-  actually close the gap is the stripper's replacement string, a space to the
-  empty string. Measured: it catches the solo comment-break AND double-reports
-  the two decomposable alternatives. It alters shared paired-matcher behaviour,
-  so it was reported rather than taken.
-
-- **CLOSED 2026-09-10. FIVE CARRIED OPEN ROWS WERE RE-PROBED BEFORE ANY SLICE
-  WAS SPENT, AND FOUR OF THEM CITED THE WRONG FILE OR THE WRONG LINE.** This
-  is the row-decay lesson arriving one level up again, and it is now cheap
-  enough to state as a rule: A ROW IS A CLAIM WITH A DATE, AND THE CITATION
-  DECAYS BEFORE THE CLAIM DOES. Re-probe every row before dispatching against
-  it. Measured at `b5dc138`:
-
-    - `nothing inspects the pre-push hook's OUTPUT` is **CLOSED, and was
-      already closed when it was carried**. `tests/test_hook_interpreter.py`
-      execs the real `.githooks/pre-push` under `sh` and four arms grade
-      OBSERVED BEHAVIOUR, not tokens. Token-scanning arms exist beside them in
-      `tests/test_prepush_skip_reporting.py`, but they were never the only
-      arms. The row was a claim about the token scan mistaken for a claim
-      about the coverage.
-    - `the sweep floor's VALUE is ungraded` named the sibling-name sweep. The
-      constant is not in `tests/test_no_sibling_names.py` at all - that file
-      has no floor. It is `_MIN_TRACKED_PATHS` in `tests/test_licence_posture.py`.
-    - `half of tests/test_conftest_skip_path_pinned.py is DEAD as shipped`
-      named the wrong module and the wrong fraction. That module is 14 arms,
-      all passing; only 2 of the 14 force the archive shape. The dead branch
-      was in `tests/test_commit_trailers.py`.
-    - `the evidence ledger TRIMS rather than rotates` cited a line inside
-      `build_prompt`. The trim is `_trim_invocations` further down
-      `tools/moon_sync_responder.py`. AND THE LIVE-INSTANCE QUESTION IS NOW
-      ANSWERED: the responder's own log is a few kilobytes against a 256 KiB
-      cap, so ITS TRIM HAS NEVER FIRED HERE. The log that actually grows is
-      written by `scripts/watch_inbox.py`, which caps on every write. The row
-      was worrying about the wrong writer.
-    - `the 11 tests/ modules the detector cannot see` is TWO POPULATIONS AND
-      ONE NUMBER, the same shape as the `53 def test_` correction recorded
-      below. 11 is the `tests/`-only population; the figure declared in the
-      detector's own docstring is 12, the all-repo-files population. Neither
-      is wrong and neither is 11 as declared anywhere in code.
-
-- **CLOSED 2026-09-10, IN TWO WAVES, AND THE SECOND WAVE EXISTS BECAUSE AN
-  ADVERSARY REFUTED THE FIRST ON SCOPE.** Landed at `b3bef1a` and `fe6c004`.
-  Seam re-measured at each: 1915 passed 1 skipped, then 1935 passed 1 skipped,
-  collect-only 1936. Both arithmetics closed at BOTH ENDS rather than
-  asserted, and the per-file counts at the second seam were re-derived from
-  that run's own collect-only listing rather than trusted from the four slice
-  reports.
-
-  **THE HEADLINE IS NOT THE COVERAGE, IT IS THAT GRADING A FLOOR FOUND A FLOOR
-  THAT WAS WRONG.** `_MIN_TRACKED_FILES` in `tests/test_line_endings.py`
-  shipped at 50. The tracked corpus is 213 paths over 16 top-level
-  directories, and the widest answer a single-directory `git ls-files` can
-  return is `tests/` at 70. So 70 sailed over 50 and the floor could not
-  refuse the partial enumeration it exists to refuse. Raised to 90 as the
-  CONSEQUENCE of grading, bounded above by the pre-existing half-corpus arm at
-  106. An independent adversary corroborated it by a DIFFERENT ROUTE - real
-  `git ls-files` with the cwd inside each directory - so this is not two
-  agents sharing one premise. THE RAISE IS A BUG FIX AND NOT A PREFERENCE.
-
-  **THE VACUOUS-FLOOR DEFECT HAD THREE INSTANCES AND WAVE ONE CLOSED ONE.** A
-  floor guarded only by `assert CONST >= 10` is an assertion about the
-  constant, not about what the constant does. `tests/test_machine_identity.py`
-  carried a NEAR-VERBATIM COPY of the very function wave one rewrote, down to
-  the function name; `tests/test_line_endings.py` carried the third. All three
-  now grade by discrimination, each replacing its vacuous assertion IN PLACE
-  because a floor in a separate arm leaves the primary arm vacuous. The
-  too-high mirror is answered rather than assumed: a floor ABOVE the corpus
-  routes the enumeration into `pytest.skip` and RETIRES its own grader instead
-  of reddening. Closed in machine identity; measured never to have existed in
-  line endings. An AST sweep for a fourth instance over 130 tracked `.py`
-  files returns 0 hits, with a non-vacuity control that finds exactly the two
-  pre-repair cases, and its blind spots are written at the site.
-
-  **THE LOAD-BEARING ASSERTION CHOICE, because it would not have been guessed.**
-  In the licence-posture arm, asserting `status == "FAILED"` would NOT have
-  caught the slack floor: the path anchors still refuse the partial
-  enumeration, so the status stays FAILED while the floor contributes nothing.
-  The arm had to assert on THE FLOOR'S OWN REASON. A grader that watches the
-  verdict instead of the mechanism passes the mutant.
-
-  **A SELF-REFERENTIAL ARM CAN SATISFY ITS OWN CONDITION.** Wave one's archive
-  arms in `tests/test_commit_trailers.py` were justified entirely by
-  `.github/workflows/docs-guards.yml` selecting that module in isolation - and
-  that selection rested on two INCIDENTAL prose mentions of a markdown
-  filename, neither of which reads a markdown file. Two arms now pin the
-  CONDITIONAL claim: this module is in the lane AND its cross-module driver is
-  not, measured by reproducing the selector over 73 candidates and getting 34.
-  The pattern had to be built as `r"\." + "md" + r"([^a-zA-Z0-9]|$)"` BECAUSE
-  THE UNSPLIT LITERAL MATCHES ITSELF. Driven as a mutant, the first arm stayed
-  GREEN with its protected mentions gone and only the second fired - so the
-  arm that looked like the point was the vacuous one.
-
-  **THE ARGV GRADERS, AND THE ASYMMETRY THE FIRST ONE EXPOSED.**
-  `tests/test_supervisor_task_argv.py` is new and grades
-  `ops/ResinCompute-Supervisor.xml`. Building it made visible that
-  `tests/test_responder_task_argv.py` graded Arguments and trigger boundaries
-  ONLY - `Command` and `WorkingDirectory` appeared nowhere in it, and
-  `ops/install_responder_task.ps1` was read by NO test at all. So the exact
-  defect the new grader's docstring describes was still true of the RESPONDER
-  task, WHICH UNLIKE THE SUPERVISOR IS THE ONE THIS TREE ACTUALLY ARMS. Both
-  are now graded. Wave two also found `SUPERVISOR_CONTRACT` pinned by neither
-  length nor set identity, with FOUR of five symbols droppable at zero red;
-  one arm now pins `(len, set)` together, since an arm here was already caught
-  arity-blind with four assertions that all held when a second entry landed.
-
-  **NOTHING WAS ARMED.** Both argv graders import no `subprocess`, no `os` and
-  no `shutil`, so neither can spawn `schtasks` even by accident; both grade
-  static declared XML and neither asserts its task is registered. The
-  responder task was re-confirmed DORMANT by the checker, exit 1, trigger
-  expired 2026-09-07T21:00. `git diff --stat -- ops/loop/` empty at both
-  commits.
 
 - **A DONE-CLAIM'S DIRECTION SURVIVED WHILE ITS NUMBER DID NOT, 2026-09-10, and
   the number had been INHERITED rather than measured.** Twelve claimed reds
@@ -4153,64 +3182,6 @@ version. What follows is everything the scaffold deliberately did not do.
   `_run_once`, and the `if reasons:` line at two against one. No other anchor of
   the 18 is duplicated anywhere in that file.
 
-- **CLOSED 2026-09-09. SEAM (f) IS CLOSED, AND RSC NO LONGER HOLDS AN OPEN
-  POSITION AGAINST RC.** RC's operator ADOPTED the diff gate and DELETED the
-  own-origin push carve-out rather than softening it, on RC's own stated reason
-  that two readings of a boundary rule in one file is how a future session picks
-  the convenient one. RC's note is
-  `moon_sync_inbox/2026-09-09-2130-from-RC-ADOPTED-the-diff-gate-your-concession-carried-it-and-RC-has-no-sweep-yet.md`.
-  What RC now runs: a push halts and pings when its DIFF touches a
-  cross-repository byte-pinned artifact or trips a sibling-name sweep, and not
-  on an ordinary push that passes the suites and the sweep. Every other clause of
-  RC's boundary is unchanged, it binds every RC session including an attended
-  one, and there is still NO TIMEOUT.
-
-  RC VOLUNTEERED THE HOLE UNASKED, WHICH IS THE PART WORTH KEEPING. RC has NO
-  sibling-name sweep, and RC's pre-push hook is GIT LFS ONLY, so half the gate
-  RC adopted has nothing to run against today. RC wrote that hole INTO its own
-  rule paragraph rather than leaving the rule looking complete, and filed its own
-  item to build the missing half, with acceptance that it runs over the push DIFF
-  rather than the whole tree, carries a positive-control arm of RC's OWN known
-  escape shapes, and preserves the LFS invocation.
-
-  RC DECLINED TO COPY THIS TREE'S LITERALS, AND WAS RIGHT TO. RC took the
-  positive-control idea and the framing that a sweep is a better shape rather
-  than a solved problem, and refused the escape list itself, because importing a
-  sibling's literals would put sibling-identifying strings into a public repo -
-  which is the exact failure such a sweep exists to prevent.
-
-  WHAT IS NOT RECORDED HERE, DELIBERATELY. Nothing in RC's note is an agreement
-  about this tree's own gate, and none is recorded as one. RC states plainly that
-  it verified RC's side only and did not re-derive this tree's citations against
-  this tree's disk. The other three participants are on ORDERED STANDBY and are
-  not named: silence from them is NOT dissent, and no position is attributed to
-  them.
-
-- **CLOSED 2026-09-09. THE 0-BYTE TEMP LEAK IN `core/atomic_io.py` IS FIXED,
-  AND IT WAS TWO DEFECTS RATHER THAN ONE.** Measured at `3533965`:
-  `atomic_write_text(target, chr(0xD800))` RAISED `UnicodeEncodeError` out of
-  the caller AND left a 0-byte sibling temp behind. One root cause under both:
-  `Path.write_text` opens the file BEFORE it encodes, so the temp already
-  exists by the time the encoder refuses, and the `except OSError` clause
-  skipped `_discard` entirely for a `UnicodeEncodeError`, which is a
-  `ValueError` and not an `OSError`.
-
-  THE REPAIR IS A `published` FLAG PLUS `try/finally`, AND NO `except` CLAUSE
-  WAS WIDENED. That was verified by diffing rather than assumed: the only
-  `except`-bearing lines anywhere in the diff are docstring prose. A verifier
-  that did not write the repair probed it on scratch copies with the bytecode
-  caches purged on BOTH sides - deleting the `finally` reddens 8 arms, forcing
-  `published = True` reddens 8.
-
-  SEVEN NEW ARMS, AND THE VACUITY CLASS THAT SHIPPED IN A RECENT SESSION DID
-  NOT RECUR. The seven is re-derived here rather than copied, by
-  `git diff -U0 tests/test_core_atomic_io.py | grep -c "^+def test_"`, which
-  returns 7. EVERY ONE of the seven carries a positive floor IN THE SAME ARM -
-  an asserted exception type, an asserted target content, or a counted call
-  asserted equal to one. That was checked per-arm rather than inferred from the
-  file, which is the whole difference from the session where a floor sitting in
-  a NEIGHBOURING arm left the primary arm vacuous.
-
 - **AN ADJUDICATED CALL, 2026-09-09. `atomic_write_text` KEEPS RAISING
   `UnicodeEncodeError`, AND DOES NOT BECOME FAIL-SOFT FOR A PAYLOAD THE ENCODER
   REJECTS.** Candidate A was to catch it and return `False`, matching
@@ -4325,86 +3296,6 @@ version. What follows is everything the scaffold deliberately did not do.
   is a unilateral rule with extra steps. RSC changed position and RC did not,
   and that is the part a later reader needs.
 
-- **SUPERSEDED 2026-09-09 - STEP THREE HAS SHIPPED AND IS CLOSED IN THE ROW AT
-  THE TOP OF THIS SECTION. LEFT STANDING RATHER THAN DELETED, SO A LATER READER
-  SEES THE POSITION AND NOT ONLY THE OUTCOME. STEP THREE OF THE GATE CENSUS IS
-  NOT THE REGISTRY THE EARLIER BRIEF ASKED FOR.** A planner refuted that brief with measurements
-  rather than with an opinion, and the refutation held. Its figures, recorded
-  as THE PLANNER'S readings of 2026-09-09 and not re-derived in this row: 13 of
-  17 adjacent gate-name swaps leave the census GREEN, and rotating all 18 names
-  leaves every problem list empty. One figure IS re-derived here, by
-  `grep -o '_line_of_tag_named("[a-z0-9-]*")' tests/test_responder_gate_census.py`
-  piped to `sort -u | wc -l`, which returns 3 against a `_FLOOR` of 18: only
-  `counterparty-agreement`, `delivery-write-all` and `hop-budget` are bound to
-  a site at all, and all three by accident, through `_line_of_tag_named` in
-  arms that wanted a line number for another purpose.
-
-  A NAME-LIST REGISTRY WOULD MAKE THINGS WORSE. It would duplicate the coverage
-  arm's set equality and add a SECOND hand-typed count beside `_FLOOR`, which
-  is the exact failure class this session logged three times. THE RIGHT
-  ARTIFACT IS A NAME-TO-SITE BINDING TABLE, closing CEILING item 1, naming.
-
-  THE TRAP THAT MUST REACH THE NEXT SESSION, and it is the reason this row
-  exists rather than a one-line backlog item. 34 of 35 mutants DESTROY THEIR
-  OWN ANCHOR. A binding table shipped as a test module therefore becomes a
-  THIRD SHAPE GRADER, reporting 34 syntax reddenings as KILLED at exit 0 - and
-  `verify_exclusions` in `tools/gate_mutation_runner.py` is BLIND to it,
-  because it iterates the DECLARED list only and a module nobody declared is
-  never checked at all.
-
-  THE TWO EXISTING EXCLUSIONS HAVE TWO DIFFERENT REASONS AND MUST NOT BE
-  MERGED. `SELF_TEST_MODULE`, `tests/test_gate_mutation_runner.py`, is excluded
-  because it decides its own verdict. `SHAPE_GRADER_MODULES`, currently
-  `tests/test_responder_gate_census.py`, is excluded because it grades the
-  TARGET FILE'S SHAPE, which is a syntax question, where the runner is asking a
-  behaviour one. Same exclusion, different arguments; collapsing them loses the
-  test that tells a future module which bucket it is in.
-
-  THE ANCHOR PROPOSAL AND ITS FAILURE MODE, stated honestly rather than sold. A
-  hand-typed substring is required to be PRESENT and UNIQUE inside `_run_once`
-  for each of the 18 names, and all 18 are unique there today. It DECAYS when a
-  statement is rewritten, and the repair temptation at that moment is to TRIM
-  THE ANCHOR UNTIL IT MATCHES again - which is the widening this tree has lost
-  to three times, and the reason the decay must fail loudly instead.
-
-  THE SIX-SLICE DECOMPOSITION THE PLANNER PRODUCED IS IN A SCRATCH SPEC UNDER
-  the session temp directory and WILL NOT SURVIVE. It must be re-derived. Do
-  not cite a path under `Temp` as if it were durable; it is not, and a row that
-  did would be worse than this one.
-
-  WHICH OF THIS ROW'S FIGURES SURVIVED RE-MEASUREMENT, checked at `68a189f` and
-  not taken on trust. The 13-of-17 adjacent-swap figure REPRODUCED EXACTLY. The
-  3-of-18 figure is a real count of a real population - the unique literal
-  arguments to `_line_of_tag_named` - but it is NOT the bound-to-a-site
-  population this row used it as, which is four under an isolating swap and one
-  under the strictest reading. The rotation figure did not reproduce as a claim
-  about the module. All three are set out in the closed row above.
-
-- **CLOSED 2026-09-09. A PROSE CLAIM IN THE GATE CENSUS DECAYED AND NOTHING
-  WATCHED IT.** `tests/test_responder_gate_census.py` claimed 18 tags "all of
-  them in the responder and none anywhere else". The first half still holds -
-  re-derived here with a `tokenize` pass over `tools/moon_sync_responder.py`
-  against `_GATE_STRICT`, which returns 18. THE SECOND HALF HAS BEEN FALSE
-  SINCE `06f8557`, which shipped `tests/test_responder_delivery_gates.py`
-  carrying a section-banner tag at its line 272 with no instrument watching.
-  False by DECAY rather than by error: it was true when it was written.
-
-  A BUILDER CORRECTED THE MERGER TWICE ON THIS ROW AND BOTH CORRECTIONS ARE THE
-  ROW'S REAL CONTENT. First, only that ONE site is strict-grammar. The other
-  banners in that file carry trailing prose and therefore fail the `$` anchor
-  in `_GATE_STRICT`, so a row claiming a set of strict sites would have been
-  over-broad. Second, the tag-shaped text in the runner's own self-test is
-  STRING-LITERAL FIXTURE DATA fed to the matcher, which is a different case
-  entirely - a `tokenize` pass distinguishes it by token type and a text grep
-  cannot.
-
-  THE REPAIR IS AN ARM THAT DERIVES THE POPULATION RATHER THAN ASSERTING IT.
-  It enumerates from `git ls-files`, reads `tokenize.COMMENT` tokens, and
-  asserts a dict BY EQUALITY, with four in-arm floors, so a tag appearing in
-  any new tracked file reddens it by name and line. Written RED FIRST against
-  the old claim, and probed red a second time by appending a runtime-built tag
-  to another tracked file on a scratch copy.
-
 - **OPEN, AND IT IS ABOUT THE CHANNEL RATHER THAN ABOUT THE CODE.**
   `moon_sync_inbox` IS GITIGNORED WHOLESALE. Both figures re-derived here:
   `git check-ignore -v moon_sync_inbox` resolves to `.gitignore:115`, and
@@ -4437,42 +3328,6 @@ version. What follows is everything the scaffold deliberately did not do.
   POPULATION IT COUNTS: whose enumeration, of what, measured when. A count with
   no population attached cannot be checked and cannot be wrong, which is why it
   keeps surviving review.
-
-- **CLOSED 2026-09-09. CI WENT RED ON A TEST THAT DECAYED, AND THE LANE SPLIT
-  WAS A TIMEZONE.** GitHub run 34405450182 failed at 21:11:41Z on
-  `tests/test_task_liveness.py:836`, `assert "LIVE" in out`, while the same
-  commit was GREEN here. Nothing regressed - time passed. `liveness.main` calls
-  `verdict(parse_facts(...))` with NO `now`, and `verdict` at
-  `ops/check_task_liveness.py:388` falls back to `dt.datetime.now()`, so five
-  arms were graded against the REAL CLOCK while every `_verdict` sibling pins
-  `now=NOW`. The boundary `2026-09-09T21:00:00` is NAIVE, so it is read in the
-  runner's LOCAL zone: expired at 21:00 UTC on CI, five hours later here.
-
-  DIFF THE CLOCK BEFORE THE ENVIRONMENT. Green-here-red-on-CI at one commit
-  reads as a platform difference and was not one.
-
-  FIXED IN THE ARMS, NOT THE CHECKER. `ops/check_task_liveness.py` is
-  byte-identical - `verdict` already offers `now=`, and adding a parameter to
-  the kill-switch checker for the tests' benefit would be worse. Five arms now
-  pin the clock through a shim, and the CI failure is an ASSERTED TRANSITION -
-  a sibling arm pins one second past the same boundary and requires DORMANT.
-
-  MEASURED, and the refuter built its own instrument rather than the builder's:
-  pre-fix bytes under `TZ=UTC0` reproduce the CI red byte-exact, post-fix are
-  green, both re-confirmed on CI's Python 3.11. The file is green at a stdlib
-  clock shift of -20000 to +40000 days, and the whole suite is green at UTC,
-  UTC+14 and UTC-12. Baseline moved 1855 to 1859 on four new arms.
-
-  TWO LIMITS RECORDED IN THE FILE RATHER THAN FIXED. The teardown arm is
-  VACUOUS IN ISOLATION - run alone it passes with nothing frozen before it, and
-  it has content only because file order puts it after a frozen arm. And the
-  root cause is closed in the test only: `main` still never threads `now` into
-  `verdict`, so any future caller of `main` is non-deterministic at that seam.
-
-  ONE SITE FLAGGED AND DELIBERATELY NOT EDITED, for a later reading: a comment
-  says "StopAtDurationEnd applies", a scheduler field the payload does not
-  carry and the checker never reads. It is domain rationale rather than a claim
-  about a branch, so it fell outside the defect class being repaired.
 
 - **STATE AS MEASURED 2026-09-09 AT `d3af1b9`, a reading and not a promise.**
   `python -m pytest tests` 1855 passed 1 skipped. `agents/pity_engine` 80
@@ -4534,71 +3389,6 @@ version. What follows is everything the scaffold deliberately did not do.
   with both the refuter and the earlier builder. WHEN A REFUTER SAYS A BUILDER
   WAS WRONG, CHECK WHO WROTE THE INSTRUCTION FIRST.
 
-- **CLOSED 2026-09-09. THE EIGHT GATES EXERCISED BY NOTHING NOW HAVE ARMS, AND
-  THE CAMPAIGN IS 35 OF 35.** Measured at `06f8557` by
-  `python -m tools.gate_mutation_runner` in an isolated worktree: 35 mutants,
-  35 KILLED, 0 SURVIVED, 0 false kills, exit 0. The eight that survived at
-  `1c596e3` are each now killed by one of two new modules -
-  `tests/test_responder_delivery_gates.py` at 8 arms takes
-  `delivery-write-all/operand-1` and `operand-2`,
-  `bounce-write-all/operand-1` and `operand-2`, and `bounce-mark/if-true`;
-  `tests/test_responder_refusal_gates.py` at 7 arms takes
-  `no-destination/if-false`, `workspace-trust/if-false` and
-  `refusal-recorded/if-false`. Not one kill is named by a shape grader.
-
-  THE EMPTY-LIST HALF IS NOT REACHABLE THROUGH REAL DESTINATIONS, and that is
-  a STATED limit rather than a hidden one. `deliver` returns exactly one row
-  per inbox and `_run_once` reaches the delivery step only past the
-  `GATE:no-destination` early return, so `written` is never `[]` there. The
-  `bool(written)` term that the responder's own comment at
-  `tools/moon_sync_responder.py:1861-1863` calls the guard and not decoration
-  therefore guards a caller shape the current callers cannot produce, and the
-  two arms that drive it substitute the module's `deliver`.
-
-  TWO ARMS SHIPPED VACUOUS AND A LENS CAUGHT THEM, NOT THE RUNNER. With
-  `GATE:bounce-once` neutralised so the bounce block ran ZERO times, both
-  bounce arms stayed GREEN on negatives alone -
-  `result["termination"] == "refused"` is assigned 60 lines above the block.
-  The repair puts a `len(attempts) == 1` floor IN THE SAME ARM, fed by a
-  wrapper that captures the module's own `deliver` before substituting and
-  calls through, so the real failing write still happens. Both arms then go RED
-  under that neutralisation and under four more. A FLOOR IN A SEPARATE ARM
-  WOULD HAVE LEFT THE PRIMARY ARM VACUOUS, which is why it is one assertion.
-
-  KNOWN LIMIT, recorded rather than fixed: `rc_inbox in handed[0]` is a
-  MEMBERSHIP test, so an extra destination appended to the list the module
-  computes leaves the arm green. Both files say so where a reader will find it.
-
-- **CLOSED 2026-09-09, AND THE DISPOSITION IS AN ADJUDICATED CALL - NOT AN
-  OPERATOR DECISION.** It is overturnable by reading this entry. The sentence
-  in `tests/test_responder_refusal_gates.py` reading "Every suppression
-  downstream is keyed on that record" has TWO live antecedents in its own
-  paragraph: the refusals FILE, which makes it true, and what
-  `_remember_refusal` writes, which makes it false. Nearest-antecedent
-  resolution steers the reader to the false one, and the correcting text sits
-  ten lines further down.
-
-  The adjudicator restated the criteria before reading the artifact - truth
-  outranks minimal change, and no assertion may move - then verified the true
-  reading in the responder rather than in the docstring three prior agents had
-  all read: `refusal_seen` at line 1359 reads the `refusals` rows,
-  `bounced_under` at 1405 reads the `bounced` ledger and says so itself,
-  `bounce_capacity` at 1417 reads the same ledger, and all key on the one path
-  `DEFAULT_REFUSALS` written by the single writer `_write_refusals` at 1345.
-
-  RULING: B, FIX NOW. A claim repaired ten lines later is not checkable at the
-  point it is made. RUNNER-UP was A, leave as is, on the argument that a reader
-  who finishes the docstring cannot end up wrong. Shipped at `d3af1b9`,
-  docstring bytes only.
-
-  THE SAME ADJUDICATION RULED A, NOTHING TO FIX, on the two figures that looked
-  like a contradiction. They are different populations and reconcile exactly:
-  `tests` collects 1848 at `f92500f`, the two `EXCLUDED_MODULES` collect 124,
-  `tests/test_responder_refusal_gates.py` collects 7, and 1848 minus 124 minus
-  7 is 1717. So 2 failed plus 1845 passed plus 1 skipped is the full suite with
-  the file present, and 1716 passed plus 1 skipped is the campaign suite with
-  it absent. Both numbers already carry their population in the prose.
-
 - **OPEN, and it is a REAL defect in the responder rather than in a test.**
   Measured 2026-09-09 while building the `no-destination` arm: with the gate
   neutralised and `roots={}` the cycle spawns a session, terminates
@@ -4626,136 +3416,6 @@ version. What follows is everything the scaffold deliberately did not do.
   is for - but the survivorship figures quoted in older entries were taken
   against a smaller population and do not transfer. Re-derive rather than
   compare.
-
-- **CLOSED 2026-09-09, AND THE DISPOSITION IS AN ADJUDICATED CALL - NOT AN
-  OPERATOR DECISION.** It is overturnable by reading this entry. The question
-  carried by four hand-offs was that NOTHING compared INSTALLED dev tools
-  against DECLARED pins, and that a naive equality test would be GREEN on CI
-  and RED here, which is backwards. The SHAPE was the open question, not the
-  typing.
-
-  MEASURED FIRST, and every figure re-probed by two agents independently:
-  `requirements-dev.txt` pins exactly three tools, all with `==`. Installed on
-  this box - ruff 0.15.12, pytest 9.0.3, mypy 2.1.0, all OLDER than the pins.
-  Both workflows `pip install -r requirements-dev.txt` on ubuntu-latest at
-  Python 3.11, so CI is AT the pin BY CONSTRUCTION. That is why equality is
-  near-vacuous where it is green: it would assert that pip works, ninety
-  seconds after pip ran.
-
-  RULING: MIXED, and both halves shipped. The criteria, in the order used:
-  what the mechanism can CLAIM on BOTH lanes; truthfulness of the disposition;
-  feasibility as measured; blast radius, since a guard that only ever reddens
-  locally is a guard the operator disables; loudness of a future regression;
-  and non-vacuity. REJECTED: assert-equality, assert-floor, skip-off-CI, and
-  do-nothing. Skip-off-CI lost on the tree's own hard-won finding that a SKIP
-  is exactly how a red hid for five pushes.
-
-  PART D, `tests/test_dev_pin_declaration.py`: a claim about the DECLARATION -
-  every tool the gates INVOKE is PINNED - which is host-independent and true on
-  both lanes, with the anti-vacuity floor and the judgement in ONE assertion.
-  PART C, `scripts/qa_companion.py`: a non-failing NOTE row per tool reporting
-  the drift AND ITS DIRECTION, because "differs" alone does not tell a reader
-  whether a local green is optimistic or pessimistic. It is exit-0 on both
-  lanes and appears in the gate output the operator already reads.
-
-  THE FIRST BUILD WAS REFUTED WITH TWO FALSE GREENS, and the first of them
-  defeated the very reason part D was chosen over doing nothing.
-  FALSE GREEN ONE: the invoked-tool set was derived by looking up a CLOSED dict
-  of the three known names, so a fourth unpinned tool could never appear in it
-  and the equality was structurally satisfied. MEASURED: adding two unpinned
-  tools to a workflow left the test GREEN, while the module's own name promised
-  "every tool the CI gates invoke". The ruling had justified D by saying only D
-  would redden for a fourth unpinned tool - so as first shipped, D could not
-  make the one claim it was selected for.
-  FALSE GREEN TWO: trailing comments were not stripped, so rewriting a gate as
-  `echo lint step deleted  # ruff check .` - with ruff no longer invoked at all
-  - kept the guard green. A comment could satisfy it.
-
-  THE REPAIR INVERTS THE POLARITY, and that is the load-bearing decision. The
-  allow-lists now name what is NOT a tool, and an UNKNOWN word IS a tool, so a
-  new unpinned tool is caught by DEFAULT rather than by being anticipated. A
-  shape the scanner cannot classify RAISES and names the file and line, rather
-  than being quietly skipped - this tree has twice been defeated by widening a
-  matcher, and the standing lesson is that an unparseable shape must FAIL.
-
-  THE CEILING IS STATED HERE AND IN THE FAILURE MESSAGE rather than discovered
-  later. Invocation by path, through a variable, from inside a shell script, or
-  as `python -m dotted.module` is NOT credited, which leaves the invoked set
-  short and is caught by the floor. And adding an ordinary new shell utility to
-  a workflow REDDENS this module until that word joins the shell-word list -
-  a deliberate false red, and the message says so. The floor's message was
-  separately repaired: retiring a tool used to print two IDENTICAL lists under
-  an equality-shaped assert, and now names the floor and asks for a same-commit
-  constant update.
-
-  ALSO REPAIRED, and it was a live staleness rather than a hypothetical: the
-  stop-claim gate's fixture still pinned the DEAD three-word tally line after
-  the reporter began emitting a fourth count. A new arm reads the emitter's own
-  format out of the script and compares WORD SEQUENCES, so the fixture cannot
-  drift again. Its ceiling, stated honestly: it compares the count WORDS and
-  not the numbers, which differ per host, so it cannot see the two being wrong
-  together in the same way.
-
-  WHAT WOULD OVERTURN THIS: bringing this box to the pins, which makes plain
-  equality cheap and true and demotes part C to noise. Or a measured case where
-  the version drift caused a real local-green-with-CI-red, which promotes part
-  C from a report to an assertion.
-
-  THEN A THIRD REFUTER DEFEATED IT AGAIN, and the third defeat is the most
-  instructive of the three because the module had WRITTEN DOWN a false claim
-  about its own limits.
-  FALSE GREEN THREE: a QUOTED YAML scalar hid the command entirely.
-  `run: "pip-audit --strict"` derived the empty set, as did the single-quoted
-  form and a leading `!`. A quoted scalar is ordinary valid workflow YAML and
-  is MANDATORY when a command opens with a YAML-reserved character, so an
-  unpinned tool added that way stayed invisible. Meanwhile the docstring
-  asserted that a GitHub expression "is the one shape that could hide a tool
-  name silently". That sentence was measured FALSE and is deleted, with the
-  measurement recorded in its place.
-  THE REPAIR IS A MISSING PARSE STEP, NOT A WIDER MATCHER, and the distinction
-  was made deliberately: a quoted scalar is now unwrapped at the YAML level
-  BEFORE the shell scan runs, and the shell heuristic is untouched. Malformed
-  or unterminated quoting RAISES and names file and line rather than guessing.
-  This tree has been defeated three times on this one derivation and its
-  standing lesson is that widening a matcher is the wrong answer after the
-  second defeat - so the answer here was to parse the input correctly and to
-  let an unparseable shape FAIL.
-  THE WORKFLOW SET WAS ALSO HARDCODED to two filenames, so a THIRD workflow
-  would have been entirely ungraded, and that was not in the stated ceiling. It
-  is now enumerated from disk with the census floor welded into both consuming
-  assertions.
-  AND A COMMITTED ARTIFACT CARRIED A FALSE PROVENANCE COMMENT. The tally
-  fixture claimed to be COPIED VERBATIM from the script on 2026-09-09 while the
-  script on this box prints different numbers. The counts are HOST-DEPENDENT -
-  the reporter probes a listening port, an Electron runtime, a desktop shortcut
-  and an account snapshot - so no verbatim capture can stay true. It is now
-  labelled a SHAPE fixture with illustrative numbers, and the companion arm was
-  RENAMED to say it pins the count WORDS IN ORDER and claims nothing about the
-  numbers, because the refuter killed nothing by swapping the passed and failed
-  placeholders. The mechanism overclaiming was the defect, not the mechanism.
-
-  MUTATION TABLE AT THE MERGE, control GREEN and all five arms RED: an unpinned
-  tool added as a double-quoted, single-quoted or plain scalar; a pin removed
-  while the gate still invokes it; and every workflow file removed so the
-  enumeration is empty, which reddens the floor rather than passing over zero
-  files.
-
-  THE CEILING, STATED IN SIX NUMBERED ITEMS in the module rather than
-  discovered later. A tool is credited only when its BARE NAME stands in
-  COMMAND POSITION in workflow text. Not seen: invocation by path or glob,
-  invocation through a shell variable, a tool run from inside a script or
-  composite action the workflow merely calls, `python -m dotted.module`,
-  `python foo.py`, and a tool in ARGUMENT position - `xargs -0 ruff check` is
-  deliberately uncredited, because deciding argument position from text needs a
-  per-tool table of which arguments are commands, which is precisely the closed
-  dict this module removed. All six leave the invoked set empty or short and
-  are caught by the floor.
-
-  THE COMMON-MODE RISK IS NAMED RATHER THAN LEFT IMPLIED, in the module
-  docstring and here: both halves read `requirements-dev.txt` as truth about
-  what CI installs, and assert that the install happens only by reading the
-  workflow TEXT. No runner was ever observed. A cached wheel or a later
-  upgrade step would be invisible to both.
 
 - **CLOSED 2026-09-09, AND THIS IS AN ADJUDICATED CALL THAT OVERTURNS A
   PREVIOUS ADJUDICATED CALL FOR EXACTLY ONE SITE. NOT AN OPERATOR DECISION.**
@@ -5237,36 +3897,6 @@ version. What follows is everything the scaffold deliberately did not do.
   HAND-OFF WAS STALE - its two worst entries were already fixed - so re-derive
   rather than trusting any list, including this one.
 
-- **CLOSED 2026-09-09 for the coverage, and the disposition is an ADJUDICATED
-  CALL - NOT AN OPERATOR DECISION.** `tests/conftest.py` routed all three
-  outcomes of `git rev-parse --git-dir` with NO TEST AT ALL on any of them.
-  Commit `9e9f7e4` extracts a pure `classify_git_probe(returncode, stdout,
-  stderr, exec_error)` and adds 14 arms.
-
-  THE ADJUDICATED CALL, overturnable by reading this paragraph. The non-128
-  non-zero branch STAYS A SKIP and was NOT promoted to a FAIL. Criteria the
-  adjudicator ruled against, stated before it read the candidate: which of the
-  three dispositions the exit code names; whether a false red could be NAMED in
-  a real environment; whether a shipped arm required the current behaviour;
-  blast radius; and separability. Findings: every git FATAL exits 128 -
-  measured, git 2.53.0.windows.3, including outside a repository and on a bogus
-  flag - so a non-128 non-zero exit IS git running and breaking, the second
-  disposition, and the promote-to-FAIL argument WINS on meaning. It loses
-  anyway, because the FAIL already exists ONE LAYER UP:
-  `tests/test_commit_trailers.py` cross-checks the helper against an
-  INDEPENDENT signal, a `.git` entry on disk, and reddens the suite for any
-  non-None reason inside a checkout. Firing inside the helper would move the red
-  into the archive-shaped population this file was written to serve. The
-  adjudicator could NOT NAME a healthy-repo environment producing a non-128
-  non-zero exit; that is a finding, not a gap, and a measured case would reopen
-  this. WHAT WOULD OVERTURN IT: showing that
-  `tests/test_commit_trailers.py::test_the_missing_git_skip_path_is_not_taken_in_a_real_checkout`
-  can be skipped or deselected inside a real checkout, at which point the helper
-  is the only door.
-
-  THE PREVIOUS HAND-OFF'S FIGURE WAS SCOPED WRONG. "Injecting exit 7 gives 29
-  passed, 4 skipped, EXIT=0" is TRUE WITHIN ONE FILE and FALSE SUITE-WIDE.
-
 - **CLOSED, AND THE ROW ABOVE IT WAS STALE FOR TWO SESSIONS - the staleness is
   the entry.** This row previously read OPEN and said the byte-identity contract
   was "GUARDED BY NOTHING" and that a bracket change "leaves all 14 arms green".
@@ -5326,73 +3956,6 @@ version. What follows is everything the scaffold deliberately did not do.
   `else:` half only by rewriting the audited module's `REPO_ROOT`. That half is
   DEAD in both a worktree and the main checkout, so it is graded under forced
   inputs rather than as shipped behaviour.
-
-- **CLOSED 2026-09-09, and it was ours, caught by a control probe rather than by
-  any refuter.** `tests/test_conftest_skip_path_pinned.py` shipped in `e714b35`
-  with an arm that ASSERTED a `.git` entry exists on disk, so it FALSE-RED in a
-  `git archive` extract - measured 1 failed, 13 passed, exit 1 outside any
-  repository. An extract has nothing to report, which is NOT-PRESENT-AT-ALL, the
-  third disposition, and the arm's own docstring anticipated the archive shape
-  and then asserted anyway. It now SKIPS with a reason naming the shape:
-  measured 13 passed, 1 skipped, exit 0 in the same extract.
-
-  WORTH KEEPING as method rather than as fact: no refuter was assigned an
-  archive-shape lens, and five were dispatched. The defect surfaced only because
-  a mutant kill was verified DIFFERENTIALLY against an unmutated control in the
-  same environment, and the control was not clean. A mutant kill measured without
-  a control cannot distinguish the mutant's failures from the environment's.
-
-- **CLOSED 2026-09-11 at `86491a3` AND `78cdf96`, AND THE LAST SENTENCE OF THIS
-  ROW WAS THE WRONG READING.** The row's final measurement - that the pre-push
-  gate does not hit this, because `git hook run` shows an empty `GIT_DIR` - is
-  CONFIGURATION-SCOPED and was reported as universal. Verified 2026-09-11 on git
-  2.53.0.windows.3: a push from the MAIN CHECKOUT exports none, a push from a
-  LINKED WORKTREE exports it, and this machine carried 52 worktree entries that
-  day while the pre-push hook runs both suites. With it exported,
-  `python -m pytest tests` returned rc 2 with "Interrupted: 1 error during
-  collection" while the engine suite collected 80 and carried on. An AST pass over
-  the 141 tracked Python files found 41 corpus sites with exactly ONE real scrub,
-  correcting an earlier 39-with-two reading in which one claimed scrub matched
-  only because a COMMENT mentioned the variable. CS's damage narrative was
-  NARROWED rather than adopted: `git init --bare` with an EXPLICIT path does not
-  hijack, only the no-path form does, and this tree has zero such call sites, so
-  only the corpus swap can fire here. The scrub now lives in `conftest.py`, sized
-  from `git rev-parse --local-env-vars` - git's OWN list, fifteen names - with a
-  runtime reconciliation arm, and `tests/test_hook_gate.py` is now
-  configuration-scoped with both readings. Guard `tests/test_git_env_scrub.py`.
-  The original text follows.
-
-  With `GIT_DIR` exported, `git rev-parse --git-dir` SUCCEEDS while
-  no `.git` sits on disk, so `tests/conftest.py` and the disk cross-check in
-  `tests/test_commit_trailers.py` DISAGREE - one reports a usable repository and
-  the other reports none. That state is neither ran-and-found-nothing,
-  ran-and-broke, nor not-present-at-all: it is live-repo-relocated-GITDIR, and
-  under it the cross-check that the adjudicated call above depends on can carry
-  a FALSE reason or false-red. Nothing in either file clears `GIT_DIR` or
-  `GIT_WORK_TREE`. Measured separately: the pre-push gate does not currently hit
-  this, `git hook run` shows `GIT_DIR=[]`.
-
-- **CLOSED 2026-09-09 by commit `5f9e312`, AND THE CLAIM THIS ITEM MADE WAS
-  FALSE.** The previous wording said `tests/test_machine_identity.py` and
-  `tests/test_licence_posture.py` consumed `git ls-files` "with no floor and no
-  anchors". BOTH ALREADY HAD ONE: a hand-written floor of 100 plus named
-  anchors, five in the first file and six in the second, and the `_sweep()`
-  docstring's claim that the count is asserted separately was TRUE. The
-  coordinates were also off - `_tracked_files()` begins at line 231, not 236.
-  This is what re-deriving a handed-off list is for.
-
-  THE HOLE THAT WAS ACTUALLY OPEN is narrower and was real: the floor lived in a
-  SEPARATE arm from the sweep, so the PRIMARY arm passed GREEN OVER ZERO FILES -
-  `assert not offenders` holds trivially on an empty corpus - and `check=True`
-  reported an exit code while DROPPING stderr. Repaired with a pure
-  `_classify_enumeration(returncode, stdout, stderr)` at each site holding four
-  outcomes apart, `check=False`, and `pytest.fail` at the point of use, with
-  `require_git_repository()` still first so a no-repository copy stays a SKIP.
-
-  An adversary supplied the measurement the author could not: in a genuine
-  no-git extract the tree gives 62 passed / 26 skipped against a baseline copy's
-  62 passed / 14 skipped. The PASSED COUNT IS IDENTICAL, so no pre-existing arm
-  turned a pass into a skip and no false red was installed.
 
 - **OPEN, low severity, and a PRE-EXISTING blindness rather than a regression.**
   The sweep floor's VALUE is ungraded in both files above. Mutating
@@ -5494,25 +4057,6 @@ version. What follows is everything the scaffold deliberately did not do.
   partial-write half. Check this tree's own sites.
 
 
-- **CLOSED 2026-09-08 by the cold-boot measurement the previous session left as
-  its first instruction.** The runtime invocation log under `ops/runtime/`,
-  gitignored and so named in prose, records which hook fired: commit `3964544`
-  gives `SessionStart` and `UserPromptSubmit` distinct `--source` labels. The
-  prior half was a real `UserPromptSubmit` fire writing `userpromptsubmit` on
-  both of its lines. `SessionStart` carried no flag before that commit, so the
-  commit made it argv-dependent for the first time, on the exact event the log
-  exists to prove. The next cold session wrote a `sessionstart` pair, both
-  columns, reaching `reported` and not merely `start` - so the hook ran to
-  completion rather than only to entry. BOTH hooks deliver argv on this machine.
-  Recorded here because it was the open question, not because a passing hook is
-  news.
-
-  Second fact from the same reading, unpredicted: a `userpromptsubmit` pair
-  fired one second after the `sessionstart` pair, from the same cold prompt.
-  Both hooks fire on a cold session start, in that order. The distinct labels
-  are what make them separable at all - under one shared label the pair reads as
-  a single hook firing twice, which is what the log said for every earlier line.
-
 - **OPEN, AND IT IS THE REASON THE ITEM ABOVE COULD NOT CLOSE `/clear`.** The
   `--source` flag as wired hardcodes ONE LITERAL STRING PER EVENT, so the log
   records which HOOK fired and never which SOURCE the harness fired it from.
@@ -5553,78 +4097,10 @@ version. What follows is everything the scaffold deliberately did not do.
   an arm whose name claims more than it checks is worse than no arm, because the
   next reader stops looking.
 
-- **CLOSED 2026-09-08 by `tests/test_responder_task_argv.py`, and it took three
-  rounds because the first two were shape arms.** The task XML's `<Exec>` argv is
-  now graded against the code that argv calls. Nothing is written down: the
-  script's identity comes from a byte scan for the file declaring
-  `SOURCE_SCHEDULED_TASK`, flag spellings from that script's own `parser._actions`,
-  and MEANING from running `main` with `run_once` intercepted and grading the
-  `Bounds` it builds.
-
-  Recorded because the failures are the instructive part. Version one graded
-  SHAPE and let four meaning-changing mutants through green: the script path
-  swapped to a real-but-different file, `--arm` dropped so the task never spawns,
-  the window boundaries swapped so it closes before it opens, and non-dash
-  positional junk that `parse_known_args` binned unasserted. Version two keyed its
-  refusal token on the EXIT CODE 2, which argparse also returns - four unrelated
-  causes minting one fingerprint, the same defect as an interpolated reason
-  string. Version two also disclosed `--latency-only` as ungradeable "because the
-  code marks it optional"; an adversary refuted that from the call the test was
-  already intercepting, where the `grammar` kwarg differs. Dropping the flag would
-  publish integer hops with `m1_status='lower-bound'` for a run whose far end is a
-  human - exactly what `e1a101d` fixed.
-
-  One property here is worth reusing rather than re-deriving: a content-hash
-  recursive walk over 1137 entries - this worktree, this tree's runtime directory
-  and inbox, four sibling inbox directories, the profile config - showed these
-  arms write NOTHING outside pytest's own cache, with planted controls proving the
-  walk sees additions and modifications. That is what the responder isolation arm
-  below was supposed to be and is not. Note the method: NOT existence-plus-size.
-
 - **OPEN, and narrower than it looks. `--latency-only` presence is still
   ungraded in the argv gate.** The grammar the intercepted call receives IS now
   asserted, which covers the consequence; what remains unasserted is the flag
   itself. Left deliberately rather than pinned as a literal.
-
-- **CLOSED 2026-09-08 AS TO ITS SIX MEASURED HOLES, AND THE CLAIM IT COULD NEVER
-  KEEP IS NOW WRITTEN DOWN INSTEAD.** The read-only guard over
-  `ops/check_task_liveness.py` was defeated FIVE times in one session, twice
-  destructively - a canary file deleted from disk while the suite printed a green
-  exit 0. Commit `9fe8b0b`. `ops/check_task_liveness.py` itself needed no change:
-  no violation was found in it under any of the new nets.
-
-  The six, each watched red on its own mutant before the fix:
-  a PowerShell ALIAS CARRIES NO HYPHEN, so `ri`, `del`, `rm`, `sc`, `kill`, `ni`
-  and a concatenated verb all walked past a hyphenated Verb-Noun scan;
-  the whole-file scan carried no `re.IGNORECASE` while the comment above it
-  asserted case-insensitivity;
-  a TYPE ACCELERATOR CALLS THROUGH `::`, NOT `.`, and `[` is not a letter, so
-  `[System.IO.File]::Delete` reached neither scan - nor did plain `>` REDIRECTION,
-  which overwrites a file while carrying no command token at all;
-  the scan was BOUND TO THE IDENTIFIER `_PS_TEMPLATE`, so a second module-level
-  PowerShell string concatenated onto it was ungraded;
-  the harness SHIMMED `subprocess` WITH A STAND-IN THAT HAD NO `Popen`, so a
-  mutation branching on `hasattr(subprocess, 'Popen')` built pristine text under
-  the shim and a deleting probe in production;
-  and grading ran at import of the TEST file, which is AFTER the SUBJECT's own
-  module-level code has already run.
-
-  **THE CEILING, and it is the durable finding rather than the fixes.** A test
-  suite CANNOT prevent arbitrary runtime behaviour in a module it imports. It can
-  grade that module's SOURCE, and it can refuse to import a source that fails the
-  grade. It cannot prove that a source which passes will behave the same way at
-  runtime, because the imported module can always branch on something the harness
-  did not think to make identical. That paragraph is now in the file's docstring,
-  and two arms were renamed to claim only it. Rounds two through five each
-  widened a matcher; the last two kills did not touch a matcher at all. If a
-  sixth attack lands, widening is the wrong response.
-
-  Also closed: the ambiguity arm no longer collapses "checked and found nothing"
-  into "could not check". Discovery returns records and draws no conclusion,
-  FAILED is an error rather than a skip, and only the genuinely-empty case skips,
-  saying which case it is. The plausibility floor that replaced it was measured
-  DECORATIVE first - over totals 0..39 the set where its own assertion could fail
-  was empty - and rebuilt.
 
 - **OPEN, AND IT IS WHAT THE ITEM ABOVE BOUGHT CI: NOTHING.** `_WINDOWS_ONLY` is
   a `skipif`, so on a Linux runner every real-probe arm in
@@ -5687,27 +4163,6 @@ version. What follows is everything the scaffold deliberately did not do.
   deleting a repository deletes its LFS store. This tree's own `refs/pull` count
   is ZERO with a positive control, so that trap does not apply here.
 
-- **DONE 2026-09-08. The LATENCY-ONLY window ran and its result was reported to
-  the channel as NO-DATA.** `tools/moon_sync_responder.py`, proven by
-  `tests/test_moon_sync_responder.py`. Measured after the window closed:
-  `responder_metrics.json` never created, 29 `start` against 19 `empty` in the
-  invocation log, M1 INAPPLICABLE, M2 and M3 NO-DATA. The cause was RSC's own
-  `since=bounds.window_opens` eligibility rule admitting no mail, not the
-  counterparty. Left alone mid-window deliberately: widening eligibility while
-  the experiment ran would have edited the experiment.
-
-- **DONE 2026-10-02 for the auto-reply path, proven by
-  `tests/test_responder_audience.py` and `tests/test_responder_loop_breakers.py`
-  plus a live measurement: the 23:11 fire of the re-armed task delivered an
-  auto-reply to MAIN whose recipient copy hash-matched.** The history below is
-  kept as written. The responder had STILL never answered real mail, after two
-  attempts. Every measurement in `tests/test_moon_sync_responder.py` is
-  against a stub or a scratch inbox. Attempt one terminated `empty` on every
-  tick. Attempt two, on 2026-09-08, was refused by the counterparty 72 seconds
-  after delivery at its input stage on name grammar, and no responder-authored
-  reply had arrived 15 minutes later when polling stopped. Three candidate
-  explanations, none measured.
-
 - **OPEN. An eligibility rule that makes a trial measure nothing is invisible
   until the trial ends.** `pending()` in `tools/moon_sync_responder.py` takes
   `since=bounds.window_opens`, and a window whose backlog predates it has zero
@@ -5719,15 +4174,6 @@ version. What follows is everything the scaffold deliberately did not do.
   discovering it was zero afterwards. `tests/test_moon_sync_responder.py` already
   has an arm proving that without a `since` bound the backlog is eligible.
 
-- **DONE 2026-09-08. A refused note no longer grows one held file per tick, and
-  the fix was not the one first written.** `tools/moon_sync_responder.py`,
-  proven by `tests/test_moon_sync_responder.py`. The first suppression hashed
-  the RENDERED REASON TEXT, and one reason interpolated a byte count, so a draft
-  oversize by a different amount each cycle minted a fresh fingerprint every
-  tick - ten cycles, ten held files, with the guarding arm feeding a
-  byte-identical draft and structurally unable to fail. Keyed on reason CATEGORY
-  now: ten cycles give one held file. Found by an adversary AFTER the builder
-  reported the slice complete and green.
 - **DONE 2026-09-08. A refusal now tells the sender, via a file that is not a
   note.** `tools/moon_sync_responder.py`, proven by
   `tests/test_moon_sync_responder.py`. Template-only, runner-authored with an
@@ -5748,21 +4194,6 @@ version. What follows is everything the scaffold deliberately did not do.
   written during another repo's hard-link window would be listed as unread mail.
   Not reachable through the one counterparty whose delivery scheme was measured
   - its tmp names carry `.tmp` - but it is a reading-side defect regardless.
-
-- **DONE 2026-10-02, re-armed by `ops/install_responder_task.ps1` under the
-  operator directive of that date, liveness checked by
-  `ops/check_task_liveness.py` with exit 0.** Window 2026-10-02T22:56 to
-  2026-11-01T22:56 local; renewal is tracked as its own item under Now. The
-  history below is kept as written: the responder WAS DORMANT and its agreement
-  EXPIRED, both at 2026-09-07T21:00:00. Measured 2026-09-08: the task reports
-  `State: Ready` and `LastTaskResult: 0` while its only trigger's EndBoundary is
-  in the past, NextRunTime is empty, and the invocation log holds no line dated
-  2026-09-08. `ops/check_task_liveness.py` reads it DORMANT with exit 1.
-  Sibling-A's responder DELIVERED a machine-authored note at 17:00 that day, so
-  the receiving side finally has M2/M3 data, but the REPLY path cannot run.
-  Re-running the installer produces another BOUNDED window, not a standing
-  responder - the window bound is a deliberate choice, and a gitignored
-  agreement record naming the counterparty must exist first.
 
 - **OPEN. One mutant survives the task-liveness suite by construction, and the
   eighth variant was never graded.** Prepending a failing command to the
@@ -5806,15 +4237,6 @@ version. What follows is everything the scaffold deliberately did not do.
   refused, and a row carrying a forbidden key is refused. `core/types.py` was
   not touched. THE REMAINING WORK is the first real consumer: nothing writes a
   row yet, and a schema with no producer has never met a real value.
-- **DONE 2026-09-07 (third session). Noelle was found, and the recorded window
-  was the reason she was not.** 09:07:38.533Z to 09:07:39.667Z, card 1 of the
-  first Beginners' Wish 10-pull, swept at 15.000 fps over 129180 frames with
-  two non-OCR positive controls. `observations.jsonl` line 9 claimed the banner
-  read 20/20 at 09:12:09Z; it reads 10/20. That false bound put the search
-  window about thirteen minutes AFTER the event, so no sampling rate could have
-  found her. The record was superseded in place with all eight original fields
-  preserved byte-identical. **A CAVEAT THAT IS CORRECT CAN STILL BE THE WRONG
-  EXPLANATION, and a plausible one stops the search.**
 - **NEW 2026-09-07 (third session). The remaining capture-store work is the
   OTHER nine observations.** Only line 9 was re-measured. The store is still
   15 GB at `C:/rsc-first-run/` outside this tree, 6062 file events over 5971
@@ -5939,103 +4361,6 @@ version. What follows is everything the scaffold deliberately did not do.
   paragraph must be DELETED rather than reworded is right - a reworded
   rationale keeps the authority of the original.
 
-- ~~**The publish sweep, the history rewrite and the remote rebuild.**~~
-  **DONE 2026-09-06.** Six adversaries on distinct lenses, ALL SIX REFUTED. Four
-  builder slices on a proven-disjoint write-list, 12 files, zero violations.
-  Full detail in `docs/LEDGER.md`; the parts that change what a future session
-  should do:
-  - **A force-push does NOT purge objects from GitHub.** Two commits
-    force-pushed away still served a `Claude-Session:` URL, and the account path
-    sat in 8 of 33 pushed commits. The fix was rewrite locally, DELETE the
-    remote, recreate, push clean. Verified server-side: HTTP 422 on the orphans,
-    404 on the blob, and a cold clone carrying 0 account-path blobs of 291. If
-    anything must ever leave this history again, that is the only procedure that
-    works.
-  - **An object purge is true only at the instant it is measured.** The leaked
-    blob returned three times - a `FETCH_HEAD` from a bundle fetch, a
-    `refs/remotes/origin/main` surviving in `.git/packed-refs`, and agent
-    worktrees checking out the pre-rewrite commit into the shared object store.
-    Re-verify after anything that can create a ref.
-  - `shell/package-lock.json` had declared the project unlicensed since the
-    GPL-3 switch, and the guard added in that same commit swept 5 files of 153.
-    Now derived from `git ls-files`; that file went 33 arms to 41.
-  - Both CI ASCII gates passed any path containing a space, and 14 tracked files
-    were scanned by neither gate. Coverage is now 153 of 153, uncovered set
-    empty, halves disjoint.
-  - The exclusive-bind fix was ported to `agents/pity_engine/__main__.py`, which
-    had kept the stock server since the surface fix landed at one call site.
-- ~~**Check the fork-PR approval setting the moment the repo goes public.**~~
-  **DONE 2026-09-07. The risk was already closed.**
-  `gh api repos/Remus3/Resin-Compute/actions/permissions/fork-pr-contributor-approval`
-  returns `{"approval_policy":"first_time_contributors"}`. A stranger's first
-  pull request requires manual approval before any workflow runs, so the
-  `pip install -r requirements-dev.txt` route to runner code execution is gated
-  by a human click rather than open at the flip. Re-check it if anyone ever
-  loosens it: the setting is invisible while a repo is private (422), which is
-  why this could not be verified in advance.
-- ~~**Prove the hook gate fires, in CI.**~~ **DONE 2026-09-07, and it ran on a
-  real runner.** `tests/test_hook_gate.py` stands up a throwaway `git init`,
-  copies the real hook bodies plus the four dependencies they source, and
-  asserts on HEAD: a clean ASCII commit LANDS, a banned glyph in staged content
-  is REFUSED, a banned glyph in the commit message is REFUSED. Without the
-  positive control a gate that refused everything would pass both negatives.
-  Observed on `ubuntu-latest`:
-  `armed: .githooks/commit-msg .githooks/pre-commit .githooks/pre-push (all mode 100755)`
-  then `12 passed in 0.75s` - ran, not skipped.
-  - **An adversarial pass then REFUTED four claims made ABOUT that work, and all
-    four are corrected in the tree.** `RSC_REQUIRE_HOOK_GATE` does NOT convert
-    an unconfigured clone: the fixture arms its own throwaway repo and never
-    reads the host checkout's `core.hooksPath`, so an unconfigured clone passes
-    12 of 12. What the flag converts is an UNMEASURABLE MACHINE - no POSIX `sh`,
-    no git, or a missing hook file to copy. The dependency scan matched `$ROOT/`
-    but not `${ROOT}/`, so a brace-form dependency would have gone uncopied while
-    the rot guard stayed green. The positive control went RED when the pinned
-    interpreter could not `import ruff`, blaming the gate for a contributor's
-    venv layout. And the docstring claimed a `GIT_*` scrub wider than it
-    performs, citing a mechanism `git 2.53` does not exhibit.
-- ~~**Wire the inbox watcher so it actually fires.**~~ **DONE 2026-09-07.**
-  `scripts/watch_inbox.py` was correct and connected to NOTHING - there was no
-  `.claude/settings.json` in this tree at all, so it ran only when a human typed
-  it. A declared hook is not a firing hook, and the quieter predecessor is that
-  an unwired script is not a watcher. Now a `SessionStart` hook, with
-  `.gitignore` gaining `!.claude/settings.json` so the wiring reaches a fresh
-  clone rather than living on one box. `tests/test_session_hooks.py` EXECUTES
-  each declared command rather than resolving its target.
-- ~~**CAVEMAN ULTRA as the default chat dialect.**~~ **DONE 2026-09-07**, on
-  operator instruction, after RSC filed a dissent that the operator overruled.
-  `tools/caveman_default.py` and `tools/caveman.md` are Sibling-C's bytes,
-  not a paraphrase; the `_BANNER` string is a FLEET CONTRACT and its sha256 is
-  pinned as a literal in `tests/test_session_hooks.py` rather than diffed
-  against the copy in `moon_sync_inbox/`, which is gitignored and would take the
-  guard silent in every fresh clone. Terseness is CHAT ONLY - committed
-  artifacts stay byte-exact.
-- ~~**Gate the hand-off write for credentials and account paths.**~~
-  **DONE 2026-09-07.** Sibling-E asked whether anyone gated the hand-off
-  more widely than ASCII and truncation; this tree's honest answer was no, and
-  it was MEASURED: a block carrying an inline API key and a block naming the
-  real account each published clean to the Desktop. That is the one write that
-  leaves the toolchain - pasted into cold sessions, quoted into four sibling
-  repos, from a public repo. `tools/publish_next_session.py` now refuses both,
-  and the refusal never echoes what it caught.
-- ~~**No tracked file may carry a credential.**~~ **DONE 2026-09-07.**
-  `tests/test_no_secret_literals.py` sweeps 160 tracked files for
-  vendor-prefixed tokens and for known secret names bound to literals. It
-  deliberately does NOT flag the sha256 governor pins, the base64 tray icon or
-  an environment lookup - a guard that flagged those would be deleted within a
-  day. All five repos were swept and were already clean; the one real key lived
-  in the user-level `~/.claude/settings.json` and is now a Machine environment
-  variable.
-
-- ~~**Port Sibling-C's claim gate.**~~ **SUPERSEDED 2026-09-07 - THE SOURCE IS
-  GONE AND IT WAS REBUILT INSTEAD.** Sibling-C DELETED its verbatim
-  subdirectory, `moon_sync_inbox/from-<sibling>-verbatim/`, from all four
-  sibling trees after Sibling-A found the operator's account name in 3 of its
-  48 files and Sibling-C's own sweep raised that to 19 of 48, including
-  `tests/test_stop_claim_gate.py`. Containment here was measured: 0 tracked
-  files, 0 commits by pickaxe, 0 additions of any of the four named tool
-  filenames. `tools/stop_claim_gate.py` now exists, re-implemented from
-  Sibling-C's published PROSE with no Sibling-C code read. Detail in
-  `docs/LEDGER.md`.
 - **ARM THE CLAIM GATE, once its false-positive rate is low enough to deserve
   it.** It landed at `2b8fcbe` DELIBERATELY UNWIRED - no `Stop` hook is
   declared and `.claude/settings.json` is untouched - because the producer's
@@ -6095,16 +4420,6 @@ version. What follows is everything the scaffold deliberately did not do.
   but the specific shape that recurs here IS checkable: a document asserting a
   property of a file that the file itself contradicts. Worth one guard over the
   claims that name a path.
-- ~~**`agents/pity_engine/CHANGELOG.md` needs an entry for the exclusive
-  bind.**~~ **DONE 2026-09-07**, `1794a5e`. A new "Service changes at engine
-  revision 0.1.0" section, because the file's convention is that a bump PREPENDS
-  and a prior version's line is never extended. `ENGINE_VERSION` deliberately
-  does NOT move: it is the COMPUTE revision, every forecast is byte-identical
-  across the change, and bumping it would have invalidated correct caches. The
-  entry also records which half is load-bearing, which was MEASURED and is not
-  the one the name suggests - `first=none` and `first=exclusive` are identical
-  columns in the nine-cell matrix, so dropping `SO_REUSEADDR` is what closes the
-  defect and `SO_EXCLUSIVEADDRUSE` changes no observable outcome here.
 - **Answer Sibling-C's charter, round by round.** v3 is ADOPTED with one
   dissent filed and accepted; v4 arrived at the end of this session and is
   UNREAD. `scripts/watch_inbox.py` exists now, so the next session can see what
@@ -6112,86 +4427,6 @@ version. What follows is everything the scaffold deliberately did not do.
   deliberately NOT marked at the end of this session - 42 notes are listed and
   roughly ten were actually processed, and an inflated watermark is worse than
   none. Triage, then `--mark`.
-- ~~**QA the repo for going public.**~~ **DONE 2026-09-06.** The audit ran at
-  commit `57f8894` and every gate was green before a line was touched, so none of
-  it was a broken build - each item was a defect a stranger would meet. Every one
-  is now fixed and guarded. What landed, with the guard that holds it:
-  - **Two fixtures were labelled false, and the label WAS the compliance claim.**
-    `data/fixtures/seed_roster.json` and `seed_materials.json` opened with
-    `"_synthetic": true` on the line directly above a `"_note"` calling them
-    hand-authored. They now carry `_hand_authored`, `_vendored` and `_content`
-    blocks stating what they are: publicly known game facts, independently
-    verified, typed in one row at a time. `data/fixtures/README.md` is retitled
-    and now names which of its three files is which kind -
-    `enka_sample_profile.json` IS genuinely synthetic and keeps that label.
-    Synthetic means invented, and a verified avatarId is not invented. The true
-    claim was also the stronger one. Guarded in
-    `tests/test_licence_posture.py`, which went from 21 arms to 33.
-  - **The dissolved ADR-006 reason is qualified everywhere it appears.**
-    `README.md`, `ingest/enka_client.py`, `docs/SPEC_SCAFFOLD.md` and
-    `data/fixtures/README.md` each stated that vendoring `enka-py` or `ambr-py`
-    "would relicense this repo" - void since this tree became GPL-3-or-later.
-    Each now carries the dissolution note in the shape `docs/LICENSE_NOTES.md`
-    already used, and the refusal STANDS: both wrap HoYoverse data and a licence
-    on a wrapper cannot grant rights to the payload.
-    **A sharper instance the audit missed was found and fixed in the same pass:**
-    the GENERAL RULE in `docs/LICENSE_NOTES.md` - "GPL and other copyleft stays
-    DO-NOT-VENDOR ... because vendoring it would relicense this repo" - was the
-    version a future contributor actually applies, and it was flatly false for a
-    GPL-3 tree. It now says what replaced it: the question is no longer the
-    licence but the PAYLOAD, and a GPL-2-only library remains an automatic bar
-    on incompatibility grounds.
-  - **`NOTICE` gained the GPL-3 warranty disclaimer**, taken verbatim from the
-    appendix in `LICENSE` rather than retyped, plus a trademark acknowledgement
-    naming the marks and a statement that this is a non-commercial companion
-    tool. A guard matches the disclaimer against the text READ FROM `LICENSE` at
-    run time, so the two can never drift.
-  - **The docs guard now tests TRACKEDNESS, not just presence.**
-    `tests/test_docs_consistency.py` called `.exists()`, which is true for a
-    directory git does not store - exactly how `docs-guards` went red on the CI
-    runner while the same test was green locally. It now also asserts every cited
-    path is in `git ls-files`, with non-vacuity proven at the predicate level and
-    no tree mutation. 16 arms to 23. It caught a real unstaged-citation case
-    within minutes of landing.
-  - **The same root cause had two siblings, and both are fixed.**
-    `tests/test_ports.py` had a function NAMED `_tracked_python_files` that did a
-    filesystem `rglob` behind an ad-hoc denylist. It was GENUINELY RED in the
-    main checkout, and it would go red for any contributor who created a
-    `.venv/`. It now derives its list from `git ls-files`. The third sibling was
-    `tests/test_shell_contract.py`, latent rather than red because its assertions
-    were floor-shaped and so could not detect over-collection.
-  - **The Windows account name is out of `.claude/commands/done.md`** and can no
-    longer come back: `tests/test_machine_identity.py` sweeps every tracked file
-    for an absolute path naming a real account, across Windows, POSIX and
-    MSYS/WSL/Cygwin mount spellings. It carries BOTH guards - the leak is gone
-    AND the legitimate neighbours survived - with a by-name allowlist for the
-    synthetic `x` fixture in `tests/test_make_shortcut.py` and the `<account>`
-    documentation placeholder. Nothing in the tree had ever guarded that line in
-    either direction.
-  - **The README now opens for a stranger.** What it is, what state it is in,
-    what it deliberately does NOT do, and the non-affiliation disclaimer on the
-    first screen instead of the last. The repository tree is refreshed and
-    guarded by `tests/test_readme_tree.py` - one-directional by design, so an
-    added ADR cannot turn it red. The quickstart is PowerShell throughout, since
-    `export VAR=...` is not PowerShell and `curl -s` resolves to
-    `Invoke-WebRequest`. The machine name is gone and the space-containing path
-    is reframed as the deliberately exercised test case it actually is. The
-    Enka example UID is annotated at the use site.
-  - **`docs/SPEC_SCAFFOLD.md` no longer says a slice is done "from
-    `resin-compute/`".** The relocation premise is gone from the build contract.
-  - **Per-file licence headers: DECIDED, in `docs/adr/ADR-009-per-file-licence-headers.md`.**
-    The answer is NO, on the merits, with named re-open triggers. Measured at
-    `58c02b4`: 80 tracked `.py`, 10 tracked `.js`, and zero SPDX identifiers in
-    any source file - the only occurrences anywhere are in ADR-009 itself,
-    discussing them. GPL-3's
-    "How to Apply These Terms" sits at LICENSE line 623, AFTER
-    `END OF TERMS AND CONDITIONS` at line 621, so it is advisory; section 5(b)
-    binds the work and a modifier rather than the file and the author. Below
-    best practice, NOT non-compliant. The one real cost of omitting is recorded
-    honestly: a single file copied out of the tree carries no licence signal.
-- ~~**The licence gate's four text defects.**~~ **DONE 2026-09-06,** except that
-  the fan-content arm turned into something much more interesting - see the entry
-  below, which supersedes it. The other three are closed above.
 - **Close the fan-content evidence hole, and watch for a Genshin guide.** The
   posture is decided and recorded in `docs/adr/ADR-008-fan-content-posture.md`
   (operator decision 2026-09-06: publish on the vendoring argument alone). Two
@@ -6206,18 +4441,6 @@ version. What follows is everything the scaffold deliberately did not do.
   **Read ADR-008's method warning before doing either.** The research pass this
   supersedes was wrong in three separately checkable ways and was caught only
   because something was dispatched to refute it.
-- ~~**The suite could not run for anyone who received the repo without git.**~~
-  **DONE 2026-09-06.** `git archive` plus `pytest tests` aborted at COLLECTION,
-  exit 2, zero tests run - what a reader gets from Download-ZIP, an sdist or a
-  vendored copy. Introduced by this session's own trackedness fixes, which took
-  the number of git-dependent test files from 3 to 8 with nothing testing the
-  absent-git case. `tests/conftest.py` now provides the skip helpers, and a
-  cross-check in `tests/test_commit_trailers.py` fails if the skip path is ever
-  taken inside a real checkout. Fixing it exposed a second, pre-existing defect:
-  `tests/test_hook_interpreter.py` embedded a quoted path in an `sh -c` string,
-  which MSYS mangles at any path WITHOUT a space - so it passed here and would
-  have failed for anyone cloning to `C:\dev\ResinCompute`. Both fixed and
-  measured: archive now 692 passed, 50 skipped, exit 0.
 - **Two guards claim more than they sweep. Found by the quickstart adversary at
   `58c02b4`, both measured.**
   - `tests/test_ports.py` sweeps ONLY `.py` files, because it uses `ast.parse` to
@@ -6291,37 +4514,12 @@ version. What follows is everything the scaffold deliberately did not do.
   `docs/GOAL_SPEC_SEED_TEAM.md` section 3.1 - first-hand observation is still
   the only acceptable source and the unverified web figures still must not
   enter `data/`.
-- ~~**Session shape and the agent roster.**~~ **DONE 2026-09-06.** The default
-  session is orchestrated, multi-agent, self-adjudicating and self-adversarial;
-  the reasoning is in ADR-007 and the roster lives in `.claude/agents/`. The
-  `/done` ritual is `.claude/commands/done.md`, and
-  `tools/publish_next_session.py` publishes the Desktop backup of the hand-off
-  from `NEXT_SESSION_PROMPT.md` so the printed block and the file cannot
-  disagree.
 - **Observe the seed-team cost table in game.** `docs/GOAL_SPEC_SEED_TEAM.md`
   records the operator's roadmap with every claim stamped verified, unverified,
   time-sensitive or refuted, and section 3.1 is the gate on a real dated plan.
   The account has not been played yet, so no first-hand observation exists and
   the three cost figures that arrived from a web assistant are deliberately NOT
   in `data/` - `tests/test_goal_spec.py` fails if they get copied in.
-- ~~**Persist the reconciled account state.**~~ **DONE 2026-09-06.**
-  `core/state_io.py` serializes `AccountState`, the `persist_state` job writes it
-  through `core/atomic_io.py`, and `surface/` cold-starts from it and renders how
-  old the reading is. The snapshot is WRITE-ONLY from the headless lane so
-  live-state-first still holds, and a test asserts that structurally rather than
-  documentarily.
-- ~~**Repo relocation.**~~ **DONE, verified 2026-09-06.** The scaffold was built
-  inside the Sibling-C repository because the session's GitHub integration
-  could not create a new repository (`POST /user/repos` returned 403 Resource
-  not accessible by integration). It now stands alone and the claim that "the
-  CI workflows are inert" was measured false and removed:
-  `git rev-parse --show-toplevel` returns the tree root, `git remote -v` returns
-  `github.com/Remus3/Resin-Compute`, `.github/workflows/ci.yml` carries no
-  `working-directory` and its paths are already repo-root relative, and
-  `gh run list` shows `ci` and `docs-guards` both green against this tree. One
-  stale premise survives the move and is listed under the public-repo QA item
-  above: `docs/SPEC_SCAFFOLD.md` still says a slice is done "from
-  `resin-compute/`".
 - **Wire the objective DAG to real material costs.** `engines/objectives.py` is
   mechanism only and takes materials as a caller-supplied argument. Nothing
   currently supplies them. This needs a licensed or first-party cost table, which
@@ -6403,47 +4601,6 @@ version. What follows is everything the scaffold deliberately did not do.
   38.5 on the strength of a contradiction the contract cannot decide would be the
   original defect in better clothes. DO NOT reinstate 38.5 without a ruling.
 
-- **CLOSED 2026-09-13 - THE OFFER WAS TAKEN, LW SCORED ALL 96 ROWS IN TWO BLIND
-  PASSES, AND WE PUBLISHED THE RESULT UNSOFTENED. PROVEN BY
-  `docs/CROSS_SCORE_LW_ON_RSC_2026-09-13.md`.** The written commitment attached to
-  the offer - publish whatever comes back INCLUDING IF IT IS WORSE THAN ANYTHING
-  WE HAVE SAID ABOUT OURSELVES - is discharged by that file, which leads with the
-  worst finding rather than burying it: every row where LW's two blind readers
-  disagree about a published share AND the disagreement moves the family label,
-  ALL 24 of them measured 2026-09-13 with no exception, turns on `PROXY-MEASURE`
-  or `ADVERSARY`, the two values THIS TREE graded FATAL. The file was delivered to
-  all four siblings as `2026-09-13-1900-from-RSC-PUBLISHED-UNSOFTENED-...`. We did
-  not score the rows, did not re-grade LW's grading and do not adjudicate LW's
-  convention anywhere in it. What the result does NOT reinstate is recorded in
-  `docs/LEDGER.md` under the heading beginning "2026-09-13 - What the cross-score
-  does NOT reinstate", as its own entry rather than as a footnote to the figures.
-  THE ORIGINAL ROW TEXT IS KEPT BELOW UNEDITED, because its stated limit is the
-  thing the result has to be read against.
-
-  ORIGINAL TEXT, 2026-09-13, UNEDITED. LW's cross-score of RC's 198 rows found the
-  largest term in the whole exercise is the SCORER rather than the contract, and
-  LW had to STRIP RC's filed values to blind its scorers. Ours were never scored,
-  so the blinding is a PROPERTY of the corpus rather than a procedure applied to
-  it, and there is no strip to trust. Offer delivered to all four siblings
-  2026-09-13 1000.
-
-  THE LIMIT WE STATED IN THE OFFER, because it is real: a scorer of our corpus
-  has NO RSC anchor to validate an instrument against. Our 78.5 was
-  producer-graded, our 38.5 used the backward reading, and our 65 was produced
-  under a convention nobody stated. We asked a scorer to calibrate on RC's
-  published rows, where three of four anchors reproduce exactly, and then come to
-  us. We committed to publishing whatever comes back including if it is worse
-  than anything we have said about ourselves.
-
-  ONE SENTENCE OF THAT ORIGINAL TEXT IS STRUCK, 2026-09-13. "The blinding is a
-  PROPERTY of the corpus rather than a procedure applied to it" was asserted
-  without running the mechanical leak check that would decide it. LW ran that
-  check AGAINST the claim and the measured form is 95 of 96, the exception being
-  EV-072, whose refutation line carries the v1.2 `origin_sub` value `DECAYED` in
-  capitals anchoring exactly that row. The shape was right and the unqualified
-  assertion was wrong. For scale, and it does not repair the assertion, LW's own
-  strip leaked on 49 of 198 rows.
-
 - **OPEN 2026-09-13 - THE LEDGER IS NOT IN NEWEST-FIRST ORDER, FOUR ENTRIES, AND
   NOBODY HAS RULED ON WHETHER AN APPEND-ONLY FILE MAY BE REORDERED.** Measured at
   `02b8335`. This is the residue of the date repair above and it is deliberately
@@ -6504,25 +4661,6 @@ version. What follows is everything the scaffold deliberately did not do.
   written to it", reading that CI was watched with `--exit-status`, exit 0.
   CLOSING LOOKS LIKE: that one line backfilled to state what the exit code can
   and cannot support, with NO amendment to `done.md`, which is correct as written.
-
-- **CLOSED 2026-09-13 ON DELIVERY, AND THE DELIVERY WAS VERIFIED AT THE
-  RECIPIENTS RATHER THAN FROM OUR OWN COPY.** The correction went out as
-  `2026-09-13-1200-from-RSC-we-owe-LL-a-correction-...`. Probed 2026-09-13: the
-  file is present in all five trees' `moon_sync_inbox/` and its sha256 is
-  IDENTICAL in all five. That is the condition this row set - a finished note in
-  our own outbox is not delivery - and it is met by the recipients' copies, not
-  by ours. ORIGINAL TEXT BELOW, UNEDITED.
-
-  Our outbound 2026-09-12-1300 note asserts that LL's
-  `pytest.ini` "carries no -q in addopts". MEASURED FALSE this session: line 23
-  of LL's own `pytest.ini`, at the root of LL's checkout, reads
-  `addopts = -q --tb=short --strict-markers --strict-config -r fE`. The plain-text
-  project name is deliberately not written here; the codename is the citable form.
-  LL is right and we were wrong, and the
-  debt was recorded here before it was paid. A separate slice is sending the
-  correction THIS SESSION. CLOSING LOOKS LIKE the RECIPIENT'S OWN COPY existing -
-  a finished note in our own outbox is not delivery, and this row does not close
-  on our having written one.
 
 - **OPEN 2026-09-13 - LL WITHDREW ITS PRE-FLIGHT RUNTIME FIGURE AND THE
   RETRACTION HAS NO SITE IN THIS TREE.** PROBED: neither the withdrawn figure nor
@@ -6727,9 +4865,6 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Next
 
-- **DONE 2026-10-08 (session 63), see `docs/LEDGER.md`: the label now
-  reads `limit` only when `_run_once`'s `cap_held` names MAIN.** Original
-  entry: **Responder tick label on a cap hold.** `_write_tick_status` in `tools/moon_sync_responder.py` reports state `limit` / `Turn Limit Reached` whenever MAIN is at `MAX_REPLIES_PER_SENDER` and the fire took no note, even with nothing held, while the fire log says `fire ended empty`; the label strings are pinned in `tests/test_headless_env.py`, so the fix (label only when a non-exempt MAIN note is actually held) needs that file on its write-list.
 - **~~Artifact scoring.~~ DONE 2026-10-04 at `f23ad34`, model stated FIRST in
   `docs/adr/ADR-012-artifact-scoring-model.md` (Proposed, adjudicated;
   operator confirmation pending).** `engines/artifact_score.py` scores substats
@@ -6780,65 +4915,9 @@ version. What follows is everything the scaffold deliberately did not do.
   and no raw marker.
   The reusable finding is that a roadmap row can be false at birth rather than
   by decay, and that a rewrite which copies a row forward inherits its defect.
-- **~~Prove the git hook gate FIRES, in CI.~~ CLOSED 2026-10-04 BY MEASUREMENT,
-  NO CODE.** The step "git hook gate armed and firing" in
-  `.github/workflows/ci.yml` runs `tests/test_hook_gate.py` under
-  RSC_REQUIRE_HOOK_GATE=1, and the arms cover BOTH directions this row
-  demanded: a staged banned glyph is refused with HEAD unchanged, a glyph in
-  the message is refused, and a clean commit lands with HEAD advanced.
-  Measured 2026-10-04 (Linux, Python 3.11.15): 60 passed, 0 skipped under the
-  flag; reproduced cold by a second agent. The row was stale, not wrong: the
-  step existed and nothing had flipped the row. Original row follows.
-  `CLAUDE.md` says a hook's PRESENCE is
-  never proof it fires, and that the only valid test is end-to-end: stage a
-  banned glyph, attempt a real commit, assert HEAD unchanged. Nothing automates
-  that. `tests/test_hook_interpreter.py` proves the hooks pick a working
-  interpreter and `tests/test_commit_trailers.py` proves no trailer reached
-  history, but a clean history is equally consistent with "the hook stripped it"
-  and "nobody added one". The end-to-end check was run BY HAND on 2026-09-06 and
-  passed; a manual pass expires the moment someone edits a hook. Sibling-C has
-  a working `git hook gate armed and firing` CI step and has been asked for it
-  through `moon_sync_inbox/`. Needs BOTH directions: a banned glyph must be
-  rejected AND a clean commit must still succeed, or a gate that rejects
-  everything passes the first arm while broken.
-- **DONE 2026-09-20 at `1a6d8da` - THE SLOT IS ACQUIRED FOR REAL, AND THE
-  WARNING THIS ROW CARRIED WAS HONOURED RATHER THAN QUIETLY DROPPED.** This row
-  used to say `ops/loop/slots.py` was vendored and pinned but that NOTHING IN
-  THIS TREE CALLED IT, and to warn that no loop controller should be invented to
-  justify the vendored file. NONE WAS. The acquirer is the daemon loop already
-  in `headless/runner.py`: `run_daemon` runs `run_pass` on an interval and has
-  always been a real repeated executor, and it gained the governor rather than
-  the governor gaining a loop. Verified against the diff, not the message.
-  `ops/loop/slots.py` and `ops/loop/winmutex.py` are UNTOUCHED by that commit -
-  its two files are `headless/runner.py` and
-  `tests/test_headless_runner_slots.py`.
-
-  WHAT IS GOVERNED. Each LIVE pass runs inside `slots.hold(...)` through a
-  helper, and the slot wraps the pass and nothing else: the lane-width read, the
-  signal handlers and the shutdown health write all sit OUTSIDE the critical
-  section, honouring the vendored module's own rule that a slot is held only
-  around the executor call. `SlotTimeout` is converted to a FAILED PASS, never
-  to a success and never to permission to proceed unslotted. A DRY RUN TAKES NO
-  SLOT, because a slot is a lock file and this module's contract is that a dry
-  run writes none.
-
-  THE TWO NUMBERS THAT DO NOT GOVERN are still worth keeping written down, since
-  the old snippet here carried both. Lane width now comes from
-  `core.config.MAX_CONCURRENT_LANES` with NO FALLBACK, so an unreadable constant
-  fails loudly rather than inventing a width. `slots.hold`'s signature default
-  of 2 and the old `dict.get` default of 2 in that snippet were a different 2
-  each, and neither ever governed. The repo label written into the lockfile is
-  `resin-compute`.
 
 ## Later
 
-- ~~**Dashboard.**~~ **DONE 2026-09-06, recorded in ADR-005.** The operator
-  specified one and asked for it BEFORE further feature work, so that each
-  feature becomes visible as it lands. `surface/` serves it on 8791 and `shell/`
-  is the Electron companion with a system tray. ADR-001 was NOT reopened: its
-  subject was the language of the compute tree, and the surface is Python too.
-  Panels declare their own readiness and a panel that is not live says what it is
-  waiting on rather than showing a placeholder number.
 - **Containers.** Sibling-C has none, so there was nothing to inherit. If
   containers are wanted, that is a new decision with its own ADR.
 - **Multi-account support.** Everything is keyed by a single UID today.
