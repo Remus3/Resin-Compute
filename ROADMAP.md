@@ -21,6 +21,13 @@ version. What follows is everything the scaffold deliberately did not do.
   "budget lock unopenable" and "budget write failed" map to
   KitRunBudgetSpent through a substring match on "budget"; give them a
   distinct termination.
+- **NEW 2026-10-08. FLEET-KIT v13 tree-side residue (ruling C).** v12
+  vendored (89fe0d9) and v13 vendored ahead of its ORDER (3438a82,
+  bb51879); see `docs/LEDGER.md`. OPEN, waits for MAIN's v13 ORDER: wire
+  `fleet_identity.py commit-msg` into `.githooks/commit-msg` and
+  `pre-push` into `.githooks/pre-push`, set the local
+  `fleet.operatorIdent`, re-verify the bundle against 1311801a...74e0.
+  Reversed by: the ORDER, a changed bundle, or the operator.
 - **DONE 2026-10-08. MAIN 1840 FLEET-KIT v11 vendored (8e675fe, merge
   9d89b26).** ANSWER 1925 to MAIN delivered 1/1 (sha256 7fb22a61...). See
   `docs/LEDGER.md`.

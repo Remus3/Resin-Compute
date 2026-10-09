@@ -12,6 +12,60 @@ now.
 
 ---
 
+## 2026-10-08 - FLEET-KIT v12 (MAIN 2031 ORDER) and v13 (staged bundle) vendored
+
+- Provenance: the v12 ORDER matched MAIN's outbox (sha256 3bad46b1...) and
+  its 21-file bundle matched both the outbox twin and its manifest, 21 of
+  21. The responder's 2035 auto-reply only reported status; it took none
+  of the ORDER's steps. v13: MAIN committed the kit (its b25cbf9,
+  2b6b2f6) and staged bundle 2128 (manifest 1311801a...74e0, 22 of 22
+  files matching it) but sent NO v13 ORDER; MAIN's roadmap reads "staged,
+  NO note sent".
+- v12 (commit 89fe0d9, through `fleet_gitlock.py run`): 21 files
+  byte-for-byte; v12 FLEET-COMMON block embedded; claims PreToolUse hook
+  (`Edit|Write|NotebookEdit|MultiEdit|Bash|PowerShell`) and SubagentStop
+  release-hook wired in `.claude/settings.json`, timeout 10, subagent-first
+  entry kept; five runtime paths gitignored; `tests/conftest.py` installs
+  `fleet_test_guard` with env_roots `RESINCOMPUTE_RUNTIME_DIR` (RC_DATA_DIR
+  not declared: it locates fixtures, not runtime state); `/done` routes
+  commit, push and each whole suite through gitlock and the suite gate.
+  Tests first: `tests/test_fleet_kit_v12_adoption.py` and the v12 pins went
+  red before the vendoring. Four arms that measure the unredirected live
+  default (`test_ops_health`, `test_responder_uniform_budget` `_live`,
+  `test_watch_inbox_session`, `test_session_hooks` live-records arm) now
+  drop the guard's redirect themselves; the guard is why the hand-off's
+  "do not export RESINCOMPUTE_RUNTIME_DIR" warning had 7 red arms here.
+  No responder, runner or script in this tree commits or pushes, so /done
+  is the only commit route to re-point.
+- v13 (commit 3438a82, census fix bb51879). RULING, distinct adjudicator,
+  DECISION C: vendor the 22 manifest-verified files and the v13 block now;
+  DEFER the identity hooks (`fleet_identity.py` commit-msg / pre-push) and
+  the local `fleet.operatorIdent` until the SHA-256-verified v13 ORDER.
+  Alternatives rejected: (A) wire identity now - guesses an operator ident
+  MAIN has not ruled on, and with no value set pre-push refuses every push;
+  (B) v12 only - the operator ordered v13 and it was found. Why: the
+  operator order covers the bytes and the manifest verifies them; tree-side
+  settings are what an ORDER specifies. Reversed by: the v13 ORDER arriving
+  (wire per it, re-check the manifest), the bundle differing from
+  1311801a...74e0, or the operator.
+- Halt boundary: the suite gate writes slots under %LOCALAPPDATA%, outside
+  this root (clause a); cleared by the verified v12 ORDER, which requires
+  the gated suite. `ops/loop/slots.py` and `ops/loop/winmutex.py` untouched.
+- ruff.toml: per-file ignores, measured: fleet_claims.py UP032 x1 BLE001
+  x1; fleet_gitlock.py UP032 x4; fleet_suite_gate.py UP032 x2;
+  fleet_identity.py UP032 x4; fleet_rewrite.py UP032 x4. Interpreter
+  census rows added for gitlock (3), suite gate (2), identity (1), rewrite
+  (2); every head is FLEET_GIT-or-git or a caller argv, never a Python.
+- Measured 2026-10-08 on Python 3.14, both suites through
+  `fleet_suite_gate.py run` at bb51879: `tests` 4363 passed 6 skipped (the
+  six known host reasons); `agents/pity_engine` 191 passed; ruff clean;
+  mypy clean over 43 files; kit check `13 []`. The first gated run at
+  3438a82 read 1 failed (the census) - fixed in bb51879. A machine slot
+  was held 45+ min by another tree's suite; our wait was about 21 min.
+- For MAIN (in the ONE ANSWER): fleet_identity/fleet_rewrite heads trip an
+  interpreter census once tracked; the claims hook default is deny with no
+  mode file.
+
 ## 2026-10-08 - Session 63 /done: checklist closure, PR #1 merged, gates at afa7fc7
 
 - Item 15 (task_liveness) DONE at merge 89528a4 (fix 8c9e35c): the
