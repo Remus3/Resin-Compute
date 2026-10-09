@@ -18,25 +18,30 @@ version. What follows is everything the scaffold deliberately did not do.
   unconditionally; the first Dependabot Linux recompile drops it, and Windows
   dev installs would then need `requirements-dev.in`. Fix: recompile with a
   platform marker or a universal resolver, and update the README and
-  CONTRIBUTING install lines. (b) DONE session 63: the post-push OpenSSF
+  CONTRIBUTING install lines. DONE session 64 (74a8710): colorama kept with
+  a `sys_platform == "win32"` marker while landing Dependabot PR #3. (b) DONE session 63: the post-push OpenSSF
   Scorecard read 6.6, up from 4.7 at d6bce85 (`docs/LEDGER.md`). (c) The kit refusals
   "budget lock unopenable" and "budget write failed" map to
   KitRunBudgetSpent through a substring match on "budget"; give them a
   distinct termination.
-- **NEW 2026-10-08. MAIN 2246 ORDER (REPO-REVIEW), SHA-256 verified -
-  sections 1 (rest) and 2-8 OPEN; ONE ANSWER (HOP: 2) owed after them.**
-  (s1) remove `.claude/commands/done.md` section 9 "Converge the Desktop
-  shortcut" and everything that creates or checks the hand-off .lnk
-  (`tools/publish_next_session.py`, `scripts/make_shortcut.py`, their tests
-  and the /done gate line; that tool also enforces the hand-off size and
-  ASCII rule, so move that check first); optionally make core.hooksPath
-  the relative `.githooks`. (s2) PERF-AUDIT items 1-8 and 10, ranked in the
-  note. (s3) README-AUDIT 1-6. (s4) GH-HYGIENE: operator-APPROVED history
-  rewrite via `fleet_rewrite.py` plan / bundle / run, then force push
-  (2 Claude-authored commits; every SHA but the root changes); delete 3
-  dependabot remote branches; land 3 Dependabot PRs locally as operator
-  commits. (s5, s6, s7) nothing to do. (s8) queue ONE headless repo-review
-  driver through the kit spawn (kind build, progress repo-review.json).
+- **OPEN 2026-10-09. MAIN 2246 ORDER (REPO-REVIEW), SHA-256 verified
+  (7ccc71ff...) - s1-s3 and the s4 Dependabot part DONE session 64 (see
+  `docs/ledger/session-64.md`); ANSWER 0009 (HOP: 2) sent. Still OPEN:**
+  (s4) the operator-APPROVED history rewrite via `fleet_rewrite.py` plan /
+  bundle (to the sidecar folder) / run, then the force push (2
+  Claude-authored commits; every SHA but the root changes). PARKED by the
+  attended session's instruction of 2026-10-09: it waits for the operator
+  in person, not for an unattended run. Reversed by: the operator starting
+  it. (s8) queue ONE headless repo-review driver through the kit spawn
+  (kind build, progress repo-review.json): PARKED the same way. FILED from
+  s2: (2b) collapse the census tables (`tests/test_responder_gate_census.py`
+  and peers) into one test per invariant; (2c) a plumbing-only push still
+  selects ~17 hook-heavy modules, about 95 s against the 30 s target -
+  trim the selector or move those modules to CI-only; (4b) hash-pinned
+  pytest-timeout and xdist need the licence gate first (new dependency);
+  the 10.4 GB process is still unexplained. (s1) The hand-off Desktop
+  `.lnk` itself is outside the repo root (halt clause a); it read absent on
+  the current profile, so nothing to remove.
 - **NEW 2026-10-08 (session 63 /done). Small residue.** (a) The leftover
   gitignored `.claude/worktrees/conftest_backup.bytes` (an old conftest copy,
   dated 2026-09-09): review, then Recycle Bin. (b) Stale comments about the
