@@ -4834,50 +4834,20 @@ def _progress(
 #: is the work session, bounded by `Bounds.spawn_timeout_seconds` (900 s).
 CHECKLIST_ETA_S: dict[str, int] = {"R1": 60, "R2": 5, "R3": 900, "R4": 10}
 
-#: The bounded replace retry, mirroring the kit's `fleet_lanes._retry`: Windows
-#: refuses a replace onto a file another process holds open for reading.
-PROGRESS_RETRIES = 20
-PROGRESS_RETRY_SLEEP_S = 0.025
-
-
 def _write_progress_doc(
     root: Path, pct: int, step: str, eta_s: int | None, status: str, checklist: list[dict]
 ) -> dict:
-    """The item-12 progress file, written HERE rather than by `kit.write_progress`
-    (refutation, defect 11): the kit's `_atomic_write` has no retry, so one
-    reader holding the file open on Windows left it reading `running` and
-    orphaned a `<name>.<pid>.tmp`. Same document shape and validation (the
-    kit's own `_checklist_rows` and `_iso`), tmp then a bounded replace retry,
-    and only THIS pid's tmp is ever deleted - whatever happens."""
-    if status not in kit.PROGRESS_STATES:
-        raise ValueError(f"status {status!r} not in {kit.PROGRESS_STATES}")
-    doc = {
-        "task": PROGRESS_TASK, "pct": max(0, min(100, int(pct))), "step": str(step)[:200],
-        "eta_s": None if eta_s is None else max(0, int(eta_s)), "status": status,
-        "updated": kit._iso(time.time()), "checklist": kit._checklist_rows(checklist),
-    }
-    path = Path(root) / kit.PROGRESS_REL / f"{PROGRESS_TASK}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    try:
-        tmp.write_bytes(json.dumps(doc).encode("ascii"))
-        for attempt in range(PROGRESS_RETRIES):
-            try:
-                os.replace(tmp, path)
-                break
-            except FileNotFoundError:
-                raise
-            except OSError:
-                if attempt + 1 == PROGRESS_RETRIES:
-                    raise
-                time.sleep(PROGRESS_RETRY_SLEEP_S)
-    finally:
-        try:
-            tmp.unlink()
-        except FileNotFoundError:
-            pass
-        except OSError:
-            log.warning("progress tmp could not be removed")
+    """The item-12 progress file, written by the kit's `write_progress` (MAIN
+    2246 ORDER section 2, PERF-AUDIT item 8: one `updated` format, the kit's
+    ISO-8601 with a UTC offset, for every writer). This module once carried
+    its own writer (refutation, defect 11: the kit's `_atomic_write` had no
+    retry); kit v13 retries a refused replace, verifies the bytes, gives each
+    write a unique tmp name and removes only its own, so the private copy is
+    retired. Returns the document as written, without the kit's `path` key."""
+    doc = kit.write_progress(
+        root, PROGRESS_TASK, pct, step, eta_s, status, checklist=checklist
+    )
+    doc.pop("path", None)
     return doc
 
 
