@@ -12,6 +12,37 @@ now.
 
 ---
 
+## 2026-10-08 - MAIN 1840 ORDER: FLEET-KIT v11 vendored (session 63)
+
+- Provenance: the order and its 17-file bundle matched MAIN's outbox,
+  18 of 18 SHA-256. All 17 files copied byte-for-byte into
+  `ops/fleet_kit/` (commit 8e675fe); read back: MANIFEST.json sha256
+  c1dcf5a613b7d765bc1f917d7844ad58e272dd7984f97a632c62f911072259a7 and
+  16 of 16 listed files matching it. Seven files differ from v10:
+  MANIFEST.json, fleet_done.py, fleet_headless.py, fleet_inbox.py,
+  fleet_lanes.py, fleet_subagent_first.py and fleet_watch.py.
+  FLEET-COMMON.md is unchanged (9dfb40e3), so `CLAUDE.md` is untouched.
+- Hook (order section 4 step 2): `.claude/settings.json` already carried
+  the anchored `$CLAUDE_PROJECT_DIR` command since the v10 adoption, so
+  there was nothing to rewire. The mode file progression (log, then deny)
+  is unchanged.
+- Triage (ruling R1): `tools/moon_sync_responder.py` now builds the triage
+  shape from `fleet_inbox.triage_spawn_kwargs(not SPAWN_BARE)` and passes
+  `floors_in_hooks` to `spawn()`. No floor lives in a hook here, so triage
+  stays bare. The test was written first and went red on
+  `KeyError: 'floors_in_hooks'`. A new arm proves the helper's answer
+  reaches `spawn()`.
+- Pins: `tests/test_fleet_kit.py` constants were renamed to version-neutral
+  names and moved to v11. The v11 `fleet_done.py` git resolution
+  (`find_git()`, an absolute PATH entry) is a new unresolvable launch head.
+  It now has a triaged row in `UNRESOLVED_CENSUS` in
+  `tests/test_interpreter_pinning.py`. `ruff.toml` needed no change.
+- Measured 2026-10-08 on Python 3.14: `tests` 4205 passed, 6 skipped;
+  `agents/pity_engine` 80 passed; ruff clean; mypy clean over its 41 files.
+- Owed: ONE ANSWER to MAIN (HOP: 2) giving the vendoring commit, the
+  manifest sha256, the conformance result and the hook command string as
+  wired.
+
 ## 2026-10-08 - Session 63: responder run ledger retired (0f), cap-hold label (0c), item-14 minors (4)
 
 - RULING 0f, decided by a distinct adjudicator, DECISION C (shrink). The
