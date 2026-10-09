@@ -100,7 +100,7 @@ _CODE_SUFFIXES = (".ps1", ".py")
 #: was `NEXT_SESSION_PROMPT.md` until that day, so a `.md`-only doc sweep
 #: covered it. It is now `RSC-NEXT-SESSION.txt`, the raw hand-off with no
 #: markdown wrapper, matching what the sibling trees keep and what the operator
-#: actually reads when the Desktop shortcut opens it. Without `.txt` here the
+#: actually reads when it opens the file. Without `.txt` here the
 #: rename would have carried the hand-off straight OUT of this sweep while
 #: every arm stayed green - a file leaving a corpus is exactly the silent
 #: failure this module's Arm 2 exists to catch, and Arm 2 did catch it.
@@ -767,8 +767,9 @@ def _starts_a_powershell_command(stripped: str) -> bool:
     Two tracked modules already resolve a PowerShell host and both settle on
     the same four names: `_powershell_executable` in
     `ops/check_task_liveness.py` tries `powershell.exe`, `powershell`,
-    `pwsh.exe` and `pwsh` in that order, and `_POWERSHELL_NAMES` in
-    `scripts/make_shortcut.py` holds the same four. The two prefixes below
+    `pwsh.exe` and `pwsh` in that order, and `_POWERSHELL_NAMES` in the
+    since-deleted (2026-10-08) shortcut script held the same four. The two
+    prefixes below
     cover all four, because the `.exe` spellings are the bare ones plus a
     suffix. Adding `pwsh` is a CLASS widening and is separate from the case
     fold: before it, a check command quoted at the operator through PowerShell

@@ -543,8 +543,9 @@ not evidence of a later session.
 - claim: the publish gate's credential rule at HEAD catches the credential
   classes it names.
 - refutation: Rule 1 leaked the Slack `xoxa-`, `xoxr-` and `xoxs-` classes
-  straight through the real publish path in `tools/publish_next_session.py`.
-- artifact: `tools/publish_next_session.py`;
+  straight through the real publish path in tools/publish_next_session.py
+  (its detectors moved unchanged to `tools/check_handoff.py` 2026-10-08).
+- artifact: `tools/check_handoff.py`;
   `tests/test_no_secret_literals.py`
 - ledgered: YES
 - individuation: AMBIGUOUS - 1 here; one-per-(artifact, root cause) folds
@@ -557,7 +558,7 @@ not evidence of a later session.
   including `xoxb-`, which had never leaked at all. The cliff was the lead-in
   bound, and a credential with a fully intact 24-character body was missed
   because its identifier segments were two characters too long.
-- artifact: `tools/publish_next_session.py`
+- artifact: `tools/check_handoff.py`
 - ledgered: YES
 - individuation: AMBIGUOUS - 1 here, folded into EV-032 by the alternative.
 
@@ -571,7 +572,7 @@ not evidence of a later session.
   false positives instead: all nine are preceded by a letter while the break set
   is preceded by an underscore or a digit, so a letters-only lookbehind separates
   them exactly, pinned by walking all 128 ASCII codepoints.
-- artifact: `tools/publish_next_session.py`
+- artifact: `tools/check_handoff.py`
 - ledgered: YES
 - individuation: AMBIGUOUS - 1 here, folded into EV-032 by the alternative.
 
@@ -583,7 +584,7 @@ not evidence of a later session.
   the sweep restated the identical shape, so there was no second line of defence
   behind it. Pre-existing at HEAD rather than introduced. The separator class is
   now derived by subtraction over the 128 codepoints with a mandatory operator.
-- artifact: `tools/publish_next_session.py`;
+- artifact: `tools/check_handoff.py`;
   `tests/test_no_secret_literals.py`
 - ledgered: YES
 - individuation: distinct.
