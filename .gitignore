@@ -86,6 +86,7 @@ env/
 # negations that follow silently dead.
 .claude/*
 !.claude/settings.json
+!.claude/session-default.md
 !.claude/commands/
 .claude/commands/*
 !.claude/commands/*.md

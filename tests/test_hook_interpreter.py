@@ -1986,9 +1986,9 @@ def _run_prepush(path_prefix: Path, env: dict[str, str] | None = None, *,
     # argument, and MSYS argv conversion mangles it - the closing quote is lost
     # and sh dies with "unexpected EOF while looking for matching quote".
     # Measured 2026-09-06: it only bites when the repository path contains NO
-    # space, because a space suppresses the conversion. So it passed here, at
-    # `C:\Resin Compute`, and would fail for a contributor who cloned to
-    # `C:\dev\ResinCompute` - the normal case. Same root cause as the
+    # space, because a space suppresses the conversion. So it passed in a
+    # checkout whose path held a space, and would fail for a contributor who
+    # cloned to a path without one - the normal case. Same root cause as the
     # `taskkill //F //PID` rule in CLAUDE.md.
     # As `$0`, the path is a separate argv element that sh never re-parses.
     return _run_sh('exec "$0"', path_prefix=path_prefix, env=env, argv=(hook,))
