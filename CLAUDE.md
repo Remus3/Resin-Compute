@@ -322,11 +322,16 @@ answer) is exempt, read narrowly. This adds to common rule SUB-AGENT FIRST:
   shared input. Refuters get DISTINCT LENSES - correctness, licence,
   does-it-reproduce, resource lifetime, scope-and-siblings - never N identical
   skeptics.
+- **Scale by risk** (MAIN 2246 ORDER section 2 item 6): the full lens set only
+  when the diff touches `agents/pity_engine/`, `engines/`, `ingest/` or
+  `core/`; plumbing gets one adversary lens or a verifier only. Cap:
+  at most 2 refute rounds, then the adjudicator decides.
 - Independence is a prompt-level property, not a vendor-level one. Do not add a
   second vendor for "independent review".
 - Roster: `.claude/agents/`. Protocol: `.claude/commands/orchestrated-run.md`.
-  Reasoning: ADR-007. Every agent file repeats this section inline because
-  subagent context does not inherit the main thread's.
+  Reasoning: ADR-007. Subagent context does not inherit the main thread's, so
+  this section lives once in `.claude/session-default.md` and every agent file
+  tells its agent to Read it first.
 
 ## The responder loop runs headless, and halts at an adjudicated boundary
 
