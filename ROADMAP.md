@@ -16,15 +16,22 @@ version. What follows is everything the scaffold deliberately did not do.
   unconditionally; the first Dependabot Linux recompile drops it, and Windows
   dev installs would then need `requirements-dev.in`. Fix: recompile with a
   platform marker or a universal resolver, and update the README and
-  CONTRIBUTING install lines. (b) The post-push OpenSSF Scorecard run is
-  still pending; the baseline was 4.7 at d6bce85. (c) The kit refusals
+  CONTRIBUTING install lines. (b) DONE session 63: the post-push OpenSSF
+  Scorecard read 6.6, up from 4.7 at d6bce85 (`docs/LEDGER.md`). (c) The kit refusals
   "budget lock unopenable" and "budget write failed" map to
   KitRunBudgetSpent through a substring match on "budget"; give them a
   distinct termination.
-- **NEW 2026-10-08. MAIN 1840 FLEET-KIT v11 vendored (8e675fe).** Remaining:
-  ONE ANSWER to MAIN (HOP: 2) giving the vendoring commit, the manifest sha256
-  c1dcf5a6..., the conformance result and the hook command as wired. See
+- **DONE 2026-10-08. MAIN 1840 FLEET-KIT v11 vendored (8e675fe, merge
+  9d89b26).** ANSWER 1925 to MAIN delivered 1/1 (sha256 7fb22a61...). See
   `docs/LEDGER.md`.
+
+- **NEW 2026-10-08 (session 63 /done). Small residue.** (a) The leftover
+  gitignored `.claude/worktrees/conftest_backup.bytes` (an old conftest copy,
+  dated 2026-09-09): review, then Recycle Bin. (b) Stale comments about the
+  retired responder run record in `conftest.py` and
+  `tests/test_responder_no_console_window.py`. (c) Report to MAIN in the next
+  batched note: kit `fleet_inbox.scan` keys seen notes by name only, so a
+  re-sent note under an old name is hidden (FYI already in the 1925 ANSWER).
 
 - **NEW 2026-10-08. Kit v10 residue (session 62 merge).** (a) DONE session
   63 (merge 5e4e525): the `orchestrated-run.md` and `ui-audit.md` skills
@@ -42,17 +49,17 @@ version. What follows is everything the scaffold deliberately did not do.
   subagent-first hook runs in log mode (gitignored mode file under
   ops/loop/control; an absent mode file means deny). Switch to deny after 3
   interactive sessions (62, 63, 64) show no un-routable would-deny row;
-  target 2026-10-11.
+  target 2026-10-11. Session 63 read 0 would-deny rows (621 rows, all
+  sub-thread allow): 2 of 3.
 
 - **E: move follow-through (session 59).** Steps a-c DONE session 60 (see
   `docs/LEDGER.md`): session started at E:, C: copy recycled and replaced by
   a junction to E:, RSC-InboxResponder re-armed from E: with a new window.
   Step d (vendor kit v9, ONE ANSWER to MAIN) DONE session 62 (merge
   e475a09, ANSWER 1454). The four merged session-62 worktrees were recycled
-  and pruned at /done (git worktree list read back 1 entry). Remaining: the
-  MIG-1 residues of the 14 pruned worktrees, kept at ops/runtime/mig1_residue/
-  (gitignored runtime artifact, one folder per worktree); review and
-  discard.
+  and pruned at /done (git worktree list read back 1 entry). DONE session
+  63: the 14 MIG-1 residue dirs (42 files, 0 unique) went to the Recycle
+  Bin; the residue dir reads absent (`docs/LEDGER.md`).
 
 - **DONE 2026-10-08. MAIN 0839 FLEET-KIT v10 and 2354 v9 vendored**
   (merge e475a09), roster 0230 + 2305 merged (e39a065), ONE ANSWER 1454
@@ -86,8 +93,9 @@ version. What follows is everything the scaffold deliberately did not do.
   roster carries EW's real root. Answered in the 1454 ANSWER, 1/1 reached.
   See `docs/LEDGER.md`.
 
-- **NEW 2026-10-05. MAIN ORDER 0300 SUPPLY-CHAIN HARDENING (verified
-  MATCH).** dependabot.yml (pip root, npm shell/, github-actions); SHA-pin
+- **DONE 2026-10-08 (merge 70e031d, `tests/test_supply_chain.py`). WAS NEW
+  2026-10-05. MAIN ORDER 0300 SUPPLY-CHAIN HARDENING (verified
+  MATCH).** Scorecard 4.7 before, 6.6 after; ANSWER 1925 delivered. dependabot.yml (pip root, npm shell/, github-actions); SHA-pin
   the 4 `uses:` lines; hash-pin both requirements files and install with
   --require-hashes; CodeQL workflow; top-level read-only token; record
   fuzzing ruled out. Scorecard v5.5.0 Linux binary in WSL before and after
@@ -118,7 +126,10 @@ version. What follows is everything the scaffold deliberately did not do.
 - **NEW 2026-10-07. Watch one armed responder fire** end with no reply to any
   of the 14 superseded MAIN stamps (not yet observed live).
 
-- **NEW 2026-10-04. REVIEW AND MERGE THE CLOUD PR #1.** A cloud session
+- **DONE 2026-10-08 (session 63, merge afa7fc7, `agents/pity_engine/timeline.py`).
+  WAS NEW 2026-10-04. REVIEW AND MERGE THE CLOUD PR #1.** CI green on ci,
+  docs-guards and codeql. The merge subject is 106 chars, over the 100
+  warning (warn only, recorded). A cloud session
   worked 9 product items against GitHub and opened ONE pull request, #1
   (by-when forecast, ledger reconciliation, artifact scoring, two new ADRs,
   guard hardening; 40 files). Review it, land it with a real merge commit

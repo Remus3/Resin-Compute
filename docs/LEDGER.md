@@ -12,6 +12,50 @@ now.
 
 ---
 
+## 2026-10-08 - Session 63 /done: checklist closure, PR #1 merged, gates at afa7fc7
+
+- Item 15 (task_liveness) DONE at merge 89528a4 (fix 8c9e35c): the
+  liveness probe in `ops/check_task_liveness.py` cast `LastTaskResult`
+  (a UInt32) with `[int]`, which threw for any HRESULT above Int32.MaxValue
+  and read as "the scheduler refused the query". Now `[int64]`; regression
+  arms in `tests/test_task_liveness.py`. An adversary did not refute it and
+  found no siblings. Consequence: the pre-push hook no longer trips on this
+  host, so the session-62 `RESIN_SKIP_PREPUSH=1` workaround is retired;
+  every session-63 push ran the hook.
+- Item 0d DONE at merge 5e4e525 (ab1e9d8, then 10cff26 after an adversary
+  REFUTED the one-orchestrator-sub-agent shape: a sub-agent has no Agent
+  tool). `.claude/commands/orchestrated-run.md` keeps the main session as
+  orchestrator dispatching every tool call; `.claude/commands/ui-audit.md`
+  dispatches one ui-auditor. Pinned in `tests/test_fleet_kit_v10_adoption.py`.
+- Item 0a DONE: the 14 MIG-1 residue dirs (42 files, 411,097 bytes, 0 unique
+  files) went to the Recycle Bin via Microsoft.VisualBasic SendToRecycleBin.
+  Read back at /done: the gitignored mig1_residue dir under the runtime
+  directory is absent.
+- Item 2 (MAIN 0300) DONE at merge 70e031d (entry below); OpenSSF Scorecard
+  after the push read 6.6, up from 4.7.
+- ANSWER 2026-10-08-1925 to MAIN (0300 and 1840) delivered 1/1; read back at
+  /done: sha256 7fb22a61ad943b11f37bfa787903d97abec24e851e672f1fce6b4ec0ccda269f.
+  OutboundCap 3 of 6 for the day.
+- Item 3 DONE: cloud PR #1 landed as the real merge commit afa7fc7 (no
+  squash, no rebase); resolutions recorded in its message. GitHub reads the
+  PR MERGED. Its subject is 106 characters, over the 100 warning (warn only).
+- Item 13: inbox triaged and marked; unread none.
+- Item 16 RETRACTED, no change: the `_MIN_TRACKED_*` floors were already
+  raised to 135 in c3bed4a. Read at /done: tracked corpus 317 paths, widest
+  directory `tests/` 124, so 135 exceeds the widest dir and 135*2 = 270 sits
+  within the corpus.
+- 0e reading: `ops/loop/control/subagent_first.jsonl` (gitignored) holds 621
+  rows, 534 after the session-62 /done commit; every row is
+  `decision allow`, `thread sub`. Would-deny rows this session: 0. Session 63
+  counts as log-mode session 2 of 3.
+- Gates measured 2026-10-08 at afa7fc7 on Python 3.14: licence 52 passed;
+  docs 42 passed; qa_companion 17 passed 0 failed 2 skipped 3 noted; ruff
+  clean; `tests` 4344 passed 6 skipped (the six known host reasons);
+  `agents/pity_engine` 191 passed; node 110 pass 0 fail; dry run 0 pass 0
+  fail 7 skip; mypy clean over 43 files (advisory); kit check `11 []`.
+- CI at afa7fc7: ci 37865404279 success, docs-guards 37865404256 success,
+  codeql 37865404240 success. This /done commit is docs-only.
+
 ## 2026-10-08 - MAIN 1840 ORDER: FLEET-KIT v11 vendored (session 63)
 
 - Provenance: the order and its 17-file bundle matched MAIN's outbox,
