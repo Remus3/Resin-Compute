@@ -146,3 +146,6 @@ ops/loop/control/locks/
 ops/loop/control/claims.jsonl
 ops/loop/control/claims.mode
 ops/loop/control/gitlock.jsonl
+# FLEET-KIT v13 identity log (MAIN 2246 ORDER s1.5); covered by the
+# directory rule above, named so it stays ignored if that rule is narrowed.
+ops/loop/control/identity.jsonl
