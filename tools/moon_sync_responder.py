@@ -259,6 +259,12 @@ TERMINATIONS = (
     # land in the sender's inbox. Never `delivered`, never recorded answered;
     # the note is retried, bounded by `MAX_WORK_ATTEMPTS`.
     "undelivered",
+    # THE FLEET KIT'S BUDGET LOCK COULD NOT BE OPENED (`KitBudgetLockUnopenable`,
+    # kit code `budget-lock-unopenable`). Not a spent budget: nothing started.
+    "kit-budget-lock-unopenable",
+    # THE FLEET KIT COULD NOT WRITE ITS RUN-BUDGET RECORD (`KitBudgetWriteFailed`,
+    # kit code `budget-write-failed`). Not a spent budget: nothing started.
+    "kit-budget-write-failed",
 )
 
 #: Set on the delivered path when the reply LANDED and the answered record did
@@ -813,6 +819,40 @@ class KitBudgetUnreadable(NoSessionStarted):
     """
 
     termination = "usage-backoff"
+
+
+class KitBudgetLockUnopenable(NoSessionStarted):
+    """The fleet kit could not OPEN its budget lock (kit `Refused.code`
+    "budget-lock-unopenable"), so nothing was started.
+
+    Its own termination (RSC-NEXT-SESSION item 2): before, the kit's text
+    matched the "budget" substring and read as `KitRunBudgetSpent`, a full run
+    cap, when the kit had counted nothing. It fails closed and the next tick
+    retries, so the status reads Backing Off, like `KitBudgetUnreadable`.
+    """
+
+    termination = "kit-budget-lock-unopenable"
+
+
+class KitBudgetWriteFailed(NoSessionStarted):
+    """The fleet kit could not WRITE its run-budget record (kit `Refused.code`
+    "budget-write-failed"), so nothing was started.
+
+    Its own termination for the reason `KitBudgetLockUnopenable` gives; a
+    distinct name because the repair differs (the record, not the lock).
+    """
+
+    termination = "kit-budget-write-failed"
+
+
+#: Kit `Refused.code` -> the responder's pre-spawn refusal. Codes are the
+#: kit's own (`ops/fleet_kit/fleet_headless.py`, `class Refused`, v14). A code
+#: not listed falls to the text match in `_spawn_headless`, then to
+#: `HeadlessRefused`.
+_KIT_REFUSAL_BY_CODE: dict[str, type[NoSessionStarted]] = {
+    "budget-lock-unopenable": KitBudgetLockUnopenable,
+    "budget-write-failed": KitBudgetWriteFailed,
+}
 
 
 #: The fail-closed log token for an unreadable kit run-budget record, beside
@@ -4091,6 +4131,8 @@ _TICK_STATES: dict[str, tuple[str, str]] = {
     "kit-run-budget": ("limit", "Turn Limit Reached"),
     "run-locked": ("idle", "Idle"),
     "headless-refused": ("refused", "Backing Off"),
+    "kit-budget-lock-unopenable": ("backoff", "Backing Off"),
+    "kit-budget-write-failed": ("backoff", "Backing Off"),
 }
 MAIN_REPLY_LIMIT_TASK = "Turn Limit Reached"
 
@@ -5862,7 +5904,8 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "", kind: str 
       once and never unlinks, and `spawn` counts every start under it - the
       two properties the responder ledger was kept for. The kit's budget is
       the only run budget; its refusals map to `KitRunBudgetSpent`,
-      `KitBudgetLockBusy` and `KitBudgetUnreadable`.
+      `KitBudgetLockBusy`, `KitBudgetUnreadable`, `KitBudgetLockUnopenable`
+      and `KitBudgetWriteFailed`.
     - THE TIMEOUT comes from the agreed bounds.
     - NO CONSOLE WINDOW (`_NO_WINDOW`), and a usage-limit backoff.
 
@@ -5962,6 +6005,11 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "", kind: str 
         raise _kit_budget_unreadable() from None
     except kit.Refused as exc:
         why = str(exc)
+        by_code = _KIT_REFUSAL_BY_CODE.get(getattr(exc, "code", ""))
+        if by_code is not None:
+            # By the kit's CODE, before any text match: a lock that will not
+            # open or a record that will not write is not a spent budget.
+            raise by_code(why) from None
         if "budget lock busy" in why:
             # By TEXT, before the "budget" match below: a busy lock is not a
             # spent budget, and the next tick simply tries again.
