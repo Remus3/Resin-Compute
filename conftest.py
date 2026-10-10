@@ -744,6 +744,9 @@ def _report_unattributed_fence_hits(session: pytest.Session) -> None:
 #   IN PROCESS - a fixture that loads the responder without redirecting its
 #   `DEFAULT_*` records and then drives `_spawn_headless`, which at the time
 #   reserved a run against the module-level `DEFAULT_RUNS`.
+#   CHILD PROCESS - an interpreter launched with `sys.executable` loads the
+#   module afresh, so no fixture's redirect reaches it, and with
+#   `RESINCOMPUTE_RUNTIME_DIR` unset it resolves `<repo root>/ops/runtime`.
 #
 # HISTORY, NOT CURRENT BEHAVIOUR (session 63, ruling 0f, DECISION C): the
 # responder-local run ledger is RETIRED. The fleet kit's `RunBudget` counts
@@ -752,9 +755,6 @@ def _report_unattributed_fence_hits(session: pytest.Session) -> None:
 # anchor `halt_sentinel`, `_kit_root` and `progress_lock_path` derive from. The
 # guard below is NOT retired: the responder still writes other records under
 # the live runtime, and it fences the whole tree for the reason given in SCOPE.
-#   CHILD PROCESS - an interpreter launched with `sys.executable` loads the
-#   module afresh, so no fixture's redirect reaches it, and with
-#   `RESINCOMPUTE_RUNTIME_DIR` unset it resolves `<repo root>/ops/runtime`.
 #
 # Hence two halves, chosen for what each route allows:
 #
