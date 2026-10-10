@@ -664,8 +664,14 @@ version. What follows is everything the scaffold deliberately did not do.
   RC, RSC, SS, all at 3, while CS carries an ops/loop/config.json of its own and declares no
   width at all. CLAUDE.md's directory-scoped phrasing, "byte-identical-by-contract
   across the carriers", is TRUE of `slots.py` and ALREADY FALSE of `ops/loop/`
-  as a directory. NOT DONE: decide whether that sentence in CLAUDE.md is narrowed
+  as a directory. WAS NOT DONE: decide whether that sentence in CLAUDE.md is narrowed
   to the file it is true of, or states its exception.
+  **DONE 2026-10-10 (slice C1b), verified against current CLAUDE.md:** the
+  directory-scoped phrase "byte-identical-by-contract across the carriers" no
+  longer occurs in CLAUDE.md (grep: 0 hits), and the "Carrier rows" bullet is
+  CODIFIED per file: "The two modules are measured separately; one numeral over
+  `loop/` is wrong.", then one carrier row for `ops/loop/slots.py` and one for
+  `ops/loop/winmutex.py`.
 
 - **NEW 2026-09-21. THE CONSTANTS THAT NAME THOSE POPULATIONS CANNOT REDDEN FOR
   ANOTHER TREE.** `tests/test_loop_concurrency.py` now ties its carrier tuples to
@@ -686,8 +692,13 @@ version. What follows is everything the scaffold deliberately did not do.
   MEASURED THIS SESSION rather than argued: repointing that citation at lines
   2-3 of the same file leaves `python -m pytest tests/test_docs_consistency.py`
   at 34 passed, so the guard would not notice a citation aimed at the module
-  docstring. NOT DONE: add this citation to the semantic set, or finish the
+  docstring. WAS NOT DONE: add this citation to the semantic set, or finish the
   move to a pure symbol cite and drop the numerals.
+  **RESOLVED 2026-10-10 (slice C1b) by the second option, verified against
+  current CLAUDE.md:** it cites the pins by symbol only - "pinned by SHA256 in
+  the `SHARED_SHA256` dict in `tests/test_loop_concurrency.py`" - with no line
+  numerals (grep for `test_loop_concurrency.py:` in CLAUDE.md: 0 hits), so no
+  range check is left guarding a numeral.
 
 - **NEW 2026-09-21. THE ops/runtime/inbox_report.txt DROP GOES STALE WHILE THE SESSION
   HOOK PRESENTS IT AS THE FULL LIST.** Measured today: the file's header read
