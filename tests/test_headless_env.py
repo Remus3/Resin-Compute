@@ -1887,3 +1887,31 @@ def test_a_filename_order_class_is_still_never_damped(rsp, tmp_path):
     kept = _note(inbox, "2026-10-03-1406-from-CS-ORDER-no-reply-loops.md", "do it\n")
     assert rsp.pending(inbox, rsp.OPTED_IN, set()) == [kept]
 
+
+# FLEET-KIT v15 (MAIN 2055 ORDER s2, LW 1020 item 7): the kit's child_env sets
+# CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 so a -p child runs foreground only. This
+# tree's wider prefix strip removes every CLAUDE_CODE_ key not in CHILD_ENV_KEEP,
+# so without the exemption the hardening silently undid the kit's fix.
+
+
+def test_v15_the_hardened_kit_env_keeps_the_background_off_switch():
+    parent = {"PATH": "p", "CLAUDE_CODE_ENTRYPOINT": "cli", "CLAUDECODE": "1"}
+    env = he.harden_child_env(kit.child_env(STUB_URL, parent=parent),
+                              keep=(he.ENV_CHILD_BASE_URL,))
+    assert kit.BG_OFF_ENV == "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"
+    assert env.get(kit.BG_OFF_ENV) == "1", sorted(env)
+    # Non-vacuity: the same prefix strip still removes its CLAUDE_CODE_ neighbours.
+    assert "CLAUDE_CODE_ENTRYPOINT" not in env and "CLAUDECODE" not in env
+    assert he._stripped("CLAUDE_CODE_ENTRYPOINT")
+    assert not he._stripped(kit.BG_OFF_ENV)
+
+
+def test_v15_the_responder_spawn_carries_the_background_off_switch(rsp, routed, monkeypatch):
+    """End to end through `_child_env`: the key the kit set reaches the child."""
+    monkeypatch.setenv("CLAUDE_CODE_MESSAGING_SOCKET", "inherited")
+    run = Run()
+    monkeypatch.setattr(subprocess, "run", run)
+    rsp._spawn_headless("p", rsp.Bounds())
+    env = run.kwargs["env"]
+    assert env.get("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS") == "1", sorted(env)
+    assert "CLAUDE_CODE_MESSAGING_SOCKET" not in env, "the prefix strip stopped firing"
