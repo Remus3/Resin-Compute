@@ -51,11 +51,12 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 13 [].
+must print 14 [] (kit v14, read back at session 65).
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
-and traverses only mypy.ini's files= roots. A concurrent session deletes the
-shared pytest temp dir: pass a private --basetemp whose PARENT EXISTS and
-which sits OUTSIDE the repo. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
+and traverses only mypy.ini's files= roots. NEVER put a --basetemp inside
+the session scratchpad (MAIN FIX TEMP-1); reuse one fixed basetemp per
+session, or remove it with a read-only-safe rmtree. pytest.ini now pins
+tmp_path_retention_count = 1. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures. Pass the suite
 interpreter to the suite gate as an ABSOLUTE path (sys.executable).
 
@@ -143,6 +144,11 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      selector or move them to CI-only; (4b) hash-pinned pytest-timeout and
      xdist need the licence gate first (new dependency); the 10.4 GB
      process is still unexplained.
+  0j. MAIN FIX TEMP-1 ACCEPTANCE READ-BACK OWED (landed session 65, merge
+     afdd733): after a day of normal work, measure the max count of
+     basetemp dirs per scratchpad (must be <= 1) and the max scratchpad
+     entry count, then answer MAIN with both numbers in the next batched
+     note.
   1. requirements-dev.txt colorama: DONE in 74a8710 with a win32 marker.
      Remaining: confirm the next Dependabot Linux recompile keeps the
      marker before any Dependabot pip PR merges.
@@ -212,7 +218,7 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   16 RETRACTED (session 63): the _MIN_TRACKED_* floors were already 135
   since c3bed4a. Reopen only if tests/ grows past 134 tracked files or the
   corpus drops below 270.
-  DO NOT REDO: v3/v4/v7/v8/v9/v10/v11/v12/v13 vendoring and provenance
+  DO NOT REDO: v3/v4/v7/v8/v9/v10/v11/v12/v13/v14 vendoring and provenance
   (reversed only by a new MAIN FLEET-KIT-vN note); the roster 0230/2305
   landing (reversed by a verified MAIN roster note); the CLAUDE.md condense
   (reversed only by a MAIN kit change); Bash removed from the responder
