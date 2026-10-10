@@ -1,8 +1,8 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-09 (session 64), gates measured at commit 4cf15be on main
+Stamped 2026-10-09 (session 65), gates measured at commit e12b0ef on main
 by the /done ritual; this paperwork commit landed after it. Everything below
-is a
-READING taken that day, not a promise about now. Re-measure before citing.
+is a READING taken that day, not a promise about now. Re-measure before
+citing.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -62,7 +62,28 @@ tmp_path_retention_count = 1. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures. Pass the suite
 interpreter to the suite gate as an ABSOLUTE path (sys.executable).
 
-STATE OBSERVED 2026-10-09 AT 4cf15be (session 64 /done gate run, at E:)
+STATE OBSERVED 2026-10-09 AT e12b0ef (session 65 /done gate run)
+  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
+  skipped 3 noted; ruff clean; tests 4450 passed 6 skipped (same six host
+  skip reasons); pity_engine 191 passed; node 110 pass 0 fail; dry run 0
+  pass 0 fail 7 skip; mypy 43 files clean; kit check 14 []. Whole suites
+  ran through the suite gate.
+  CI at e12b0ef: ci 38012355089, docs-guards 38012355068, codeql
+  38012355054, all success. origin/main read back e12b0ef before the
+  /done paperwork commit.
+  LANDED (session 65): FLEET-KIT v14 (slice 546647f, merge e47af71);
+  MAIN FIX TEMP-1 (slice a9de110, merge afdd733); ledger and hand-off
+  cd1a769; verifier correction e12b0ef. ANSWER 2020 to MAIN (HOP 2) on
+  kit v14 and TEMP-1, delivered 2/2, sha256 7e24ed1a...; outbound 4 of 6
+  on 2026-10-09. Inbox: 8 notes triaged (3 MAIN items SHA-256 verified;
+  SS notes SS-to-MAIN, not applicable); watermark marked at /done, then
+  read back unread: none. Identity section-4 survey: history TRIGGER
+  tier, 2 ai-or-bot author/committer commits including the root (main
+  then 499 commits). Details: docs/ledger/session-65.md.
+  Housekeeping: slice A worktree and branch removed (merged, clean); the
+  slice B worktree agent-a229657b9f3dba736 is still locked by a live
+  claude process - remove it next session only if merged and unlocked.
+PRIOR READING 2026-10-09 AT 4cf15be (session 64 /done gate run, at E:)
   Python 3.14: licence 52; docs 46; qa 16 passed 0 failed 2 skipped 3
   noted; ruff clean; tests 4449 passed 6 skipped in run 1 with 1 teardown
   error (fleet_test_guard caught the /done agent's own mid-run write of the
@@ -151,6 +172,18 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      basetemp dirs per scratchpad (must be <= 1) and the max scratchpad
      entry count, then answer MAIN with both numbers in the next batched
      note.
+  0k. Identity section-4 history TRIGGER tier (2 ai-or-bot author and
+     committer commits, the root among them). A rewrite runs ONLY on a MAIN
+     ORDER (or the operator in person, O8) via ops/fleet_kit/fleet_rewrite.py.
+  0l. About 38 local worktree-agent branches unsurveyed. Prune only a
+     branch whose tip is merged into main and whose worktree is gone, with
+     git branch -d (never -D); check for a consumer first; else carry.
+  0m. Off-list: tools/moon_sync_responder.py:5965 matches the kit text
+     "budget lock busy" by substring; could move to the kit Refused.code.
+     Same family as item 2.
+  0n. The v14 inbox bundle directory carries a stray __pycache__ that
+     fails its provenance check (every kit file matched). Report to MAIN
+     in the next batched note with 0c; never patch kit bytes.
   1. requirements-dev.txt colorama: DONE in 74a8710 with a win32 marker.
      Remaining: confirm the next Dependabot Linux recompile keeps the
      marker before any Dependabot pip PR merges.
@@ -209,9 +242,12 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      is unreachable; an idle status over a non-oldest epoch-ms row reads
      120/120 while the kit still counts it as one; a one-off kit read error
      reads Backing Off, not the limit.
-  13. Inbox: the session watcher's watermark WAS MARKED at session 64 /done
+  13. Inbox: the session watcher's watermark WAS MARKED at session 65 /done
      after triage. Each session: triage new entries into the four buckets,
      then --mark only what was triaged.
+  DONE session 65 (see docs/ledger/session-65.md): kit v14 vendoring;
+  MAIN FIX TEMP-1 (retention 1, no basetemp in scratchpad); ANSWER 2020 to
+  MAIN; inbox triage and mark; independent verification.
   DONE session 64 (see docs/ledger/session-64.md and
   docs/ledger/archive-2026-10.md): kit v12 and v13 adoption and
   verification; MAIN 2246 s1 rest, s2, s3, s4 Dependabot; ANSWERs 2301 and
@@ -260,6 +296,11 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   by plumbing tests moving back into the push path).
 
 TRAPS MEASURED - none are hypothetical
+  ANOTHER PROCESS CAN DELETE A SHARED TEMP DIR MID PRE-PUSH (session 65).
+  The first pre-push run of e12b0ef failed 1 test when an ew-gate temp dir
+  under the user Temp folder vanished; the retry was green. Read the
+  failing test before retrying; a single vanished-dir failure is this.
+
   DO NOT WRITE LIVE TREE STATE DURING A WHOLE-SUITE RUN (session 64 /done).
   fleet_test_guard fails the suite at teardown of whichever test was last,
   e.g. for a change to the hook mode file under ops/loop/control.
@@ -371,4 +412,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 65
+SESSION: 66

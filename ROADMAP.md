@@ -13,6 +13,24 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-09. Session 65 residue (kit v14 and MAIN FIX TEMP-1
+  landed, merges e47af71 and afdd733; see `docs/ledger/session-65.md`).**
+  (a) TEMP-1 acceptance read-back owed after a day of normal work: the max
+  count of basetemp dirs per session scratchpad (must be <= 1) and the max
+  scratchpad entry count, then both numbers to MAIN in the next batched
+  note. (b) About 38 local worktree-agent branches are unsurveyed; prune
+  only branches whose tip is merged into main and whose worktree is gone,
+  with `git branch -d` (never `-D`). (c) `tools/moon_sync_responder.py`
+  matches the kit refusal text "budget lock busy" by substring; move it to
+  the kit's structured refusal code once the kit exposes one (sibling of the
+  session 63 item (c) below). (d) The kit v14 inbox bundle directory holds a
+  stray `__pycache__` that fails its provenance check; every kit file
+  matched. Report to MAIN in the next batched note; never patch kit bytes.
+  (e) The kit identity section-4 survey puts main in the history TRIGGER
+  tier (2 ai-or-bot author/committer commits, the root among them); a
+  rewrite runs only on a MAIN ORDER via `ops/fleet_kit/fleet_rewrite.py`
+  (the 2246 entry below, item s4).
+
 - **NEW 2026-10-08. Session 63 supply-chain residue.** (a)
   `requirements-dev.txt` was compiled on Windows and lists colorama
   unconditionally; the first Dependabot Linux recompile drops it, and Windows
