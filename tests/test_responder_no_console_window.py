@@ -124,11 +124,17 @@ def rsp(tmp_path):
     EVERY `DEFAULT_*` PATH IS REDIRECTED, DISCOVERED RATHER THAN LISTED, exactly
     as `tests/test_moon_sync_responder.py` does. This fixture used to say no
     redirection was needed because every arm intercepts the spawn. That was
-    false: `_spawn_headless` RESERVES A RUN against `DEFAULT_RUNS` before it
-    spawns. Measured 2026-10-03 in the MAIN checkout: each suite run wrote three
-    rows into the LIVE `ops/runtime/responder_runs.json`, every one counted
-    against the real daily cap, and created the lock file beside it. The root
-    conftest's live-runtime fence now refuses that write.
+    false: `_spawn_headless` then RESERVED A RUN against `DEFAULT_RUNS` before
+    it spawned. Measured 2026-10-03 in the MAIN checkout: each suite run wrote
+    three rows into the LIVE `ops/runtime/responder_runs.json`, every one
+    counted against the real daily cap, and created the lock file beside it.
+
+    That run ledger is RETIRED since session 63 (ruling 0f, DECISION C): the
+    kit's `RunBudget` counts starts, nothing reads or writes
+    `responder_runs.json`, and `DEFAULT_RUNS` is kept only as the anchor the
+    halt sentinel, kit root and progress lock derive from. The redirect stays
+    because the spawn still writes OTHER `DEFAULT_*` records under the runtime,
+    and the root conftest's live-runtime fence still refuses any such write.
     """
     module = _load("responder_no_console_window_under_test", MODULE)
     for name in [n for n in dir(module) if n.startswith("DEFAULT_")]:
