@@ -108,8 +108,8 @@ def test_a_mutated_claude_md_is_reported(tmp_path, old, new, expected):
     assert expected in KIT.conformance(root)
 
 
-#: The files kit v13 pins (bundle 2128 of 2026-10-08, staged by MAIN, its ORDER
-#: not yet sent; manifest verified file by file), sorted as
+#: The files kit v14 pins (bundle 0930 of 2026-10-09, MAIN ORDER 0930; manifest
+#: verified file by file against the ORDER's section 1), sorted as
 #: `sorted()` orders them. v4 added LICENSE and NOTICE (Apache-2.0, holder the
 #: operator); v5 added fleet_watch.py, fleet_secrets.py and the two token
 #: files; v6 added fleet_lanes.py; v7 added fleet_checklist.py; v8 added
@@ -127,7 +127,10 @@ def test_a_mutated_claude_md_is_reported(tmp_path, old, new, expected):
 #: and fleet_headless.py; v13 added fleet_identity.py and fleet_rewrite.py and
 #: changed FLEET-COMMON.md (item 5, item 16a/c, item 17), NOTICE,
 #: cli_display.json, fleet_claims.py, fleet_gitlock.py, fleet_headless.py and
-#: fleet_suite_gate.py.
+#: fleet_suite_gate.py; v14 added no file and changed fleet_claims.py,
+#: fleet_gitlock.py, fleet_headless.py, fleet_identity.py, fleet_inbox.py,
+#: fleet_lanes.py, fleet_rewrite.py, fleet_statusline.js, fleet_suite_gate.py,
+#: fleet_test_guard.py and tokens.json (FLEET-COMMON.md unchanged).
 PINNED_FILES = (
     "FLEET-COMMON.md",
     "LICENSE",
@@ -155,21 +158,21 @@ PINNED_FILES = (
 
 #: MANIFEST.json is not in its own `files` map, so conformance() cannot notice
 #: a file and the manifest edited TOGETHER (its own docstring says MAIN's drift
-#: sweep catches that). Pinning the manifest's digest here, as MAIN's v13 bundle
-#: and MAIN's roadmap state it (1311801a...74e0), closes that gap here.
-PINNED_KIT_VERSION = 13
-MANIFEST_SHA256 = "1311801a0f5c5ee17150d56b438fb0038a92efeb2b8e13ba02c79da2457f74e0"
+#: sweep catches that). Pinning the manifest's digest here, as MAIN's v14 ORDER
+#: section 1 states it (d045d4ba...acbb78), closes that gap here.
+PINNED_KIT_VERSION = 14
+MANIFEST_SHA256 = "d045d4ba6f7f397fa6d14a934362ec6ddf2b2f4738c3b0dbfdf2c5ad19acbb78"
 
 
 def test_the_vendored_kit_is_the_pinned_version_and_pins_its_licence_files():
-    """The kit adopted is v13; a v14 drop must update this arm deliberately."""
+    """The kit adopted is v14; a v15 drop must update this arm deliberately."""
     raw = (KIT_DIR / "MANIFEST.json").read_bytes()
     manifest = json.loads(raw.decode("ascii"))
     assert KIT.KIT_VERSION == PINNED_KIT_VERSION
     assert manifest["version"] == PINNED_KIT_VERSION
     assert tuple(sorted(manifest["files"])) == PINNED_FILES
     assert hashlib.sha256(raw).hexdigest() == MANIFEST_SHA256, (
-        "ops/fleet_kit/MANIFEST.json is not MAIN's v13 manifest byte-for-byte"
+        "ops/fleet_kit/MANIFEST.json is not MAIN's v14 manifest byte-for-byte"
     )
 
 
@@ -203,9 +206,9 @@ def test_a_manifest_version_mismatch_is_reported(tmp_path):
     root = _scratch_copy(tmp_path)
     path = root / "ops" / "fleet_kit" / "MANIFEST.json"
     data = path.read_bytes()
-    assert b'"version": 13' in data, "mutation target absent - this mutant would be a no-op"
-    path.write_bytes(data.replace(b'"version": 13', b'"version": 12', 1))
-    assert "manifest v12 != kit v13" in KIT.conformance(root)
+    assert b'"version": 14' in data, "mutation target absent - this mutant would be a no-op"
+    path.write_bytes(data.replace(b'"version": 14', b'"version": 13', 1))
+    assert "manifest v13 != kit v14" in KIT.conformance(root)
 
 
 #: U+2610 as UTF-8, built from the code point so this file stays 7-bit.
