@@ -48,8 +48,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 RESPONDER = ROOT / "tools" / "moon_sync_responder.py"
 CAPTURE = ROOT / "tools" / "first_run_capture.py"
@@ -282,23 +280,27 @@ _LITERAL_ZERO = (
 )
 
 
-@pytest.mark.parametrize(
-    "label,source",
-    [
-        ("aliased Popen", _ALIASED_POPEN),
-        ("os.system", _OS_SYSTEM),
-        ("renamed subprocess module", _RENAMED_MODULE),
-        ("kwargs splat", _SPLAT_ONLY),
-        ("subprocess.getoutput", _GETOUTPUT),
-        ("subprocess.getstatusoutput", _GETSTATUSOUTPUT),
-        ("aliased getoutput", _ALIASED_GETOUTPUT),
-        ("creationflags=0 literal", _LITERAL_ZERO),
-    ],
+_DEFEATING_ROUTES = (
+    ("aliased Popen", _ALIASED_POPEN),
+    ("os.system", _OS_SYSTEM),
+    ("renamed subprocess module", _RENAMED_MODULE),
+    ("kwargs splat", _SPLAT_ONLY),
+    ("subprocess.getoutput", _GETOUTPUT),
+    ("subprocess.getstatusoutput", _GETSTATUSOUTPUT),
+    ("aliased getoutput", _ALIASED_GETOUTPUT),
+    ("creationflags=0 literal", _LITERAL_ZERO),
 )
-def test_the_census_fires_on_each_route_that_defeated_an_earlier_version(label, source):
-    assert unflagged_spawn_sites(source) != [], (
-        f"the census cannot see an unflagged spawn reached through {label}, so a "
-        "clean report from it says nothing about that route"
+
+
+def test_the_census_fires_on_each_route_that_defeated_an_earlier_version():
+    """One arm over every defeating route, listing every route the census
+    cannot see (collapsed from a per-route parametrization, MAIN 2246 s2
+    item 2b)."""
+    assert len(_DEFEATING_ROUTES) == 8, _DEFEATING_ROUTES
+    blind = [label for label, source in _DEFEATING_ROUTES if unflagged_spawn_sites(source) == []]
+    assert blind == [], (
+        f"the census cannot see an unflagged spawn reached through {blind}, so a "
+        "clean report from it says nothing about those routes"
     )
 
 
@@ -332,14 +334,13 @@ _BLIND_REBIND = (
 _BLIND_ATTR_PATH = "import os.path\n\n\ndef go():\n    return os.system('reg query')\n"
 
 
-@pytest.mark.parametrize(
-    "label,source",
-    [
-        ("assignment rebinding", _BLIND_REBIND),
-        ("attribute-path import", _BLIND_ATTR_PATH),
-    ],
+_DECLARED_BLIND_SPOTS = (
+    ("assignment rebinding", _BLIND_REBIND),
+    ("attribute-path import", _BLIND_ATTR_PATH),
 )
-def test_the_declared_blind_spots_really_are_blind(label, source):
+
+
+def test_the_declared_blind_spots_really_are_blind():
     """THE HONESTY ARM, and it asserts the UNCOMFORTABLE direction on purpose.
 
     `_BLIND_TO` claims this census cannot see two specific shapes. A claim of
@@ -347,12 +348,17 @@ def test_the_declared_blind_spots_really_are_blind(label, source):
     walk to follow assignments, the entry becomes false and every reader of
     `_BLIND_TO` is then misled about what a clean result means. This arm goes red
     on that day and says so. It is NOT an instruction to keep the blind spot - the
-    repair is to delete the `_BLIND_TO` entry and this parameter case together, in
-    the same commit that widens the walk.
+    repair is to delete the `_BLIND_TO` entry and this table row together, in
+    the same commit that widens the walk. One arm over the whole table, listing
+    every offender (collapsed from a parametrization, MAIN 2246 s2 item 2b).
     """
-    assert unflagged_spawn_sites(source) == [], (
-        f"{label} is now VISIBLE to the census, so the _BLIND_TO entry describing "
-        "it is false - delete that entry and this case together"
+    assert len(_DECLARED_BLIND_SPOTS) == 2, _DECLARED_BLIND_SPOTS
+    visible = [
+        label for label, source in _DECLARED_BLIND_SPOTS if unflagged_spawn_sites(source) != []
+    ]
+    assert visible == [], (
+        f"{visible} now VISIBLE to the census, so the _BLIND_TO entry describing "
+        "each is false - delete that entry and its row together"
     )
 
 
