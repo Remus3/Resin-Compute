@@ -99,6 +99,10 @@ fi
 # upstream, a huge diff, a conftest or pytest.ini change, or any selector
 # error. `slow` is deselected here in every mode. The whole application suite
 # runs in CI and on the nightly schedule; this gate is the fast local half.
+# CI-ONLY (2246 s2 item 2c): scripts/prepush_select.py CI_ONLY names the
+# exhaustive sweeps, censuses, mutation campaigns and end-to-end hook
+# harnesses; the mapping never selects them here (they still run when their
+# own file changed or they last failed), and CI runs every one of them.
 # The selection reaches pytest through RSC_PREPUSH_SELECT, which tests/
 # conftest.py reads; pytest then prints a line saying the run was narrowed.
 #

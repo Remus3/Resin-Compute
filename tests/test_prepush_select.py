@@ -208,6 +208,161 @@ def test_a_last_failed_module_that_no_longer_exists_is_dropped():
     assert got.mode == sel.NONE
 
 
+# ---------------------------------------------------------------------------
+# select(): CI-only modules (MAIN 2246 ORDER s2 item 2c - the 30 s target)
+# ---------------------------------------------------------------------------
+
+_CI_ONLY_MOD = "tests/test_hook_gate.py"
+_CI_ONLY_TABLE = {
+    _CI_ONLY_MOD: {"tools/precommit_gate.py"},
+    "tests/test_precommit_gate_corpus.py": {"tools/precommit_gate.py"},
+}
+
+
+def _select_ci_only(changed, existing=(), last_failed=()):
+    return sel.select(
+        changed,
+        grep=_grep_from(_CI_ONLY_TABLE),
+        exists=_exists(*existing),
+        plumbing=frozenset(),
+        last_failed=last_failed,
+        ci_only=frozenset({_CI_ONLY_MOD}),
+    )
+
+
+def test_a_ci_only_module_reached_by_mapping_is_dropped_and_its_neighbour_survives():
+    got = _select_ci_only(["tools/precommit_gate.py"])
+    assert got.mode == sel.SELECT
+    assert got.modules == ("tests/test_precommit_gate_corpus.py",)
+    assert "1 CI-only deferred" in got.reason
+
+
+def test_without_a_ci_only_set_the_same_mapping_keeps_the_module():
+    # Non-vacuity: the drop above is the ci_only argument's doing, not the table's.
+    got = _select(["tools/precommit_gate.py"], table=_CI_ONLY_TABLE)
+    assert _CI_ONLY_MOD in got.modules
+    assert "CI-only" not in got.reason
+
+
+def test_a_changed_ci_only_test_still_runs_itself():
+    got = _select_ci_only(["tools/precommit_gate.py", _CI_ONLY_MOD], existing=[_CI_ONLY_MOD])
+    assert _CI_ONLY_MOD in got.modules
+
+
+def test_a_last_failed_ci_only_module_still_runs():
+    got = _select_ci_only(
+        ["tools/precommit_gate.py"], existing=[_CI_ONLY_MOD], last_failed=[_CI_ONLY_MOD]
+    )
+    assert _CI_ONLY_MOD in got.modules
+
+
+def test_a_diff_mapping_only_to_ci_only_modules_selects_nothing():
+    got = sel.select(
+        ["tools/precommit_gate.py"],
+        grep=_grep_from({_CI_ONLY_MOD: {"tools/precommit_gate.py"}}),
+        exists=_exists(),
+        plumbing=frozenset(),
+        last_failed=(),
+        ci_only=frozenset({_CI_ONLY_MOD}),
+    )
+    assert got.mode == sel.NONE
+    assert "1 CI-only deferred" in got.reason
+
+
+#: The fast, high-signal tree-wide guards the pre-push gate must keep running:
+#: the glyph gate's corpus, the sibling-name sweep, interpreter pinning, the
+#: fleet-kit pin, the secret-literal and machine-identity sweeps, line endings.
+_KEEP_LOCAL = frozenset(
+    {
+        "tests/test_precommit_gate_corpus.py",
+        "tests/test_no_sibling_names.py",
+        "tests/test_interpreter_pinning.py",
+        "tests/test_fleet_kit.py",
+        "tests/test_no_secret_literals.py",
+        "tests/test_machine_identity.py",
+        "tests/test_line_endings.py",
+        "tests/test_prepush_select.py",
+    }
+)
+
+
+def test_the_shipped_ci_only_set_names_real_modules_and_spares_the_fast_guards():
+    assert sel.CI_ONLY, "non-vacuity: an empty set would make the deferral a no-op"
+    for module in sel.CI_ONLY:
+        assert sel._is_test_module(module), module
+        assert (REPO_ROOT / module).is_file(), f"CI_ONLY names a missing module: {module}"
+    assert not (sel.CI_ONLY & _KEEP_LOCAL), sorted(sel.CI_ONLY & _KEEP_LOCAL)
+
+
+def test_ci_still_runs_every_ci_only_module_the_hook_would_have_mapped():
+    # A plumbing module in CI_ONLY is mapped only when a plumbing root changed,
+    # and then ci_mark_for is "" (every module runs in CI). A product module in
+    # CI_ONLY is never deselected by the "not plumbing" mark at all.
+    assert sel.ci_mark_for(["core/x.py"]) == "not plumbing"
+    for module in sel.CI_ONLY:
+        if module not in PLUMBING:
+            continue  # "not plumbing" keeps it on every CI push
+        for root in sel.PLUMBING_ROOTS:
+            assert sel.ci_mark_for([f"{root}x.py"]) == "", (module, root)
+
+
+def _ci_cancel_in_progress(text: str) -> str:
+    """The workflow-level `concurrency: cancel-in-progress:` value of ci.yml."""
+    lines = text.splitlines()
+    start = lines.index("concurrency:")
+    for line in lines[start + 1:]:
+        if line and not line.startswith(" "):
+            break
+        key, _, value = line.strip().partition(":")
+        if key == "cancel-in-progress":
+            return value.strip()
+    raise AssertionError("ci.yml concurrency block has no cancel-in-progress key")
+
+
+#: The only accepted spelling: a push run is never cancelled; a superseded
+#: pull-request or dispatch run still is.
+_PUSH_NEVER_CANCELLED = "${{ github.event_name != 'push' }}"
+
+
+def test_a_push_run_in_ci_is_never_cancelled_so_ci_only_modules_always_run():
+    # Adversary counter-example against 64d05a7: push A breaks a hook, the hook
+    # now defers test_hook_gate, push B (core/ only) cancels A's CI run and
+    # diffs from A, so ci_mark_for gives "not plumbing" and the PLUMBING
+    # CI_ONLY modules never run until the nightly. A push run must finish.
+    text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="ascii")
+    assert _ci_cancel_in_progress(text) == _PUSH_NEVER_CANCELLED
+
+
+@pytest.mark.parametrize("value", ["true", "${{ true }}", "${{ github.event_name == 'push' }}"])
+def test_the_cancel_parser_reports_a_cancellable_push_run(value: str):
+    # Non-vacuity: the arm above reads the real key, and would see a regression.
+    text = f"on: push\nconcurrency:\n  group: g\n  cancel-in-progress: {value}\njobs: {{}}\n"
+    assert _ci_cancel_in_progress(text) != _PUSH_NEVER_CANCELLED
+
+
+def test_the_cli_defers_a_shipped_ci_only_module(tmp_path: Path):
+    from tests.conftest import require_git_repository
+
+    require_git_repository()
+    root = tmp_path / "r"
+    (root / "tests").mkdir(parents=True)
+    (root / "core").mkdir()
+    (root / "core" / "thing.py").write_text("X = 1\n", encoding="ascii", newline="\n")
+    deferred = sorted(sel.CI_ONLY)[0]
+    for module in (deferred, "tests/test_thing.py"):
+        (root / module).write_text("# core/thing.py\n", encoding="ascii", newline="\n")
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "base")
+    base = _git(root, "rev-parse", "HEAD").strip()
+    (root / "core" / "thing.py").write_text("X = 2\n", encoding="ascii", newline="\n")
+    _git(root, "commit", "-q", "-am", "change")
+    mode, reason, modules = _cli(root, "--base", base)
+    assert mode == sel.SELECT
+    assert modules == "tests/test_thing.py"
+    assert "CI-only deferred" in reason
+
+
 def test_the_cache_reader_keeps_app_suite_modules_only(tmp_path: Path):
     cache = tmp_path / "lastfailed"
     cache.write_text(
