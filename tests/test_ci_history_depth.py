@@ -35,7 +35,8 @@ vacuous in the window where the floor is red, so `full_history_problems()`
 reports "no checkout step found" as a PROBLEM and the guard grades one list.
 
 NO YAML LIBRARY. PyYAML is installed on the author's box and is NOT in
-requirements-dev.txt, which pins ruff, pytest and mypy only. A guard importing
+requirements-dev.txt, which pins ruff, pytest, mypy and the pytest-timeout
+plugin only. A guard importing
 it would pass here and fail on the runner, which is the reverse of useful.
 
 NO GIT, EITHER. Nothing in this module shells out, so an exported GIT_DIR, a
