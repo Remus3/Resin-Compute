@@ -53,9 +53,16 @@ on:
 # ref, so rapid pushes do not each bill to completion. event_name is IN the
 # group on purpose: without it a push would cancel the nightly schedule run, or
 # the reverse. Only same-event runs supersede each other.
+#
+# A PUSH RUN IS NEVER CANCELLED (0i 2c). The next push's run diffs from
+# github.event.before, so a cancelled push's plumbing diff would never be
+# graded by a run that selects plumbing - and the pre-push hook defers
+# scripts/prepush_select.py CI_ONLY to CI. Pushes queue instead (the group
+# still serialises them); pull-request and dispatch runs still supersede.
+# tests/test_prepush_select.py pins this exact expression.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 # Least privilege, declared at workflow level so any job added later inherits
 # it. This workflow only reads the tree; nothing here needs write.
