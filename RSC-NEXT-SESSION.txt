@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-10 (session 67), gates measured at commit 7a11186 on main
+Stamped 2026-10-10 (session 68), gates measured at commit 0e8612a on main
 by the /done ritual; this paperwork commit landed after it. Everything below
 is a READING taken that day, not a promise about now. Re-measure before
 citing.
@@ -63,7 +63,27 @@ tmp_path_retention_count = 1. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures. Pass the suite
 interpreter to the suite gate as an ABSOLUTE path (sys.executable).
 
-STATE OBSERVED 2026-10-10 AT 7a11186 (session 67 /done gate run)
+STATE OBSERVED 2026-10-10 AT 0e8612a (session 68 /done gate run)
+  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
+  skipped 4 noted; ruff clean; tests 4385 passed 6 skipped (same six host
+  skip reasons, read with -rs; collect-only 4391); pity_engine 191
+  passed; node 110 pass 0 fail; dry run 0 pass 0 fail 7 skip; mypy 43
+  files clean; kit check 15 []. Whole suites ran through the suite gate;
+  the app suite WAITED about 1291 s for a slot (2 of 2 held elsewhere).
+  core.hooksPath read the absolute path at /done start; install_hooks
+  restored it, read back .githooks.
+  READ BACK at /done: push 5538515..0e8612a, pre-push OK, origin/main
+  0e8612a (git fetch); git ls-remote origin lists main and
+  claude/new-session-19dmsr only; git stash list empty; watch_inbox
+  unread: none; git worktree list shows only the main checkout. CI at
+  0e8612a and the paperwork push: see docs/ledger/session-68.md.
+  LANDED session 68: 0i(2b) merge 079c7fa (census 190 -> 94 items);
+  0i(2c) merge 0127b26 PARTIAL (six modules CI_ONLY, push CI runs never
+  cancelled); 0i(4b) merge d57226d DECISION B (pytest-timeout 2.4.0
+  pinned, xdist and execnet deferred); 0p merge 9cd50b7 (arm-proving rule
+  into CLAUDE.md, stash dropped); 0l rsc-v8-slice-a deleted on origin;
+  0j measured; follow-up 0e8612a. Rulings: docs/ledger/session-68.md.
+PRIOR READING 2026-10-10 AT 7a11186 (session 67 /done gate run)
   Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
   skipped 3 noted; ruff clean; tests 4467 passed 6 skipped (same six host
   skip reasons, read with -rs); pity_engine 191 passed; node 110 pass 0
@@ -200,32 +220,37 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      session 66 (pre-hang merge-e1-0o run; the liveness-diag progress file
      put it down to a host WMI 0x800700a4 condition with a taskkill.exe
      pileup, no code change); it passed in the session 67 /done gate.
-     Watch both for a repeat; root-cause if either recurs.
-  0i. MAIN 2246 s2 residue (FILED, ROADMAP 2246 entry): (2b) collapse the
-     census tables (tests/test_responder_gate_census.py and peers) into one
-     test per invariant; (2c) a plumbing-only pre-push still selects ~17
-     hook-heavy modules, about 95 s against the 30 s target - trim the
-     selector or move them to CI-only; (4b) hash-pinned pytest-timeout and
-     xdist need the licence gate first (new dependency); the 10.4 GB
-     process is still unexplained.
-  0j. MAIN FIX TEMP-1 ACCEPTANCE READ-BACK OWED (landed session 65, merge
-     afdd733): after a day of normal work, measure the max count of
-     basetemp dirs per scratchpad (must be <= 1) and the max scratchpad
-     entry count, then answer MAIN with both numbers in the next batched
-     note.
+     (i) RECURRED session 68: failed twice, both under a concurrent suite,
+     passed solo 3 of 3 - ROOT-CAUSE IT NOW; the module is CI_ONLY
+     locally (scripts/prepush_select.py), so only CI exercises it.
+     Watch (ii) for a repeat.
+  0i. MAIN 2246 s2 residue (ROADMAP 2246 entry; 2b and 4b DONE session
+     68). (2c) PARTIAL: local plumbing pre-push 35-44 s against the 30 s
+     target - the remaining ~5-14 s is open (running the engine suite in
+     parallel was REJECTED: a second suite slot, FLEET-COMMON 16c). (2c-b)
+     3 pushes inside one CI run (~213 s) still replace the pending run;
+     reverse to a per-commit concurrency group if any push run is ever
+     cancelled. The 10.4 GB process is still unexplained. xdist and
+     execnet stay DEFERRED (reversed by an xdist run under the suite gate
+     with no worker loss and a green lock-budget module across repeated
+     runs).
+  0j. MAIN FIX TEMP-1 ACCEPTANCE: MEASURED session 68 over 191
+     scratchpads - max basetemp dirs per scratchpad 0, max entry count
+     16938 (another tree's scratchpad); this tree's max 2019 (mostly a
+     pt311 venv). OWED: send both numbers to MAIN in the NEXT batched note
+     (outbound cap 6/day: batch with other answers).
   0k. Identity section-4 history TRIGGER tier (2 ai-or-bot author and
      committer commits, the root among them). A rewrite runs ONLY on a MAIN
      ORDER (or the operator in person, O8) via ops/fleet_kit/fleet_rewrite.py.
-  0l. Residue of the session 66 branch prune: one deleted local branch
-     tracked the remote branch rsc-v8-slice-a, which still exists on
-     origin. Decide whether to delete it (check for a consumer first).
-  0p. A STALE STASH remains: stash@{0} "pre-session uncommitted
-     RSC-NEXT-SESSION.txt short form, superseded by c07dc82" (an old
-     hand-off draft, 1 file). Read it, confirm nothing in it is missing
-     from the current hand-off, then drop it. Not dropped yet.
+  0l. rsc-v8-slice-a DONE session 68 (deleted on origin, ls-remote read
+     back absent). NEW: origin also holds claude/new-session-19dmsr
+     (154d5f8, merged PR #1 head, ancestor of origin/main); decide whether
+     to delete it after a consumer check.
   1. requirements-dev.txt colorama: DONE in 74a8710 with a win32 marker.
-     Remaining: confirm the next Dependabot Linux recompile keeps the
-     marker before any Dependabot pip PR merges.
+     Remaining: the marker is a HAND-EDIT NO TEST GUARDS (session 68
+     finding); a Linux Dependabot recompile drops it with CI green. Add a
+     guard, and confirm the next Dependabot Linux recompile keeps the
+     marker, before any Dependabot pip PR merges.
   5. Future MAIN supersessions: the stamp list is closed by design. A new
      superseded MAIN order needs a verified MAIN note naming its stamps; add
      them to SUPERSEDED_MAIN_STAMPS. Not watched live yet: confirm the next
@@ -269,12 +294,13 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      is unreachable; an idle status over a non-oldest epoch-ms row reads
      120/120 while the kit still counts it as one; a one-off kit read error
      reads Backing Off, not the limit.
-  13. Inbox: the session watcher's watermark WAS MARKED at session 66 /done
-     after triage (v15 ORDER and bundle: applicable-and-not-done, then
-     DONE session 67 as E1; the v14 bundle re-flagged only by an mtime
-     change: already ingested). The session 67 /done did not re-mark it.
+  13. Inbox: marked session 68; watch_inbox read unread: none at /done.
      Each session: triage new entries into the four buckets, then --mark
      only what was triaged.
+  DONE session 68 (see docs/ledger/session-68.md): 0i(2b) census
+  collapse; 0i(4b) DECISION B; 0i(2c) partial (residue in 0i); 0l
+  rsc-v8-slice-a; 0j measurement (send still owed); 0p stash adjudicated
+  and dropped, arm-proving rule in CLAUDE.md; 13 inbox marked.
   DONE session 67 (see docs/ledger/session-67.md): E1 kit v15 adoption
   and its ONE ANSWER to MAIN; A1 (old item 2, kit budget refusal codes);
   0o (HISTORY block moved); 0m (busy-lock check by Refused.code); the
@@ -334,9 +360,16 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   docs/LEDGER.md kept as the index and per-session ledger files (reversed
   by a MAIN ruling); display name ResinCompute in one word (reversed by an
   operator or MAIN instruction); the nightly gated on new commits (reversed
-  by plumbing tests moving back into the push path).
+  by plumbing tests moving back into the push path); the six CI_ONLY
+  pre-push modules and never-cancelled push CI runs (reversed by any
+  cancelled push run in ci, or 3 pushes landing within one run duration);
+  dev-dep DECISION B, pytest-timeout only (reversed as in 0i).
 
 TRAPS MEASURED - none are hypothetical
+  THE SUITE GATE CAN HOLD A WHOLE SUITE FOR OVER 20 MINUTES (session 68
+  /done: about 1291 s waiting, 2 of 2 slots held by other owners). Run
+  the gate in the background and poll its output file for EXIT=.
+
   A SYSTEM HANG CAN LEAVE MERGES UNPUSHED AND SLICES HALF-BUILT (session
   67). On "continue" after a crash: git log origin/main..main, git
   worktree list, and the progress files' status before anything else.
@@ -462,4 +495,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 68
+SESSION: 69
