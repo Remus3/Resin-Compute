@@ -489,7 +489,8 @@ _SLOT_BUCKET_ABS_NORM = _bucket_norm() if _SLOT_BUCKET_IS_ABS else ""
 
 
 # 8.3 SHORT NAMES ARE THE SAME PATH TO THE KERNEL (S3 residual c, 2026-10-03).
-# Measured on this host: `C:\RESINC~1\...\ops\runtime\responder_runs.json`,
+# Measured on this host: `C:\RESINC~1\...\ops\runtime\responder_runs.json`
+# (the run record, retired in session 63; the 8.3 finding holds for any path),
 # the 8.3 spelling of the home directory's `.claude.json` and `C:\PROGRA~3\...` all normcased to
 # strings that matched no fenced root, so a write by the short spelling passed
 # both fences. `_expand_short_names` maps the LONGEST EXISTING PREFIX through
@@ -736,13 +737,21 @@ def _report_unattributed_fence_hits(session: pytest.Session) -> None:
 #
 # MEASURED 2026-10-03 in the MAIN checkout: a suite run wrote the LIVE runtime.
 # `ops/runtime/responder_runs.json` gained six rows the scheduled responder never
-# reserved - and every one of them counts against the real daily run cap - the
+# reserved - each one then counted against the real daily run cap - the
 # lock file beside it was created, and `responder_invocations.log` gained 103
 # `fail-closed:run-lock-busy` lines. Two routes, both re-measured in a worktree:
 #
 #   IN PROCESS - a fixture that loads the responder without redirecting its
-#   `DEFAULT_*` records and then drives `_spawn_headless`, which reserves a run
-#   against the module-level `DEFAULT_RUNS`.
+#   `DEFAULT_*` records and then drives `_spawn_headless`, which at the time
+#   reserved a run against the module-level `DEFAULT_RUNS`.
+#
+# HISTORY, NOT CURRENT BEHAVIOUR (session 63, ruling 0f, DECISION C): the
+# responder-local run ledger is RETIRED. The fleet kit's `RunBudget` counts
+# every start under an OS-held lock; nothing reads or writes
+# `responder_runs.json` any more, and `DEFAULT_RUNS` survives only as the
+# anchor `halt_sentinel`, `_kit_root` and `progress_lock_path` derive from. The
+# guard below is NOT retired: the responder still writes other records under
+# the live runtime, and it fences the whole tree for the reason given in SCOPE.
 #   CHILD PROCESS - an interpreter launched with `sys.executable` loads the
 #   module afresh, so no fixture's redirect reaches it, and with
 #   `RESINCOMPUTE_RUNTIME_DIR` unset it resolves `<repo root>/ops/runtime`.
