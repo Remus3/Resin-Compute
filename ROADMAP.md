@@ -13,6 +13,24 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-09 (session 66). MAIN 2055 ORDER FLEET-KIT v15, ONE
+  ANSWER - IN PROGRESS, NOT MERGED.** Provenance verified: ORDER sha256
+  0697accc... matches MAIN's outbox; bundle 23 of 23 files match;
+  MANIFEST sha256 8b20a75b.... Builder worktree branch
+  worktree-agent-afb48ff62cd4b834b: commit 1 vendors v15 and pins 15 in
+  `tests/test_fleet_kit.py`; commit 2 adds CLAUDE_CODE_DISABLE_BACKGROUND_TASKS
+  to CHILD_ENV_KEEP in `core/headless_env.py` (defect: harden_child_env
+  strips CLAUDE_CODE_* so the v15 child_env key was dropped) with a
+  regression test in `tests/test_headless_env.py`. Next: verifier re-hash
+  of the 23 files and conformance()==[]; full lens refute (core/ change);
+  merge; gated suite; ledger; ONE ANSWER to MAIN (HOP 2) with vendoring
+  sha, MANIFEST sha, conformance()==[], gated suite count, stray gate
+  copies 0, the step 4 local prefix-strip fix, and step 5 already pinned
+  in `tests/conftest.py`. The responder already auto-acked the ORDER.
+- **NEW 2026-10-09 (session 66). Low-priority tidy.** The B1 adversary's
+  residual nit: the new HISTORY block in `conftest.py` sits between the IN
+  PROCESS and CHILD PROCESS route comments; move it.
+
 - **NEW 2026-10-09. Session 65 residue (kit v14 and MAIN FIX TEMP-1
   landed, merges e47af71 and afdd733; see `docs/ledger/session-65.md`).**
   (a) TEMP-1 acceptance read-back owed after a day of normal work: the max
@@ -30,6 +48,17 @@ version. What follows is everything the scaffold deliberately did not do.
   tier (2 ai-or-bot author/committer commits, the root among them); a
   rewrite runs only on a MAIN ORDER via `ops/fleet_kit/fleet_rewrite.py`
   (the 2246 entry below, item s4).
+  Session 66: (b) DONE - 41 merged branches deleted with `git branch -d`
+  (44 seen, all merged) and the stale-locked slice B worktree removed;
+  RESIDUE: one deleted branch tracked the remote branch rsc-v8-slice-a,
+  which still exists on origin - decide whether to delete it. (c) PARTIAL
+  - see the session 63 supply-chain entry item (c) below; the code-only
+  switch needs code="budget-lock-busy" on the test stubs in
+  `tests/test_headless_env.py` and `tests/test_responder_uniform_budget.py`,
+  sequenced after the kit v15 merge (E1 also writes
+  `tests/test_headless_env.py`). (d) RETRACTED - the stray `__pycache__`
+  was this tree's own local leftover, sent to the Recycle Bin and read
+  back absent; reported to MAIN in the 2055 REPORT.
 
 - **NEW 2026-10-08. Session 63 supply-chain residue.** (a)
   `requirements-dev.txt` was compiled on Windows and lists colorama
@@ -41,7 +70,12 @@ version. What follows is everything the scaffold deliberately did not do.
   Scorecard read 6.6, up from 4.7 at d6bce85 (`docs/LEDGER.md`). (c) The kit refusals
   "budget lock unopenable" and "budget write failed" map to
   KitRunBudgetSpent through a substring match on "budget"; give them a
-  distinct termination.
+  distinct termination. Session 66: BUILT ON A BRANCH, NOT MERGED -
+  worktree branch worktree-agent-a0315350541d2d26b at 3edef74
+  (KitBudgetLockUnopenable and KitBudgetWriteFailed matched by the kit
+  Refused.code, terminations kit-budget-lock-unopenable and
+  kit-budget-write-failed joined TERMINATIONS). Next: one adversary lens,
+  then merge; the builder's suite figures are unverified.
 - **OPEN 2026-10-09. MAIN 2246 ORDER (REPO-REVIEW), SHA-256 verified
   (7ccc71ff...) - s1-s3 and the s4 Dependabot part DONE session 64 (see
   `docs/ledger/session-64.md`); ANSWER 0019 (HOP: 2) sent. Still OPEN:**
@@ -61,20 +95,12 @@ version. What follows is everything the scaffold deliberately did not do.
   run waited about 21 min for a `fleet_suite_gate.py` slot this session
   (observed by the attended session); no RSC outbound note named it when
   grepped at /done, so put it in the next batched note to MAIN as a kit
-  observation. (s4 count) `fleet_identity.py check HEAD` at /done refused
+  observation. DONE session 66: carried in the 2055 REPORT to MAIN. (s4 count) `fleet_identity.py check HEAD` at /done refused
   4 violations on 2 commits, all ai-or-bot author/committer class and NO
   claude-trailer class - unlike SS (its 0025 note, section 1b, 28
   trailer refusals), so the rewrite scope here stays 2 commits. (s1) The hand-off Desktop
   `.lnk` itself is outside the repo root (halt clause a); it read absent on
   the current profile, so nothing to remove.
-- **NEW 2026-10-08 (session 63 /done). Small residue.** (a) The leftover
-  gitignored `.claude/worktrees/conftest_backup.bytes` (an old conftest copy,
-  dated 2026-09-09): review, then Recycle Bin. (b) Stale comments about the
-  retired responder run record in `conftest.py` and
-  `tests/test_responder_no_console_window.py`. (c) Report to MAIN in the next
-  batched note: kit `fleet_inbox.scan` keys seen notes by name only, so a
-  re-sent note under an old name is hidden (FYI already in the 1925 ANSWER).
-
 - **NEW 2026-10-08. Kit v10 residue (session 62 merge).** (a) DONE session
   63 (merge 5e4e525): the `orchestrated-run.md` and `ui-audit.md` skills
   dispatch ONE sub-agent that runs the skill, as `.claude/commands/done.md`
@@ -94,8 +120,8 @@ version. What follows is everything the scaffold deliberately did not do.
   target 2026-10-11. Session 63 read 0 would-deny rows (621 rows, all
   sub-thread allow): 2 of 3. Session 64 /done read 0 would-deny and 0
   main-thread rows (1361 rows, all sub-thread allow): 3 of 3, so the mode
-  file was set to deny at session 64 /done (read back `deny`). Still OPEN:
-  say so in the next batched note to MAIN.
+  file was set to deny at session 64 /done (read back `deny`). DONE
+  session 66: reported in the 2055 REPORT to MAIN.
 
 - **E: move follow-through (session 59).** Steps a-c DONE session 60 (see
   `docs/LEDGER.md`): session started at E:, C: copy recycled and replaced by
@@ -119,19 +145,6 @@ version. What follows is everything the scaffold deliberately did not do.
   SUPERSEDED_MAIN_STAMPS rather than an auto-reply each.
   Session 62: the 1454 ANSWER asked MAIN for the 2354 and 0020 stamps;
   await the reply.
-
-- **DONE 2026-10-08 (session 63). Item-14 residuals (1)-(4) from the
-  round-5 refuter.** (1) The MAIN retry loop's bound is now the kit's
-  120-run budget alone (`test_a_full_legacy_run_record_no_longer_refuses_a_spawn`).
-  (2) Pinned: `test_r5_minor2_*` in `tests/test_responder_inbox_v8.py`,
-  mutation-checked (deleting the triage-lane release turns it red).
-  (3) `_safe_note_label` removed; `_log_safe` now also replaces non-ASCII,
-  which had silently dropped whole log lines. (4) `record_outbound` and
-  `_release_outbound` run under an OS lock beside the outbound record
-  (`outbound_lock_path`); measured before: 4 contending interpreters, 83
-  reservations reported, 27 rows survived. See `docs/LEDGER.md`. STILL
-  OPEN: the kit `fleet_inbox.scan` keys seen-notes by name only, so a
-  re-sent note under a seen name is hidden silently (kit, reported to MAIN).
 
 - **NEW 2026-10-07. Watch one armed responder fire** end with no reply to any
   of the 14 superseded MAIN stamps (not yet observed live).
