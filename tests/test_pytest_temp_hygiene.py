@@ -7,23 +7,22 @@ and this repo's pytest.ini governs only this repo's runs. Measured 2026-09-20:
 one full `python -m pytest tests` here left 163 files across two numbered
 directories, which is not the source of a six-figure pile.
 
-Two controls decided what this file pins.
+The 2026-09-20 measurement found `tmp_path_retention_count` was not what kept
+numbered roots alive on this host: of 14 numbered roots, 12 were already
+cleanup candidates under pytest's default keep=3 and every one was refused by
+`_pytest.pathlib.ensure_deletable` on a `.lock` younger than `LOCK_TIMEOUT`
+(259200 s, 72 hours, a module constant no ini key reaches). That finding still
+stands as a fact about lock age.
 
-* `tmp_path_retention_count` defaults to the string "3" inside pytest itself
-  (`_pytest/tmpdir.py`, `pytest_addoption`). Writing `tmp_path_retention_count
-  = 3` into pytest.ini therefore restates a default and changes nothing.
-* Root pruning on this host is not failing on that count. Of 14 numbered
-  roots present, 12 were already cleanup candidates under keep=3, and every
-  one was refused by `_pytest.pathlib.ensure_deletable` because it still
-  carried a `.lock` younger than `LOCK_TIMEOUT` - 259200 s, that is 72 hours,
-  a module constant no ini key reaches. A control in a private root
-  reproduced the split exactly: given ten numbered directories where the even
-  ones carried a fresh lock, keep=3 spared the newest three and then removed
-  only the unlocked candidates, leaving every locked candidate standing.
+MAIN FIX TEMP-1 (2026-10-09, SHA-256 verified, operator authority) supersedes
+the earlier conclusion that the key should stay undeclared. It orders
+`tmp_path_retention_policy = failed` AND `tmp_path_retention_count = 1`, after
+measuring 16 basetemp dirs and 22,876 entries in one of this tree's session
+scratchpads. Decision recorded: adopt 1. Alternative rejected: keep pytest's
+default 3. Reversed by: a MAIN ruling.
 
-So the supported change was no new setting at all. These arms pin that
-decision so a later reader cannot quietly add the no-op line, or quietly
-delete the one setting that does move measured behaviour.
+These arms pin both settings, declared and effective, so a later reader cannot
+quietly drop either one.
 
 This module carries NO allowlist, exemption or known-good set. Every value it
 asserts was read off a run of this tree on this host, and none was admitted
@@ -43,6 +42,10 @@ PYTEST_INI = REPO_ROOT / "pytest.ini"
 # pytest's own default for tmp_path_retention_count, read off
 # _pytest/tmpdir.py::pytest_addoption on 2026-09-20 under pytest 9.0.3.
 PYTEST_OWN_RETENTION_COUNT_DEFAULT = "3"
+
+# The value MAIN FIX TEMP-1 (2026-10-09, SHA-256 verified) orders this tree to
+# declare. Reversed only by a MAIN ruling.
+ORDERED_RETENTION_COUNT = "1"
 
 
 def _declared() -> configparser.ConfigParser:
@@ -75,31 +78,33 @@ def test_tmp_path_retention_policy_is_declared_and_effective_is_failed(
     )
 
 
-def test_tmp_path_retention_count_is_left_at_pytests_own_default(
+def test_tmp_path_retention_count_effective_value_is_one(
     pytestconfig: pytest.Config,
 ) -> None:
     effective = pytestconfig.getini("tmp_path_retention_count")
-    assert effective == PYTEST_OWN_RETENTION_COUNT_DEFAULT, (
+    assert str(effective) == ORDERED_RETENTION_COUNT, (
         "the EFFECTIVE tmp_path_retention_count is "
-        f"{effective!r}, not {PYTEST_OWN_RETENTION_COUNT_DEFAULT!r}. That key "
-        "governs how many numbered pytest-N ROOT directories survive under "
-        "%TEMP%/pytest-of-<user>. Changing it was measured NOT to shrink that "
-        "pile on this host: 12 of 14 roots were already cleanup candidates under "
-        "keep=3 and every one was refused on lock age by "
-        "_pytest.pathlib.ensure_deletable, whose LOCK_TIMEOUT of 72 hours no ini "
-        "key can reach. If you are changing it anyway, bring a before/after count "
-        "of the surviving root directories and update this arm with it."
+        f"{effective!r}, not {ORDERED_RETENTION_COUNT!r}. MAIN FIX TEMP-1 "
+        "(2026-10-09) orders tmp_path_retention_count = 1 alongside "
+        "tmp_path_retention_policy = failed: one session scratchpad here was "
+        "measured holding 16 basetemp dirs and 22,876 entries. pytest's own "
+        f"default is {PYTEST_OWN_RETENTION_COUNT_DEFAULT!r}, so an effective "
+        "value of 3 means the pytest.ini line is missing or overridden. "
+        "Reversed only by a MAIN ruling."
     )
 
 
-def test_pytest_ini_does_not_restate_the_retention_count_default() -> None:
+def test_pytest_ini_declares_retention_count_one_per_main_fix_temp_1() -> None:
     parser = _declared()
-    assert not parser.has_option("pytest", "tmp_path_retention_count"), (
-        "pytest.ini declares tmp_path_retention_count, which pytest already "
-        "defaults to "
-        f"{PYTEST_OWN_RETENTION_COUNT_DEFAULT!r}. A config line that restates its "
-        "own default moves no behaviour and is worse than no line at all, because "
-        "the next reader will believe the pile is bounded by it. It is not: the "
-        "block is a stale .lock newer than LOCK_TIMEOUT, not the keep count. See "
-        "the measured comment block in pytest.ini before re-adding this."
+    assert parser.has_option("pytest", "tmp_path_retention_count"), (
+        "pytest.ini must DECLARE tmp_path_retention_count. MAIN FIX TEMP-1 "
+        "(2026-10-09) orders it set to 1; pytest's own default is "
+        f"{PYTEST_OWN_RETENTION_COUNT_DEFAULT!r}, which is what an absent key "
+        "silently yields."
+    )
+    declared = parser.get("pytest", "tmp_path_retention_count").strip()
+    assert declared == ORDERED_RETENTION_COUNT, (
+        f"pytest.ini declares tmp_path_retention_count = {declared!r}; MAIN FIX "
+        f"TEMP-1 orders {ORDERED_RETENTION_COUNT!r}. Reversed only by a MAIN "
+        "ruling."
     )
