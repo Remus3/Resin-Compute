@@ -19,7 +19,9 @@ THE MAPPING, deterministic and bounded:
      are dropped unless a changed path sits under a PLUMBING_ROOTS root.
   6. pytest's own last-failed cache adds its `tests/` modules (the `--lf`
      half of the order).
-  7. Nothing selected -> NONE.
+  7. CI_ONLY modules reached ONLY through step 4 are deferred to CI (MAIN
+     2246 ORDER s2 item 2c, the 30 s target); steps 3 and 6 still run them.
+  8. Nothing selected -> NONE.
 
 OUTPUT, three lines on stdout, read by the hook:
 
@@ -83,6 +85,28 @@ PLUMBING_ROOTS: tuple[str, ...] = (
     ".claude/",
 )
 
+#: CI-ONLY (MAIN 2246 ORDER s2 item 2c). Modules the pre-push gate never
+#: reaches through the needle mapping (step 4): each one is an exhaustive
+#: sweep, census, mutation campaign or end-to-end hook harness that spawns
+#: real git / sh / pytest children, and together they were about two thirds
+#: of a plumbing push's selected time (measured 2026-10-10, this host, Python
+#: 3.14: a tools/precommit_gate.py push selected 24 modules, 84 s, of which
+#: these six were 61 s). CI runs every one of them: the product-class ones on
+#: every push, the PLUMBING ones whenever a plumbing root changed, which is
+#: the only time the hook would have mapped them. A CI-only module still runs
+#: locally when its own file changed (step 3) or it last failed (step 6).
+#: Re-measure with `--durations=0` before adding or removing an entry.
+CI_ONLY: frozenset[str] = frozenset(
+    {
+        "tests/test_hook_gate.py",
+        "tests/test_conftest_git_gate_sites.py",
+        "tests/test_git_subprocess_census.py",
+        "tests/test_git_env_scrub.py",
+        "tests/test_gate_mutation_runner.py",
+        "tests/test_responder_gate_census.py",
+    }
+)
+
 _ZERO_SHA = "0" * 40
 
 
@@ -130,8 +154,13 @@ def select(
     exists: Callable[[str], bool],
     plumbing: frozenset[str],
     last_failed: Iterable[str],
+    ci_only: frozenset[str] = frozenset(),
 ) -> Selection:
-    """The pure decision. `grep` maps needles to the test modules holding any."""
+    """The pure decision. `grep` maps needles to the test modules holding any.
+
+    `ci_only` modules reached only through the mapping are deferred to CI;
+    `compute` passes CI_ONLY, the pure default defers nothing.
+    """
     changed = sorted(set(changed))
     if len(changed) > MAX_CHANGED:
         return Selection(FULL, f"{len(changed)} changed paths exceed MAX_CHANGED={MAX_CHANGED}")
@@ -152,7 +181,10 @@ def select(
         mapped -= plumbing
 
     failed = {m for m in last_failed if _is_test_module(m) and exists(m)}
+    deferred = (mapped & ci_only) - explicit - failed
+    mapped -= deferred
     modules = tuple(sorted(explicit | mapped | failed))
+    deferred_note = f", {len(deferred)} CI-only deferred" if deferred else ""
 
     unsafe = [m for m in modules if any(ch.isspace() or ch == "," for ch in m)]
     if unsafe:
@@ -160,13 +192,15 @@ def select(
     if not modules:
         return Selection(
             NONE,
-            f"no application module maps to {len(changed)} changed path(s)",
+            f"no application module maps to {len(changed)} changed path(s)"
+            f"{deferred_note}",
         )
     return Selection(
         SELECT,
         f"{len(modules)} module(s) from {len(changed)} changed path(s)"
         f"{'' if plumbing_touched else ', plumbing deselected'}"
-        f"{f', {len(failed)} last-failed' if failed else ''}",
+        f"{f', {len(failed)} last-failed' if failed else ''}"
+        f"{deferred_note}",
         modules,
     )
 
@@ -275,6 +309,7 @@ def compute(root: Path, base: str | None) -> Selection:
         exists=lambda rel: (root / rel).is_file(),
         plumbing=load_plumbing(root),
         last_failed=last_failed_modules(root / ".pytest_cache" / "v" / "cache" / "lastfailed"),
+        ci_only=CI_ONLY,
     )
 
 
