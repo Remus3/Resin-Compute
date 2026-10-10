@@ -256,6 +256,15 @@ python -m mypy
   (`-rs`), not skip counts.
 - **Launch an interpreter by `sys.executable`, never by a bare name.**
   `tests/test_interpreter_pinning.py` enforces it. The `shell/` Node lane is exempt.
+- **Never pass `--basetemp` inside the session scratchpad** (MAIN FIX TEMP-1,
+  2026-10-09). A per-run basetemp there is never reaped while the session lives;
+  one scratchpad held 16 of them and 22,876 entries. Prefer the default
+  `tmp_path`: `pytest.ini` sets `tmp_path_retention_policy = failed` and
+  `tmp_path_retention_count = 1`. If a run truly needs an explicit basetemp,
+  reuse ONE fixed path per session (pytest clears it at each run start) or
+  delete it right after reading the result with a read-only-safe rmtree (an
+  `onexc` handler that clears the read-only bit and retries). Every session and
+  lane prompt follows this.
 
 ## TDD, verification, bugs
 
