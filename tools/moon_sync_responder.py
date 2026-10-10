@@ -786,8 +786,8 @@ class HaltedBeforeSpawn(NoSessionStarted):
 
 
 class KitBudgetLockBusy(NoSessionStarted):
-    """The fleet kit's budget lock stayed busy past its wait ("budget lock
-    busy"), so nothing was started.
+    """The fleet kit's budget lock stayed busy past its wait (kit
+    `Refused.code` "budget-lock-busy"), so nothing was started.
 
     Its own termination: a busy lock is not a spent budget, and the log must
     say which. Status Idle, because the next tick simply tries again.
@@ -852,6 +852,7 @@ class KitBudgetWriteFailed(NoSessionStarted):
 _KIT_REFUSAL_BY_CODE: dict[str, type[NoSessionStarted]] = {
     "budget-lock-unopenable": KitBudgetLockUnopenable,
     "budget-write-failed": KitBudgetWriteFailed,
+    "budget-lock-busy": KitBudgetLockBusy,
 }
 
 
@@ -6007,13 +6008,10 @@ def _spawn_headless(prompt: str, bounds: Bounds, note_name: str = "", kind: str 
         why = str(exc)
         by_code = _KIT_REFUSAL_BY_CODE.get(getattr(exc, "code", ""))
         if by_code is not None:
-            # By the kit's CODE, before any text match: a lock that will not
-            # open or a record that will not write is not a spent budget.
+            # By the kit's CODE, before any text match: a busy lock, a lock
+            # that will not open or a record that will not write is not a
+            # spent budget.
             raise by_code(why) from None
-        if "budget lock busy" in why:
-            # By TEXT, before the "budget" match below: a busy lock is not a
-            # spent budget, and the next tick simply tries again.
-            raise KitBudgetLockBusy(why) from None
         raise (KitRunBudgetSpent if "budget" in why else HeadlessRefused)(why) from None
     except SpawnFailed:
         raise
