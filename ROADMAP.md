@@ -13,24 +13,6 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-10-09 (session 66). MAIN 2055 ORDER FLEET-KIT v15, ONE
-  ANSWER - IN PROGRESS, NOT MERGED.** Provenance verified: ORDER sha256
-  0697accc... matches MAIN's outbox; bundle 23 of 23 files match;
-  MANIFEST sha256 8b20a75b.... Builder worktree branch
-  worktree-agent-afb48ff62cd4b834b: commit 1 vendors v15 and pins 15 in
-  `tests/test_fleet_kit.py`; commit 2 adds CLAUDE_CODE_DISABLE_BACKGROUND_TASKS
-  to CHILD_ENV_KEEP in `core/headless_env.py` (defect: harden_child_env
-  strips CLAUDE_CODE_* so the v15 child_env key was dropped) with a
-  regression test in `tests/test_headless_env.py`. Next: verifier re-hash
-  of the 23 files and conformance()==[]; full lens refute (core/ change);
-  merge; gated suite; ledger; ONE ANSWER to MAIN (HOP 2) with vendoring
-  sha, MANIFEST sha, conformance()==[], gated suite count, stray gate
-  copies 0, the step 4 local prefix-strip fix, and step 5 already pinned
-  in `tests/conftest.py`. The responder already auto-acked the ORDER.
-- **NEW 2026-10-09 (session 66). Low-priority tidy.** The B1 adversary's
-  residual nit: the new HISTORY block in `conftest.py` sits between the IN
-  PROCESS and CHILD PROCESS route comments; move it.
-
 - **NEW 2026-10-09. Session 65 residue (kit v14 and MAIN FIX TEMP-1
   landed, merges e47af71 and afdd733; see `docs/ledger/session-65.md`).**
   (a) TEMP-1 acceptance read-back owed after a day of normal work: the max
@@ -56,7 +38,8 @@ version. What follows is everything the scaffold deliberately did not do.
   switch needs code="budget-lock-busy" on the test stubs in
   `tests/test_headless_env.py` and `tests/test_responder_uniform_budget.py`,
   sequenced after the kit v15 merge (E1 also writes
-  `tests/test_headless_env.py`). (d) RETRACTED - the stray `__pycache__`
+  `tests/test_headless_env.py`). DONE session 67: commit 5896365, merge 7a11186
+  (Refused.code only, text fallback removed). (d) RETRACTED - the stray `__pycache__`
   was this tree's own local leftover, sent to the Recycle Bin and read
   back absent; reported to MAIN in the 2055 REPORT.
 
@@ -74,8 +57,8 @@ version. What follows is everything the scaffold deliberately did not do.
   worktree branch worktree-agent-a0315350541d2d26b at 3edef74
   (KitBudgetLockUnopenable and KitBudgetWriteFailed matched by the kit
   Refused.code, terminations kit-budget-lock-unopenable and
-  kit-budget-write-failed joined TERMINATIONS). Next: one adversary lens,
-  then merge; the builder's suite figures are unverified.
+  kit-budget-write-failed joined TERMINATIONS). DONE: merged 15af0d0 (pushed
+  session 67, see `docs/ledger/session-67.md`).
 - **OPEN 2026-10-09. MAIN 2246 ORDER (REPO-REVIEW), SHA-256 verified
   (7ccc71ff...) - s1-s3 and the s4 Dependabot part DONE session 64 (see
   `docs/ledger/session-64.md`); ANSWER 0019 (HOP: 2) sent. Still OPEN:**

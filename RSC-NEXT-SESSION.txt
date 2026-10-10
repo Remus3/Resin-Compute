@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-09 (session 66), gates measured at commit aaa4d7d on main
+Stamped 2026-10-10 (session 67), gates measured at commit 7a11186 on main
 by the /done ritual; this paperwork commit landed after it. Everything below
 is a READING taken that day, not a promise about now. Re-measure before
 citing.
@@ -51,8 +51,8 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 14 [] (kit v14, read back at session 66 /done; v15 is
-vendored on the E1 branch only, not merged).
+must print 15 [] (kit v15, read back at session 67 /done; merged
+226a60f).
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
 shared pytest temp dir: if a run needs an explicit --basetemp, use ONE
@@ -63,7 +63,30 @@ tmp_path_retention_count = 1. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures. Pass the suite
 interpreter to the suite gate as an ABSOLUTE path (sys.executable).
 
-STATE OBSERVED 2026-10-09 AT aaa4d7d (session 66 /done gate run)
+STATE OBSERVED 2026-10-10 AT 7a11186 (session 67 /done gate run)
+  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
+  skipped 3 noted; ruff clean; tests 4467 passed 6 skipped (same six host
+  skip reasons, read with -rs); pity_engine 191 passed; node 110 pass 0
+  fail; dry run 0 pass 0 fail 7 skip; mypy 43 files clean; kit check
+  15 []. Whole suites ran through the suite gate.
+  Session 67 was a RECOVERY after a system hang mid session 66: it found
+  5 unpushed commits, half-built slice 0m in a worktree, a dead 0m
+  progress file, and the merge-e1-0o progress file failed on the
+  task_liveness int32 probe (host WMI condition, see 0h).
+  READ BACK at /done before the paperwork commit: origin/main 7a11186;
+  CI at 476623a ci 38063033075 and codeql 38063033074 success; CI at
+  7a11186 ci 38066774852 and codeql 38066774848 success; git worktree
+  list shows only the main checkout; git branch lists 1 branch.
+  LANDED (made in session 66 pre-hang, pushed session 67): A1 merge
+  15af0d0; 0o slice 93a08fd, merge 476623a; E1 kit v15 vendoring
+  028afc6, merge 226a60f. LANDED session 67: 0m commit 5896365, merge
+  7a11186 (adversary correctness+scope lens NOT REFUTED). CLEAN:
+  worktrees agent-a0315, agent-a19b, agent-afb4 and b-0m removed, their
+  branches deleted with -d. E1-ANS: ONE ANSWER to MAIN (HOP 2, TERMINAL)
+  for the v15 2055 ORDER, local copy sha256 41252173...12d6 re-hashed at
+  /done, reached 2/2, outbound 1 of 6 on 2026-10-10. Paperwork push and
+  its CI run: see docs/ledger/session-67.md. Details there.
+PRIOR READING 2026-10-09 AT aaa4d7d (session 66 /done gate run)
   Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
   skipped 3 noted; ruff clean; tests 4450 passed 6 skipped (same six host
   skip reasons); pity_engine 191 passed; node 110 pass 0 fail; dry run 0
@@ -83,9 +106,8 @@ STATE OBSERVED 2026-10-09 AT aaa4d7d (session 66 /done gate run)
   to MAIN (HOP 1) sha256 fcd0a755..., reached 2/2, outbound 5 of 6 on
   2026-10-09; items 3 and 0n RETRACTED (see below). Details:
   docs/ledger/session-66.md.
-  LIVE WORKTREES LEFT IN PLACE (do not touch until their slice ends):
-  .claude/worktrees/agent-a0315350541d2d26b (A1, branch at 3edef74) and
-  .claude/worktrees/agent-afb48ff62cd4b834b (E1, kit v15 builder).
+  (Its two live worktrees, A1 and E1, were merged and removed in
+  session 67.)
 PRIOR READING 2026-10-09 AT e12b0ef (session 65 /done gate run)
   Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
   skipped 3 noted; ruff clean; tests 4450 passed 6 skipped (same six host
@@ -143,28 +165,6 @@ PRIOR READINGS sessions 57-62: see docs/ledger/archive-2026-10.md and
   trap, not a regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
-  E1. MAIN 2055 ORDER FLEET-KIT v15, ONE ANSWER - IN PROGRESS, NOT MERGED.
-     Provenance verified session 66: ORDER sha256 0697accc... matches
-     MAIN's outbox; bundle 23 of 23 match; MANIFEST sha256 8b20a75b....
-     Builder worktree agent-afb48ff62cd4b834b: commit 1 vendors v15 and
-     pins 15 in tests/test_fleet_kit.py; commit 2 adds
-     CLAUDE_CODE_DISABLE_BACKGROUND_TASKS to CHILD_ENV_KEEP in
-     core/headless_env.py (harden_child_env stripped the v15 child_env key)
-     plus a regression test in tests/test_headless_env.py. NEXT: verifier
-     re-hash of the 23 files and conformance()==[]; full lens refute (core/
-     change); merge; gated suite; ledger; then ONE ANSWER to MAIN (HOP 2)
-     with vendoring sha, MANIFEST sha, conformance()==[], gated suite count,
-     stray gate copies 0, the step 4 local prefix-strip fix, and step 5
-     already pinned in tests/conftest.py. The responder already auto-acked.
-     If the builder is gone, read its branch state before redoing anything.
-  A1. Hand-off item 2 BUILT ON A BRANCH, NOT MERGED: branch
-     worktree-agent-a0315350541d2d26b at 3edef742c90e
-     (KitBudgetLockUnopenable / KitBudgetWriteFailed matched by kit
-     Refused.code; terminations kit-budget-lock-unopenable and
-     kit-budget-write-failed in TERMINATIONS; test
-     a new budget-codes test module on the branch). The
-     builder's suite figures are unverified. NEXT: one adversary lens, then
-     merge, then measure.
   O8. MAIN 2246 ORDER s4 HISTORY REWRITE + FORCE PUSH, and s8 - NOT DONE,
      AWAITING EXPLICIT OPERATOR APPROVAL IN PERSON (attended session's
      instruction 2026-10-09; not for an unattended run). s4: the
@@ -192,11 +192,15 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      UP017+UP032, fleet_subagent_first BLE001 - reported to MAIN in 1454.
      Re-measure against the v13 bytes; drop each when a kit version ships
      clean; never patch kit bytes.
-  0h. Unexplained one-off failure in the session 62 build run:
-     tests/test_conftest_git_gate_sites.py::
+  0h. FLAKY-TEST WATCH. (i) Unexplained one-off failure in the session 62
+     build run: tests/test_conftest_git_gate_sites.py::
      test_the_run_half_reports_a_module_welded_to_skip_unconditionally
      (passed solo and on re-run; passed in the session 62, 63 and 64 /done
-     gates). Watch for a repeat; root-cause if it recurs.
+     gates). (ii) tests/test_task_liveness.py int32 probe failed once in
+     session 66 (pre-hang merge-e1-0o run; the liveness-diag progress file
+     put it down to a host WMI 0x800700a4 condition with a taskkill.exe
+     pileup, no code change); it passed in the session 67 /done gate.
+     Watch both for a repeat; root-cause if either recurs.
   0i. MAIN 2246 s2 residue (FILED, ROADMAP 2246 entry): (2b) collapse the
      census tables (tests/test_responder_gate_census.py and peers) into one
      test per invariant; (2c) a plumbing-only pre-push still selects ~17
@@ -215,19 +219,13 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   0l. Residue of the session 66 branch prune: one deleted local branch
      tracked the remote branch rsc-v8-slice-a, which still exists on
      origin. Decide whether to delete it (check for a consumer first).
-  0m. tools/moon_sync_responder.py matches the kit text "budget lock busy"
-     by substring; move it to the kit Refused.code. BLOCKED: the stubs at
-     tests/test_headless_env.py (about line 1406) and
-     tests/test_responder_uniform_budget.py (about line 195) need
-     code="budget-lock-busy" first. Sequence AFTER E1 merges (E1 also
-     writes tests/test_headless_env.py). Same family as A1.
-  0o. Low-priority tidy (B1 adversary nit): the new HISTORY block in
-     conftest.py sits between the IN PROCESS and CHILD PROCESS route
-     comments; move it.
+  0p. A STALE STASH remains: stash@{0} "pre-session uncommitted
+     RSC-NEXT-SESSION.txt short form, superseded by c07dc82" (an old
+     hand-off draft, 1 file). Read it, confirm nothing in it is missing
+     from the current hand-off, then drop it. Not dropped yet.
   1. requirements-dev.txt colorama: DONE in 74a8710 with a win32 marker.
      Remaining: confirm the next Dependabot Linux recompile keeps the
      marker before any Dependabot pip PR merges.
-  2. See A1 above (built on a branch, not merged).
   5. Future MAIN supersessions: the stamp list is closed by design. A new
      superseded MAIN order needs a verified MAIN note naming its stamps; add
      them to SUPERSEDED_MAIN_STAMPS. Not watched live yet: confirm the next
@@ -272,9 +270,15 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      120/120 while the kit still counts it as one; a one-off kit read error
      reads Backing Off, not the limit.
   13. Inbox: the session watcher's watermark WAS MARKED at session 66 /done
-     after triage (v15 ORDER and bundle: applicable-and-not-done, E1; the
-     v14 bundle re-flagged only by an mtime change: already ingested). Each session: triage new entries into the four buckets,
-     then --mark only what was triaged.
+     after triage (v15 ORDER and bundle: applicable-and-not-done, then
+     DONE session 67 as E1; the v14 bundle re-flagged only by an mtime
+     change: already ingested). The session 67 /done did not re-mark it.
+     Each session: triage new entries into the four buckets, then --mark
+     only what was triaged.
+  DONE session 67 (see docs/ledger/session-67.md): E1 kit v15 adoption
+  and its ONE ANSWER to MAIN; A1 (old item 2, kit budget refusal codes);
+  0o (HISTORY block moved); 0m (busy-lock check by Refused.code); the
+  recovery, gate re-run and push; worktree and branch clean-up.
   DONE session 66 (see docs/ledger/session-66.md): B1 stale comments
   (merge aaa4d7d) and the old conftest backup recycled (old item 4); C1
   branch prune (old 0l); D1 2055 REPORT to MAIN (old 0c). RETRACTED
@@ -293,7 +297,7 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   16 RETRACTED (session 63): the _MIN_TRACKED_* floors were already 135
   since c3bed4a. Reopen only if tests/ grows past 134 tracked files or the
   corpus drops below 270.
-  DO NOT REDO: v3/v4/v7/v8/v9/v10/v11/v12/v13/v14 vendoring and provenance
+  DO NOT REDO: v3/v4/v7/v8/v9/v10/v11/v12/v13/v14/v15 vendoring and provenance
   (reversed only by a new MAIN FLEET-KIT-vN note); the roster 0230/2305
   landing (reversed by a verified MAIN roster note); the CLAUDE.md condense
   (reversed only by a MAIN kit change); Bash removed from the responder
@@ -333,6 +337,10 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   by plumbing tests moving back into the push path).
 
 TRAPS MEASURED - none are hypothetical
+  A SYSTEM HANG CAN LEAVE MERGES UNPUSHED AND SLICES HALF-BUILT (session
+  67). On "continue" after a crash: git log origin/main..main, git
+  worktree list, and the progress files' status before anything else.
+
   THE PRE-PUSH HOOK TESTS THE WORKING TREE, NOT THE PUSHED COMMITS
   (session 66 /done). Uncommitted docs edits citing an unwritten file made
   a push of already-green commits fail 5 tests. Push before editing, or
@@ -454,4 +462,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 67
+SESSION: 68
