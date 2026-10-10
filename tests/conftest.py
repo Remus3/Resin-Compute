@@ -215,6 +215,15 @@ fleet_test_guard.install(
     env_roots={"RESINCOMPUTE_RUNTIME_DIR": "runtime"},
 )
 
+# FLEET-KIT v14 (MAIN 0930 ORDER s3.4): fleet_lanes.worktree_path() reads the
+# machine variable FLEET_SIDECAR_ROOT (process env first, then the user
+# registry); an EMPTY process value turns it off. tests/test_fleet_lanes_adoption.py
+# calls worktree_path(), so the suite pins it empty and never depends on
+# whether MAIN has set the variable on this machine yet.
+import os as _os_sidecar  # noqa: E402
+
+_os_sidecar.environ["FLEET_SIDECAR_ROOT"] = ""
+
 
 # ---------------------------------------------------------------------------
 # CENTRAL MARKERS AND THE PRE-PUSH SELECTION (MAIN 2246 ORDER s2, PERF-AUDIT
