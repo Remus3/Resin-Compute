@@ -123,3 +123,46 @@ def test_neighbour_a_busy_kit_lock_is_still_run_locked(rsp, refusing):
 def test_neighbour_a_route_refusal_is_still_headless_refused(rsp, refusing):
     exc = refusing(rsp.kit.Refused("halt file present"))
     assert type(exc) is rsp.HeadlessRefused
+
+
+# --- item 0m: the busy lock maps by the kit's CODE, not by its message text ---
+
+#: The kit's one raise of the busy refusal, byte-exact (v15,
+#: `ops/fleet_kit/fleet_headless.py`, `RunBudget._lock`).
+KIT_BUSY_RAISE = 'raise Refused("budget lock busy", code="budget-lock-busy")'
+
+
+def test_the_kit_raises_the_busy_lock_only_with_its_code():
+    """Every kit site carrying the busy text carries the code with it, so the
+    responder's code lookup sees every busy refusal the kit can raise."""
+    text = KIT_SOURCE.read_text(encoding="utf-8")
+    assert text.count(KIT_BUSY_RAISE) == 1, "the kit's busy raise moved or changed"
+    assert text.count('"budget lock busy"') == text.count(KIT_BUSY_RAISE)
+
+
+def test_the_busy_code_is_in_the_responder_code_table(rsp):
+    assert rsp._KIT_REFUSAL_BY_CODE.get("budget-lock-busy") is rsp.KitBudgetLockBusy
+
+
+@pytest.mark.parametrize("why", ["lock contended past its wait", "busy"])
+def test_a_busy_code_with_other_text_is_still_run_locked(rsp, refusing, why):
+    """The code decides, not the message: a reworded kit text stays Idle."""
+    exc = refusing(rsp.kit.Refused(why, code="budget-lock-busy"))
+    assert type(exc) is rsp.KitBudgetLockBusy and exc.termination == "run-locked"
+    assert str(exc) == why
+
+
+def test_a_busy_code_beats_a_budget_spent_text(rsp, refusing):
+    """Non-vacuity of the code lookup: this text alone reads as a spent budget."""
+    why = "run budget exhausted (120/120)"
+    assert type(refusing(rsp.kit.Refused(why))) is rsp.KitRunBudgetSpent
+    exc = refusing(rsp.kit.Refused(why, code="budget-lock-busy"))
+    assert type(exc) is rsp.KitBudgetLockBusy and exc.termination == "run-locked"
+
+
+def test_the_busy_text_without_its_code_no_longer_decides(rsp, refusing):
+    """Item 0m: the busy lock maps by CODE only. A codeless "budget lock busy"
+    (the v15 kit never raises one) falls through to the generic "budget"
+    text match like any other codeless budget refusal."""
+    exc = refusing(rsp.kit.Refused("budget lock busy"))
+    assert type(exc) is rsp.KitRunBudgetSpent

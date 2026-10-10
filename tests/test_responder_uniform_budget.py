@@ -192,7 +192,7 @@ def test_the_kits_budget_lock_busy_ends_the_spawn_as_run_locked(rsp, routed, mon
     from ops.fleet_kit import fleet_headless as kit
 
     def refuse(*_a, **_k):
-        raise kit.Refused("budget lock busy")
+        raise kit.Refused("budget lock busy", code="budget-lock-busy")
 
     monkeypatch.setattr(kit, "spawn", refuse)
     with pytest.raises(rsp.KitBudgetLockBusy) as caught:
