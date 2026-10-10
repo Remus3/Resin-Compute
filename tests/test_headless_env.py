@@ -1401,9 +1401,9 @@ def test_a_kit_refusal_inside_spawn_for_budget_is_the_kits_outcome(rsp, routed, 
 
 
 def test_a_kit_lock_busy_inside_spawn_is_still_run_locked(rsp, routed, monkeypatch):
-    """Neighbour that must survive: "budget lock busy" contains "budget"."""
+    """Neighbour that must survive: the busy code beats the "budget" text match."""
     def refuse(*_a, **_k):
-        raise kit.Refused("budget lock busy")
+        raise kit.Refused("budget lock busy", code="budget-lock-busy")
 
     monkeypatch.setattr(kit, "spawn", refuse)
     with pytest.raises(rsp.KitBudgetLockBusy) as caught:
