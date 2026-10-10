@@ -36,7 +36,13 @@ ENV_CHILD_BASE_URL = "ANTHROPIC_BASE_URL"
 CHILD_ENV_STRIP_PREFIXES: tuple[str, ...] = ("ANTHROPIC_", "CLAUDE_CODE_", "CLAUDECODE")
 
 #: Exempt from the prefix strip. `claude` on Windows needs to find Git Bash.
-CHILD_ENV_KEEP: tuple[str, ...] = ("CLAUDE_CODE_GIT_BASH_PATH",)
+#: FLEET-KIT v15: the kit's child_env sets CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+#: (a -p child that left a background agent running killed it at turn end), so
+#: the strip must not undo it. It is a tool switch, neither auth nor provider.
+CHILD_ENV_KEEP: tuple[str, ...] = (
+    "CLAUDE_CODE_GIT_BASH_PATH",
+    "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS",
+)
 
 #: The NAMED floor of the strip, kept as documentation and as a test target:
 #: each one either authenticates directly or switches the provider, so any of
