@@ -280,6 +280,7 @@ python -m mypy
 - Root-cause first; fix every sibling case with the same root cause together. A
   data fix is not done until already-corrupted records are backfilled.
 - Adding a required dataclass field: append it at the END with a default.
+- **Before writing any arm, reinstate the exact defect and prove the arm reds.** An arm that has never rejected anything is not a gate (a fixture that excludes the defect, a detector blind to the fix's own shape).
 
 ## Domain constants
 
