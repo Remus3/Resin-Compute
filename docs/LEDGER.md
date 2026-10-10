@@ -19,6 +19,7 @@ This file is now the INDEX. Each session writes its own entry to
 
 ## Session files
 
+- `docs/ledger/session-65.md`
 - `docs/ledger/session-64.md`
 
 ## Month archives (historic body, verbatim, newest first)
