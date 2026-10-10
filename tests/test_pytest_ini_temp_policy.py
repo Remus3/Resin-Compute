@@ -2,9 +2,11 @@
 
 A sibling measured 68,630 leftover temp files from about 9 pytest runs on this
 shared host, stalling logon by roughly 155 s. `tmp_path_retention_policy =
-failed` keeps only the tmp_path dirs of failed tests. This test parses
-pytest.ini with configparser and asserts the key is present and correct,
-without disturbing any other existing key.
+failed` keeps only the tmp_path dirs of failed tests. MAIN FIX TEMP-1
+(2026-10-09, SHA-256 verified) adds `tmp_path_retention_count = 1` after one
+session scratchpad here held 16 basetemp dirs and 22,876 entries. This test
+parses pytest.ini with configparser and asserts both keys are present and
+correct, without disturbing any other existing key.
 """
 from __future__ import annotations
 
@@ -27,6 +29,15 @@ def test_tmp_path_retention_policy_is_failed() -> None:
     assert parser.has_option("pytest", "tmp_path_retention_policy")
     value = parser.get("pytest", "tmp_path_retention_policy").strip()
     assert value == "failed"
+
+
+def test_tmp_path_retention_count_is_one() -> None:
+    parser = _parse()
+    assert parser.has_option("pytest", "tmp_path_retention_count"), (
+        "MAIN FIX TEMP-1 orders tmp_path_retention_count = 1 in pytest.ini"
+    )
+    value = parser.get("pytest", "tmp_path_retention_count").strip()
+    assert value == "1"
 
 
 def test_existing_addopts_unchanged() -> None:

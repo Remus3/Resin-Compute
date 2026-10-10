@@ -494,10 +494,17 @@ version. What follows is everything the scaffold deliberately did not do.
   numbered dirs were candidates and every one was `deletable=False`, held by a
   `.lock` aged hours against `LOCK_TIMEOUT = 259200` seconds - 72 hours - a
   module constant in `_pytest.pathlib` with no ini key. Stale locks come from
-  killed pytest processes. `tmp_path_retention_count` is a no-op here because
-  pytest already defaults it to `"3"`, and a repo-scoped basetemp BREAKS THE
-  SUITE with `Filename too long` under `.git/objects`. Recorded at `a7fbf20`
-  with an arm in `tests/test_pytest_temp_hygiene.py`. NOT DONE, and it may not
+  killed pytest processes. A repo-scoped basetemp BREAKS THE SUITE with
+  `Filename too long` under `.git/objects`. Recorded at `a7fbf20` with an arm
+  in `tests/test_pytest_temp_hygiene.py`. UPDATED 2026-10-09 by MAIN FIX
+  TEMP-1 (SHA-256 verified, operator authority), which supersedes the earlier
+  "leave `tmp_path_retention_count` at pytest's default" rationale. DECISION:
+  adopt `tmp_path_retention_count = 1` in `pytest.ini`, pinned declared and
+  effective by both temp tests. Alternative rejected: keep pytest's default 3.
+  Why: the FIX orders it, and one session scratchpad here measured 16 basetemp
+  dirs and 22,876 entries. Reversed by: a MAIN ruling. The behavioural half (no
+  `--basetemp` inside a session scratchpad) is in CLAUDE.md Testing. The lock
+  age point below still stands. NOT DONE, and it may not
   be this tree's to do: nothing here stops a killed pytest leaving a lock that
   outlives the run by up to 72 hours. The machine sweep ignores locks and is
   the only thing that currently reclaims them.
