@@ -53,9 +53,11 @@ Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
 must print 14 [] (kit v14, read back at session 65).
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
-and traverses only mypy.ini's files= roots. NEVER put a --basetemp inside
-the session scratchpad (MAIN FIX TEMP-1); reuse one fixed basetemp per
-session, or remove it with a read-only-safe rmtree. pytest.ini now pins
+and traverses only mypy.ini's files= roots. A concurrent session deletes the
+shared pytest temp dir: if a run needs an explicit --basetemp, use ONE
+fixed path per session whose PARENT EXISTS, OUTSIDE the repo and NEVER
+inside the session scratchpad (MAIN FIX TEMP-1), or remove it with a
+read-only-safe rmtree. pytest.ini now pins
 tmp_path_retention_count = 1. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures. Pass the suite
 interpreter to the suite gate as an ABSOLUTE path (sys.executable).
