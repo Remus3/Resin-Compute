@@ -359,16 +359,112 @@ def _only(source: str) -> census.CallSite:
     return sites[0]
 
 
+#: One row of a shape table: (label, fixture source, expected bucket, why,
+#: extra checks). Each extra check is (attribute, op, value) with op "==" or
+#: "in" ("in" meaning `value in getattr(site, attribute)`).
+ShapeRow = tuple[str, str, str, str, tuple[tuple[str, str, object], ...]]
+
+
+def _table_offenders(rows: tuple[ShapeRow, ...]) -> list[str]:
+    """Every row of a shape table that the census gets wrong, all at once.
+
+    MAIN 2246 s2 item 2b collapsed the one-test-per-fixture tables into one
+    arm per invariant that LISTS EVERY OFFENDER. A row whose fixture does not
+    yield exactly one site, lands in the wrong bucket, or fails an extra check
+    is named by its label, with its reason.
+    """
+    offenders: list[str] = []
+    for label, source, bucket, why, checks in rows:
+        sites = census.census_source(source, "<fixture>")
+        if len(sites) != 1:
+            offenders.append(f"{label}: expected exactly one call site, got {sites!r}")
+            continue
+        site = sites[0]
+        if site.bucket != bucket:
+            offenders.append(f"{label}: bucket {site.bucket!r}, expected {bucket!r} - {why}")
+        for attribute, op, value in checks:
+            actual = getattr(site, attribute)
+            held = actual == value if op == "==" else value in actual
+            if not held:
+                offenders.append(f"{label}: {attribute}={actual!r}, expected {op} {value!r}")
+    return offenders
+
+
+def _assert_table(rows: tuple[ShapeRow, ...], floor: int) -> None:
+    """The table is not emptied, and no row is an offender."""
+    assert len(rows) >= floor, f"only {len(rows)} rows; the table was emptied"
+    offenders = _table_offenders(rows)
+    assert offenders == [], "\n".join(offenders)
+
+
 # ---------------------------------------------------------------------------
 # THE GIT BUCKET
 # ---------------------------------------------------------------------------
 
 
-def test_git_list_literal_lands_in_the_git_bucket():
-    site = _only(GIT_LIST_LITERAL)
-    assert site.bucket == census.GIT
-    assert site.callee == "subprocess.run"
-    assert site.lineno == 2
+_GIT_BUCKET_ROWS: tuple[ShapeRow, ...] = (
+    (
+        "git list literal",
+        GIT_LIST_LITERAL,
+        census.GIT,
+        "a literal git argv",
+        (("callee", "==", "subprocess.run"), ("lineno", "==", 2)),
+    ),
+    ("function-local constant", LOCAL_CONSTANT_ARGV, census.GIT, "a local constant", ()),
+    (
+        "literal head concatenation",
+        LITERAL_HEAD_CONCATENATION,
+        census.GIT,
+        "argv[0] is a literal in the left operand of the concatenation, so the tail "
+        "being dynamic does not make the head unknown",
+        (),
+    ),
+    (
+        "absolute windows git.exe",
+        ABSOLUTE_GIT_EXE,
+        census.GIT,
+        "an absolute path to git.exe",
+        (("argv0", "in", "git.exe"),),
+    ),
+    ("whole shell string, git", SHELL_STRING_GIT, census.GIT, "resolves on its first word", ()),
+    (
+        "whole shell string, not git",
+        SHELL_STRING_NOT_GIT,
+        census.NOT_GIT,
+        "resolves on its first word",
+        (),
+    ),
+    (
+        "quoted absolute path in a shell string",
+        SHELL_STRING_QUOTED_PATH,
+        census.GIT,
+        "a naive whitespace split cuts this at 'C:\\Program' and reports a false "
+        "NOT-GIT, which is the same class of error as the name filter this census "
+        "replaces",
+        (),
+    ),
+    (
+        "keyword args argv",
+        KEYWORD_ARGS_ARGV,
+        census.GIT,
+        "`subprocess.run(args=[...])` has no positional argument; a census that only "
+        "reads call.args[0] reports this as no argv at all",
+        (),
+    ),
+    (
+        "from-import alias",
+        FROM_IMPORT_ALIAS,
+        census.GIT,
+        "an aliased from-import launcher",
+        (("callee", "==", "subprocess.check_output"),),
+    ),
+    ("module alias", MODULE_ALIAS, census.GIT, "an aliased subprocess module", ()),
+)
+
+
+def test_every_statically_resolvable_shape_lands_in_its_bucket():
+    """One arm over the resolvable-shape table, listing every offender."""
+    _assert_table(_GIT_BUCKET_ROWS, 10)
 
 
 def test_module_level_constant_bound_list_resolves_to_git():
@@ -376,46 +472,6 @@ def test_module_level_constant_bound_list_resolves_to_git():
     assert site.bucket == census.GIT, (
         "a module-level constant bound to a git argv list is statically resolvable, "
         "so leaving it UNRESOLVED under-reports the git surface"
-    )
-
-
-def test_function_local_constant_bound_list_resolves_to_git():
-    assert _only(LOCAL_CONSTANT_ARGV).bucket == census.GIT
-
-
-def test_literal_head_concatenation_resolves_to_git():
-    site = _only(LITERAL_HEAD_CONCATENATION)
-    assert site.bucket == census.GIT, (
-        "argv[0] is a literal in the left operand of the concatenation, so the tail "
-        "being dynamic does not make the head unknown"
-    )
-
-
-def test_absolute_windows_path_to_git_exe_resolves_to_git():
-    site = _only(ABSOLUTE_GIT_EXE)
-    assert site.bucket == census.GIT
-    assert "git.exe" in site.argv0
-
-
-def test_a_whole_command_shell_string_resolves_on_its_first_word():
-    assert _only(SHELL_STRING_GIT).bucket == census.GIT
-    assert _only(SHELL_STRING_NOT_GIT).bucket == census.NOT_GIT
-
-
-def test_a_quoted_absolute_path_in_a_shell_string_resolves_to_git():
-    site = _only(SHELL_STRING_QUOTED_PATH)
-    assert site.bucket == census.GIT, (
-        "a naive whitespace split cuts this at 'C:\\Program' and reports a false "
-        "NOT-GIT, which is the same class of error as the name filter this census "
-        "replaces"
-    )
-
-
-def test_keyword_args_argv_is_resolved_not_dropped():
-    site = _only(KEYWORD_ARGS_ARGV)
-    assert site.bucket == census.GIT, (
-        "`subprocess.run(args=[...])` has no positional argument; a census that only "
-        "reads call.args[0] reports this as no argv at all"
     )
 
 
@@ -431,33 +487,27 @@ def test_every_launcher_is_detected():
     assert {site.bucket for site in sites} == {census.GIT}
 
 
-def test_from_import_alias_is_detected():
-    site = _only(FROM_IMPORT_ALIAS)
-    assert site.bucket == census.GIT
-    assert site.callee == "subprocess.check_output"
-
-
-def test_module_alias_is_detected():
-    assert _only(MODULE_ALIAS).bucket == census.GIT
-
-
 # ---------------------------------------------------------------------------
 # THE NOT-GIT BUCKET
 # ---------------------------------------------------------------------------
 
 
-def test_non_git_list_literal_lands_in_the_not_git_bucket():
-    site = _only(NON_GIT_LIST_LITERAL)
-    assert site.bucket == census.NOT_GIT
-
-
-def test_sys_executable_head_lands_in_the_not_git_bucket():
-    site = _only(SYS_EXECUTABLE_HEAD)
-    assert site.bucket == census.NOT_GIT, (
+_NOT_GIT_ROWS: tuple[ShapeRow, ...] = (
+    ("non-git list literal", NON_GIT_LIST_LITERAL, census.NOT_GIT, "a literal non-git argv", ()),
+    (
+        "sys.executable head",
+        SYS_EXECUTABLE_HEAD,
+        census.NOT_GIT,
         "sys.executable is the running interpreter and can never be git; it is the "
-        "only dotted name the census resolves"
-    )
-    assert site.argv0 == "sys.executable"
+        "only dotted name the census resolves",
+        (("argv0", "==", "sys.executable"),),
+    ),
+)
+
+
+def test_every_non_git_shape_lands_in_the_not_git_bucket():
+    """One arm over the NOT-GIT table, listing every offender."""
+    _assert_table(_NOT_GIT_ROWS, 2)
 
 
 # ---------------------------------------------------------------------------
@@ -465,40 +515,40 @@ def test_sys_executable_head_lands_in_the_not_git_bucket():
 # ---------------------------------------------------------------------------
 
 
-def test_bare_name_argv_is_unresolved_and_not_dropped():
-    site = _only(BARE_NAME_ARGV)
-    assert site.bucket == census.UNRESOLVED, (
+_UNRESOLVED_ROWS: tuple[ShapeRow, ...] = (
+    (
+        "bare name argv",
+        BARE_NAME_ARGV,
+        census.UNRESOLVED,
         "argv is a function parameter, so argv[0] is unknowable at parse time; "
-        "calling it NOT-GIT would under-report and dropping it would hide it"
-    )
-
-
-def test_fstring_argv_is_unresolved():
-    assert _only(FSTRING_ARGV).bucket == census.UNRESOLVED
-
-
-def test_rebound_name_is_unresolved():
-    site = _only(REBOUND_NAME_ARGV)
-    assert site.bucket == census.UNRESOLVED, (
+        "calling it NOT-GIT would under-report and dropping it would hide it",
+        (),
+    ),
+    ("f-string argv", FSTRING_ARGV, census.UNRESOLVED, "an f-string argv", ()),
+    (
+        "rebound name",
+        REBOUND_NAME_ARGV,
+        census.UNRESOLVED,
         "the name is bound twice, once to git and once to something else, so no "
-        "single static answer exists"
-    )
-
-
-def test_function_parameter_shadows_a_module_binding():
-    site = _only(PARAMETER_SHADOWS_MODULE)
-    assert site.bucket == census.UNRESOLVED, (
+        "single static answer exists",
+        (),
+    ),
+    (
+        "parameter shadows a module binding",
+        PARAMETER_SHADOWS_MODULE,
+        census.UNRESOLVED,
         "the parameter shadows the module-level GIT_ARGV, so resolving through to "
-        "the module constant would be a false GIT"
-    )
+        "the module constant would be a false GIT",
+        (),
+    ),
+    ("kwargs splat", KWARGS_SPLAT_ARGV, census.UNRESOLVED, "a **kwargs splat", ()),
+    ("empty sequence argv", EMPTY_SEQUENCE_ARGV, census.UNRESOLVED, "an empty argv", ()),
+)
 
 
-def test_kwargs_splat_is_unresolved():
-    assert _only(KWARGS_SPLAT_ARGV).bucket == census.UNRESOLVED
-
-
-def test_empty_sequence_argv_is_unresolved():
-    assert _only(EMPTY_SEQUENCE_ARGV).bucket == census.UNRESOLVED
+def test_every_unknowable_argv_is_unresolved_and_not_dropped():
+    """One arm over the UNRESOLVED table, listing every offender."""
+    _assert_table(_UNRESOLVED_ROWS, 6)
 
 
 # ---------------------------------------------------------------------------
@@ -683,53 +733,50 @@ def test_the_fixture_sources_parse():
 # ---------------------------------------------------------------------------
 
 
-def test_a_launch_in_a_function_decorator_is_not_dropped():
-    site = _only(DECORATOR_ON_FUNCTION)
-    assert site.bucket == census.GIT, (
+_NON_BODY_ROWS: tuple[ShapeRow, ...] = (
+    (
+        "function decorator",
+        DECORATOR_ON_FUNCTION,
+        census.GIT,
         "a decorator expression is not in any statement body, so a walk that "
-        "recurses into `body` alone emits no row at all for this git launch"
-    )
-    assert site.lineno == 2
-
-
-def test_a_launch_in_a_class_decorator_is_not_dropped():
-    assert _only(DECORATOR_ON_CLASS).bucket == census.GIT
-
-
-def test_a_launch_in_a_method_decorator_is_not_dropped():
-    assert _only(DECORATOR_ON_METHOD).bucket == census.GIT
-
-
-def test_a_launch_in_a_nested_function_decorator_is_not_dropped():
-    assert _only(NESTED_DECORATOR).bucket == census.GIT
-
-
-def test_a_launch_in_a_default_argument_is_not_dropped():
-    site = _only(DEFAULT_ARGUMENT_ARGV)
-    assert site.bucket == census.GIT, (
+        "recurses into `body` alone emits no row at all for this git launch",
+        (("lineno", "==", 2),),
+    ),
+    ("class decorator", DECORATOR_ON_CLASS, census.GIT, "a class decorator launch", ()),
+    ("method decorator", DECORATOR_ON_METHOD, census.GIT, "a method decorator launch", ()),
+    ("nested function decorator", NESTED_DECORATOR, census.GIT, "a nested decorator", ()),
+    (
+        "default argument",
+        DEFAULT_ARGUMENT_ARGV,
+        census.GIT,
         "a default argument is evaluated once at definition time and is a real "
-        "launch; dropping it makes the git surface look smaller than it is"
-    )
-
-
-def test_a_launch_in_a_keyword_only_default_is_not_dropped():
-    assert _only(KWONLY_DEFAULT_ARGV).bucket == census.GIT
-
-
-def test_a_launch_in_a_nested_default_argument_is_not_dropped():
-    assert _only(NESTED_DEFAULT_ARGUMENT_ARGV).bucket == census.GIT
-
-
-def test_a_launch_in_a_lambda_default_is_not_dropped():
-    assert _only(LAMBDA_DEFAULT_ARGV).bucket == census.GIT
-
-
-def test_a_default_argument_resolves_in_the_enclosing_scope():
-    site = _only(DEFAULT_RESOLVES_IN_THE_ENCLOSING_SCOPE)
-    assert site.bucket == census.GIT, (
+        "launch; dropping it makes the git surface look smaller than it is",
+        (),
+    ),
+    ("keyword-only default", KWONLY_DEFAULT_ARGV, census.GIT, "a kw-only default", ()),
+    (
+        "nested default argument",
+        NESTED_DEFAULT_ARGUMENT_ARGV,
+        census.GIT,
+        "a nested function's default",
+        (),
+    ),
+    ("lambda default", LAMBDA_DEFAULT_ARGV, census.GIT, "a lambda default", ()),
+    (
+        "default resolves in the enclosing scope",
+        DEFAULT_RESOLVES_IN_THE_ENCLOSING_SCOPE,
+        census.GIT,
         "the default is evaluated before the parameter of the same spelling "
-        "exists, so walking it with the nested chain is a false UNRESOLVED"
-    )
+        "exists, so walking it with the nested chain is a false UNRESOLVED",
+        (),
+    ),
+)
+
+
+def test_a_launch_in_a_non_body_position_is_never_dropped():
+    """One arm over the decorator and default-argument table, listing every
+    offender (collapsed from nine one-fixture arms, MAIN 2246 s2 item 2b)."""
+    _assert_table(_NON_BODY_ROWS, 9)
 
 
 # ---------------------------------------------------------------------------
@@ -737,39 +784,59 @@ def test_a_default_argument_resolves_in_the_enclosing_scope():
 # ---------------------------------------------------------------------------
 
 
-def test_shell_true_resolves_the_command_out_of_list_element_zero():
-    site = _only(SHELL_TRUE_LIST_HEAD_GIT)
-    assert site.bucket == census.GIT, (
+_SHELL_FLAG_ROWS: tuple[ShapeRow, ...] = (
+    (
+        "shell=True, list element zero is git",
+        SHELL_TRUE_LIST_HEAD_GIT,
+        census.GIT,
         "under shell=True element 0 carries the command - the string on POSIX, "
-        "the head of the joined command line on Windows - so this launches git"
-    )
-
-
-def test_shell_true_list_element_zero_can_still_be_not_git():
-    assert _only(SHELL_TRUE_LIST_HEAD_NOT_GIT).bucket == census.NOT_GIT
-
-
-def test_shell_true_honours_quoting_inside_list_element_zero():
-    assert _only(SHELL_TRUE_LIST_QUOTED_PATH).bucket == census.GIT
-
-
-def test_the_same_bytes_without_shell_true_are_not_git():
-    assert _only(NO_SHELL_LIST_HEAD_WITH_SPACE).bucket == census.NOT_GIT, (
+        "the head of the joined command line on Windows - so this launches git",
+        (),
+    ),
+    (
+        "shell=True, list element zero is not git",
+        SHELL_TRUE_LIST_HEAD_NOT_GIT,
+        census.NOT_GIT,
+        "element zero can still name another program",
+        (),
+    ),
+    (
+        "shell=True honours quoting in element zero",
+        SHELL_TRUE_LIST_QUOTED_PATH,
+        census.GIT,
+        "a quoted path inside element zero",
+        (),
+    ),
+    (
+        "same bytes without shell=True",
+        NO_SHELL_LIST_HEAD_WITH_SPACE,
+        census.NOT_GIT,
         "without shell=True 'git log -n 1' names one executable whose name "
-        "contains spaces; splitting it would cut an absolute path at its space"
-    )
-
-
-def test_an_unknowable_shell_flag_over_an_ambiguous_head_is_unresolved():
-    site = _only(SHELL_NOT_STATICALLY_KNOWN_AMBIGUOUS)
-    assert site.bucket == census.UNRESOLVED, (
+        "contains spaces; splitting it would cut an absolute path at its space",
+        (),
+    ),
+    (
+        "unknowable shell flag, ambiguous head",
+        SHELL_NOT_STATICALLY_KNOWN_AMBIGUOUS,
+        census.UNRESOLVED,
         "shell= is a parameter, and the two readings of argv[0] disagree, so "
-        "either bucket would be a guess"
-    )
+        "either bucket would be a guess",
+        (),
+    ),
+    (
+        "unknowable shell flag, unambiguous head",
+        SHELL_NOT_STATICALLY_KNOWN_UNAMBIGUOUS,
+        census.GIT,
+        "both readings agree, so the head still resolves",
+        (),
+    ),
+)
 
 
-def test_an_unknowable_shell_flag_over_an_unambiguous_head_still_resolves():
-    assert _only(SHELL_NOT_STATICALLY_KNOWN_UNAMBIGUOUS).bucket == census.GIT
+def test_the_shell_flag_decides_how_argv_zero_is_read():
+    """One arm over the shell= table, listing every offender (collapsed from
+    six one-fixture arms, MAIN 2246 s2 item 2b)."""
+    _assert_table(_SHELL_FLAG_ROWS, 6)
 
 
 # ---------------------------------------------------------------------------
@@ -777,31 +844,43 @@ def test_an_unknowable_shell_flag_over_an_unambiguous_head_still_resolves():
 # ---------------------------------------------------------------------------
 
 
-def test_a_which_call_as_argv0_is_unresolved_and_never_not_git():
-    site = _only(WHICH_CALL_ARGV_HEAD)
-    assert site.bucket == census.UNRESOLVED, (
+_FALLBACK_ROWS: tuple[ShapeRow, ...] = (
+    (
+        "which call as argv[0]",
+        WHICH_CALL_ARGV_HEAD,
+        census.UNRESOLVED,
         "shutil.which('git') is the most ordinary dynamic git argv[0] in Python; "
-        "an UNRESOLVED fallback folded into NOT-GIT makes it a silent non-finding"
-    )
-    assert "Call" in site.argv0
+        "an UNRESOLVED fallback folded into NOT-GIT makes it a silent non-finding",
+        (("argv0", "in", "Call"),),
+    ),
+    (
+        "which call as the whole argv",
+        WHICH_CALL_WHOLE_ARGV,
+        census.UNRESOLVED,
+        "a call expression as the whole argv",
+        (("argv0", "in", "Call"),),
+    ),
+    (
+        "subscript as argv[0]",
+        SUBSCRIPT_ARGV_HEAD,
+        census.UNRESOLVED,
+        "a subscript argv head",
+        (("argv0", "in", "Subscript"),),
+    ),
+    (
+        "subscript as the whole argv",
+        SUBSCRIPT_WHOLE_ARGV,
+        census.UNRESOLVED,
+        "a subscript as the whole argv",
+        (("argv0", "in", "Subscript"),),
+    ),
+)
 
 
-def test_a_which_call_as_the_whole_argv_is_unresolved():
-    site = _only(WHICH_CALL_WHOLE_ARGV)
-    assert site.bucket == census.UNRESOLVED
-    assert "Call" in site.argv0
-
-
-def test_a_subscript_argv0_is_unresolved_and_never_not_git():
-    site = _only(SUBSCRIPT_ARGV_HEAD)
-    assert site.bucket == census.UNRESOLVED
-    assert "Subscript" in site.argv0
-
-
-def test_a_subscript_whole_argv_is_unresolved():
-    site = _only(SUBSCRIPT_WHOLE_ARGV)
-    assert site.bucket == census.UNRESOLVED
-    assert "Subscript" in site.argv0
+def test_a_dynamic_argv_falls_back_to_unresolved_and_never_not_git():
+    """One arm over the fallback table, listing every offender (collapsed from
+    four one-fixture arms, MAIN 2246 s2 item 2b)."""
+    _assert_table(_FALLBACK_ROWS, 4)
 
 
 # ---------------------------------------------------------------------------
@@ -967,33 +1046,34 @@ WIDENED_CONSERVATION_EXPECTED = {"GIT": 2, "NOT-GIT": 1, "UNRESOLVED": 3}
 # ---------------------------------------------------------------------------
 
 
-def test_a_getattr_callee_emits_an_unresolved_site_rather_than_silence():
-    site = _only(GETATTR_CALLEE)
-    assert site.bucket == census.UNRESOLVED, (
+_UNRESOLVABLE_CALLEE_ROWS: tuple[ShapeRow, ...] = (
+    (
+        "getattr callee",
+        GETATTR_CALLEE,
+        census.UNRESOLVED,
         "getattr(subprocess, 'run')(...) launches git; the callee is a call "
         "expression so the census cannot resolve it, and UNRESOLVED is the "
-        "bucket this module already keeps for what it cannot answer"
-    )
-
-
-def test_a_functools_partial_callee_emits_an_unresolved_site():
-    assert _only(PARTIAL_CALLEE).bucket == census.UNRESOLVED
-
-
-def test_a_stub_factory_callee_is_seen_without_any_subprocess_import():
-    site = _only(STUB_FACTORY_CALLEE)
-    assert site.bucket == census.UNRESOLVED, (
+        "bucket this module already keeps for what it cannot answer",
+        (),
+    ),
+    ("functools.partial callee", PARTIAL_CALLEE, census.UNRESOLVED, "a partial callee", ()),
+    (
+        "stub factory callee, no subprocess import",
+        STUB_FACTORY_CALLEE,
+        census.UNRESOLVED,
         "no subprocess import appears in this fixture at all; gating the row on "
-        "one would be the name filter this census replaces"
-    )
+        "one would be the name filter this census replaces",
+        (),
+    ),
+    ("subscript callee", SUBSCRIPT_CALLEE, census.UNRESOLVED, "a subscript callee", ()),
+    ("boolop callee", BOOLOP_CALLEE, census.UNRESOLVED, "a BoolOp callee", ()),
+)
 
 
-def test_a_subscript_callee_emits_an_unresolved_site():
-    assert _only(SUBSCRIPT_CALLEE).bucket == census.UNRESOLVED
-
-
-def test_a_boolop_callee_emits_an_unresolved_site():
-    assert _only(BOOLOP_CALLEE).bucket == census.UNRESOLVED
+def test_an_unresolvable_callee_emits_an_unresolved_site_rather_than_silence():
+    """One arm over the unresolvable-callee table, listing every offender
+    (collapsed from five one-fixture arms, MAIN 2246 s2 item 2b)."""
+    _assert_table(_UNRESOLVABLE_CALLEE_ROWS, 5)
 
 
 def test_the_unresolvable_callee_row_names_the_node_kind():

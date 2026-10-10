@@ -935,29 +935,48 @@ _NEAR_MISSES = [
 ]
 
 
-@pytest.mark.parametrize(("why", "line"), _NEAR_MISSES, ids=[w for w, _ in _NEAR_MISSES])
-def test_a_near_miss_tag_raises_rather_than_being_counted_as_absent(why, line):
-    source = f"def _run_once():\n    {line}\n    if True:\n        pass\n"
+def test_a_near_miss_tag_raises_rather_than_being_counted_as_absent():
+    """One arm over the whole `_NEAR_MISSES` table, listing EVERY offender.
 
-    with pytest.raises(GateTagError) as caught:
-        _tags(source, "synthetic")
+    Collapsed from a per-row parametrization (MAIN 2246 s2 item 2b). Each row
+    must raise `GateTagError` naming the line and the grammar; a row that does
+    not is reported by its `why`, and every failing row is reported at once.
+    """
+    assert len(_NEAR_MISSES) >= 13, _NEAR_MISSES
+    offenders: list[str] = []
+    for why, line in _NEAR_MISSES:
+        source = f"def _run_once():\n    {line}\n    if True:\n        pass\n"
+        try:
+            _tags(source, "synthetic")
+        except GateTagError as caught:
+            message = str(caught)
+            if not message.startswith("synthetic:2:"):
+                offenders.append(f"{why}: message lacks the line: {message!r}")
+            if repr(f"    {line}") not in message:
+                offenders.append(f"{why}: message lacks the source line: {message!r}")
+            if "accepted grammar" not in message:
+                offenders.append(f"{why}: message lacks the grammar: {message!r}")
+        else:
+            offenders.append(f"{why}: {line!r} did not raise")
+    assert offenders == [], offenders
 
-    message = str(caught.value)
-    assert message.startswith("synthetic:2:"), message
-    assert repr(f"    {line}") in message, message
-    assert "accepted grammar" in message, message
 
-
-@pytest.mark.parametrize(("why", "line"), _NEAR_MISSES, ids=[w for w, _ in _NEAR_MISSES])
-def test_the_permissive_detector_sees_every_near_miss_it_is_meant_to_see(why, line):
+def test_the_permissive_detector_sees_every_near_miss_it_is_meant_to_see():
     """The half of the mechanism that would fail SILENTLY if it regressed.
 
     If `_GATE_ATTEMPT` stopped matching one of these, the arm above would still
     pass in appearance only - a shape nobody detects also raises nothing. So the
-    detector is pinned separately from the grammar it feeds.
+    detector is pinned separately from the grammar it feeds. One arm over the
+    whole table, listing every offender (MAIN 2246 s2 item 2b).
     """
-    assert _GATE_ATTEMPT.match(f"    {line}") is not None, line
-    assert _GATE_STRICT.match(f"    {line}") is None, line
+    assert len(_NEAR_MISSES) >= 13, _NEAR_MISSES
+    offenders: list[str] = []
+    for why, line in _NEAR_MISSES:
+        if _GATE_ATTEMPT.match(f"    {line}") is None:
+            offenders.append(f"{why}: the permissive detector misses {line!r}")
+        if _GATE_STRICT.match(f"    {line}") is not None:
+            offenders.append(f"{why}: the strict grammar accepts {line!r}")
+    assert offenders == [], offenders
 
 
 def test_the_grammar_accepts_the_shapes_it_is_supposed_to_accept():
@@ -1066,14 +1085,17 @@ def _tag_lines_removed(source: str, linenos: list[int]) -> str:
 
 
 #: The line of every `# GATE:` tag in the live responder, derived at import.
-#: Parametrizes the refutation below so a rule that happens to see only some
+#: The refutation below iterates it so a rule that happens to see only some
 #: tagged shapes is caught by the tags it cannot see.
 _TAG_LINES = [lineno for lineno, _ in _tags(_LIVE_SOURCE)]
 
 
-@pytest.mark.parametrize("lineno", _TAG_LINES, ids=[str(n) for n in _TAG_LINES])
-def test_removing_one_tag_reports_exactly_that_site_as_untagged(lineno):
+def test_removing_one_tag_reports_exactly_that_site_as_untagged():
     """THE REFUTATION for the coverage arm, once per tag on the live file.
+
+    One arm iterating every tag line and listing every offending line at once
+    (collapsed from a per-tag parametrization, MAIN 2246 s2 item 2b). The
+    `_FLOOR` conjunct is what stops an emptied `_TAG_LINES` passing vacuously.
 
     An arm asserting an already-empty set difference is vacuous - it would pass
     just as cleanly against a rule that finds zero sites. So the detector is
@@ -1086,12 +1108,19 @@ def test_removing_one_tag_reports_exactly_that_site_as_untagged(lineno):
     leaves no misplaced tag behind. That second assertion is what stops this
     from passing against a detector that simply reports every line it sees.
     """
-    mutated = _tag_line_removed(_LIVE_SOURCE, lineno)
-    untagged = _untagged_consult_sites(mutated, "synthetic")
-
-    assert len(untagged) == 1, untagged
-    assert untagged[0].startswith(f"synthetic:{lineno}: consult site inside "), untagged
-    assert _problems(mutated, "synthetic") == [], _problems(mutated, "synthetic")
+    assert len(_TAG_LINES) >= _FLOOR, _TAG_LINES
+    offenders: list[str] = []
+    for lineno in _TAG_LINES:
+        mutated = _tag_line_removed(_LIVE_SOURCE, lineno)
+        untagged = _untagged_consult_sites(mutated, "synthetic")
+        if len(untagged) != 1:
+            offenders.append(f"{lineno}: expected exactly one untagged site, got {untagged!r}")
+        elif not untagged[0].startswith(f"synthetic:{lineno}: consult site inside "):
+            offenders.append(f"{lineno}: wrong site reported: {untagged!r}")
+        problems = _problems(mutated, "synthetic")
+        if problems != []:
+            offenders.append(f"{lineno}: _problems not silent: {problems!r}")
+    assert offenders == [], offenders
 
 
 def test_removing_two_tags_reports_both_sites_and_not_only_the_first():
@@ -1211,19 +1240,26 @@ def test_the_two_rules_are_re_derived_here_and_the_tighter_one_loses_nothing():
     )
 
 
-@pytest.mark.parametrize("lineno", _FALSE_SPOTS, ids=[str(n) for n in _FALSE_SPOTS])
-def test_a_tag_parked_on_a_dependency_injection_default_is_reported(lineno):
+def test_a_tag_parked_on_a_dependency_injection_default_is_reported():
     """The refutation, once per false site the bare-shape rule accepted.
 
     Under that rule each of these passed the census CLEAN - a tag certifying a
     gate that does not exist. Each must now be REPORTED, naming file and line.
+    One arm iterating every false spot and listing every offender (collapsed
+    from a per-spot parametrization, MAIN 2246 s2 item 2b).
     """
-    source = _tag_parked_above(_LIVE_SOURCE, lineno, "di-probe")
-    problems = _problems(source, "synthetic")
-
-    assert len(problems) == 1, problems
-    assert problems[0].startswith(f"synthetic:{lineno}: GATE:di-probe"), problems
-    assert f"not immediately above {_SHAPE_NAMES}" in problems[0], problems
+    assert _FALSE_SPOTS, "no false spots: this arm would iterate nothing"
+    offenders: list[str] = []
+    for lineno in _FALSE_SPOTS:
+        source = _tag_parked_above(_LIVE_SOURCE, lineno, "di-probe")
+        problems = _problems(source, "synthetic")
+        if len(problems) != 1:
+            offenders.append(f"{lineno}: expected exactly one problem, got {problems!r}")
+        elif not problems[0].startswith(f"synthetic:{lineno}: GATE:di-probe"):
+            offenders.append(f"{lineno}: wrong problem reported: {problems!r}")
+        elif f"not immediately above {_SHAPE_NAMES}" not in problems[0]:
+            offenders.append(f"{lineno}: problem lacks the shape names: {problems!r}")
+    assert offenders == [], offenders
 
 
 def test_the_choosing_sites_that_do_bind_the_cycle_are_still_accepted():
@@ -1829,10 +1865,7 @@ def _expected_untagged_lines_after_removal(removed: list[int]) -> set[int]:
     return {lineno - index for index, lineno in enumerate(sorted(removed))}
 
 
-@pytest.mark.parametrize(
-    "arity", _MULTIPLICITY_ARITIES, ids=[f"k{n}" for n in _MULTIPLICITY_ARITIES]
-)
-def test_removing_k_tags_reports_exactly_those_k_sites_as_a_set(arity):
+def test_removing_k_tags_reports_exactly_those_k_sites_as_a_set():
     """MULTIPLICITY AT THREE ARITIES, BY SET EQUALITY rather than by length.
 
     `test_removing_two_tags_reports_both_sites_and_not_only_the_first` removes
@@ -1853,25 +1886,32 @@ def test_removing_k_tags_reports_exactly_those_k_sites_as_a_set(arity):
     NON-ADJACENCY IS ASSERTED, not assumed. The chosen gates are checked to be
     non-neighbours in tag order, so a detector that reported a forgotten site
     plus its neighbour cannot pass k = 2 or k = 3 by accident.
+
+    One arm iterating every arity and listing every offending arity (collapsed
+    from a per-arity parametrization, MAIN 2246 s2 item 2b).
     """
-    chosen = _tag_lines_named(_MULTIPLICITY_TAG_NAMES)[:arity]
-    assert len(chosen) == arity, chosen
-
+    assert _MULTIPLICITY_ARITIES == (1, 2, 3), _MULTIPLICITY_ARITIES
     ordered = sorted(_TAG_LINES)
-    positions = [ordered.index(lineno) for lineno in chosen]
-    assert all(
-        later - earlier > 1 for earlier, later in zip(positions, positions[1:])
-    ), positions
+    offenders: list[str] = []
+    for arity in _MULTIPLICITY_ARITIES:
+        chosen = _tag_lines_named(_MULTIPLICITY_TAG_NAMES)[:arity]
+        if len(chosen) != arity:
+            offenders.append(f"k{arity}: only {chosen!r} chosen")
+            continue
 
-    mutated = _tag_lines_removed(_LIVE_SOURCE, chosen)
-    untagged = _untagged_consult_sites(mutated, "synthetic")
-    reported_lines = {int(report.split(":")[1]) for report in untagged}
+        positions = [ordered.index(lineno) for lineno in chosen]
+        if not all(later - earlier > 1 for earlier, later in zip(positions, positions[1:])):
+            offenders.append(f"k{arity}: chosen tags are neighbours: {positions!r}")
 
-    assert reported_lines == _expected_untagged_lines_after_removal(chosen), (
-        arity,
-        untagged,
-    )
-    assert _problems(mutated, "synthetic") == [], _problems(mutated, "synthetic")
+        mutated = _tag_lines_removed(_LIVE_SOURCE, chosen)
+        untagged = _untagged_consult_sites(mutated, "synthetic")
+        reported_lines = {int(report.split(":")[1]) for report in untagged}
+        if reported_lines != _expected_untagged_lines_after_removal(chosen):
+            offenders.append(f"k{arity}: reported {untagged!r}")
+        problems = _problems(mutated, "synthetic")
+        if problems != []:
+            offenders.append(f"k{arity}: _problems not silent: {problems!r}")
+    assert offenders == [], offenders
 
 
 def test_removing_every_tag_reports_every_site_and_bounds_no_truncation():
