@@ -306,6 +306,40 @@ def test_ci_still_runs_every_ci_only_module_the_hook_would_have_mapped():
             assert sel.ci_mark_for([f"{root}x.py"]) == "", (module, root)
 
 
+def _ci_cancel_in_progress(text: str) -> str:
+    """The workflow-level `concurrency: cancel-in-progress:` value of ci.yml."""
+    lines = text.splitlines()
+    start = lines.index("concurrency:")
+    for line in lines[start + 1:]:
+        if line and not line.startswith(" "):
+            break
+        key, _, value = line.strip().partition(":")
+        if key == "cancel-in-progress":
+            return value.strip()
+    raise AssertionError("ci.yml concurrency block has no cancel-in-progress key")
+
+
+#: The only accepted spelling: a push run is never cancelled; a superseded
+#: pull-request or dispatch run still is.
+_PUSH_NEVER_CANCELLED = "${{ github.event_name != 'push' }}"
+
+
+def test_a_push_run_in_ci_is_never_cancelled_so_ci_only_modules_always_run():
+    # Adversary counter-example against 64d05a7: push A breaks a hook, the hook
+    # now defers test_hook_gate, push B (core/ only) cancels A's CI run and
+    # diffs from A, so ci_mark_for gives "not plumbing" and the PLUMBING
+    # CI_ONLY modules never run until the nightly. A push run must finish.
+    text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="ascii")
+    assert _ci_cancel_in_progress(text) == _PUSH_NEVER_CANCELLED
+
+
+@pytest.mark.parametrize("value", ["true", "${{ true }}", "${{ github.event_name == 'push' }}"])
+def test_the_cancel_parser_reports_a_cancellable_push_run(value: str):
+    # Non-vacuity: the arm above reads the real key, and would see a regression.
+    text = f"on: push\nconcurrency:\n  group: g\n  cancel-in-progress: {value}\njobs: {{}}\n"
+    assert _ci_cancel_in_progress(text) != _PUSH_NEVER_CANCELLED
+
+
 def test_the_cli_defers_a_shipped_ci_only_module(tmp_path: Path):
     from tests.conftest import require_git_repository
 
