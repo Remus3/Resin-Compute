@@ -280,7 +280,7 @@ name-grammar class above.
      in the coverage arm and in `test_gate_tag_names_are_unique` it shares one
      assertion with that arm's own judgement, because a floor in a separate arm
      leaves the primary arm vacuous. STANDALONE: elsewhere it pins the SCALE a
-     block runs at - that `_TAG_LINES` is long enough to parametrize 20 cases,
+     block runs at - that `_TAG_LINES` is long enough to drive the 20-row table,
      that the re-derivation block is comparing real sets, that a synthetic
      mutant is still responder-sized - and there a separate line is right,
      because the scale is not the arm's judgement. Inside the coverage arm
@@ -289,8 +289,8 @@ name-grammar class above.
      which finds zero sites and so makes the set difference empty for the wrong
      reason - measured 2026-09-09, forcing that predicate to False gives 0 sites
      and 0 untagged reports. `len(_TAG_LINES) >= _FLOOR` catches an empty
-     `_TAG_LINES`, which would parametrize the 20-case refutation below over
-     nothing and report `1 skipped` at exit 0 rather than a failure. Neither
+     `_TAG_LINES`, which would leave the table-driven refutation below looping
+     over nothing and passing vacuously at exit 0 rather than failing. Neither
      conjunct is what reddens an untagged site: stripping every tag from the
      responder gives 20 untagged reports and turns the FIRST conjunct alone
      False while both floors stay True.
@@ -710,8 +710,8 @@ def test_every_consult_site_inside_run_once_carries_a_tag():
     the judgement. The second pins the site count, so a gutted
     `_is_a_consult_site` that finds NO sites cannot satisfy the judgement by
     measuring an empty difference. The third pins the number of cases
-    `test_removing_one_tag_reports_exactly_that_site_as_untagged` generates,
-    because an empty `parametrize` list is `1 skipped` at exit 0 and not a
+    `test_removing_one_tag_reports_exactly_that_site_as_untagged` iterates,
+    because a loop over an empty table passes vacuously at exit 0 and not as a
     failure. The fourth is the distinct-line requirement.
     """
     source = RESPONDER.read_text(encoding="ascii")
@@ -1926,9 +1926,9 @@ def test_removing_every_tag_reports_every_site_and_bounds_no_truncation():
     claims nothing about an n at or above it.
 
     THE ARITY LIST IS GUARDED HERE, and a standalone assertion is right for it.
-    An empty `parametrize` list reports `1 skipped` at exit 0 rather than a
-    failure, so the block above could silently stop running; this arm is not
-    parametrized and always does. Standalone rather than welded into the
+    The block above loops over that tuple, and a loop over an empty tuple
+    passes at exit 0 rather than failing, so it could silently stop testing
+    anything; this arm does not depend on the tuple to run and always does. Standalone rather than welded into the
     judgement below, following the rule this file already applies to `_FLOOR`: a
     floor is WELDED when it makes the arm's OWN judgement non-vacuous, and
     STANDALONE when it pins the SCALE some other block runs at. The arities are

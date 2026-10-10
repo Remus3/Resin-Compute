@@ -35,8 +35,9 @@ in a way that no reader and no runtime error would ever flag:
    `verifier` when `verifier.md` declares `name: verifer` does not fail loudly.
    It silently does not run the agent, and the phase reports no findings.
 
-WHY NO PyYAML. `requirements-dev.txt` pins ruff, pytest and mypy and nothing
-else, and CI installs exactly that file. `import yaml` would pass on this
+WHY NO PyYAML. `requirements-dev.txt` pins ruff, pytest, mypy and the
+pytest-timeout plugin (plus their hashed dependencies) and nothing else,
+and CI installs exactly that file. `import yaml` would pass on this
 workstation and ImportError on the runner, so the frontmatter parser below is
 stdlib-only and deliberately minimal - it needs to answer "is there a delimited
 block", "what is `name`" and "is there a `tools:` key", not to implement YAML.

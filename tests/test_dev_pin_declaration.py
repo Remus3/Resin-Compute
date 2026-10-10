@@ -121,7 +121,8 @@ CI installs is this file" - is ever false, every arm below stays green while
 saying nothing. Do not read a pass here as a statement about the runner.
 
 NO YAML LIBRARY. PyYAML is installed on the author's box and is NOT in
-requirements-dev.in, which pins ruff, pytest and mypy only. A guard importing
+requirements-dev.in, which pins ruff, pytest, mypy and the pytest-timeout
+plugin only. A guard importing
 it would pass here and fail on the runner, which is the reverse of useful. The
 same rule and the same line-scanner shape are in
 `tests/test_ci_history_depth.py`; this module follows it.

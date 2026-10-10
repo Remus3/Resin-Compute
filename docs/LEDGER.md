@@ -47,3 +47,16 @@ This file is now the INDEX. Each session writes its own entry to
   Reversed by: an xdist run under the gate showing no worker loss and a
   green lock-budget module across repeated runs; or any execnet bytes
   vendored, or a dev dep reaching runtime.
+
+- 0i(2c) pre-push trim merge (adjudicated 2026-10-10).
+  DECISION: M - merge bedcb6c (CI_ONLY deferral of 6 slow modules; push
+  runs in ci.yml not cancellable). Local gate 55-97 s -> 35-44 s (3.14
+  host); 30 s target not met.
+  Rejected: F (per-commit concurrency group) - gap never observed (133
+  push runs since 2026-09-07, 0 cancelled, closest pushes 178 s apart vs
+  213 s max run), nightly bounds delay to 24 h; R (reject CI_ONLY) -
+  gives up the speed win for an unobserved case.
+  Rejected: running the engine suite in parallel in the hook - takes a
+  second suite slot, against FLEET-COMMON 16c.
+  Reversed by: any cancelled push run in ci, or 3 pushes landing within
+  one run duration.
