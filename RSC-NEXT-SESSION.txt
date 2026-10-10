@@ -72,9 +72,10 @@ STATE OBSERVED 2026-10-09 AT aaa4d7d (session 66 /done gate run)
   PUSH/CI: the /done agent's first push of aaa4d7d was refused by the
   pre-push hook (it tests the WORKING TREE, which held uncommitted ROADMAP
   edits citing the unwritten session ledger file); nothing reached origin.
-  The paperwork commit carries the fix and was pushed after; its CI is
-  recorded in docs/ledger/session-66.md only if read, else read it next
-  session with gh run list --branch main --limit 5.
+  The paperwork commit 969b0eb was pushed after (origin/main read back
+  969b0eb); CI at 969b0eb: ci 38017609190, docs-guards 38017609208,
+  codeql 38017609220, all success. A ledger-only follow-up commit
+  recording this landed after it.
   LANDED (session 66): B1 merge aaa4d7d (slice c260c05, stale responder
   run record comments, adversary NOT REFUTED); C1 41 merged branches
   deleted with git branch -d (44 seen, all merged) and the stale-locked
