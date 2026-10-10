@@ -28,3 +28,22 @@ This file is now the INDEX. Each session writes its own entry to
 
 - `docs/ledger/archive-2026-10.md`
 - `docs/ledger/archive-2026-09.md`
+
+## Adjudicated rulings
+
+- 0i(4b) dev-dep licence gate (adjudicated 2026-10-10).
+  DECISION: B - pin pytest-timeout==2.4.0 in requirements-dev.in; defer
+  pytest-xdist 3.8.0 and execnet 2.1.2.
+  Licence ruling: execnet CLEARED for dev/CI install only. LICENSE is MIT
+  text with no copyright line, but trap 2 targets an unrendered grant;
+  holder is named in METADATA ("holger krekel and others", same lineage
+  as pinned pytest/iniconfig/pluggy). Installing is not lifting: no bytes
+  enter the tree, so MIT's notice duty never attaches.
+  Alternatives rejected: (A) both - xdist risks the suite gate
+  (fleet_suite_gate.py docstring: concurrent suites lost xdist workers),
+  timing tests in tests/test_headless_runner_lock_budget.py, and the
+  xdist exit-status notes in conftest.py; benefit unmeasured. (C) refuse
+  both - no licence bar exists to justify it.
+  Reversed by: an xdist run under the gate showing no worker loss and a
+  green lock-budget module across repeated runs; or any execnet bytes
+  vendored, or a dev dep reaching runtime.

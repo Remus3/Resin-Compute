@@ -159,6 +159,17 @@ WORKFLOW_SUFFIXES = (".yml", ".yaml")
 #: naming itself is a puzzle rather than a finding.
 FLOOR = frozenset({"ruff", "pytest", "mypy"})
 
+#: pytest plugins pinned in requirements-dev.in. pytest loads a plugin through
+#: its entry point, so no gate ever invokes one by name and the scanner cannot
+#: derive it - it is declared here instead, and the equality arm below grades
+#: `pinned == invoked | PLUGINS`. Slice 0i(4b), adjudicated 2026-10-10
+#: (docs/LEDGER.md): DECISION B pins pytest-timeout only.
+PLUGINS = frozenset({"pytest-timeout"})
+
+#: Deferred by the same ruling, NOT refused: the reversal condition is in the
+#: ledger block. Pinning either one without that evidence reddens on purpose.
+DEFERRED = frozenset({"pytest-xdist", "execnet"})
+
 _RUN_KEY = re.compile(r"^(?:-\s+)?run:\s*(.*)$")
 
 #: A YAML block scalar header. `run: |` introduces the command lines; it is not
@@ -762,8 +773,8 @@ def test_every_tool_the_gates_invoke_is_pinned_in_requirements_dev():
     workflows = workflow_files()
     invoked = gate_invoked_tools()
     pinned = pinned_names(REQUIREMENTS_DEV.read_text(encoding="utf-8"))
-    assert pinned == invoked and invoked >= FLOOR and workflows, _declaration_report(
-        invoked, pinned, workflows
+    assert pinned == invoked | PLUGINS and invoked >= FLOOR and workflows, (
+        _declaration_report(invoked, pinned - PLUGINS, workflows)
     )
 
 
@@ -1159,3 +1170,37 @@ def test_a_third_workflow_invoking_an_unpinned_tool_would_be_caught(tmp_path):
     for path in workflow_files(tmp_path):
         found |= invoked_tools(path.read_text(encoding="utf-8"), source=path.name)
     assert found == {"ruff", "pip-audit"}
+
+
+def test_the_adjudicated_plugin_is_pinned_and_the_deferred_ones_are_not():
+    """Slice 0i(4b) DECISION B: pytest-timeout is pinned; xdist and execnet wait.
+
+    Read from BOTH files. The .in is the human declaration; the compiled .txt
+    is what CI installs, and a transitive pull of execnet would land there
+    without ever touching the .in.
+    """
+    pinned = pinned_names(REQUIREMENTS_DEV.read_text(encoding="utf-8"))
+    compiled = (REPO_ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
+    closure = {
+        m.group(1).lower()
+        for m in re.finditer(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==", compiled, re.M)
+    }
+    assert PLUGINS <= pinned and PLUGINS <= closure, (
+        f"plugins not pinned: .in missing {sorted(PLUGINS - pinned)},"
+        f" .txt missing {sorted(PLUGINS - closure)}"
+    )
+    leaked = DEFERRED & (pinned | closure)
+    assert not leaked, f"deferred by the 0i(4b) ruling but pinned: {sorted(leaked)}"
+
+
+def test_the_equality_arm_still_reds_on_an_unexplained_extra_pin():
+    """Non-vacuity for PLUGINS: the allowance covers exactly the declared plugins.
+
+    The real declaration satisfies `pinned == invoked | PLUGINS`; a deferred
+    plugin planted into it must break that equality.
+    """
+    invoked = gate_invoked_tools()
+    text = REQUIREMENTS_DEV.read_text(encoding="utf-8")
+    assert pinned_names(text) == invoked | PLUGINS
+    planted = pinned_names(text + "\npytest-xdist==3.8.0\n")
+    assert planted - (invoked | PLUGINS) == {"pytest-xdist"}

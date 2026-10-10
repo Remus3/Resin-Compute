@@ -1,8 +1,11 @@
 # ResinCompute development + CI dependencies.
 #
 # Runtime deps are deliberately empty - see requirements.txt. Nothing pinned
-# here may be imported by shipped code; these three exist to lint, test and
-# type-check it.
+# here may be imported by shipped code; ruff, pytest and mypy exist to lint,
+# test and type-check it, and pytest-timeout is a pytest plugin (slice 0i(4b),
+# DECISION B, docs/LEDGER.md; pytest-xdist and execnet are deferred there).
+# tests/test_dev_pin_declaration.py lists plugins in PLUGINS, because no gate
+# invokes a plugin by name.
 #
 # Pinned with == rather than >=. CI installs these (via the compiled
 # requirements-dev.txt) on every run, and an
@@ -30,8 +33,20 @@
 #
 # (One line on purpose, so it pastes into any shell without a continuation.)
 #
+# The generated header reads `--no-index` although that flag is NOT passed.
+# pip-tools 7.5.3 writes it itself (measured 2026-10-10: the command above,
+# run under Python 3.11 with network access, emits that exact header). Do not
+# add --no-index to the command - it would make pip ignore PyPI and resolve
+# nothing.
+#
+# colorama: pip-compile drops pytest's `sys_platform == "win32"` marker, and a
+# Linux recompile (Dependabot) drops colorama entirely. After recompiling,
+# restore the line `colorama==0.4.6 ; sys_platform == "win32"` by hand so
+# Windows dev installs keep working.
+#
 # Do not hand-edit requirements-dev.txt: Dependabot overwrites it whole.
 
 ruff==0.16.10
 pytest==9.1.1
 mypy==2.4.0
+pytest-timeout==2.4.0
