@@ -19,6 +19,7 @@ This file is now the INDEX. Each session writes its own entry to
 
 ## Session files
 
+- `docs/ledger/session-68.md`
 - `docs/ledger/session-67.md`
 - `docs/ledger/session-66.md`
 - `docs/ledger/session-65.md`
@@ -31,32 +32,5 @@ This file is now the INDEX. Each session writes its own entry to
 
 ## Adjudicated rulings
 
-- 0i(4b) dev-dep licence gate (adjudicated 2026-10-10).
-  DECISION: B - pin pytest-timeout==2.4.0 in requirements-dev.in; defer
-  pytest-xdist 3.8.0 and execnet 2.1.2.
-  Licence ruling: execnet CLEARED for dev/CI install only. LICENSE is MIT
-  text with no copyright line, but trap 2 targets an unrendered grant;
-  holder is named in METADATA ("holger krekel and others", same lineage
-  as pinned pytest/iniconfig/pluggy). Installing is not lifting: no bytes
-  enter the tree, so MIT's notice duty never attaches.
-  Alternatives rejected: (A) both - xdist risks the suite gate
-  (fleet_suite_gate.py docstring: concurrent suites lost xdist workers),
-  timing tests in tests/test_headless_runner_lock_budget.py, and the
-  xdist exit-status notes in conftest.py; benefit unmeasured. (C) refuse
-  both - no licence bar exists to justify it.
-  Reversed by: an xdist run under the gate showing no worker loss and a
-  green lock-budget module across repeated runs; or any execnet bytes
-  vendored, or a dev dep reaching runtime.
-
-- 0i(2c) pre-push trim merge (adjudicated 2026-10-10).
-  DECISION: M - merge bedcb6c (CI_ONLY deferral of 6 slow modules; push
-  runs in ci.yml not cancellable). Local gate 55-97 s -> 35-44 s (3.14
-  host); 30 s target not met.
-  Rejected: F (per-commit concurrency group) - gap never observed (133
-  push runs since 2026-09-07, 0 cancelled, closest pushes 178 s apart vs
-  213 s max run), nightly bounds delay to 24 h; R (reject CI_ONLY) -
-  gives up the speed win for an unobserved case.
-  Rejected: running the engine suite in parallel in the hook - takes a
-  second suite slot, against FLEET-COMMON 16c.
-  Reversed by: any cancelled push run in ci, or 3 pushes landing within
-  one run duration.
+- The 0i(4b) and 0i(2c) rulings of 2026-10-10 live in
+  `docs/ledger/session-68.md` (moved there verbatim; this file is an index).

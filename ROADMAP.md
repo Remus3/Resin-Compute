@@ -42,6 +42,14 @@ version. What follows is everything the scaffold deliberately did not do.
   (Refused.code only, text fallback removed). (d) RETRACTED - the stray `__pycache__`
   was this tree's own local leftover, sent to the Recycle Bin and read
   back absent; reported to MAIN in the 2055 REPORT.
+  Session 68: (a) MEASURED - max basetemp dirs per scratchpad 0, max
+  scratchpad entry count 16938 (another tree's), this tree's max 2019;
+  the SEND to MAIN is still owed in the next batched note (outbound cap:
+  batch it). The rsc-v8-slice-a residue DONE - deleted on origin, read
+  back absent with `git ls-remote origin` (see `docs/ledger/session-68.md`).
+  NEW residue: origin also holds claude/new-session-19dmsr (154d5f8, the
+  merged PR #1 head, an ancestor of origin/main); decide whether to delete
+  it after a consumer check.
 
 - **NEW 2026-10-08. Session 63 supply-chain residue.** (a)
   `requirements-dev.txt` was compiled on Windows and lists colorama
@@ -49,7 +57,10 @@ version. What follows is everything the scaffold deliberately did not do.
   dev installs would then need `requirements-dev.in`. Fix: recompile with a
   platform marker or a universal resolver, and update the README and
   CONTRIBUTING install lines. DONE session 64 (74a8710): colorama kept with
-  a `sys_platform == "win32"` marker while landing Dependabot PR #3. (b) DONE session 63: the post-push OpenSSF
+  a `sys_platform == "win32"` marker while landing Dependabot PR #3.
+  OPEN (session 68): that marker is a hand-edit no test guards; a Linux
+  Dependabot recompile drops it with CI green. Add a guard (or a
+  universal-resolver recompile) before any Dependabot pip PR merges. (b) DONE session 63: the post-push OpenSSF
   Scorecard read 6.6, up from 4.7 at d6bce85 (`docs/LEDGER.md`). (c) The kit refusals
   "budget lock unopenable" and "budget write failed" map to
   KitRunBudgetSpent through a substring match on "budget"; give them a
@@ -74,7 +85,15 @@ version. What follows is everything the scaffold deliberately did not do.
   selects ~17 hook-heavy modules, about 95 s against the 30 s target -
   trim the selector or move those modules to CI-only; (4b) hash-pinned
   pytest-timeout and xdist need the licence gate first (new dependency);
-  the 10.4 GB process is still unexplained. (2d, session 64) A whole-suite
+  the 10.4 GB process is still unexplained. Session 68 (see
+  `docs/ledger/session-68.md`): (2b) DONE - one test per invariant,
+  190 -> 94 items, merge 079c7fa. (2c) PARTIAL - six modules CI_ONLY, push
+  CI runs never cancelled, merge 0127b26; pre-push 35-44 s, RESIDUE: the
+  remaining ~5-14 s to 30 s (engine suite in parallel rejected, FLEET-COMMON
+  16c), and 3 pushes inside one CI run (~213 s) still replace the pending
+  run - reverse to a per-commit concurrency group if any push run is ever
+  cancelled. (4b) DONE as DECISION B - pytest-timeout 2.4.0 hash-pinned,
+  xdist and execnet deferred, merge d57226d. (2d, session 64) A whole-suite
   run waited about 21 min for a `fleet_suite_gate.py` slot this session
   (observed by the attended session); no RSC outbound note named it when
   grepped at /done, so put it in the next batched note to MAIN as a kit
@@ -96,7 +115,10 @@ version. What follows is everything the scaffold deliberately did not do.
   a kit version ships clean. (d) One-off unexplained failure in the session
   62 build run:
   `tests/test_conftest_git_gate_sites.py::test_the_run_half_reports_a_module_welded_to_skip_unconditionally`
-  (passed solo and in the re-run); watch for a repeat. (e) The
+  (passed solo and in the re-run); watch for a repeat. REPEATED session
+  68: failed twice, both under a concurrent suite, passed solo 3 of 3;
+  root cause open; the module is now CI_ONLY in
+  `scripts/prepush_select.py`, so local pushes no longer exercise it. (e) The
   subagent-first hook runs in log mode (gitignored mode file under
   ops/loop/control; an absent mode file means deny). Switch to deny after 3
   interactive sessions (62, 63, 64) show no un-routable would-deny row;
@@ -119,6 +141,7 @@ version. What follows is everything the scaffold deliberately did not do.
   `E:\Resin Compute\.githooks` at session 60 /done (session 58 saw the same
   on C:); `python scripts/install_hooks.py` restored `.githooks`. Cause
   unknown - find what writes it (worktree creation, an agent, a hook).
+  Seen again at session 68 /done start; restored the same way.
 
 - **NEW 2026-10-07. WATCH THE HELD MAIN BACKLOG DRAIN.** After a487d15 the
   responder auto-replied (2251) to MAIN 0020, an old kit-v5 ORDER the cap had
