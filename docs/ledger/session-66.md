@@ -14,7 +14,10 @@
   ROADMAP edits citing the not-yet-written session ledger file (5 failed,
   dead-pointer and untracked-path rows). Nothing reached origin; the
   paperwork commit carries the file and the push was retried.
-- Push and CI results: see `RSC-NEXT-SESSION.txt` STATE OBSERVED.
+- Push: 969b0eb (paperwork, carrying aaa4d7d and c260c05) on origin/main,
+  read back with git fetch; pre-push OK. CI at 969b0eb (read by the /done
+  agent with gh): ci 38017609190, docs-guards 38017609208, codeql
+  38017609220, all success.
 
 ## 2026-10-09 - E1: MAIN 2055 ORDER FLEET-KIT v15 (IN PROGRESS, NOT MERGED)
 
