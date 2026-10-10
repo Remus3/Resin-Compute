@@ -17,8 +17,10 @@ session 66 work that was left half-done.
   int32 probe; the liveness-diag progress file put it down to a host
   condition (WMI 0x800700a4, a taskkill.exe pileup), no code change.
   Watched under hand-off item 0h.
-- Push and CI for the paperwork commit: recorded in the follow-up section
-  of this file if read back after the commit; see `RSC-NEXT-SESSION.txt`.
+- Push: paperwork commit e7c99ce on origin/main, read back with git
+  fetch; pre-push OK. CI at e7c99ce (gh run list): ci 38068181115 and
+  docs-guards 38068181210, both success; no codeql run listed for it. A
+  ledger-only follow-up commit recording this landed after it.
 
 ## 2026-10-10 - R1: recover the pre-hang state
 
