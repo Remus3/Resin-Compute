@@ -373,6 +373,7 @@ class Outcome(NamedTuple):
     gate_skip_lines: tuple[str, ...]
     summary: str
     stdout: str
+    stderr: str = ""
 
 
 def _summary_line(stdout: str) -> str:
@@ -435,6 +436,7 @@ def _run_child_pytest(selection: tuple[str, ...], env: dict[str, str] | None) ->
         gate_skip_lines=tuple(gate_lines),
         summary=summary,
         stdout=stdout,
+        stderr=completed.stderr,
     )
 
 
@@ -1706,6 +1708,20 @@ def _write_stub(tmp_path: Path, name: str, body: str) -> str:
     return str(target)
 
 
+def _stub_selection(stub: str) -> tuple[str, ...]:
+    """The child-pytest selection for a stub planted outside the repo.
+
+    `--confcutdir` is pinned to the stub's own directory. Without it the child
+    (cwd=REPO_ROOT) takes the repo as confcutdir, which is no ancestor of a
+    stub under %TEMP%, so it collects EVERY ancestor of the stub as a `Dir`,
+    lists shared %TEMP% and `lstat`s each entry - and a concurrent suite
+    deleting its own temp dir mid-listing turns the child into `1 error`
+    (0h(i); see test_a_stub_child_collects_nothing_above_the_stub_directory).
+    Same fix as tests/test_empty_parametrize_policy.py `_run_probe`.
+    """
+    return ("--confcutdir", os.path.dirname(stub), stub)
+
+
 _UNCONDITIONAL_SKIP_STUB = (
     "import pytest\n"
     "\n"
@@ -1728,7 +1744,7 @@ def test_the_run_half_reports_a_module_welded_to_skip_unconditionally(tmp_path: 
     decoration.
     """
     stub = _write_stub(tmp_path, "test_welded_shut_stub.py", _UNCONDITIONAL_SKIP_STUB)
-    outcome = _run_child_pytest((stub,), None)
+    outcome = _run_child_pytest(_stub_selection(stub), None)
     problems = _present_half_problems(outcome)
 
     assert problems, (
@@ -1753,7 +1769,7 @@ def test_the_run_half_clears_a_stub_that_genuinely_runs(tmp_path: Path):
     no reason.
     """
     stub = _write_stub(tmp_path, "test_honest_stub.py", _HONEST_STUB)
-    outcome = _run_child_pytest((stub,), None)
+    outcome = _run_child_pytest(_stub_selection(stub), None)
 
     assert outcome.passed == 1, (
         f"the honest stub did not run, so this arm measured nothing: {outcome.summary!r}\n"
@@ -1762,6 +1778,75 @@ def test_the_run_half_clears_a_stub_that_genuinely_runs(tmp_path: Path):
     assert not _present_half_problems(outcome), (
         "the PRESENT judgement flagged a module that genuinely ran a passing test, so "
         f"it is armed to flag everything: {_present_half_problems(outcome)}"
+    )
+
+
+_OUTSIDE_TRAP_MARKER = "stub-child-walked-above-its-own-directory"
+
+
+def _plant_trapped_stub(tmp_path: Path) -> str:
+    """An honest stub one level below a directory whose conftest.py raises.
+
+    The trap sits in the stub's PARENT. A child that considers that parent at
+    all - the same `_is_in_confcutdir` predicate decides both conftest loading
+    and the ancestor `Dir` walk (`_pytest/main.py` Session.collect) - imports
+    it and dies with the marker in its output.
+    """
+    outer = tmp_path / "outer"
+    inner = outer / "inner"
+    inner.mkdir(parents=True)
+    _write_stub(
+        outer,
+        "conftest.py",
+        "raise RuntimeError('" + _OUTSIDE_TRAP_MARKER + "')\n",
+    )
+    return _write_stub(inner, "test_honest_stub.py", _HONEST_STUB)
+
+
+def test_a_stub_child_collects_nothing_above_the_stub_directory(tmp_path: Path):
+    """REGRESSION for the 0h(i) flake: a stub child must not walk shared %TEMP%.
+
+    Root cause, measured 2026-10-12 on pytest 9.0.3: the child runs with
+    cwd=REPO_ROOT, so its rootdir and default confcutdir are the repo, which is
+    no ancestor of a stub under %TEMP%. Every ancestor of the stub from the
+    drive root down then counts as inside confcutdir, and Session.collect
+    builds a `Dir` for each and lists ALL of its entries - including %TEMP%
+    itself, where concurrent suites create and delete mkdtemp directories. On
+    Windows each listed entry is `lstat`ed by `samefile_nofollow`
+    (`_pytest/main.py:982`), so an entry deleted between the listing and that
+    call is `FileNotFoundError` and the child reports `1 error`. Solo there is
+    no churn; under a concurrent suite there is. A scratch stress run of the
+    two stub arms, 8 in parallel, failed 21 of 40 runs that way before the fix.
+    """
+    stub = _plant_trapped_stub(tmp_path)
+    outcome = _run_child_pytest(_stub_selection(stub), None)
+    output = outcome.stdout + outcome.stderr
+
+    assert _OUTSIDE_TRAP_MARKER not in output, (
+        "the stub child imported a conftest.py ABOVE the stub's own directory, so "
+        "it also walks every ancestor - shared %TEMP% included - and races "
+        f"concurrent suites deleting their temp dirs: {output[-2000:]}"
+    )
+    assert outcome.passed == 1 and not outcome.errors, (
+        f"the confined stub child did not run its one test: {outcome.summary!r}\n"
+        f"{outcome.stdout[-2000:]}"
+    )
+
+
+def test_control_the_outside_trap_fires_for_an_unconfined_stub_child(tmp_path: Path):
+    """Non-vacuity arm: the trap above is live, so its silence means something.
+
+    The same layout run WITHOUT the confinement imports the trap - the exact
+    shape both stub arms had before the fix.
+    """
+    stub = _plant_trapped_stub(tmp_path)
+    outcome = _run_child_pytest((stub,), None)
+    output = outcome.stdout + outcome.stderr
+
+    assert _OUTSIDE_TRAP_MARKER in output, (
+        "an unconfined stub child did NOT import the conftest above it, so the "
+        "trap cannot tell a confined child from an unconfined one: "
+        f"rc {outcome.returncode}\n{output[-2000:]}"
     )
 
 
