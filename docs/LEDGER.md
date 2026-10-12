@@ -19,6 +19,7 @@ This file is now the INDEX. Each session writes its own entry to
 
 ## Session files
 
+- `docs/ledger/session-70.md`
 - `docs/ledger/session-69.md`
 - `docs/ledger/session-68.md`
 - `docs/ledger/session-67.md`
