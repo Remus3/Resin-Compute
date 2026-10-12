@@ -91,6 +91,13 @@ exclude = [
 # fleet_identity.py UP032 x4 and fleet_rewrite.py UP032 x4.
 "ops/fleet_kit/fleet_identity.py" = ["UP032"]
 "ops/fleet_kit/fleet_rewrite.py" = ["UP032"]
+# Kit v17 re-measured 2026-10-12, each rule alone with this config bypassed
+# (`ruff check <file> --isolated --target-version py311 --select <rule>`):
+# every kit entry above still fires - fleet_inbox UP017 x1; fleet_done UP017
+# x1, UP032 x3; fleet_subagent_first BLE001 x1; fleet_claims UP032 x1, BLE001
+# x1, B007 x1; fleet_gitlock UP032 x5; fleet_suite_gate UP032 x2;
+# fleet_identity UP032 x4; fleet_rewrite UP032 x4. The whole kit dir under
+# this select/ignore set shows no rule outside these entries. None dropped.
 "agents/pity_engine/tests/*.py" = ["B011"]
 
 [lint.isort]
