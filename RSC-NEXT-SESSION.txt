@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-12 (session 69), gates measured at commit 6f61e0d on main
+Stamped 2026-10-12 (session 70), gates measured at commit 960ef34 on main
 by the /done ritual; this paperwork commit landed after it. Everything below
 is a READING taken that day, not a promise about now. Re-measure before
 citing.
@@ -14,7 +14,9 @@ BOOTSTRAP - READ IN THIS ORDER
   docs/LEDGER.md (an INDEX since session 64; read the newest
     docs/ledger/session-<n>.md, older bodies in docs/ledger/archive-*.md)
   git log --oneline -10
-  gh pr list   (expect none open; Dependabot PRs were landed locally)
+  gh pr list   (read 2026-10-12: Dependabot PR #5, electron 44.5.1 ->
+    44.7.0 in /shell, OPEN - item 0u; earlier Dependabot PRs were landed
+    locally)
 Before planning any character build: docs/GOAL_SPEC_SEED_TEAM.md.
 Before adding any data source: docs/LICENSE_NOTES.md.
 Before re-litigating a past choice: docs/adr/README.md.
@@ -51,7 +53,7 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 17 [] (kit v17, read back at session 69 /done; vendored
+must print 17 [] (kit v17, read back at session 70 /done; vendored
 6f61e0d).
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
@@ -63,7 +65,33 @@ tmp_path_retention_count = 1. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures. Pass the suite
 interpreter to the suite gate as an ABSOLUTE path (sys.executable).
 
-STATE OBSERVED 2026-10-12 AT 6f61e0d (session 69 /done gate run)
+STATE OBSERVED 2026-10-12 AT 960ef34 (session 70 /done gate run)
+  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
+  skipped 4 noted; ruff clean; tests 4438 passed 6 skipped (same six host
+  skip reasons, read with -rs); pity_engine 191 passed; node 110 pass
+  0 fail; dry run 0
+  pass 0 fail 7 skip; mypy 43 files clean; kit check 17 []. Whole suites
+  ran through the suite gate (FLEET_SUITE_SLOTS=1, machine policy).
+  core.hooksPath read the ABSOLUTE path at /done start; install_hooks
+  restored it, read back .githooks.
+  READ BACK before the paperwork commit: origin/main 960ef34 (ls-remote).
+  CI AT 960ef34 RED: ci 38288918481 failed 1 test (item 0v); docs-guards
+  38288918702 and codeql 38288918456 success. Paperwork push and its CI:
+  see docs/ledger/session-70.md.
+  LANDED session 70: 0g merge b47887e (ruff.toml comment; all 11 kit
+  ignores still fire on v17 bytes); 1 merge 38fbe43
+  (tests/test_requirements_dev_markers.py, 4 failed with the marker
+  stripped); 0h(i) merge cc2d86a (--confcutdir, adversary NOT REFUTED);
+  0i(2c) merge 3c61cc8 (plumbing push median 35.1 s -> 25.1 s; round 1
+  REFUTED, fixed, round 2 NOT REFUTED); 0l claude/new-session-19dmsr
+  deleted on origin (tip 154d5f8, ls-remote read back empty); ledger
+  07e54d1 and 960ef34 (origin/main read back 960ef34); 0j INFORMATION
+  note to MAIN, sha256 80a3a5c4...ab69 (local copy re-hashed at /done),
+  reached 2/2, outbound 2 of 6 on 2026-10-12; inbox 8 notes triaged and
+  marked. INCIDENT: a round-1 adversary's failed chained cd ran git reset
+  --hard in the main checkout; verifier read back NOTHING-LOST. Details:
+  docs/ledger/session-70.md.
+PRIOR READING 2026-10-12 AT 6f61e0d (session 69 /done gate run)
   Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
   skipped 4 noted; ruff clean; tests 4385 passed 6 skipped; pity_engine
   191 passed; node 110 pass 0 fail; dry run 0 pass 0 fail 7 skip; mypy 43
@@ -196,6 +224,15 @@ PRIOR READINGS sessions 57-62: see docs/ledger/archive-2026-10.md and
   trap, not a regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
+  0v. CI IS RED - FIX FIRST (NEW session 70). ci run 38288918481 at
+     960ef34 (Linux, Python 3.11.17, pytest 9.1.1) failed
+     tests/test_conftest_git_gate_sites.py::
+     test_control_the_outside_trap_fires_for_an_unconfined_stub_child: the
+     unconfined stub child did not import the trap conftest above it. The
+     arm landed with the 0h(i) merge cc2d86a and passes locally (pytest
+     9.0.3, stub on another drive). Lead: pytest 9.0.3 vs the 9.1.1 pin,
+     and /tmp sharing the checkout's root on Linux. Root-cause, regression
+     test, both suites, read CI back green. ROADMAP item (g).
   O8. MAIN 2246 ORDER s4 HISTORY REWRITE + FORCE PUSH, and s8 - NOT DONE,
      AWAITING EXPLICIT OPERATOR APPROVAL IN PERSON (attended session's
      instruction 2026-10-09; not for an unattended run). s4: the
@@ -219,49 +256,50 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      (gitignored) now reads deny. If a main-thread tool call is denied for
      work that cannot be dispatched, set it back to log and ask MAIN for a
      ruling. Reversed by: a MAIN ruling or a later kit version.
-  0g. Residual kit ruff ignores in ruff.toml: fleet_inbox UP017, fleet_done
-     UP017+UP032, fleet_subagent_first BLE001 - reported to MAIN in 1454.
-     Re-measure against the v13 bytes; drop each when a kit version ships
-     clean; never patch kit bytes.
-  0h. FLAKY-TEST WATCH. (i) Unexplained one-off failure in the session 62
-     build run: tests/test_conftest_git_gate_sites.py::
-     test_the_run_half_reports_a_module_welded_to_skip_unconditionally
-     (passed solo and on re-run; passed in the session 62, 63 and 64 /done
-     gates). (ii) tests/test_task_liveness.py int32 probe failed once in
-     session 66 (pre-hang merge-e1-0o run; the liveness-diag progress file
-     put it down to a host WMI 0x800700a4 condition with a taskkill.exe
-     pileup, no code change); it passed in the session 67 /done gate.
-     (i) RECURRED session 68: failed twice, both under a concurrent suite,
-     passed solo 3 of 3 - ROOT-CAUSE IT NOW; the module is CI_ONLY
-     locally (scripts/prepush_select.py), so only CI exercises it.
-     Watch (ii) for a repeat.
+  0q. OUTBOUND LEDGER UNDERCOUNTS (NEW session 70). The gitignored
+     outbound-notes ledger under ops/loop/control has 0 rows for
+     2026-10-12 although the 0900 ANSWER and the 1258 INFORMATION notes to
+     MAIN were sent (its last row is 2026-10-11), so the kit OutboundCap
+     undercounts. Root-cause which send path skips the row; backfill the 2
+     rows. ROADMAP "Session 70 residue" (a).
+  0r. ADVERSARY GIT RULE (NEW session 70). Adversary prompts run
+     destructive git only as git -C <clone>, after a
+     git rev-parse --show-toplevel check; never chain a cd into a mutating
+     git command. Write it into .claude/agents/adversary.md and the
+     orchestrated-run protocol. Cause: the session-70 ledger INCIDENT (a
+     failed chained cd ran git reset --hard in the main checkout; nothing
+     lost per the verifier read-back). ROADMAP item (c).
+  0s. CONFIRM THE "CS" CODENAME (NEW session 70) used in ledger commit
+     960ef34 against the gitignored codename map. ROADMAP item (d).
+  0t. WATCH FOR MAIN'S REPLY (NEW session 70) to the 1258 INFORMATION note
+     (TEMP-1 numbers, FLEET_SUITE_SLOTS=1 observed). Triage it when it
+     lands. ROADMAP item (e).
+  0u. DEPENDABOT PR #5 OPEN (seen at session 70 /done): electron 44.5.1 ->
+     44.7.0 in /shell (npm-shell group). Land it locally after the gates,
+     as earlier Dependabot PRs were, or record why not.
+  0h. FLAKY-TEST WATCH. (i) DONE session 70 (root-caused: a child pytest
+     walked the temp dir across drives; --confcutdir fix, merge cc2d86a).
+     (ii) tests/test_task_liveness.py int32 probe failed once in session 66
+     (pre-hang merge-e1-0o run; the liveness-diag progress file put it down
+     to a host WMI 0x800700a4 condition with a taskkill.exe pileup, no code
+     change); it passed in the session 67 /done gate. Watch (ii) for a
+     repeat. ROADMAP item (f).
   0i. MAIN 2246 s2 residue (ROADMAP 2246 entry; 2b and 4b DONE session
-     68). (2c) PARTIAL: local plumbing pre-push 35-44 s against the 30 s
-     target - the remaining ~5-14 s is open (running the engine suite in
-     parallel was REJECTED: a second suite slot, FLEET-COMMON 16c). (2c-b)
+     68). (2c) the 30 s target MET session 70 (engine suite skipped outside
+     its import closure, plumbing push median 35.1 s -> 25.1 s, merge
+     3c61cc8). RESIDUE (ROADMAP session 70 item (b)): an untracked
+     dot-prefixed pytest ini file in the checkout gives SKIP locally; a
+     force-push diff against the merge-base can miss discarded engine
+     changes. (2c-b)
      3 pushes inside one CI run (~213 s) still replace the pending run;
      reverse to a per-commit concurrency group if any push run is ever
      cancelled. The 10.4 GB process is still unexplained. xdist and
      execnet stay DEFERRED (reversed by an xdist run under the suite gate
      with no worker loss and a green lock-budget module across repeated
      runs).
-  0j. MAIN FIX TEMP-1 ACCEPTANCE: MEASURED session 68 over 191
-     scratchpads - max basetemp dirs per scratchpad 0, max entry count
-     16938 (another tree's scratchpad); this tree's max 2019 (mostly a
-     pt311 venv). OWED: send both numbers to MAIN in the NEXT batched note
-     (outbound cap 6/day: batch with other answers).
   0k. Identity section-4 history TRIGGER tier (2 ai-or-bot author and
      committer commits, the root among them). A rewrite runs ONLY on a MAIN
      ORDER (or the operator in person, O8) via ops/fleet_kit/fleet_rewrite.py.
-  0l. rsc-v8-slice-a DONE session 68 (deleted on origin, ls-remote read
-     back absent). NEW: origin also holds claude/new-session-19dmsr
-     (154d5f8, merged PR #1 head, ancestor of origin/main); decide whether
-     to delete it after a consumer check.
-  1. requirements-dev.txt colorama: DONE in 74a8710 with a win32 marker.
-     Remaining: the marker is a HAND-EDIT NO TEST GUARDS (session 68
-     finding); a Linux Dependabot recompile drops it with CI green. Add a
-     guard, and confirm the next Dependabot Linux recompile keeps the
-     marker, before any Dependabot pip PR merges.
   5. Future MAIN supersessions: the stamp list is closed by design. A new
      superseded MAIN order needs a verified MAIN note naming its stamps; add
      them to SUPERSEDED_MAIN_STAMPS. Not watched live yet: confirm the next
@@ -305,9 +343,17 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      is unreachable; an idle status over a non-oldest epoch-ms row reads
      120/120 while the kit still counts it as one; a one-off kit read error
      reads Backing Off, not the limit.
-  13. Inbox: marked session 68; watch_inbox read unread: none at /done.
-     Each session: triage new entries into the four buckets, then --mark
-     only what was triaged.
+  13. Inbox: 8 notes triaged and marked session 70; at /done the only
+     unread entry was this tree's own sent 1258 note (not-applicable, own
+     note), marked; watch_inbox read back unread: none. Each session: triage
+     new entries into the four buckets, then --mark only what was triaged.
+  DONE session 70 (see docs/ledger/session-70.md): INBOX-13 triage; 0g
+  (ignores re-measured on v17, comment only); 0h(i) (--confcutdir); 1
+  (colorama marker guard test); 0l (claude/new-session-19dmsr deleted on
+  origin; restore with git push origin 154d5f8:refs/heads/
+  claude/new-session-19dmsr); 0i(2c) target met (residue in 0i); 0j
+  (TEMP-1 numbers sent to MAIN in the 1258 INFORMATION note). All other
+  items carried forward.
   DONE session 69 (see docs/ledger/session-69.md): kit v17 adoption and
   its ANSWER to MAIN. All items above carried forward unchanged; 0g
   (residual kit ruff ignores) should be re-measured against v17 bytes.
@@ -377,9 +423,23 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   by plumbing tests moving back into the push path); the six CI_ONLY
   pre-push modules and never-cancelled push CI runs (reversed by any
   cancelled push run in ci, or 3 pushes landing within one run duration);
-  dev-dep DECISION B, pytest-timeout only (reversed as in 0i).
+  dev-dep DECISION B, pytest-timeout only (reversed as in 0i); the
+  claude/new-session-19dmsr deletion on origin (reversed by a cloud
+  session or reopened PR needing the branch name; restore from 154d5f8);
+  the pre-push engine-suite skip outside its import closure (reversed by a
+  false SKIP that let an engine-breaking push through).
 
 TRAPS MEASURED - none are hypothetical
+  A FAILED CHAINED cd RUNS GIT IN THE MAIN CHECKOUT (session 70). An
+  adversary's cd into its scratch clone failed and its git mv, git rm and
+  git reset --hard ran against the main checkout; nothing was lost only
+  because no tracked edit was unstaged then. Use git -C <clone> after a
+  git rev-parse --show-toplevel check (item 0r).
+
+  FLEET_SUITE_SLOTS=1 IS MACHINE POLICY (user env, session 70). One whole
+  suite runs at a time machine-wide; a sibling tree held the only slot for
+  over an hour. Do not override it; queue with --timeout 7200.
+
   THE SUITE GATE CAN HOLD A WHOLE SUITE FOR OVER 20 MINUTES (session 68
   /done: about 1291 s waiting, 2 of 2 slots held by other owners). Run
   the gate in the background and poll its output file for EXIT=.
@@ -422,8 +482,8 @@ TRAPS MEASURED - none are hypothetical
   A SUB-AGENT HAS NO Agent TOOL (session 63, refuted 0d shape). Only the
   main session can dispatch planner, builders, verifier and adversaries.
 
-  core.hooksPath DRIFTS TO AN ABSOLUTE PATH (seen sessions 58, 60 and 64:
-  it read an absolute path at session 64 /done). Read it back at
+  core.hooksPath DRIFTS TO AN ABSOLUTE PATH (seen sessions 58, 60, 64, 68
+  and 70: it read an absolute path at session 70 /done start). Read it back at
   session start; python scripts/install_hooks.py restores it.
 
   THE SESSION SCRATCHPAD IS SHARED ACROSS TREES (MAIN 0905, observed).
@@ -509,4 +569,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 70
+SESSION: 71

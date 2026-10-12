@@ -13,63 +13,35 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-10-09. Session 65 residue (kit v14 and MAIN FIX TEMP-1
-  landed, merges e47af71 and afdd733; see `docs/ledger/session-65.md`).**
-  (a) TEMP-1 acceptance read-back owed after a day of normal work: the max
-  count of basetemp dirs per session scratchpad (must be <= 1) and the max
-  scratchpad entry count, then both numbers to MAIN in the next batched
-  note. (b) About 38 local worktree-agent branches are unsurveyed; prune
-  only branches whose tip is merged into main and whose worktree is gone,
-  with `git branch -d` (never `-D`). (c) `tools/moon_sync_responder.py`
-  matches the kit refusal text "budget lock busy" by substring; move it to
-  the kit's structured refusal code once the kit exposes one (sibling of the
-  session 63 item (c) below). (d) The kit v14 inbox bundle directory holds a
-  stray `__pycache__` that fails its provenance check; every kit file
-  matched. Report to MAIN in the next batched note; never patch kit bytes.
-  (e) The kit identity section-4 survey puts main in the history TRIGGER
-  tier (2 ai-or-bot author/committer commits, the root among them); a
-  rewrite runs only on a MAIN ORDER via `ops/fleet_kit/fleet_rewrite.py`
-  (the 2246 entry below, item s4).
-  Session 66: (b) DONE - 41 merged branches deleted with `git branch -d`
-  (44 seen, all merged) and the stale-locked slice B worktree removed;
-  RESIDUE: one deleted branch tracked the remote branch rsc-v8-slice-a,
-  which still exists on origin - decide whether to delete it. (c) PARTIAL
-  - see the session 63 supply-chain entry item (c) below; the code-only
-  switch needs code="budget-lock-busy" on the test stubs in
-  `tests/test_headless_env.py` and `tests/test_responder_uniform_budget.py`,
-  sequenced after the kit v15 merge (E1 also writes
-  `tests/test_headless_env.py`). DONE session 67: commit 5896365, merge 7a11186
-  (Refused.code only, text fallback removed). (d) RETRACTED - the stray `__pycache__`
-  was this tree's own local leftover, sent to the Recycle Bin and read
-  back absent; reported to MAIN in the 2055 REPORT.
-  Session 68: (a) MEASURED - max basetemp dirs per scratchpad 0, max
-  scratchpad entry count 16938 (another tree's), this tree's max 2019;
-  the SEND to MAIN is still owed in the next batched note (outbound cap:
-  batch it). The rsc-v8-slice-a residue DONE - deleted on origin, read
-  back absent with `git ls-remote origin` (see `docs/ledger/session-68.md`).
-  NEW residue: origin also holds claude/new-session-19dmsr (154d5f8, the
-  merged PR #1 head, an ancestor of origin/main); decide whether to delete
-  it after a consumer check.
+- **NEW 2026-10-12. Session 70 residue (see `docs/ledger/session-70.md`).**
+  (a) The gitignored outbound-notes ledger under ops/loop/control has 0
+  rows for 2026-10-12 although the 0900 ANSWER and the 1258 INFORMATION
+  notes to MAIN were both sent, so the kit OutboundCap undercounts this
+  tree's daily notes. Root-cause it (which send path skips the ledger row)
+  and backfill the 2 rows. (b) 0i(2c) residuals: an untracked dot-prefixed
+  pytest ini file in the checkout makes `scripts/prepush_select.py` report
+  SKIP locally; a force-push diff taken against the merge-base can miss
+  engine changes the force-push discarded. (c) Adversary prompts must run
+  destructive git only as `git -C <clone>`, after a
+  `git rev-parse --show-toplevel` check; never chain a `cd` into a mutating
+  git command (the session-70 INCIDENT: a failed chained cd ran
+  `git reset --hard` in the main checkout; the read-back found nothing
+  lost). Put the rule into `.claude/agents/adversary.md` and the
+  orchestrated-run protocol. (d) Confirm the "CS" codename used in ledger
+  commit 960ef34 against the gitignored codename map. (e) The
+  FLEET_SUITE_SLOTS=1 observation went to MAIN in the 1258 INFORMATION
+  note; watch the inbox for a reply. (f) Flaky watch carried from the kit
+  v10 residue entry (archived): the `tests/test_task_liveness.py` int32
+  probe failed once in session 66 (host WMI 0x800700a4 condition); watch
+  for a repeat.
+  (g) CI RED at 960ef34 (ci run 38288918481, Linux, pytest 9.1.1):
+  `tests/test_conftest_git_gate_sites.py::test_control_the_outside_trap_fires_for_an_unconfined_stub_child`
+  - the unconfined stub child did not import the trap conftest above it.
+  The arm came in with the 0h(i) merge cc2d86a; local is pytest 9.0.3
+  against the 9.1.1 pin. Root-cause it and make the non-vacuity arm hold
+  on both hosts (or skip it honestly where it cannot discriminate); fix CI
+  first.
 
-- **NEW 2026-10-08. Session 63 supply-chain residue.** (a)
-  `requirements-dev.txt` was compiled on Windows and lists colorama
-  unconditionally; the first Dependabot Linux recompile drops it, and Windows
-  dev installs would then need `requirements-dev.in`. Fix: recompile with a
-  platform marker or a universal resolver, and update the README and
-  CONTRIBUTING install lines. DONE session 64 (74a8710): colorama kept with
-  a `sys_platform == "win32"` marker while landing Dependabot PR #3.
-  OPEN (session 68): that marker is a hand-edit no test guards; a Linux
-  Dependabot recompile drops it with CI green. Add a guard (or a
-  universal-resolver recompile) before any Dependabot pip PR merges. (b) DONE session 63: the post-push OpenSSF
-  Scorecard read 6.6, up from 4.7 at d6bce85 (`docs/LEDGER.md`). (c) The kit refusals
-  "budget lock unopenable" and "budget write failed" map to
-  KitRunBudgetSpent through a substring match on "budget"; give them a
-  distinct termination. Session 66: BUILT ON A BRANCH, NOT MERGED -
-  worktree branch worktree-agent-a0315350541d2d26b at 3edef74
-  (KitBudgetLockUnopenable and KitBudgetWriteFailed matched by the kit
-  Refused.code, terminations kit-budget-lock-unopenable and
-  kit-budget-write-failed joined TERMINATIONS). DONE: merged 15af0d0 (pushed
-  session 67, see `docs/ledger/session-67.md`).
 - **OPEN 2026-10-09. MAIN 2246 ORDER (REPO-REVIEW), SHA-256 verified
   (7ccc71ff...) - s1-s3 and the s4 Dependabot part DONE session 64 (see
   `docs/ledger/session-64.md`); ANSWER 0019 (HOP: 2) sent. Still OPEN:**
@@ -103,30 +75,11 @@ version. What follows is everything the scaffold deliberately did not do.
   trailer refusals), so the rewrite scope here stays 2 commits. (s1) The hand-off Desktop
   `.lnk` itself is outside the repo root (halt clause a); it read absent on
   the current profile, so nothing to remove.
-- **NEW 2026-10-08. Kit v10 residue (session 62 merge).** (a) DONE session
-  63 (merge 5e4e525): the `orchestrated-run.md` and `ui-audit.md` skills
-  dispatch ONE sub-agent that runs the skill, as `.claude/commands/done.md`
-  does. (b) ANSWERED session 63:
-  yes, the responder's run ledger is retired (ruling 0f, see the amended
-  "/120 COUNTER" entry below and `docs/LEDGER.md`).
-  (c) Kit v10 still fails ruff on its own bytes: fleet_inbox UP017,
-  fleet_done UP017 and UP032, fleet_subagent_first BLE001 - per-file ignored
-  in `ruff.toml`, reported to MAIN in the 1454 ANSWER; drop each ignore when
-  a kit version ships clean. (d) One-off unexplained failure in the session
-  62 build run:
-  `tests/test_conftest_git_gate_sites.py::test_the_run_half_reports_a_module_welded_to_skip_unconditionally`
-  (passed solo and in the re-run); watch for a repeat. REPEATED session
-  68: failed twice, both under a concurrent suite, passed solo 3 of 3;
-  root cause open; the module is now CI_ONLY in
-  `scripts/prepush_select.py`, so local pushes no longer exercise it. (e) The
-  subagent-first hook runs in log mode (gitignored mode file under
-  ops/loop/control; an absent mode file means deny). Switch to deny after 3
-  interactive sessions (62, 63, 64) show no un-routable would-deny row;
-  target 2026-10-11. Session 63 read 0 would-deny rows (621 rows, all
-  sub-thread allow): 2 of 3. Session 64 /done read 0 would-deny and 0
-  main-thread rows (1361 rows, all sub-thread allow): 3 of 3, so the mode
-  file was set to deny at session 64 /done (read back `deny`). DONE
-  session 66: reported in the 2055 REPORT to MAIN.
+  Session 70 (see `docs/ledger/session-70.md`): (2c) the 30 s target MET -
+  `scripts/prepush_select.py` skips the engine suite when no changed path
+  is in its import closure; plumbing push median 35.1 s -> 25.1 s, merge
+  3c61cc8 (round 1 REFUTED on delete/rename, fixed, round 2 NOT REFUTED).
+  RESIDUE in the session 70 residue entry, item (b).
 
 - **E: move follow-through (session 59).** Steps a-c DONE session 60 (see
   `docs/LEDGER.md`): session started at E:, C: copy recycled and replaced by
