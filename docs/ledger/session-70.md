@@ -55,4 +55,4 @@ INBOX-13: triage of the 8 unread inbox entries.
 ## OBSERVATION - machine-wide suite slots
 
 - User env FLEET_SUITE_SLOTS=1 overrides the kit default of 2 machine-wide.
-- A Clockspeed run held the only slot for over an hour; an engine-suite run was reaped for low memory.
+- A CS (sibling tree, by codename) run held the only slot for over an hour; an engine-suite run was reaped for low memory.
