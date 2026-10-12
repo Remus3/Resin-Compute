@@ -2,6 +2,17 @@
 
 INBOX-13: triage of the 8 unread inbox entries.
 
+## 2026-10-12 - /done paperwork push
+
+- Paperwork commit bac5edc pushed through fleet_gitlock (pre-push OK,
+  engine suite skipped outside its closure, 315 passed 1 skipped in the
+  selection). Read back: `git ls-remote origin refs/heads/main` =
+  bac5edc7d1aa0b272cd7989a3d1845596835063a.
+- CI at bac5edc: ci 38289666845 and docs-guards 38289666824 were
+  in_progress when this entry was written; their result is NOT recorded
+  here - read them with `gh run view` next session (ci is expected to
+  carry the item 0v failure until it is fixed).
+
 ## 2026-10-12 - /done gate run at 960ef34 (Python 3.14; CI is 3.11)
 
 - Measured 2026-10-12 by the /done ritual, whole suites through
