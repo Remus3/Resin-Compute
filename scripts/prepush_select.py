@@ -23,11 +23,28 @@ THE MAPPING, deterministic and bounded:
      2246 ORDER s2 item 2c, the 30 s target); steps 3 and 6 still run them.
   8. Nothing selected -> NONE.
 
-OUTPUT, three lines on stdout, read by the hook:
+THE ENGINE SUITE (0i 2c, the 30 s target; `engine_decision`). Profiled
+2026-10-12 on this host (Python 3.14), a one-file plumbing push spent 24 s in
+the application selection and 9.4 s in `pytest agents/pity_engine`, which no
+plumbing file can reach. The engine suite's verdict is a function of the files
+it imports (`engine_closure`: an AST walk from every `.py` under
+`agents/pity_engine/` plus the root `conftest.py`, nested and try-imports
+included), the pytest configuration, and the interpreter. So it is SKIPPED
+locally only when no changed path is: under `agents/`; in the closure; a
+non-Python file beside a closure module; a root-level module or a path whose
+top-level name shadows any module the closure imports; a FULL trigger; a
+root pytest config file (ENGINE_CONFIG_FILES); a deleted or renamed-away
+`.py` (the diff runs with --no-renames so both halves are listed). A
+last-failed engine test, no base, more than MAX_CHANGED paths, or any walker
+error -> RUN. CI's "Engine suite" step (.github/workflows/ci.yml) runs it on
+every push and pull request regardless, and push runs are never cancelled.
+
+OUTPUT, four lines on stdout, read by the hook:
 
     <FULL|SELECT|NONE>
     <one-line reason>
     <comma-joined module paths, empty unless SELECT>
+    <RUN|SKIP> <one-line reason>     (the engine suite; only SKIP skips)
 
 `--ci-mark` prints one line instead: the `-m` expression ci.yml's push and
 pull-request jobs pass to the application suite - "not plumbing", or empty
@@ -39,6 +56,8 @@ Any internal error prints FULL with the error's type as the reason and exits
 from __future__ import annotations
 
 import argparse
+import ast
+import dataclasses
 import importlib.util
 import json
 import subprocess
@@ -109,12 +128,28 @@ CI_ONLY: frozenset[str] = frozenset(
 
 _ZERO_SHA = "0" * 40
 
+#: The engine-suite verdicts on the fourth output line. The hook skips the
+#: engine suite on the exact first word SKIP and runs it on anything else.
+ENGINE_RUN = "RUN"
+ENGINE_SKIP = "SKIP"
+
+#: The engine suite's target, and the root under which every file pytest
+#: loads for it (package inits, conftests, the tests) lives.
+ENGINE_SUITE = "agents/pity_engine"
+ENGINE_PREFIX = "agents/"
+
+#: Root files pytest may read as its configuration besides pytest.ini (a
+#: FULL trigger). Any change to one, including creating it, runs the engine.
+ENGINE_CONFIG_FILES = frozenset({"tox.ini", "pyproject.toml", "setup.cfg", ".pytest.ini"})
+
 
 @dataclass(frozen=True)
 class Selection:
     mode: str
     reason: str
     modules: tuple[str, ...] = ()
+    engine: str = ENGINE_RUN
+    engine_reason: str = ""
 
 
 def _is_test_module(path: str) -> bool:
@@ -219,26 +254,170 @@ def ci_mark_for(changed: Sequence[str]) -> str:
     return "not plumbing"
 
 
+def _module_files(root: Path, dotted: str) -> list[str]:
+    """Repo files executed by importing `dotted`: each package `__init__.py` on
+    the way down plus the module itself. Empty when it is not in the repo."""
+    parts = [p for p in dotted.split(".") if p]
+    found: list[str] = []
+    for i in range(1, len(parts) + 1):
+        rel = "/".join(parts[:i])
+        if (root / rel / "__init__.py").is_file():
+            found.append(f"{rel}/__init__.py")
+        elif (root / f"{rel}.py").is_file():
+            found.append(f"{rel}.py")
+            break
+        elif not (root / rel).is_dir():
+            break
+        # else: a namespace package (a directory with no __init__.py, as
+        # `ops/loop/` is) - nothing executes, keep descending.
+    return found
+
+
+def _imports_of(root: Path, rel: str) -> tuple[set[str], set[str]]:
+    """(repo files `rel` imports, top-level names it imports). Every Import and
+    ImportFrom node counts, nested and guarded ones included. Raises on a file
+    that does not parse, which the caller turns into RUN."""
+    tree = ast.parse((root / rel).read_bytes(), filename=rel)
+    # Both a module and a package `__init__.py` resolve relative imports
+    # against the directory holding them.
+    package = PurePosixPath(rel).parent.parts
+    files: set[str] = set()
+    tops: set[str] = set()
+
+    def absolute(dotted: str) -> None:
+        resolved = _module_files(root, dotted)
+        files.update(resolved)
+        top = dotted.split(".", 1)[0]
+        if not resolved and not (root / top).is_dir():
+            tops.add(top)  # stdlib or third party: a repo file could shadow it
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                absolute(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                anchor = list(package[: len(package) - (node.level - 1)])
+                base = ".".join([*anchor, *([node.module] if node.module else [])])
+                files.update(_module_files(root, base))
+            else:
+                base = node.module or ""
+                absolute(base)
+            for alias in node.names:
+                files.update(_module_files(root, f"{base}.{alias.name}" if base else alias.name))
+    return files, tops
+
+
+def engine_closure(root: Path = REPO_ROOT) -> tuple[frozenset[str], frozenset[str]]:
+    """(repo files the engine suite imports, external top-level names it imports).
+
+    The external names are the stdlib and third-party ones - those a new repo
+    file of the same name at the root would shadow on sys.path[0].
+
+    Seeds: every `.py` under ENGINE_SUITE, its ancestor package inits and the
+    root `conftest.py`. Walked to
+    a fixed point over the repo's own files; stdlib and third-party names are
+    collected but not followed.
+    """
+    seeds = {"conftest.py"} if (root / "conftest.py").is_file() else set()
+    # pytest imports every ancestor package of a test module.
+    seeds |= set(_module_files(root, ENGINE_SUITE.replace("/", ".")))
+    seeds |= {
+        p.relative_to(root).as_posix()
+        for p in (root / ENGINE_SUITE).rglob("*.py")
+        if "__pycache__" not in p.parts
+    }
+    seen: set[str] = set()
+    tops: set[str] = set()
+    todo = sorted(seeds)
+    while todo:
+        rel = todo.pop()
+        if rel in seen:
+            continue
+        seen.add(rel)
+        files, names = _imports_of(root, rel)
+        tops |= names
+        todo.extend(f for f in files if f not in seen)
+    return frozenset(seen), frozenset(tops)
+
+
+def engine_decision(
+    changed: Sequence[str],
+    *,
+    closure: frozenset[str],
+    top_names: frozenset[str],
+    last_failed: Iterable[str],
+    deleted: Iterable[str] = (),
+) -> tuple[str, str]:
+    """RUN or SKIP for the local engine suite, with a one-line reason.
+
+    `deleted` are changed paths absent from the working tree. The closure is
+    walked over the working tree, so a deleted (or, with renames off, the old
+    half of a renamed) engine dependency is invisible to it: any deleted
+    `.py` therefore runs the engine (adversary round 1, 2026-10-12).
+    """
+    changed = sorted(set(changed))
+    gone = sorted(d for d in set(deleted) if d.endswith(".py"))
+    if len(changed) > MAX_CHANGED:
+        return ENGINE_RUN, f"{len(changed)} changed paths exceed MAX_CHANGED={MAX_CHANGED}"
+    failed = sorted(m for m in last_failed if m.startswith(ENGINE_PREFIX))
+    if failed:
+        return ENGINE_RUN, f"last-failed engine test(s): {failed[0]}"
+    # The repo root holds the root conftest, but its other files (docs, the
+    # hand-off) are not data the engine reads; the root-level cases that do
+    # matter are the FULL triggers and root `.py` files, handled below.
+    closure_dirs = {str(PurePosixPath(f).parent) for f in closure} - {"."}
+    for c in changed:
+        p = PurePosixPath(c)
+        top = p.parts[0].removesuffix(".py") if p.parts else ""
+        if c in FULL_TRIGGERS:
+            why = "a FULL trigger"
+        elif c in ENGINE_CONFIG_FILES:
+            why = "a root pytest configuration file"
+        elif c in gone:
+            why = "a deleted or renamed-away Python file"
+        elif c.startswith(ENGINE_PREFIX):
+            why = f"under {ENGINE_PREFIX}"
+        elif c in closure:
+            why = "in the engine's import closure"
+        elif len(p.parts) == 1 and p.suffix == ".py":
+            why = "a root-level module on sys.path[0]"
+        elif top in top_names:
+            why = f"it shadows the imported name {top!r}"
+        elif p.suffix != ".py" and str(p.parent) in closure_dirs:
+            why = "a data file beside an engine-closure module"
+        else:
+            continue
+        return ENGINE_RUN, f"{c} is {why}"
+    return (
+        ENGINE_SKIP,
+        f"no changed path reaches the engine closure ({len(closure)} files); CI runs it",
+    )
+
+
 def render(selection: Selection) -> str:
-    return "\n".join([selection.mode, selection.reason, ",".join(selection.modules)])
+    engine = f"{selection.engine} {selection.engine_reason}".rstrip()
+    return "\n".join(
+        [selection.mode, selection.reason, ",".join(selection.modules), engine]
+    )
 
 
-def last_failed_modules(cache_file: Path) -> set[str]:
-    """`tests/` modules named in pytest's lastfailed cache; empty on any defect."""
+def _last_failed_keys(cache_file: Path) -> set[str]:
+    """Module paths named in pytest's lastfailed cache; empty on any defect."""
     try:
         data = json.loads(cache_file.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return set()
     if not isinstance(data, dict):
         return set()
-    out = set()
-    for key in data:
-        if not isinstance(key, str):
-            continue
-        module = key.split("::", 1)[0].replace("\\", "/")
-        if _is_test_module(module):
-            out.add(module)
-    return out
+    return {
+        key.split("::", 1)[0].replace("\\", "/") for key in data if isinstance(key, str)
+    }
+
+
+def last_failed_modules(cache_file: Path) -> set[str]:
+    """`tests/` modules named in pytest's lastfailed cache; empty on any defect."""
+    return {m for m in _last_failed_keys(cache_file) if _is_test_module(m)}
 
 
 def load_plumbing(root: Path = REPO_ROOT) -> frozenset[str]:
@@ -292,8 +471,10 @@ def _changed(root: Path, base: str | None) -> list[str] | None:
     resolved = _resolve_base(root, base)
     if resolved is None:
         return None
-    pushed = _git(root, "diff", "--name-only", f"{resolved}...HEAD")
-    local = _git(root, "diff", "--name-only", "HEAD")
+    # --no-renames: a rename must list its OLD path too, or a renamed-away
+    # module disappears from every rule (adversary round 1, 2026-10-12).
+    pushed = _git(root, "diff", "--name-only", "--no-renames", f"{resolved}...HEAD")
+    local = _git(root, "diff", "--name-only", "--no-renames", "HEAD")
     if pushed is None or local is None:
         return None
     return [line for line in (pushed + local).splitlines() if line.strip()]
@@ -302,15 +483,32 @@ def _changed(root: Path, base: str | None) -> list[str] | None:
 def compute(root: Path, base: str | None) -> Selection:
     changed = _changed(root, base)
     if changed is None:
-        return Selection(FULL, "no upstream or base commit to diff against, or git diff failed")
-    return select(
+        return Selection(
+            FULL,
+            "no upstream or base commit to diff against, or git diff failed",
+            engine_reason="no base to diff against",
+        )
+    failed_keys = _last_failed_keys(root / ".pytest_cache" / "v" / "cache" / "lastfailed")
+    selection = select(
         changed,
         grep=_git_grep(root),
         exists=lambda rel: (root / rel).is_file(),
         plumbing=load_plumbing(root),
-        last_failed=last_failed_modules(root / ".pytest_cache" / "v" / "cache" / "lastfailed"),
+        last_failed={m for m in failed_keys if _is_test_module(m)},
         ci_only=CI_ONLY,
     )
+    try:
+        closure, top_names = engine_closure(root)
+        engine, engine_reason = engine_decision(
+            changed,
+            closure=closure,
+            top_names=top_names,
+            last_failed=failed_keys,
+            deleted=[c for c in changed if not (root / c).exists()],
+        )
+    except Exception as exc:  # noqa: BLE001 - any walker defect must degrade to RUN
+        engine, engine_reason = ENGINE_RUN, f"engine closure error: {type(exc).__name__}"
+    return dataclasses.replace(selection, engine=engine, engine_reason=engine_reason)
 
 
 def _emit(text: str) -> None:
