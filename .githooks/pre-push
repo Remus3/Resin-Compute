@@ -152,10 +152,12 @@ if TEST_PY="$(resin_pick_python pytest)"; then
     MODE=""
     REASON=""
     MODULES=""
+    ENGINE=""
     {
         read -r MODE || true
         read -r REASON || true
         read -r MODULES || true
+        read -r ENGINE || true
     } <<EOF
 $SEL
 EOF
@@ -177,7 +179,22 @@ EOF
         }
     fi
     unset RSC_PREPUSH_SELECT
-    "$TEST_PY" -m pytest -rs agents/pity_engine -m "not slow" || exit 1
+    # THE ENGINE SUITE RUNS UNLESS THE SELECTOR SAYS, IN SO MANY WORDS, SKIP
+    # (0i 2c, the 30 s target). Profiled 2026-10-12, this host, Python 3.14:
+    # a one-file plumbing push spent 9.4 s of about 35 s here, grading code
+    # the push could not reach. The fourth selector line is `SKIP <reason>`
+    # only when no changed path touches the engine suite's import closure,
+    # `agents/`, a FULL trigger or a shadowing name (scripts/prepush_select.py
+    # engine_decision). An empty, missing, lowercase or misspelt line runs
+    # the suite: the token must be exactly SKIP. CI's "Engine suite" step in
+    # .github/workflows/ci.yml runs the engine suite on every push and pull
+    # request whatever this hook decided, and push runs are never cancelled.
+    case "$ENGINE" in
+        "SKIP "*|SKIP)
+            echo "pre-push: engine suite SKIPPED - ${ENGINE#SKIP } (CI runs it)" ;;
+        *)
+            "$TEST_PY" -m pytest -rs agents/pity_engine -m "not slow" || exit 1 ;;
+    esac
 else
     echo "pre-push WARNING: pytest not importable - the suites did NOT run." >&2
     echo "  tried: $(resin_python_candidates)" >&2
