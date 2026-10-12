@@ -395,9 +395,13 @@ def test_an_absent_or_corrupt_cache_contributes_nothing(tmp_path: Path, body: st
 # ---------------------------------------------------------------------------
 
 
-def test_render_is_three_lines_mode_reason_modules():
+def test_render_is_four_lines_mode_reason_modules_engine():
     out = sel.render(sel.Selection(sel.SELECT, "why", ("tests/test_a.py", "tests/test_b.py")))
-    assert out.split("\n") == [sel.SELECT, "why", "tests/test_a.py,tests/test_b.py"]
+    assert out.split("\n") == [
+        sel.SELECT, "why", "tests/test_a.py,tests/test_b.py", sel.ENGINE_RUN
+    ]
+    skipped = sel.Selection(sel.NONE, "w", (), sel.ENGINE_SKIP, "no path reaches it")
+    assert sel.render(skipped).split("\n")[3] == f"{sel.ENGINE_SKIP} no path reaches it"
 
 
 def test_a_path_with_whitespace_or_a_comma_forces_full():
@@ -439,7 +443,12 @@ def _cli(repo: Path, *args: str) -> list[str]:
         [sys.executable, str(REPO_ROOT / "scripts" / "prepush_select.py"), "--root", str(repo), *args],
         capture_output=True, text=True, check=True, env=env,
     ).stdout
-    return out.removesuffix("\n").split("\n")
+    return out.removesuffix("\n").split("\n")[:3]
+
+
+def _cli_lines(repo: Path, *args: str) -> list[str]:
+    """Every line the CLI printed, the engine line included."""
+    return _cli_raw(repo, *args).removesuffix("\n").split("\n")
 
 
 @pytest.fixture()
@@ -532,3 +541,300 @@ def test_cli_ci_mark_with_a_plumbing_diff_runs_everything(repo: Path):
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "plumbing")
     assert _cli_raw(repo, "--ci-mark", "--base", base) == "\n"
+
+
+# ---------------------------------------------------------------------------
+# The engine suite runs only when the push can reach it (0i 2c, the 30 s
+# target). Profiled 2026-10-12 on this host (Python 3.14), a one-file plumbing
+# push: app selection 24.2 s, engine suite 9.4 s, everything else under 1 s.
+# The engine suite is a pure function of its own import closure plus the
+# pytest configuration, so a push that changes neither cannot change its
+# verdict. CI (.github/workflows/ci.yml "Engine suite") still runs it on
+# every push.
+# ---------------------------------------------------------------------------
+
+_CLOSURE = frozenset(
+    {
+        "agents/__init__.py",
+        "agents/pity_engine/__init__.py",
+        "agents/pity_engine/markov.py",
+        "conftest.py",
+        "core/__init__.py",
+        "core/types.py",
+        "ops/__init__.py",
+        "ops/health.py",
+    }
+)
+_TOP_NAMES = frozenset({"json", "pytest"})  # external names only
+
+
+def _engine(changed, last_failed=()):
+    return sel.engine_decision(
+        changed, closure=_CLOSURE, top_names=_TOP_NAMES, last_failed=last_failed
+    )
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        ["tools/precommit_gate.py"],
+        ["docs/LEDGER.md"],
+        ["tests/test_prepush_select.py"],
+        ["headless/runner.py", "scripts/watch_inbox.py", ".github/workflows/ci.yml"],
+        ["engines/scheduler.py"],
+        ["core/resin.py"],  # a module beside the closure, never imported by it
+        ["ops/fleet_kit/fleet_claims.py"],  # an in-repo package, not a shadow
+        [],
+    ],
+)
+def test_a_push_outside_the_engine_closure_skips_the_engine_suite(changed):
+    verdict, reason = _engine(changed)
+    assert verdict == sel.ENGINE_SKIP, reason
+    assert "CI" in reason
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "agents/pity_engine/markov.py",  # in the closure
+        "agents/pity_engine/CHANGELOG.md",  # anything under agents/
+        "agents/conftest.py",  # a conftest pytest loads on the way down
+        "agents/pity_engine/tests/test_new.py",  # a new engine test
+        "core/types.py",  # imported by the engine
+        "ops/health.py",  # reached only through the root conftest's try-import
+        "core/fixture.json",  # a data file beside a closure module
+        "conftest.py",  # root conftest, FULL trigger and closure
+        "pytest.ini",  # pytest configuration
+        "requirements-dev.txt",  # the pytest that runs it
+        "sitecustomize.py",  # any root-level module is on sys.path[0]
+        "json.py",  # would shadow a module the closure imports
+        "pytest/__init__.py",  # same, as a package
+    ],
+)
+def test_a_push_reaching_the_engine_runs_it(path):
+    verdict, reason = _engine(["tools/precommit_gate.py", path])
+    assert verdict == sel.ENGINE_RUN, (path, reason)
+
+
+def test_a_huge_diff_runs_the_engine_suite():
+    verdict, _ = _engine([f"tools/f{i}.py" for i in range(sel.MAX_CHANGED + 1)])
+    assert verdict == sel.ENGINE_RUN
+
+
+def test_a_last_failed_engine_test_runs_the_engine_suite():
+    verdict, reason = _engine(
+        ["tools/precommit_gate.py"],
+        last_failed=["agents/pity_engine/tests/test_markov.py"],
+    )
+    assert verdict == sel.ENGINE_RUN
+    assert "last-failed" in reason
+
+
+def test_the_real_engine_closure_holds_its_imports_and_spares_plumbing():
+    """Non-vacuity on the shipped tree: the walker sees nested and try-imports
+    (ops/health.py is reached only through the root conftest's try-import),
+    and a plumbing file the engine never imports stays outside."""
+    closure, top_names = sel.engine_closure(REPO_ROOT)
+    for must in (
+        "agents/pity_engine/__init__.py",
+        "agents/pity_engine/markov.py",
+        "agents/pity_engine/tests/test_markov.py",
+        "core/types.py",
+        "core/ports.py",
+        "conftest.py",
+        "ops/health.py",
+        "ops/loop/slots.py",
+    ):
+        assert must in closure, must
+    for spared in ("tools/precommit_gate.py", "headless/runner.py", "scripts/prepush_select.py"):
+        assert spared not in closure, spared
+    assert {"pytest", "json"} <= top_names
+    assert not {"core", "ops", "agents"} & top_names, "repo packages are not shadows"
+
+
+def test_the_closure_walker_follows_relative_and_from_imports(tmp_path: Path):
+    root = tmp_path / "r"
+    for rel, body in {
+        "conftest.py": "import pkg\n",
+        "pkg/__init__.py": "from . import a\n",
+        "pkg/a.py": "from .sub import b\ndef f():\n    from other import thing\n",
+        "pkg/sub/__init__.py": "",
+        "pkg/sub/b.py": "import json\n",
+        "other.py": "thing = 1\n",
+        "unrelated.py": "import os\n",
+        "agents/pity_engine/__init__.py": "import pkg.a\n",
+        "agents/__init__.py": "",
+    }.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(body, encoding="ascii", newline="\n")
+    closure, top_names = sel.engine_closure(root)
+    assert {
+        "conftest.py", "pkg/__init__.py", "pkg/a.py", "pkg/sub/__init__.py",
+        "pkg/sub/b.py", "other.py", "agents/__init__.py", "agents/pity_engine/__init__.py",
+    } <= closure
+    assert "unrelated.py" not in closure
+    assert "json" in top_names
+
+
+@pytest.fixture()
+def repo_with_engine(repo: Path) -> Path:
+    (repo / "agents" / "pity_engine").mkdir(parents=True)
+    (repo / "agents" / "__init__.py").write_text("", encoding="ascii", newline="\n")
+    (repo / "agents" / "pity_engine" / "__init__.py").write_text(
+        "from core.thing import X\n", encoding="ascii", newline="\n"
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "engine")
+    return repo
+
+
+def _commit_tools_change(repo: Path) -> None:
+    (repo / "tools").mkdir()
+    (repo / "tools" / "t.py").write_text("Z = 1\n", encoding="ascii", newline="\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "plumbing")
+
+
+def test_cli_skips_the_engine_for_a_push_outside_its_closure(repo_with_engine: Path):
+    base = _git(repo_with_engine, "rev-parse", "HEAD").strip()
+    _commit_tools_change(repo_with_engine)
+    lines = _cli_lines(repo_with_engine, "--base", base)
+    assert lines[3].startswith(f"{sel.ENGINE_SKIP} "), lines
+
+
+def test_an_unparseable_closure_file_runs_the_engine_suite(repo_with_engine: Path):
+    """The pair of the arm above: same tools/ push, but a closure module the
+    walker cannot parse. The verdict must fall back to RUN, never SKIP."""
+    (repo_with_engine / "core" / "thing.py").write_text("def (\n", encoding="ascii", newline="\n")
+    _git(repo_with_engine, "commit", "-q", "-am", "broken")
+    base = _git(repo_with_engine, "rev-parse", "HEAD").strip()
+    _commit_tools_change(repo_with_engine)
+    lines = _cli_lines(repo_with_engine, "--base", base)
+    assert lines[3].startswith(sel.ENGINE_RUN), lines
+
+
+def test_cli_runs_the_engine_when_its_import_changed(repo_with_engine: Path):
+    base = _git(repo_with_engine, "rev-parse", "HEAD").strip()
+    (repo_with_engine / "core" / "thing.py").write_text("X = 9\n", encoding="ascii", newline="\n")
+    _git(repo_with_engine, "commit", "-q", "-am", "product")
+    lines = _cli_lines(repo_with_engine, "--base", base)
+    assert lines[3].startswith(sel.ENGINE_RUN), lines
+
+
+def test_cli_runs_the_engine_without_a_base(repo_with_engine: Path):
+    assert _cli_lines(repo_with_engine)[3].startswith(sel.ENGINE_RUN)
+
+
+# ---------------------------------------------------------------------------
+# The hook honours the engine line, and ONLY a literal SKIP token skips
+# ---------------------------------------------------------------------------
+
+_HOOK_STUB = (
+    "#!/bin/sh\n"
+    "# Stub interpreter: claims every import, prints the canned selection,\n"
+    "# logs every pytest invocation and runs nothing.\n"
+    'case "$*" in\n'
+    '  *prepush_select.py*) cat "$RSC_TEST_CANNED"; exit 0 ;;\n'
+    '  *"-m pytest"*) printf \'%s\\n\' "$*" >> "$RSC_TEST_LOG"; exit 0 ;;\n'
+    "esac\n"
+    "exit 0\n"
+)
+
+
+def _hook_pytest_calls(tmp_path: Path, canned: str) -> list[str]:
+    from tests.test_hook_interpreter import _run_prepush
+
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    for name in ("python3", "python", "py"):
+        (stubs / name).write_text(_HOOK_STUB, encoding="ascii", newline="\n")
+        (stubs / name).chmod(0o755)
+    canned_file = tmp_path / "canned.txt"
+    canned_file.write_text(canned, encoding="ascii", newline="\n")
+    log = tmp_path / "pytest.log"
+    log.write_text("", encoding="ascii", newline="\n")
+    result = _run_prepush(
+        stubs,
+        env={"RSC_TEST_CANNED": canned_file.as_posix(), "RSC_TEST_LOG": log.as_posix()},
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "pre-push: OK" in result.stdout, result.stdout
+    return log.read_text(encoding="ascii").splitlines()
+
+
+def test_the_hook_skips_the_engine_suite_on_a_skip_line(tmp_path: Path):
+    calls = _hook_pytest_calls(tmp_path, "FULL\nwhy\n\nSKIP no path reaches it\n")
+    assert [c for c in calls if " tests " in f" {c} "], (
+        "non-vacuity: the application suite must still have been invoked", calls
+    )
+    assert not [c for c in calls if "agents/pity_engine" in c], calls
+
+
+@pytest.mark.parametrize(
+    "canned",
+    [
+        "FULL\nwhy\n\nRUN core/types.py changed\n",
+        "FULL\nwhy\n\n",  # an older selector: no engine line
+        "",  # the selector printed nothing
+        "FULL\nwhy\n\nskip lowercase is not the token\n",
+        "FULL\nwhy\n\nSKIPPED near miss\n",
+    ],
+)
+def test_the_hook_runs_the_engine_suite_unless_told_skip(tmp_path: Path, canned: str):
+    calls = _hook_pytest_calls(tmp_path, canned)
+    assert [c for c in calls if "agents/pity_engine" in c], calls
+    assert [c for c in calls if " tests " in f" {c} "], calls
+
+
+# ---------------------------------------------------------------------------
+# Adversary round 1 (2026-10-12): a deleted or renamed engine dependency, and
+# a root pytest config file pytest would read, must RUN the engine suite.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("config", ["tox.ini", "pyproject.toml", "setup.cfg", ".pytest.ini"])
+def test_a_root_pytest_config_file_runs_the_engine_suite(config):
+    verdict, reason = _engine(["tools/precommit_gate.py", config])
+    assert verdict == sel.ENGINE_RUN, (config, reason)
+
+
+def test_a_deleted_python_file_runs_the_engine_suite():
+    verdict, reason = sel.engine_decision(
+        ["tools/precommit_gate.py", "core/gone.py"],
+        closure=_CLOSURE, top_names=_TOP_NAMES, last_failed=(), deleted=["core/gone.py"],
+    )
+    assert verdict == sel.ENGINE_RUN, reason
+    assert "deleted" in reason
+
+
+def test_a_deleted_non_python_file_outside_the_closure_still_skips():
+    """The legitimate neighbour: deleting a doc must not cost the engine run."""
+    verdict, reason = sel.engine_decision(
+        ["docs/old.md"],
+        closure=_CLOSURE, top_names=_TOP_NAMES, last_failed=(), deleted=["docs/old.md"],
+    )
+    assert verdict == sel.ENGINE_SKIP, reason
+
+
+def test_cli_runs_the_engine_when_its_import_is_deleted(repo_with_engine: Path):
+    base = _git(repo_with_engine, "rev-parse", "HEAD").strip()
+    _git(repo_with_engine, "rm", "-q", "core/thing.py")
+    _git(repo_with_engine, "commit", "-q", "-m", "delete")
+    lines = _cli_lines(repo_with_engine, "--base", base)
+    assert lines[3].startswith(sel.ENGINE_RUN), lines
+
+
+def test_cli_runs_the_engine_when_its_import_is_renamed(repo_with_engine: Path):
+    base = _git(repo_with_engine, "rev-parse", "HEAD").strip()
+    _git(repo_with_engine, "mv", "core/thing.py", "core/thing_renamed.py")
+    _git(repo_with_engine, "commit", "-q", "-m", "rename")
+    lines = _cli_lines(repo_with_engine, "--base", base)
+    assert lines[3].startswith(sel.ENGINE_RUN), lines
+
+
+def test_cli_runs_the_engine_when_its_import_is_deleted_uncommitted(repo_with_engine: Path):
+    """The hook also grades working-tree edits: an unstaged deletion counts."""
+    base = _git(repo_with_engine, "rev-parse", "HEAD").strip()
+    (repo_with_engine / "core" / "thing.py").unlink()
+    lines = _cli_lines(repo_with_engine, "--base", base)
+    assert lines[3].startswith(sel.ENGINE_RUN), lines
