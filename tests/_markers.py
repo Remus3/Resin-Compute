@@ -179,6 +179,7 @@ DOCS_GREP_EXEMPT: frozenset[str] = frozenset(
         "tests/test_responder_spawn_census.py",
         "tests/test_responder_spawn_cwd.py",
         "tests/test_responder_uniform_budget.py",
+        "tests/test_send_note.py",
         "tests/test_session_hooks.py",
         "tests/test_shell_contract.py",
         "tests/test_stop_claim_gate.py",
