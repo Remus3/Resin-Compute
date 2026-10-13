@@ -152,9 +152,12 @@ def test_an_existing_recipient_copy_is_never_overwritten_and_no_row_is_written(s
     (world["main_inbox"] / NOTE_1258).write_bytes(b"older mail\n")
     result = _send(sn, world, _draft(world, NOTE_1258))
     assert not result["ok"]
-    assert result["reason"] == "undelivered"
+    assert result["reason"] == "name-taken"
     assert (world["main_inbox"] / NOTE_1258).read_bytes() == b"older mail\n"
+    # Refused before any write: no lone own copy for the audit to count.
+    assert not (world["own_inbox"] / NOTE_1258).exists()
     assert _rows(world) == []
+    assert sn.audit(world["own_inbox"], world["own"]) == []
 
 
 @pytest.mark.parametrize(
@@ -163,12 +166,140 @@ def test_an_existing_recipient_copy_is_never_overwritten_and_no_row_is_written(s
         ("2026-10-12-1300-from-LW-ANSWER-to-MAIN-x.md", "bad-name"),
         ("2026-10-12-1300-from-RSC-auto-reply-to-x.md", "bad-name"),
         ("2026-10-12-1300-from-RSC-ANSWER-to-ZZ-x.md", "unknown-recipient"),
+        ("2026-10-12-1300-from-RSC-ANSWER-to-LL-x.md", "retired-recipient"),
+        ("2026-10-12-1300-from-RSC-ANSWER-to-RSC-x.md", "self-recipient"),
     ],
 )
 def test_a_note_the_tool_cannot_attribute_is_refused(sn, world, name, reason):
+    # The roster HOLDS LL and RSC: the refusal is the responder's rule, not a
+    # missing roster row.
+    world["roots"]["LL"] = world["roots"]["MAIN"]
+    world["roots"]["RSC"] = world["own"]
     result = _send(sn, world, _draft(world, name))
     assert (result["ok"], result["reason"]) == (False, reason)
     assert _rows(world) == []
+    assert not any(world["main_inbox"].iterdir())
+
+
+def test_the_retired_codes_are_the_responders_own(sn):
+    assert "LL" in sn.responder.RETIRED
+    assert sn.SELF_CODE == sn.responder.SELF_CODE == "RSC"
+
+
+# ---------------------------------------------------------------- hyphenated classes (round 1, b)
+
+
+@pytest.mark.parametrize(
+    "cls",
+    ["POLL-ANSWER", "CORRECTION-ACCEPTED", "NO-REPLY", "ANSWER", "INFORMATION", "REPORT", "ORDER"],
+)
+def test_hyphenated_and_plain_classes_parse_as_the_kit_classifies_them(sn, cls):
+    name = f"2026-10-12-1300-from-RSC-{cls}-to-MAIN-x.md"
+    assert sn.parse_name(name) == (sn.inbox_kit.note_class(name), "MAIN")
+    assert sn.parse_name(name)[0] == cls
+
+
+def test_a_hyphenated_exempt_class_is_exempt_by_the_kits_rule(sn, world):
+    """FIX-ACK is not a kit ACK class, so the kit classes it FIX - exempt."""
+    name = "2026-10-12-1300-from-RSC-FIX-ACK-to-MAIN-x.md"
+    assert sn.parse_name(name) == ("FIX", "MAIN")
+    today = time.strftime("%Y-%m-%d")
+    _seed_ledger(world, [{"ts": "x", "day": today, "note": f"n{i}.md", "cls": "ANSWER", "to": "MAIN", "parts": 1}
+                         for i in range(6)])
+    result = _send(sn, world, _draft(world, name))
+    assert result["ok"], result
+    assert _rows(world)[-1]["cls"] == "FIX"
+
+
+def test_a_hyphenated_class_note_is_sent_and_audited(sn, world):
+    name = "2026-10-12-1300-from-RSC-POLL-ANSWER-to-MAIN-x.md"
+    _plant(world, name, time.time())
+    assert [r["cls"] for r in sn.audit(world["own_inbox"], world["own"])] == ["POLL-ANSWER"]
+
+
+# ---------------------------------------------------------------- draft gate (round 1, d)
+
+
+def test_the_responders_draft_gate_refuses_a_traceback_and_nothing_is_written(sn, world):
+    body = BODY + "\nTraceback (most recent call last):\n  File x\n"
+    result = _send(sn, world, _draft(world, NOTE_1258, body))
+    assert (result["ok"], result["reason"]) == (False, "invalid-draft")
+    assert result["reasons"]
+    assert not any(world["main_inbox"].iterdir()) and not any(world["own_inbox"].iterdir())
+    assert _rows(world) == []
+
+
+def test_the_draft_gate_passes_an_ordinary_note_with_hashes(sn):
+    """Neighbour guard: a real note carries sha256 hex and commit ids and has
+    no responder tag; the gate must pass it."""
+    text = BODY + "\nsha256 6daf69451a0de0d920d731d8eb8a22a3894133540e281bf6391cd8327ee0c2c6, commit 6f61e0d.\n"
+    assert sn.draft_reasons(text) == []
+    assert sn.responder.RESPONDER_TAG not in text
+
+
+# ---------------------------------------------------------------- partial failure (round 1, a)
+
+
+def _kill_on_call(monkeypatch, sn, n: int):
+    real = sn.atomic_write_text
+    calls = {"n": 0}
+
+    def flaky(path, text):
+        calls["n"] += 1
+        if calls["n"] == n:
+            raise KeyboardInterrupt("killed between copies")
+        return real(path, text)
+
+    monkeypatch.setattr(sn, "atomic_write_text", flaky)
+    return real
+
+
+def test_a_send_killed_between_the_copies_is_seen_by_the_audit_and_recovered_by_a_retry(sn, world, monkeypatch):
+    draft = _draft(world, NOTE_0900)
+    real = _kill_on_call(monkeypatch, sn, 2)
+    with pytest.raises(KeyboardInterrupt):
+        _send(sn, world, draft)
+    monkeypatch.setattr(sn, "atomic_write_text", real)
+    # The audit sees the interrupted send (the own copy landed first).
+    assert [r["note"] for r in sn.audit(world["own_inbox"], world["own"])] == [NOTE_0900]
+    result = _send(sn, world, draft)
+    assert result["ok"], result
+    assert (result["reached"], result["of"]) == (2, 2)
+    assert [r["note"] for r in _rows(world)] == [NOTE_0900]
+    assert sn.audit(world["own_inbox"], world["own"]) == []
+    want = hashlib.sha256(draft.read_bytes()).hexdigest()
+    assert hashlib.sha256((world["main_inbox"] / NOTE_0900).read_bytes()).hexdigest() == want
+
+
+def test_a_send_killed_after_both_copies_is_recorded_once_by_a_retry(sn, world, monkeypatch):
+    draft = _draft(world, NOTE_0900)
+
+    def boom(self, *a, **k):
+        raise KeyboardInterrupt("killed before the row")
+
+    with monkeypatch.context() as m:
+        m.setattr(sn.inbox_kit.OutboundCap, "record", boom)
+        with pytest.raises(KeyboardInterrupt):
+            _send(sn, world, draft)
+    assert _rows(world) == []
+    first = _send(sn, world, draft)
+    assert (first["ok"], first["reason"]) == (True, "already-delivered")
+    second = _send(sn, world, draft)
+    assert (second["ok"], second["reason"]) == (True, "already-recorded")
+    assert [r["note"] for r in _rows(world)] == [NOTE_0900]
+
+
+def test_an_already_delivered_send_is_recorded_even_over_the_cap(sn, world):
+    """A retry records a PAST send; the cap must not leave it uncounted."""
+    draft = _draft(world, NOTE_1258)
+    for inbox in (world["main_inbox"], world["own_inbox"]):
+        (inbox / NOTE_1258).write_bytes(draft.read_bytes())
+    today = time.strftime("%Y-%m-%d")
+    _seed_ledger(world, [{"ts": "x", "day": today, "note": f"n{i}.md", "cls": "ANSWER", "to": "MAIN", "parts": 1}
+                         for i in range(6)])
+    result = _send(sn, world, draft)
+    assert (result["ok"], result["reason"]) == (True, "already-delivered")
+    assert _rows(world)[-1]["note"] == NOTE_1258
 
 
 def test_a_non_ascii_note_is_refused(sn, world):
