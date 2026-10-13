@@ -1724,12 +1724,22 @@ def _stub_selection(stub: str) -> tuple[str, ...]:
     deleting its own temp dir mid-listing turns the child into `1 error`
     (0h(i); see test_a_stub_child_collects_nothing_above_the_stub_directory).
     Same fix as tests/test_empty_parametrize_policy.py `_run_probe`.
+
+    `--rootdir` is pinned to the repo as well, so this selection differs from
+    `_unconfined_stub_selection` by `--confcutdir` ALONE. Without it, on a
+    host where the child's cwd and the stub share only a filesystem root
+    (Linux: the repo and /tmp share `/`), pytest's rootdir fallback makes the
+    stub directory the rootdir and so the default confcutdir, and the
+    confined arm would pass with `--confcutdir` deleted - a vacuous arm.
     """
-    return ("--confcutdir", os.path.dirname(stub), stub)
+    return ("--rootdir", str(REPO_ROOT), "--confcutdir", os.path.dirname(stub), stub)
 
 
 def _unconfined_stub_selection(stub: str) -> tuple[str, ...]:
     """The pre-fix stub selection, pinned so it is unconfined on every host.
+
+    It is `_stub_selection` minus `--confcutdir` and nothing else, so the
+    control and the confined arm differ by exactly the flag under test.
 
     `--rootdir` is the repo, so the default confcutdir is the repo too - no
     ancestor of a stub under the temp dir - whatever the child's cwd and
@@ -1819,7 +1829,8 @@ def _plant_trapped_stub(tmp_path: Path) -> str:
     return _write_stub(inner, "test_honest_stub.py", _HONEST_STUB)
 
 
-def test_a_stub_child_collects_nothing_above_the_stub_directory(tmp_path: Path):
+@pytest.mark.parametrize("cwd_kind", ["repo-root-cwd", "filesystem-root-cwd"])
+def test_a_stub_child_collects_nothing_above_the_stub_directory(tmp_path: Path, cwd_kind: str):
     """REGRESSION for the 0h(i) flake: a stub child must not walk shared %TEMP%.
 
     Root cause, measured 2026-10-12 on pytest 9.0.3: the child runs with
@@ -1833,9 +1844,14 @@ def test_a_stub_child_collects_nothing_above_the_stub_directory(tmp_path: Path):
     call is `FileNotFoundError` and the child reports `1 error`. Solo there is
     no churn; under a concurrent suite there is. A scratch stress run of the
     two stub arms, 8 in parallel, failed 21 of 40 runs that way before the fix.
+
+    Parametrized over the child's cwd like the control below: from a
+    filesystem-root cwd only the pinned `--rootdir` keeps this arm able to
+    red when `--confcutdir` is removed.
     """
     stub = _plant_trapped_stub(tmp_path)
-    outcome = _run_child_pytest(_stub_selection(stub), None)
+    cwd = REPO_ROOT if cwd_kind == "repo-root-cwd" else Path(tmp_path.anchor)
+    outcome = _run_child_pytest(_stub_selection(stub), None, cwd)
     output = outcome.stdout + outcome.stderr
 
     assert _OUTSIDE_TRAP_MARKER not in output, (
