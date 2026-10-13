@@ -1,4 +1,4 @@
-"""The builder's ui-auditor routing must defer to the ui-audit skip list.
+"""Every ui-auditor routing must defer to the ui-audit skip list.
 
 WHY THIS EXISTS (slice 0y, session 71 residue (b)). `.claude/agents/builder.md`
 said, unconditionally, that a slice touching `surface/` or `shell/` is not
@@ -10,11 +10,15 @@ nothing) needed an adjudicator waiver to get past the builder's wording. 0u is
 do-not-re-litigate: the waiver stands, reversed only by narrowing that
 exemption, a MAIN ruling, or a rendered regression.
 
-The guard: every builder.md paragraph that routes a `surface/` or `shell/`
-change to `ui-auditor` must also point at the skip list in
-`.claude/commands/ui-audit.md`. A non-vacuity arm feeds the pre-fix wording to
-the same detector and asserts it is caught; a neighbour arm asserts the routing
-itself survived (the fix must not be "delete the rule").
+The guard: every paragraph in `.claude/agents/*.md` and `.claude/commands/*.md`
+that routes a `surface/` or `shell/` change to `ui-auditor` must also point at
+the skip list in `.claude/commands/ui-audit.md`. The 0y adversary found the
+sibling: `planner.md` carried the same unconditional rule, so the scan covers
+the whole roster and command set, not one file.
+
+Non-vacuity arms feed the pre-fix wording to the same detector and assert it
+is caught; a neighbour arm asserts the routing itself survived (the fix must
+not be "delete the rule").
 """
 
 from __future__ import annotations
@@ -25,12 +29,15 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILDER_MD = REPO_ROOT / ".claude" / "agents" / "builder.md"
 UI_AUDIT_MD = REPO_ROOT / ".claude" / "commands" / "ui-audit.md"
+AGENT_AND_COMMAND_DOCS = sorted(
+    [*REPO_ROOT.glob(".claude/agents/*.md"), *REPO_ROOT.glob(".claude/commands/*.md")]
+)
 
 SKIP_HEADING = "When to skip this entirely"
 SKIP_POINTER = ".claude/commands/ui-audit.md"
 
-#: The builder.md wording before slice 0y, verbatim. The non-vacuity arm
-#: proves the detector rejects exactly this shape.
+#: The builder.md wording before slice 0y, verbatim. The non-vacuity arms
+#: prove the detector rejects exactly this shape.
 PRE_FIX_PARAGRAPH = (
     "Run the suites once from the repo root, separately, and trust the exit code."
     " Never re-read\nan edit to confirm it. `write_text` converts LF to CRLF on"
@@ -40,8 +47,23 @@ PRE_FIX_PARAGRAPH = (
 )
 
 
+def _body(text: str) -> str:
+    """Drop YAML frontmatter.
+
+    A justified exemption by SHAPE, not a per-file one: the frontmatter
+    `description:` is the registry blurb naming an agent's own scope
+    (ui-auditor.md says "Audits surface/ and shell/"), not a routing rule, and
+    `tests/test_agent_roster.py` pins its shape.
+    """
+    if text.startswith("---\n"):
+        end = text.find("\n---\n", 4)
+        if end != -1:
+            return text[end + 5 :].lstrip("\n")
+    return text
+
+
 def _paragraphs(text: str) -> list[str]:
-    return [p for p in re.split(r"\n\s*\n", text) if p.strip()]
+    return [p for p in re.split(r"\n\s*\n", _body(text)) if p.strip()]
 
 
 def _routes_to_ui_auditor(paragraph: str) -> bool:
@@ -50,13 +72,17 @@ def _routes_to_ui_auditor(paragraph: str) -> bool:
     )
 
 
-def unconditional_routings(text: str) -> list[str]:
-    """Paragraphs routing surface/ or shell/ to ui-auditor with no skip-list pointer."""
+def unconditional_routings(text: str, *, is_skip_list_file: bool = False) -> list[str]:
+    """Paragraphs routing surface/ or shell/ to ui-auditor with no skip-list citation.
+
+    A citation is the section heading plus the file pointer. Inside ui-audit.md
+    itself the pointer is implicit, so the heading alone cites the list there.
+    """
     return [
         p
         for p in _paragraphs(text)
         if _routes_to_ui_auditor(p)
-        and not (SKIP_POINTER in p and SKIP_HEADING in p)
+        and not (SKIP_HEADING in p and (is_skip_list_file or SKIP_POINTER in p))
     ]
 
 
@@ -69,11 +95,22 @@ def test_skip_list_target_exists_and_covers_dependency_bumps() -> None:
     assert "`shell/`" in section and "`surface/`" in section
 
 
-def test_builder_routing_defers_to_ui_audit_skip_list() -> None:
-    offenders = unconditional_routings(BUILDER_MD.read_text(encoding="utf-8"))
-    assert offenders == [], (
-        "builder.md routes surface/ or shell/ to ui-auditor unconditionally;"
-        f" point it at the '{SKIP_HEADING}' list in {SKIP_POINTER}: {offenders!r}"
+def test_scan_corpus_covers_builder_planner_and_the_skip_list() -> None:
+    names = {p.name for p in AGENT_AND_COMMAND_DOCS}
+    assert {"builder.md", "planner.md", "ui-auditor.md", "ui-audit.md"} <= names
+
+
+def test_every_ui_auditor_routing_defers_to_ui_audit_skip_list() -> None:
+    offenders = {}
+    for path in AGENT_AND_COMMAND_DOCS:
+        found = unconditional_routings(
+            path.read_text(encoding="utf-8"), is_skip_list_file=path == UI_AUDIT_MD
+        )
+        if found:
+            offenders[path.relative_to(REPO_ROOT).as_posix()] = found
+    assert offenders == {}, (
+        "these files route surface/ or shell/ to ui-auditor unconditionally;"
+        f" point them at the '{SKIP_HEADING}' list in {SKIP_POINTER}: {offenders!r}"
     )
 
 
@@ -87,6 +124,21 @@ def test_builder_still_routes_rendered_changes_to_ui_auditor() -> None:
 def test_detector_rejects_the_pre_fix_wording() -> None:
     """Non-vacuity arm: the detector fires on the wording slice 0y replaced."""
     assert unconditional_routings(PRE_FIX_PARAGRAPH) == [PRE_FIX_PARAGRAPH]
+
+
+def test_frontmatter_strip_does_not_hide_a_body_routing() -> None:
+    """Non-vacuity for the frontmatter exemption: only the frontmatter is dropped."""
+    doc = (
+        "---\nname: x\ndescription: Audits surface/ via ui-auditor.\n---\n\n"
+        + PRE_FIX_PARAGRAPH
+    )
+    assert unconditional_routings(doc) == [PRE_FIX_PARAGRAPH]
+
+
+def test_heading_alone_cites_the_list_only_inside_ui_audit_md() -> None:
+    para = PRE_FIX_PARAGRAPH + f"Unless {SKIP_HEADING} applies.\n"
+    assert unconditional_routings(para, is_skip_list_file=True) == []
+    assert unconditional_routings(para) == [para]
 
 
 def test_detector_requires_both_pointer_and_heading() -> None:
