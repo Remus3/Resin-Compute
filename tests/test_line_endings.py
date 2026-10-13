@@ -180,7 +180,12 @@ class _Enumeration(typing.NamedTuple):
 # tests/test_fleet_kit_v10_adoption.py took `tests/` to exactly 120 of 299
 # tracked paths, measured with the same two commands. Legal interval now
 # 120 < value <= 149; 135 leaves fifteen modules of headroom.
-_MIN_TRACKED_FILES = 135
+# RAISED 135 -> 155 ON 2026-10-13, SAME TRIGGER, AT A MERGE SEAM. The 0w,
+# 0y and 0z modules took `tests/` to 136 of 352 tracked paths, measured with
+# the same two commands. Legal interval now 136 < value <= 176; 155 leaves
+# nineteen modules of headroom. The third carrier of this literal, missed by
+# 5555ce6 (which raised test_machine_identity.py and test_licence_posture.py).
+_MIN_TRACKED_FILES = 155
 
 # THE FLOOR ALONE CANNOT SEE A PARTIAL ENUMERATION. A `git ls-files` narrowed by
 # a pathspec, a sparse checkout, or a cwd that landed in a subdirectory can
