@@ -388,12 +388,18 @@ def _summary_line(stdout: str) -> str:
     return found[-1] if found else ""
 
 
-def _run_child_pytest(selection: tuple[str, ...], env: dict[str, str] | None) -> Outcome:
+def _run_child_pytest(
+    selection: tuple[str, ...],
+    env: dict[str, str] | None,
+    cwd: Path = REPO_ROOT,
+) -> Outcome:
     """Run pytest as its own process over `selection` and read back its counts.
 
     `--tb=line` keeps a failure to one line, `-rs` forces every skip to state its
     reason, and `-p no:cacheprovider` stops the child writing a cache directory
-    into the tree it is measuring. NO `-q`: see `_summary_line`.
+    into the tree it is measuring. NO `-q`: see `_summary_line`. `cwd` is the
+    child's invocation directory, which feeds pytest's rootdir fallback; every
+    caller but the outside-trap control keeps the repo root.
     """
     completed = subprocess.run(
         [
@@ -406,7 +412,7 @@ def _run_child_pytest(selection: tuple[str, ...], env: dict[str, str] | None) ->
             "-p",
             "no:cacheprovider",
         ],
-        cwd=str(REPO_ROOT),
+        cwd=str(cwd),
         capture_output=True,
         text=True,
         env=env,
@@ -1722,6 +1728,16 @@ def _stub_selection(stub: str) -> tuple[str, ...]:
     return ("--confcutdir", os.path.dirname(stub), stub)
 
 
+def _unconfined_stub_selection(stub: str) -> tuple[str, ...]:
+    """The pre-fix stub selection, pinned so it is unconfined on every host.
+
+    `--rootdir` is the repo, so the default confcutdir is the repo too - no
+    ancestor of a stub under the temp dir - whatever the child's cwd and
+    whether or not the temp dir shares a drive or a root with the checkout.
+    """
+    return ("--rootdir", str(REPO_ROOT), stub)
+
+
 _UNCONDITIONAL_SKIP_STUB = (
     "import pytest\n"
     "\n"
@@ -1833,14 +1849,29 @@ def test_a_stub_child_collects_nothing_above_the_stub_directory(tmp_path: Path):
     )
 
 
-def test_control_the_outside_trap_fires_for_an_unconfined_stub_child(tmp_path: Path):
+@pytest.mark.parametrize("cwd_kind", ["repo-root-cwd", "filesystem-root-cwd"])
+def test_control_the_outside_trap_fires_for_an_unconfined_stub_child(tmp_path: Path, cwd_kind: str):
     """Non-vacuity arm: the trap above is live, so its silence means something.
 
     The same layout run WITHOUT the confinement imports the trap - the exact
-    shape both stub arms had before the fix.
+    shape both stub arms had before the fix: rootdir, and so the default
+    confcutdir, is the repo, which is no ancestor of the stub.
+
+    `--rootdir` PINS that shape; a bare stub path does not. With no ini file
+    above the stub, pytest's rootdir fallback (`_pytest/config/findpaths.py`
+    determine_setup, identical in 9.0.3 and 9.1.1) takes the common ancestor
+    of the invocation dir and the stub, and if that is a filesystem root it
+    uses the stub's own directory instead - which makes the default
+    confcutdir the stub directory and hides the trap. On Windows the repo
+    (E:) and %TEMP% (C:) share no ancestor, so the fallback kept the repo and
+    the arm passed; on the Linux CI runner the repo and /tmp share only `/`,
+    so rootdir collapsed to `outer/inner` and the arm went red (ci
+    38288918481 at 960ef34, "rootdir: /tmp/.../outer/inner", rc 0). The
+    filesystem-root-cwd case reproduces that collapse on any host.
     """
     stub = _plant_trapped_stub(tmp_path)
-    outcome = _run_child_pytest((stub,), None)
+    cwd = REPO_ROOT if cwd_kind == "repo-root-cwd" else Path(tmp_path.anchor)
+    outcome = _run_child_pytest(_unconfined_stub_selection(stub), None, cwd)
     output = outcome.stdout + outcome.stderr
 
     assert _OUTSIDE_TRAP_MARKER in output, (
