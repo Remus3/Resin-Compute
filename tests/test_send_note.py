@@ -157,7 +157,7 @@ def test_an_existing_recipient_copy_is_never_overwritten_and_no_row_is_written(s
     # Refused before any write: no lone own copy for the audit to count.
     assert not (world["own_inbox"] / NOTE_1258).exists()
     assert _rows(world) == []
-    assert sn.audit(world["own_inbox"], world["own"]) == []
+    assert sn.audit(world["own_inbox"], world["own"], roots=world["roots"]) == []
 
 
 @pytest.mark.parametrize(
@@ -214,7 +214,7 @@ def test_a_hyphenated_exempt_class_is_exempt_by_the_kits_rule(sn, world):
 def test_a_hyphenated_class_note_is_sent_and_audited(sn, world):
     name = "2026-10-12-1300-from-RSC-POLL-ANSWER-to-MAIN-x.md"
     _plant(world, name, time.time())
-    assert [r["cls"] for r in sn.audit(world["own_inbox"], world["own"])] == ["POLL-ANSWER"]
+    assert [r["cls"] for r in sn.audit(world["own_inbox"], world["own"], roots=world["roots"])] == ["POLL-ANSWER"]
 
 
 # ---------------------------------------------------------------- draft gate (round 1, d)
@@ -260,13 +260,16 @@ def test_a_send_killed_between_the_copies_is_seen_by_the_audit_and_recovered_by_
     with pytest.raises(KeyboardInterrupt):
         _send(sn, world, draft)
     monkeypatch.setattr(sn, "atomic_write_text", real)
-    # The audit sees the interrupted send (the own copy landed first).
-    assert [r["note"] for r in sn.audit(world["own_inbox"], world["own"])] == [NOTE_0900]
+    # The audit sees the interrupted send (the own copy landed first), but
+    # proposes no row: the recipient never got it.
+    seen = sn.audit(world["own_inbox"], world["own"], roots=world["roots"])
+    assert [(r["note"], r.get("reason")) for r in seen] == [(NOTE_0900, "undelivered")]
+    assert sn.backfill(world["own"], seen) == 0
     result = _send(sn, world, draft)
     assert result["ok"], result
     assert (result["reached"], result["of"]) == (2, 2)
     assert [r["note"] for r in _rows(world)] == [NOTE_0900]
-    assert sn.audit(world["own_inbox"], world["own"]) == []
+    assert sn.audit(world["own_inbox"], world["own"], roots=world["roots"]) == []
     want = hashlib.sha256(draft.read_bytes()).hexdigest()
     assert hashlib.sha256((world["main_inbox"] / NOTE_0900).read_bytes()).hexdigest() == want
 
@@ -298,8 +301,31 @@ def test_an_already_delivered_send_is_recorded_even_over_the_cap(sn, world):
     _seed_ledger(world, [{"ts": "x", "day": today, "note": f"n{i}.md", "cls": "ANSWER", "to": "MAIN", "parts": 1}
                          for i in range(6)])
     result = _send(sn, world, draft)
-    assert (result["ok"], result["reason"]) == (True, "already-delivered")
+    assert (result["ok"], result["reason"]) == (True, "over-cap-recorded")
     assert _rows(world)[-1]["note"] == NOTE_1258
+
+
+def test_a_fresh_send_that_loses_the_cap_race_says_over_cap_recorded(sn, world, monkeypatch):
+    """P3: the forced row is kept (an undercount is the 0q defect) and is
+    never silent: the result names it."""
+    today = time.strftime("%Y-%m-%d")
+    _seed_ledger(world, [{"ts": "x", "day": today, "note": f"n{i}.md", "cls": "ANSWER", "to": "MAIN", "parts": 1}
+                         for i in range(6)])
+    # Another sender filled the cap between our allow() and our record().
+    # The FIRST allow() (our pre-delivery check) passes; the kit's own
+    # allow() inside record() then sees the full ledger and refuses.
+    real_allow = sn.inbox_kit.OutboundCap.allow
+    calls = {"n": 0}
+
+    def racy_allow(self, cls):
+        calls["n"] += 1
+        return True if calls["n"] == 1 else real_allow(self, cls)
+
+    monkeypatch.setattr(sn.inbox_kit.OutboundCap, "allow", racy_allow)
+    result = _send(sn, world, _draft(world, NOTE_1258))
+    assert (result["ok"], result["reason"]) == (True, "over-cap-recorded")
+    assert result["row"]["note"] == NOTE_1258
+    assert len(_rows(world)) == 7
 
 
 def test_a_non_ascii_note_is_refused(sn, world):
@@ -313,10 +339,13 @@ def test_a_non_ascii_note_is_refused(sn, world):
 # ---------------------------------------------------------------- the audit
 
 
-def _plant(world, name: str, epoch: float, body: str = BODY) -> Path:
+def _plant(world, name: str, epoch: float, body: str = BODY, recipient: bool = True) -> Path:
+    """An own copy, and (by default) the recipient's byte-equal copy in MAIN."""
     p = world["own_inbox"] / name
     p.write_bytes(body.encode("ascii"))
     os.utime(p, (epoch, epoch))
+    if recipient:
+        (world["main_inbox"] / name).write_bytes(body.encode("ascii"))
     return p
 
 
@@ -329,7 +358,7 @@ def test_audit_reproduces_the_2026_10_12_gap_and_proposes_both_rows(sn, world):
     t1258 = time.mktime((2026, 10, 12, 12, 58, 17, 0, 0, -1))
     _plant(world, NOTE_0900, t0900)
     _plant(world, NOTE_1258, t1258)
-    missing = sn.audit(world["own_inbox"], world["own"])
+    missing = sn.audit(world["own_inbox"], world["own"], roots=world["roots"])
     assert [r["note"] for r in missing] == [NOTE_0900, NOTE_1258]
     assert [(r["cls"], r["to"], r["day"], r["parts"]) for r in missing] == [
         ("ANSWER", "MAIN", "2026-10-12", 1),
@@ -351,34 +380,41 @@ def test_audit_leaves_the_legitimate_neighbours_alone(sn, world):
                  "README.txt"):
         _plant(world, name, time.time())
     (world["own_inbox"] / "2026-10-12-0000-from-RSC-ANSWER-to-MAIN-dir.md").mkdir()
-    assert sn.audit(world["own_inbox"], world["own"]) == []
+    assert sn.audit(world["own_inbox"], world["own"], roots=world["roots"]) == []
 
 
 def test_audit_day_filter(sn, world):
     _plant(world, NOTE_0900, time.mktime((2026, 10, 12, 4, 13, 56, 0, 0, -1)))
     _plant(world, "2026-10-11-0100-from-RSC-ANSWER-to-MAIN-y.md", time.mktime((2026, 10, 11, 1, 0, 0, 0, 0, -1)))
-    assert [r["note"] for r in sn.audit(world["own_inbox"], world["own"], day="2026-10-12")] == [NOTE_0900]
+    assert [r["note"] for r in sn.audit(world["own_inbox"], world["own"], roots=world["roots"], day="2026-10-12")] == [NOTE_0900]
 
 
 def test_backfill_closes_the_gap_and_a_second_audit_is_clean(sn, world):
     _plant(world, NOTE_0900, time.mktime((2026, 10, 12, 4, 13, 56, 0, 0, -1)))
     _plant(world, NOTE_1258, time.mktime((2026, 10, 12, 12, 58, 17, 0, 0, -1)))
-    missing = sn.audit(world["own_inbox"], world["own"])
+    missing = sn.audit(world["own_inbox"], world["own"], roots=world["roots"])
     assert sn.backfill(world["own"], missing) == 2
     assert [r["note"] for r in _rows(world)] == [NOTE_0900, NOTE_1258]
-    assert sn.audit(world["own_inbox"], world["own"]) == []
+    assert sn.audit(world["own_inbox"], world["own"], roots=world["roots"]) == []
     # Idempotent: a second backfill of the same rows appends nothing.
     assert sn.backfill(world["own"], missing) == 0
     assert len(_rows(world)) == 2
 
 
+def _roots_config(world) -> Path:
+    cfg = world["own"] / "roots.json"
+    cfg.write_bytes(json.dumps({"channel_codes": {k: str(v) for k, v in world["roots"].items()}}).encode("ascii"))
+    return cfg
+
+
 def test_cli_audit_exits_nonzero_while_a_row_is_missing(sn, world, capsys):
     _plant(world, NOTE_1258, time.time())
-    argv = ["audit", "--inbox", str(world["own_inbox"]), "--ledger-root", str(world["own"])]
+    argv = ["audit", "--inbox", str(world["own_inbox"]), "--ledger-root", str(world["own"]),
+            "--roots", str(_roots_config(world))]
     assert sn.main(argv) == 1
     out = capsys.readouterr().out
     assert json.loads(out.strip().splitlines()[0])["note"] == NOTE_1258
-    assert sn.backfill(world["own"], sn.audit(world["own_inbox"], world["own"])) == 1
+    assert sn.backfill(world["own"], sn.audit(world["own_inbox"], world["own"], roots=world["roots"])) == 1
     assert sn.main(argv) == 0
 
 
@@ -387,3 +423,43 @@ def test_ledger_bytes_are_ascii_lf(sn, world):
     raw = world["ledger"].read_bytes()
     raw.decode("ascii")
     assert b"\r" not in raw and raw.endswith(b"\n")
+
+
+# ---------------------------------------------------------------- P1: audit checks the recipient copy
+
+
+@pytest.mark.parametrize(
+    "setup, reason",
+    [("missing", "undelivered"), ("mismatch", "recipient-mismatch"), ("unknown", "unknown-recipient")],
+)
+def test_audit_proposes_no_row_unless_the_recipient_copy_hashes_equal(sn, world, setup, reason):
+    """P1 (adjudicated B): an own copy alone is not a send. Own copy present,
+    recipient copy missing / different / recipient unknown -> listed with a
+    reason, and backfill appends 0."""
+    name = NOTE_1258 if setup != "unknown" else "2026-10-12-1300-from-RSC-ANSWER-to-ZZ-x.md"
+    _plant(world, name, time.time(), recipient=False)
+    if setup == "mismatch":
+        (world["main_inbox"] / name).write_bytes(b"other bytes\n")
+    seen = sn.audit(world["own_inbox"], world["own"], roots=world["roots"])
+    assert [(r["note"], r.get("reason")) for r in seen] == [(name, reason)]
+    assert sn.backfill(world["own"], seen) == 0
+    assert _rows(world) == []
+
+
+def test_cli_audit_apply_appends_nothing_for_an_undelivered_own_copy(sn, world, capsys):
+    """P1 regression via the CLI the merger runs: own copy present, recipient
+    copy missing, `audit --apply` appends 0."""
+    _plant(world, NOTE_1258, time.time(), recipient=False)
+    argv = ["audit", "--apply", "--inbox", str(world["own_inbox"]), "--ledger-root", str(world["own"]),
+            "--roots", str(_roots_config(world))]
+    sn.main(argv)
+    assert "appended 0" in capsys.readouterr().out
+    assert _rows(world) == []
+
+
+def test_audit_still_proposes_a_delivered_note(sn, world):
+    """Neighbour guard for P1: own and recipient copies equal -> a row."""
+    _plant(world, NOTE_1258, time.time())
+    seen = sn.audit(world["own_inbox"], world["own"], roots=world["roots"])
+    assert [r["note"] for r in seen] == [NOTE_1258] and "reason" not in seen[0]
+    assert sn.backfill(world["own"], seen) == 1

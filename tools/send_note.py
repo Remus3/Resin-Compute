@@ -21,7 +21,10 @@ INFORMATION to MAIN), leaving the cap undercounted.
         Every own-sent note (`<stamp>-from-RSC-<CLASS>-to-<CODE>-...md`) in
         this tree's inbox with no ledger row, whatever path sent it, printed
         as the exact JSON row to append (ts and day from the copy's mtime).
-        Exit 1 while any is missing; `--apply` appends them (idempotent).
+        A row is proposed only when the recipient's copy hashes equal;
+        others are listed with a `reason` and never appended.
+        Exit 1 while any is listed; `--apply` appends the proposed rows
+        (idempotent).
 
 OWN COPY FIRST (refutation round 1, defect a). A send interrupted between
 the two copies used to leave the recipient's copy delivered, no own copy
@@ -209,12 +212,23 @@ def send(
         row = {"ts": inbox_kit._iso(now), "day": inbox_kit._local_day(now), "note": note.name,
                "cls": cls, "to": to, "parts": 1}
         inbox_kit._append(Path(ledger_root) / inbox_kit.OUTBOUND_REL, row)
+        # Never silent (adjudicated B, P3): the result names the forced row.
+        return {**result, "reason": "over-cap-recorded", "row": row}
     reason = "sent" if "written" in states else "already-delivered"
     return {**result, "reason": reason, "row": row}
 
 
-def audit(own_inbox: Path, ledger_root: Path, day: str | None = None) -> list[dict[str, Any]]:
-    """The rows missing for own-sent notes in `own_inbox`, oldest first."""
+def audit(
+    own_inbox: Path, ledger_root: Path, day: str | None = None, *, roots: dict[str, Path]
+) -> list[dict[str, Any]]:
+    """The rows missing for own-sent notes in `own_inbox`, oldest first.
+
+    AN OWN COPY ALONE IS NOT A SEND (adjudicated B, P1). Own copies are
+    written first, so an interrupted send leaves one with no recipient copy.
+    A row is PROPOSED only when `<recipient root>/moon_sync_inbox/<name>`
+    hashes equal to the own copy. Anything else is still LISTED, with a
+    `reason` - `undelivered`, `recipient-mismatch`, `unknown-recipient`
+    (also a retired or self code) - and `backfill` skips it."""
     have = _ledger_names(ledger_root)
     out: list[dict[str, Any]] = []
     try:
@@ -229,8 +243,17 @@ def audit(own_inbox: Path, ledger_root: Path, day: str | None = None) -> list[di
             epoch = entry.stat().st_mtime
         except OSError:
             continue
-        row = {"ts": inbox_kit._iso(epoch), "day": inbox_kit._local_day(epoch), "note": entry.name,
-               "cls": parsed[0], "to": parsed[1], "parts": 1}
+        row: dict[str, Any] = {"ts": inbox_kit._iso(epoch), "day": inbox_kit._local_day(epoch),
+                               "note": entry.name, "cls": parsed[0], "to": parsed[1], "parts": 1}
+        dest_root, _why = recipient_root(parsed[1], roots)
+        if dest_root is None:
+            row["reason"] = "unknown-recipient"
+        else:
+            theirs = _sha(dest_root / INBOX_DIRNAME / entry.name)
+            if theirs is None:
+                row["reason"] = "undelivered"
+            elif theirs != _sha(entry):
+                row["reason"] = "recipient-mismatch"
         if day is None or row["day"] == day:
             out.append(row)
     out.sort(key=lambda r: (r["ts"], r["note"]))
@@ -238,12 +261,13 @@ def audit(own_inbox: Path, ledger_root: Path, day: str | None = None) -> list[di
 
 
 def backfill(ledger_root: Path, rows: list[dict[str, Any]]) -> int:
-    """Append each row whose note has no row yet. Returns the count appended."""
+    """Append each PROPOSED row (no `reason`) whose note has no row yet.
+    Returns the count appended."""
     have = _ledger_names(ledger_root)
     path = Path(ledger_root) / inbox_kit.OUTBOUND_REL
     n = 0
     for row in rows:
-        if row["note"] in have:
+        if "reason" in row or row["note"] in have:
             continue
         inbox_kit._append(path, row)
         have.add(row["note"])
@@ -262,6 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     for p in (p_send, p_audit):
         p.add_argument("--inbox", type=Path)
         p.add_argument("--ledger-root", type=Path)
+        p.add_argument("--roots", type=Path, help="per-host roster (default: the MAIN checkout's)")
     args = parser.parse_args(argv)
     root = args.ledger_root
     inbox = args.inbox
@@ -269,12 +294,12 @@ def main(argv: list[str] | None = None) -> int:
         main_checkout = main_root()
         root = root or main_checkout
         inbox = inbox or main_checkout / INBOX_DIRNAME
+    roots = load_roots(args.roots or main_root() / ROOTS_REL)
     if args.cmd == "send":
-        roots = load_roots(main_root() / ROOTS_REL)
         result = send(args.note, roots=roots, own_inbox=inbox, ledger_root=root)
         print(json.dumps(result))
         return 0 if result["ok"] else 1
-    missing = audit(inbox, root, day=args.day)
+    missing = audit(inbox, root, day=args.day, roots=roots)
     for row in missing:
         print(json.dumps(row))
     if args.apply:
