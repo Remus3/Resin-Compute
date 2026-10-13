@@ -24,9 +24,8 @@ version. What follows is everything the scaffold deliberately did not do.
   any `shell/` or `surface/` diff to ui-auditor) should defer to the
   exemptions at `.claude/commands/ui-audit.md:77-85`; the 0u electron bump
   needed an adjudicator waiver because the two files disagree.
-  (c) hooksPath drift recurred in session 71; `python scripts/install_hooks.py`
-  restored `core.hooksPath` and it read back as the relative `.githooks`.
-  Find what rewrites it.
+  (c) DONE session 72 - root-caused and moved to
+  `docs/roadmap-archive/2026-10.md`; see `docs/ledger/session-72.md`.
   (d) Nothing yet forces an attended session or `/done` to send notes
   through `tools/send_note.py`, so a hand-written send can still skip the
   outbound-ledger row. Wire it in, or record why not; interim, run
@@ -92,12 +91,6 @@ version. What follows is everything the scaffold deliberately did not do.
   and pruned at /done (git worktree list read back 1 entry). DONE session
   63: the 14 MIG-1 residue dirs (42 files, 0 unique) went to the Recycle
   Bin; the residue dir reads absent (`docs/LEDGER.md`).
-
-- **NEW 2026-10-08. core.hooksPath drifts to an absolute path.** Read
-  `E:\Resin Compute\.githooks` at session 60 /done (session 58 saw the same
-  on C:); `python scripts/install_hooks.py` restored `.githooks`. Cause
-  unknown - find what writes it (worktree creation, an agent, a hook).
-  Seen again at session 68 /done start; restored the same way.
 
 - **NEW 2026-10-07. WATCH THE HELD MAIN BACKLOG DRAIN.** After a487d15 the
   responder auto-replied (2251) to MAIN 0020, an old kit-v5 ORDER the cap had

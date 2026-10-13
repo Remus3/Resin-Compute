@@ -60,8 +60,12 @@ forward rule as FLEET-COMMON item 5, applied to the list the session printed.
   ADR-002 and `docs/LICENSE_NOTES.md` this tree vendors no game data, and
   `data/fixtures/` is hand-authored only. A real cost table or banner list in
   `data/` stops the ritual - report it as the failure line.
-- `git config core.hooksPath` must print `.githooks`. If it prints nothing, run
-  `python scripts/install_hooks.py` first.
+- `git config core.hooksPath` must RESOLVE to `<repo>/.githooks`. Either
+  spelling is fine: the relative `.githooks` or the absolute
+  `<main root>\.githooks` (Claude Code's worktree setup rewrites it to the
+  absolute form in the shared `.git/config`; harmless). Run
+  `python scripts/install_hooks.py` first only when it prints nothing or
+  resolves elsewhere.
 
 ## 1. The gate - all of it, before any commit
 
