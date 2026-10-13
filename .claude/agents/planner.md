@@ -37,8 +37,9 @@ trailer.
    MAIN checkout's path.
 9. Name the grading plan under the shared risk scaling: the full lens set only for
    `agents/pity_engine/`, `engines/`, `ingest/`, `core/`; plumbing gets one lens or a
-   verifier; at most 2 refute rounds, then the adjudicator. Name who runs `ui-auditor` if
-   a slice touches `surface/` or `shell/`.
+   verifier; at most 2 refute rounds, then the adjudicator. Name who runs `ui-auditor` for
+   a `surface/` or `shell/` slice not on "When to skip this entirely" in
+   `.claude/commands/ui-audit.md`.
 10. List every open question and unsettled assumption, labelled.
 
 Output: spec, slice table, disjointness proof, `file:line` citations, open questions,

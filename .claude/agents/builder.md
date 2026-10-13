@@ -41,7 +41,9 @@ adversaries REFUTE your done-claim. Report what you observed.
 Run the suites once from the repo root, separately, and trust the exit code. Never re-read
 an edit to confirm it. `write_text` converts LF to CRLF on Windows; write bytes where byte
 counts matter (`.gitattributes` pins `eol=lf`). A slice touching `surface/` or `shell/` is
-not committable until `ui-auditor` has run and every MUST-FIX is closed.
+not committable until `ui-auditor` has run and every MUST-FIX is closed, unless
+"When to skip this entirely" in `.claude/commands/ui-audit.md` covers it (that list rules;
+e.g. a dependency bump). A skip is a claim: name its bullet in the report.
 
 ## Report
 

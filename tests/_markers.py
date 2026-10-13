@@ -44,6 +44,7 @@ PLUMBING_ROOTS: tuple[str, ...] = (
 PLUMBING: frozenset[str] = frozenset(
     {
         "tests/test_agent_roster.py",
+        "tests/test_builder_ui_audit_rule.py",
         "tests/test_carrier_population_prose.py",
         "tests/test_ci_history_depth.py",
         "tests/test_ci_workflow_complement.py",
@@ -116,6 +117,7 @@ PLUMBING: frozenset[str] = frozenset(
 READS_DOCS: frozenset[str] = frozenset(
     {
         "tests/test_agent_roster.py",
+        "tests/test_builder_ui_audit_rule.py",
         "tests/test_carrier_population_prose.py",
         "tests/test_channel_doc_pin.py",
         "tests/test_ci_workflow_complement.py",
