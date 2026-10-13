@@ -27,34 +27,23 @@ version. What follows is everything the scaffold deliberately did not do.
   (c) hooksPath drift recurred in session 71; `python scripts/install_hooks.py`
   restored `core.hooksPath` and it read back as the relative `.githooks`.
   Find what rewrites it.
+  (d) Nothing yet forces an attended session or `/done` to send notes
+  through `tools/send_note.py`, so a hand-written send can still skip the
+  outbound-ledger row. Wire it in, or record why not; interim, run
+  `python tools/send_note.py audit` at /done (it must print nothing).
 - **NEW 2026-10-12. Session 70 residue (see `docs/ledger/session-70.md`).**
-  (a) The gitignored outbound-notes ledger under ops/loop/control has 0
-  rows for 2026-10-12 although the 0900 ANSWER and the 1258 INFORMATION
-  notes to MAIN were both sent, so the kit OutboundCap undercounts this
-  tree's daily notes. Root-cause it (which send path skips the ledger row)
-  and backfill the 2 rows. (b) 0i(2c) residuals: an untracked dot-prefixed
+  (a), (c), (d) and (g) DONE session 71 - moved to
+  `docs/roadmap-archive/2026-10.md`; see `docs/ledger/session-71.md`.
+  (b) 0i(2c) residuals: an untracked dot-prefixed
   pytest ini file in the checkout makes `scripts/prepush_select.py` report
   SKIP locally; a force-push diff taken against the merge-base can miss
-  engine changes the force-push discarded. (c) Adversary prompts must run
-  destructive git only as `git -C <clone>`, after a
-  `git rev-parse --show-toplevel` check; never chain a `cd` into a mutating
-  git command (the session-70 INCIDENT: a failed chained cd ran
-  `git reset --hard` in the main checkout; the read-back found nothing
-  lost). Put the rule into `.claude/agents/adversary.md` and the
-  orchestrated-run protocol. (d) Confirm the "CS" codename used in ledger
-  commit 960ef34 against the gitignored codename map. (e) The
+  engine changes the force-push discarded. (e) The
   FLEET_SUITE_SLOTS=1 observation went to MAIN in the 1258 INFORMATION
-  note; watch the inbox for a reply. (f) Flaky watch carried from the kit
+  note; watch the inbox for a reply (none at session 71 /done). (f) Flaky
+  watch carried from the kit
   v10 residue entry (archived): the `tests/test_task_liveness.py` int32
   probe failed once in session 66 (host WMI 0x800700a4 condition); watch
   for a repeat.
-  (g) CI RED at 960ef34 (ci run 38288918481, Linux, pytest 9.1.1):
-  `tests/test_conftest_git_gate_sites.py::test_control_the_outside_trap_fires_for_an_unconfined_stub_child`
-  - the unconfined stub child did not import the trap conftest above it.
-  The arm came in with the 0h(i) merge cc2d86a; local is pytest 9.0.3
-  against the 9.1.1 pin. Root-cause it and make the non-vacuity arm hold
-  on both hosts (or skip it honestly where it cannot discriminate); fix CI
-  first.
 
 - **OPEN 2026-10-09. MAIN 2246 ORDER (REPO-REVIEW), SHA-256 verified
   (7ccc71ff...) - s1-s3 and the s4 Dependabot part DONE session 64 (see
