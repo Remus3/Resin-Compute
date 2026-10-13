@@ -66,8 +66,18 @@ def _paragraphs(text: str) -> list[str]:
     return [p for p in re.split(r"\n\s*\n", _body(text)) if p.strip()]
 
 
+#: Every token that routes a change to the visual audit: the agent name, the
+#: slash command, and its pass verdict. The slash command is matched only in
+#: its invocation shape - NOT preceded by a word character, `/`, `.` or `-` -
+#: so the file pointer `.claude/commands/ui-audit.md` (which contains the
+#: substring "/ui-audit") is not itself read as a routing. Slice 0y F1: the
+#: first detector matched only "ui-auditor" and missed the orchestrated-run.md
+#: merge check, which routes by `/ui-audit` and `AUDIT: PASS`.
+ROUTING_TOKEN = re.compile(r"ui-auditor|(?<![\w/.-])/ui-audit\b|AUDIT: PASS")
+
+
 def _routes_to_ui_auditor(paragraph: str) -> bool:
-    return "ui-auditor" in paragraph and (
+    return bool(ROUTING_TOKEN.search(paragraph)) and (
         "surface/" in paragraph or "shell/" in paragraph
     )
 
@@ -145,3 +155,36 @@ def test_detector_requires_both_pointer_and_heading() -> None:
     """A bare file mention without the section name is still unconditional."""
     half = PRE_FIX_PARAGRAPH + "See `.claude/commands/ui-audit.md`.\n"
     assert unconditional_routings(half) == [half]
+
+
+#: The orchestrated-run.md merge-check wording before 0y F1, verbatim. It
+#: routes by the slash command and the verdict, never naming ui-auditor.
+PRE_F1_MERGE_CHECK = (
+    "- If any slice touched `surface/` or `shell/`, also run\n"
+    "  `python scripts/qa_companion.py` and `cd shell && node --test`, and confirm\n"
+    "  that `/ui-audit` already ran and returned `AUDIT: PASS` INSIDE that slice.\n"
+    "  Per `.claude/commands/ui-audit.md`, the audit runs before the commit, so\n"
+    "  discovering at merge time that it never ran is a process failure to report,\n"
+    "  not a step to run late.\n"
+)
+
+
+def test_detector_rejects_the_pre_f1_merge_check() -> None:
+    """Non-vacuity arm (0y F1): a `/ui-audit` + `AUDIT: PASS` routing is caught."""
+    assert unconditional_routings(PRE_F1_MERGE_CHECK) == [PRE_F1_MERGE_CHECK]
+
+
+def test_each_routing_token_alone_is_detected() -> None:
+    for token in ("ui-auditor", "`/ui-audit`", "run /ui-audit", "AUDIT: PASS"):
+        para = f"A `surface/` slice needs {token} before the commit.\n"
+        assert unconditional_routings(para) == [para], token
+
+
+def test_file_pointer_alone_is_not_a_routing() -> None:
+    """The allowance: `.claude/commands/ui-audit.md` is a pointer, not a routing.
+
+    Paired with test_each_routing_token_alone_is_detected, which proves the
+    slash-command form is still caught.
+    """
+    para = "A `surface/` change: see `.claude/commands/ui-audit.md` for the phases.\n"
+    assert unconditional_routings(para) == []
