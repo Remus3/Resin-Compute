@@ -13,6 +13,20 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-12. Session 71 residue (0q merge 20d9d29).**
+  (a) KIT DEFECT, report to MAIN in the next batched note:
+  `OutboundCap.record` / `_append` in `ops/fleet_kit/fleet_inbox.py` take no
+  lock, so two concurrent sends can write a duplicate row or lose an append
+  on Windows. This is 0q's P2, filed rather than patched because the kit is
+  vendored byte-for-byte. Reversed by: a kit version that locks `record`,
+  or a MAIN ruling that the ledger must never exceed the cap.
+  (b) `.claude/agents/builder.md:43-44` (the general path rule that sends
+  any `shell/` or `surface/` diff to ui-auditor) should defer to the
+  exemptions at `.claude/commands/ui-audit.md:77-85`; the 0u electron bump
+  needed an adjudicator waiver because the two files disagree.
+  (c) hooksPath drift recurred in session 71; `python scripts/install_hooks.py`
+  restored `core.hooksPath` and it read back as the relative `.githooks`.
+  Find what rewrites it.
 - **NEW 2026-10-12. Session 70 residue (see `docs/ledger/session-70.md`).**
   (a) The gitignored outbound-notes ledger under ops/loop/control has 0
   rows for 2026-10-12 although the 0900 ANSWER and the 1258 INFORMATION
