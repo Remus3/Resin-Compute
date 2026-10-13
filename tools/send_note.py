@@ -11,10 +11,11 @@ and its own by hand, so the ledger row was a remembered manual step - and on
 INFORMATION to MAIN), leaving the cap undercounted.
 
     python tools/send_note.py send <draft.md>
-        Cap check (exempt ORDER / FIX / RULING always pass), deliver to the
-        recipient's inbox and this tree's own, never overwriting a name,
-        re-hash every copy, THEN write the row. Prints one JSON result line.
-        Exit 0 sent and recorded, 1 refused (nothing delivered, no row).
+        Validate (the responder's `validate_draft`), refuse a retired or
+        unknown recipient, cap check (exempt ORDER / FIX / RULING always
+        pass), write this tree's OWN copy first, then the recipient's,
+        re-hash both, THEN the row. Prints one JSON result line.
+        Exit 0 sent (or already delivered and now recorded), 1 refused.
 
     python tools/send_note.py audit [--day YYYY-MM-DD] [--apply]
         Every own-sent note (`<stamp>-from-RSC-<CLASS>-to-<CODE>-...md`) in
@@ -22,8 +23,20 @@ INFORMATION to MAIN), leaving the cap undercounted.
         as the exact JSON row to append (ts and day from the copy's mtime).
         Exit 1 while any is missing; `--apply` appends them (idempotent).
 
-Responder auto-replies (`-from-RSC-auto-reply-to-...`) are not matched: the
-responder records those itself under `reply-to-<note>`.
+OWN COPY FIRST (refutation round 1, defect a). A send interrupted between
+the two copies used to leave the recipient's copy delivered, no own copy
+and no row: a retry said `undelivered` and the audit saw nothing. Now the
+own copy lands first, so the audit always sees an interrupted send, and a
+retry treats a destination copy that already hashes equal as delivered -
+it finishes the send and writes the row exactly once (`already-delivered`
+when no write was needed). A copy of the same name with DIFFERENT bytes is
+never overwritten (`name-taken`).
+
+THE CLASS is the kit's own `note_class`, so the row's `cls` means exactly
+what `OutboundCap`'s EXEMPT test means. Hyphenated classes (POLL-ANSWER,
+CORRECTION-ACCEPTED, NO-REPLY) are accepted. Responder auto-replies
+(`-from-RSC-auto-reply-to-...`) are not matched: the responder records
+those itself under `reply-to-<note>`.
 
 Paths default to the MAIN checkout (the kit's `main_checkout`), so a linked
 worktree reads and writes the live inbox and ledger, never a worktree copy.
@@ -46,27 +59,59 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.atomic_io import atomic_write_text, read_json  # noqa: E402
+from core.atomic_io import atomic_write_text  # noqa: E402
 
 #: The vendored kit, loaded by importlib and typed Any (same as the responder).
 inbox_kit: Any = importlib.import_module("ops.fleet_kit.fleet_inbox")
 headless_kit: Any = importlib.import_module("ops.fleet_kit.fleet_headless")
+#: The responder, REUSED for its draft gate, roster reader, retired codes and
+#: channel code. Never copied: one gate, one roster rule.
+responder: Any = importlib.import_module("tools.moon_sync_responder")
 
-SELF_CODE = "RSC"
-INBOX_DIRNAME = "moon_sync_inbox"
+SELF_CODE: str = responder.SELF_CODE
+INBOX_DIRNAME: str = responder.INBOX_DIRNAME
 ROOTS_REL = Path("ops") / "moon_sync_repos.json"
 
-#: An attended note's name: stamp, sender RSC, an UPPERCASE class, recipient.
-#: The lowercase `auto-reply` the responder writes never matches.
+#: An attended note's name: stamp, sender RSC, an UPPERCASE class (hyphenated
+#: allowed), recipient. The lowercase `auto-reply` never matches.
 _NAME = re.compile(
-    r"^\d{4}-\d{2}-\d{2}-\d{4}-from-" + SELF_CODE + r"-([A-Z]+)-to-([A-Z][A-Z0-9]*)(?:-[^/\\]*)?\.md$"
+    r"^\d{4}-\d{2}-\d{2}-\d{4}-from-" + SELF_CODE
+    + r"-([A-Z]+(?:-[A-Z]+)*)-to-([A-Z][A-Z0-9]*)(?:-[^/\\]*)?\.md$"
 )
 
 
 def parse_name(name: str) -> tuple[str, str] | None:
-    """(class, recipient code) from an own-sent note's file name, else None."""
+    """(class, recipient code) from an own-sent note's file name, else None.
+    The class is the kit's `note_class`, the one `OutboundCap` judges."""
     found = _NAME.match(name)
-    return (found.group(1), found.group(2)) if found else None
+    if not found:
+        return None
+    cls = inbox_kit.note_class(name)
+    if not isinstance(cls, str) or not cls:
+        return None
+    return cls, found.group(2)
+
+
+def recipient_root(to: str, roots: dict[str, Path]) -> tuple[Path | None, str]:
+    """The recipient's repo root, or None and why. The responder's own
+    destination rule (`destinations_for`): never self, never a RETIRED code,
+    never a code the roster does not hold."""
+    if to == SELF_CODE:
+        return None, "self-recipient"
+    if to in responder.RETIRED:
+        return None, "retired-recipient"
+    root = roots.get(to)
+    return (None, "unknown-recipient") if root is None else (Path(root), "")
+
+
+def draft_reasons(text: str) -> list[str]:
+    """The responder's `validate_draft`, run on an attended note.
+
+    An attended note must NOT carry the responder tag (that tag is how M5
+    tells unattended traffic from human traffic), so the gate sees the tag
+    prepended and every other rule - ascii, CRLF, size, traceback, account
+    path, credential scan - runs on the note's own bytes."""
+    return list(responder.validate_draft(responder.RESPONDER_TAG + "\n" + text, responder.Bounds()))
 
 
 def main_root() -> Path:
@@ -74,14 +119,8 @@ def main_root() -> Path:
 
 
 def load_roots(config: Path) -> dict[str, Path]:
-    """`{CODE: repo root}` from the per-host roster (gitignored). Missing is empty."""
-    payload = read_json(config, default=None)
-    if not isinstance(payload, dict):
-        return {}
-    raw = payload.get("channel_codes", payload.get("repos", payload))
-    if not isinstance(raw, dict):
-        return {}
-    return {str(k).upper(): Path(str(v)) for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
+    """`{CODE: repo root}` from the per-host roster, by the responder's reader."""
+    return dict(responder.load_roots(config))
 
 
 def _sha(path: Path) -> str | None:
@@ -100,6 +139,16 @@ def _refused(reason: str, **extra: Any) -> dict[str, Any]:
     return {"ok": False, "reason": reason, "sha256": None, "reached": 0, "of": 0, "row": None, **extra}
 
 
+def _place(target: Path, text: str, want: str) -> str:
+    """'present' (same bytes already there), 'written', 'taken' (other bytes
+    under the name - never overwritten) or 'failed'."""
+    if target.exists():
+        return "present" if _sha(target) == want else "taken"
+    if atomic_write_text(target, text) and _sha(target) == want:
+        return "written"
+    return "failed"
+
+
 def send(
     note: Path,
     *,
@@ -108,16 +157,16 @@ def send(
     ledger_root: Path,
     clock: Callable[[], float] = time.time,
 ) -> dict[str, Any]:
-    """Deliver one attended note and write its ledger row. Never partial-silent:
-    no row unless the recipient's copy landed and re-hashed equal."""
+    """Deliver one attended note and write its ledger row exactly once.
+    No row unless BOTH copies hold the note's bytes."""
     note = Path(note)
     parsed = parse_name(note.name)
     if parsed is None:
         return _refused("bad-name")
     cls, to = parsed
-    dest_root = roots.get(to)
+    dest_root, why = recipient_root(to, roots)
     if dest_root is None:
-        return _refused("unknown-recipient")
+        return _refused(why)
     try:
         raw = note.read_bytes()
     except OSError:
@@ -126,31 +175,42 @@ def send(
         text = raw.decode("ascii")
     except UnicodeDecodeError:
         return _refused("not-ascii")
-    cap = inbox_kit.OutboundCap(ledger_root, clock=clock)
-    if not cap.allow(cls):
-        return _refused("over-cap", used=int(cap.used()), cap=int(cap.cap))
+    reasons = draft_reasons(text)
+    if reasons:
+        return _refused("invalid-draft", reasons=reasons)
     want = hashlib.sha256(raw).hexdigest()
-    targets = [Path(dest_root) / INBOX_DIRNAME / note.name, Path(own_inbox) / note.name]
-    landed: list[bool] = []
-    for target in targets:
-        if target.exists():
-            landed.append(False)
-        else:
-            landed.append(atomic_write_text(target, text) and _sha(target) == want)
-        if not landed[0]:
-            # The recipient's copy is the send. Without it nothing else is
-            # written: no own copy, no row.
-            return _refused("undelivered", sha256=want, of=len(targets))
+    own_target = Path(own_inbox) / note.name
+    dest_target = dest_root / INBOX_DIRNAME / note.name
+    cap = inbox_kit.OutboundCap(ledger_root, clock=clock)
+    for target in (own_target, dest_target):
+        if target.exists() and _sha(target) != want:
+            # Checked before ANY write, so a taken name never leaves a lone
+            # own copy the audit would count.
+            return _refused("name-taken", sha256=want, of=2)
+    fresh = not (dest_target.exists() and _sha(dest_target) == want)
+    if fresh and not cap.allow(cls):
+        return _refused("over-cap", used=int(cap.used()), cap=int(cap.cap))
+    states = []
+    for target in (own_target, dest_target):
+        state = _place(target, text, want)
+        states.append(state)
+        if state in ("taken", "failed"):
+            reason = "name-taken" if state == "taken" else "undelivered"
+            return _refused(reason, sha256=want, of=2, reached=states.count("present") + states.count("written"))
+    result = {"ok": True, "sha256": want, "reached": 2, "of": 2}
+    if note.name in _ledger_names(ledger_root):
+        return {**result, "reason": "already-recorded", "row": None}
     row = cap.record(note.name, cls, to)
     if row is None:
-        # Over the cap between the check and the write (another sender). The
-        # note IS delivered, so it is still counted: an undercount is the
-        # defect this module closes.
+        # Over the cap now (a past send being recorded, or another sender in
+        # between). The note IS delivered, so it is still counted: an
+        # undercount is the defect this module closes.
         now = clock()
         row = {"ts": inbox_kit._iso(now), "day": inbox_kit._local_day(now), "note": note.name,
                "cls": cls, "to": to, "parts": 1}
         inbox_kit._append(Path(ledger_root) / inbox_kit.OUTBOUND_REL, row)
-    return {"ok": True, "reason": "sent", "sha256": want, "reached": sum(landed), "of": len(targets), "row": row}
+    reason = "sent" if "written" in states else "already-delivered"
+    return {**result, "reason": reason, "row": row}
 
 
 def audit(own_inbox: Path, ledger_root: Path, day: str | None = None) -> list[dict[str, Any]]:
@@ -192,7 +252,7 @@ def backfill(ledger_root: Path, rows: list[dict[str, Any]]) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="send_note", description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(prog="send_note", description=(__doc__ or "").splitlines()[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
     p_send = sub.add_parser("send")
     p_send.add_argument("note", type=Path)
