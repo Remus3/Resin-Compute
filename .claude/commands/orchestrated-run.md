@@ -335,6 +335,16 @@ discrepancies: <one line each, or none>
 - **Cap: at most 2 refute rounds per finding or done-claim,
   then the adjudicator decides** on the record of those rounds. Do not dispatch a
   third adversary at the same claim; the adjudicator's ruling is recorded.
+- **An adversary runs mutating git only as `git -C <clone>`, after a
+  `git -C <clone> rev-parse --show-toplevel` check prints that clone's path.**
+  Mutating means reset, rm, mv, checkout, clean, commit and their kin; they
+  run only in a scratch clone, never in this checkout. Never chain a `cd` into
+  a mutating git command: if the `cd` fails, the git runs in whatever tree the
+  shell was already in. Say this in every adversary dispatch that builds a
+  clone. Measured in session 70 (the `docs/ledger/session-70.md` INCIDENT): a
+  failed chained `cd` into a scratch clone ran `git mv`, `git rm` and
+  `git reset --hard` against the main checkout; the read-back found nothing
+  lost only because no tracked edit was unstaged then.
 - **Spawn DISTINCT LENSES, never N identical skeptics.** Diversity catches
   failure modes redundancy cannot. The five that fit this tree:
   - **correctness** - does the change do what the spec said, on the edge cases;
