@@ -390,10 +390,12 @@ python -m pytest agents/pity_engine
 
 - If any slice touched `surface/` or `shell/`, also run
   `python scripts/qa_companion.py` and `cd shell && node --test`, and confirm
-  that `/ui-audit` already ran and returned `AUDIT: PASS` INSIDE that slice.
-  Per `.claude/commands/ui-audit.md`, the audit runs before the commit, so
-  discovering at merge time that it never ran is a process failure to report,
-  not a step to run late.
+  that `/ui-audit` already ran and returned `AUDIT: PASS` INSIDE that slice,
+  unless the change falls under "When to skip this entirely" in
+  `.claude/commands/ui-audit.md` - a skipped slice names the skip bullet it
+  relies on instead of an `AUDIT: PASS`. Per that file, the audit runs before
+  the commit, so discovering at merge time that it never ran (and no skip
+  bullet was named) is a process failure to report, not a step to run late.
 - A `docs/LEDGER.md` entry cites the ITEM, the MERGED FILE and the TEST NAME -
   **never the slice SHA.** Worktree-agent commits frequently do not survive
   cherry-pick, so a SHA-based pointer is a citation that stops resolving.
