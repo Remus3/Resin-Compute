@@ -134,6 +134,45 @@ def check_cited_subcommands(text: str, declared: set[str]) -> tuple[int, list[st
     return len(cited), sorted({c for c in cited if c not in declared})
 
 
+_SPAN = re.compile(r"`([^`\n]+)`")
+_FLAG = re.compile(r"(?<![A-Za-z0-9-])--[a-z][a-z-]*")
+_TOKEN = re.compile(r"[a-z][a-z]*(?:-[a-z]+)*")
+
+
+def declared_flags(source: str) -> set[str]:
+    """Every `--flag` the module's argparse declares, parsed from source."""
+    return set(re.findall(r'add_argument\(\s*"(--[a-z][a-z-]*)"', source))
+
+
+def check_cited_flags(text: str, flags: set[str]) -> tuple[int, list[str]]:
+    """(flags cited in a backtick span naming the tool, undeclared ones)."""
+    cited = [f for span in _SPAN.findall(text) if TOOL in span for f in _FLAG.findall(span)]
+    return len(cited), sorted({f for f in cited if f not in flags})
+
+
+def cited_tokens(text: str) -> list[str]:
+    """Every bare lowercase backticked token (a result `reason`, a row key,
+    a kit method) in a claim-block that names the tool."""
+    out: list[str] = []
+    for block in claim_blocks(text):
+        if TOOL not in block:
+            continue
+        out.extend(s for s in _SPAN.findall(block) if _TOKEN.fullmatch(s))
+    return out
+
+
+def check_cited_tokens(text: str, source: str) -> tuple[int, list[str]]:
+    """(tokens cited, tokens the module does not carry). A token is carried
+    when it is a quoted string literal in the source - so deleting a reason
+    the docs promise reds here - or a method the source calls (`.record(`)."""
+    cited = cited_tokens(text)
+    missing = sorted({
+        t for t in cited
+        if f'"{t}"' not in source and not re.search(r"\." + re.escape(t) + r"\(", source)
+    })
+    return len(cited), missing
+
+
 # ---------------------------------------------------------------- live docs
 
 
@@ -168,7 +207,54 @@ def test_cited_subcommands_exist() -> None:
         assert unknown == [], f"{path.name} cites undeclared subcommands {unknown}"
 
 
+def test_cited_flags_exist() -> None:
+    flags = declared_flags(SEND_NOTE.read_text(encoding="utf-8"))
+    assert "--apply" in flags, f"tools/send_note.py declares {sorted(flags)}"
+    checked, unknown = check_cited_flags(DONE_MD.read_text(encoding="utf-8"), flags)
+    assert checked >= 1, "done.md cites no tools/send_note.py flag"
+    for path in GUARDED:
+        _checked, unknown = check_cited_flags(path.read_text(encoding="utf-8"), flags)
+        assert unknown == [], f"{path.name} cites undeclared flags {unknown}"
+
+
+def test_cited_reason_tokens_exist() -> None:
+    source = SEND_NOTE.read_text(encoding="utf-8")
+    checked, missing = check_cited_tokens(DONE_MD.read_text(encoding="utf-8"), source)
+    cited = set(cited_tokens(DONE_MD.read_text(encoding="utf-8")))
+    promised = {"over-cap-recorded", "undelivered", "recipient-mismatch", "unknown-recipient"}
+    assert promised <= cited, f"done.md no longer cites {sorted(promised - cited)}"
+    assert checked >= len(promised)
+    assert missing == [], f"done.md cites tokens tools/send_note.py does not carry: {missing}"
+    for path in GUARDED:
+        _checked, missing = check_cited_tokens(path.read_text(encoding="utf-8"), source)
+        assert missing == [], f"{path.name}: {missing}"
+
+
 # ---------------------------------------------------------- non-vacuity arms
+
+
+def test_arm_flag_mutant_is_caught() -> None:
+    """The adversary's mutant: `--apply` deleted from the argparse."""
+    source = SEND_NOTE.read_text(encoding="utf-8")
+    mutant = source.replace('p_audit.add_argument("--apply", action="store_true")\n', "")
+    assert mutant != source, "mutation site moved; re-aim the arm"
+    doc = DONE_MD.read_text(encoding="utf-8")
+    assert check_cited_flags(doc, declared_flags(mutant))[1] == ["--apply"]
+    assert check_cited_flags(doc, declared_flags(source))[1] == []
+
+
+def test_arm_reason_mutant_is_caught() -> None:
+    source = SEND_NOTE.read_text(encoding="utf-8")
+    mutant = source.replace('"over-cap-recorded"', '"over-cap-forced"')
+    assert mutant != source, "mutation site moved; re-aim the arm"
+    doc = DONE_MD.read_text(encoding="utf-8")
+    assert check_cited_tokens(doc, mutant)[1] == ["over-cap-recorded"]
+    assert check_cited_tokens(doc, source)[1] == []
+
+
+def test_neighbour_prose_token_outside_tool_block_survives() -> None:
+    planted = "Run `pytest` and read `ruff` output.\n"
+    assert check_cited_tokens(planted, "") == (0, [])
 
 
 def test_arm_manual_copy_into_inbox_is_caught() -> None:
