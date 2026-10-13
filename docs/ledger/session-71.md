@@ -3,6 +3,15 @@
 Mostly unattended (operator away). Checklist: 0v, 0r, 0q, 0u, 0s, MERGE,
 /done. Item 0 (responder renewal) and the rest carried forward.
 
+## 2026-10-12 - /done paperwork push
+
+- Paperwork commit a0f32f1 pushed through fleet_gitlock (pre-push OK,
+  6-module selection 315 passed 1 skipped, engine suite skipped outside
+  its closure). Read back: `git ls-remote origin refs/heads/main` =
+  a0f32f1742a0c90d938b6d3dd07d56b9224fd4a6.
+- CI at a0f32f1 read back with `gh run view`: ci 38339482708 success,
+  docs-guards 38339482716 success (the hand-off is .txt, so ci fired).
+
 ## 2026-10-12 - /done gate run at d142bd8 (Python 3.14; CI is 3.11)
 
 - Measured 2026-10-12 by the /done ritual, whole suites through
