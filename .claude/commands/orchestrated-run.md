@@ -419,3 +419,11 @@ python -m pytest agents/pity_engine
   a syntax error crashes silently under `pythonw.exe`.
 - Never surface a raw API or error string on a user-facing surface. Catch it,
   render a friendly degraded state, log the raw error.
+- **Every note sent to another tree, by the main session's dispatch or by any
+  sub-agent, goes through `python tools/send_note.py send <draft>`** - the one
+  attended send path (hand-off 0q). `tools/send_note.py` writes both copies,
+  re-hashes them and appends the outbound-ledger row FLEET-COMMON item 14c
+  counts; a note sent any other way skips that row. A dispatch prompt that asks
+  an agent to send a note names this command. `/done` then runs
+  `python tools/send_note.py audit`, which must print nothing
+  (`.claude/commands/done.md` section 4b).

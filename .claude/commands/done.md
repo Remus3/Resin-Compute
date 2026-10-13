@@ -131,6 +131,42 @@ gate, and the ledger entry says so.
 record it as green, red or pending in the ledger entry. Do not dispatch a second
 run of something the push already started, and do not predict a running result.
 
+## 4b. Outbound notes - `tools/send_note.py` is the only send path
+
+Every note this session sends to another tree, including any note /done itself
+sends, goes through the attended send path, `tools/send_note.py`:
+
+```
+python tools/send_note.py send <draft>
+```
+
+`tools/send_note.py send` validates the draft (the responder's own gate),
+refuses a retired or unknown recipient, applies the FLEET-COMMON item 14c cap
+(ORDER, FIX and RULING always pass), writes this tree's own copy first and the
+recipient's second, re-hashes both, and only then appends the outbound-ledger
+row `OutboundCap` counts. It prints one JSON result line: exit 0 is sent, exit
+1 is refused and is the failure line. There is no other send path - a note
+hand-placed in an inbox skips the ledger row, which is how both notes of
+2026-10-12 went unrecorded (hand-off 0q). A result reason of
+`over-cap-recorded` is NOT a failure: the note was delivered, so its row is
+forced in and the cap overshoot is visible (0q ruling B; do not re-litigate -
+reversed only by the kit locking `record` or a MAIN ruling that the ledger
+must never exceed the cap).
+
+Then, whether or not this session sent anything, run the audit:
+
+```
+python tools/send_note.py audit
+```
+
+It must print nothing (exit 0). Any line it prints is an own-sent note with no
+ledger row. A line with no `reason` key is a delivered note: append its row
+with `python tools/send_note.py audit --apply`, re-run the audit until it
+prints nothing, and record the backfill in the section 5 ledger entry. A line
+WITH a `reason` (`undelivered`, `recipient-mismatch`, `unknown-recipient`) is
+never appended by `tools/send_note.py`; it stops the ritual and is the failure
+line.
+
 ## 5. Write `docs/ledger/session-<n>.md` and index it in `docs/LEDGER.md`
 
 n is this session's `SESSION:` counter from `RSC-NEXT-SESSION.txt`. Write the
