@@ -8,8 +8,10 @@ schedule, so this is a fast local gate, not the only one.
 
 THE MAPPING, deterministic and bounded:
 
-  1. Changed paths = `git diff --name-only <base>...HEAD` plus the working
-     tree's own edits against HEAD (the hook grades the working tree).
+  1. Changed paths = `git diff --name-only <base>...HEAD`, plus `<base> HEAD`
+     (a force-push discards the remote's own side; 0i 2c residue b), plus the
+     working tree's own edits against HEAD and its untracked, non-ignored
+     files (the hook grades the working tree; 0i 2c residue a).
      <base> is `--base` when it names a commit, else `@{u}`. No base -> FULL.
   2. More than MAX_CHANGED paths, or any FULL_TRIGGERS path -> FULL.
   3. A changed `tests/test_*.py` that exists runs itself.
@@ -82,6 +84,9 @@ FULL_TRIGGERS = frozenset(
     {
         "conftest.py",
         "pytest.ini",
+        # pytest 9 reads these two BEFORE pytest.ini (findpaths.locate_config).
+        "pytest.toml",
+        ".pytest.toml",
         "requirements.txt",
         "requirements-dev.txt",
         "tests/__init__.py",
@@ -474,10 +479,21 @@ def _changed(root: Path, base: str | None) -> list[str] | None:
     # --no-renames: a rename must list its OLD path too, or a renamed-away
     # module disappears from every rule (adversary round 1, 2026-10-12).
     pushed = _git(root, "diff", "--name-only", "--no-renames", f"{resolved}...HEAD")
+    # 0i(2c) residue (b): a FORCE-PUSH moves the remote from <base> to HEAD,
+    # so the remote's real change is the two-dot diff. The three-dot one above
+    # lists only HEAD's side since the merge-base and misses a remote-only
+    # change the force-push discards. On a fast-forward the two are equal.
+    replaced = _git(root, "diff", "--name-only", "--no-renames", resolved, "HEAD")
     local = _git(root, "diff", "--name-only", "--no-renames", "HEAD")
-    if pushed is None or local is None:
+    # 0i(2c) residue (a): the hook grades the files ON DISK, and pytest reads
+    # its configuration and conftests from disk, so an untracked file counts.
+    # Gitignored files do not: they are scratch the tree has disowned.
+    untracked = _git(root, "ls-files", "--others", "--exclude-standard")
+    if pushed is None or replaced is None or local is None or untracked is None:
         return None
-    return [line for line in (pushed + local).splitlines() if line.strip()]
+    return [
+        line for line in (pushed + replaced + local + untracked).splitlines() if line.strip()
+    ]
 
 
 def compute(root: Path, base: str | None) -> Selection:
