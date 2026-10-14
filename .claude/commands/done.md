@@ -206,7 +206,9 @@ first. Rewrite it, then commit it with the rest of the paperwork.
   because the session worked on something else. An item leaves the file only
   when it was done (and the ledger says so) or explicitly retracted (and the
   file says why).
-- Contents: the bootstrap reading order and the standing warning not to
+- Contents: the bootstrap reading order (it includes running
+  `python tools/roots_map_probe.py` from the main checkout and reading its
+  DRIFT lines - ADR-013 interim d) and the standing warning not to
   re-derive gacha constants; the gates in section 1 order; the state observed
   THIS session, stamped with date and commit, labelled as a reading; traps that
   have actually bitten here; open work highest priority first; what must NOT be
