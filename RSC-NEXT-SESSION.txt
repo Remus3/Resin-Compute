@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-12 (session 71), gates measured at commit d142bd8 on main
+Stamped 2026-10-13 (session 72), gates measured at commit 6f0cfc9 on main
 by the /done ritual; this paperwork commit landed after it. Everything below
 is a READING taken that day, not a promise about now. Re-measure before
 citing.
@@ -14,9 +14,7 @@ BOOTSTRAP - READ IN THIS ORDER
   docs/LEDGER.md (an INDEX since session 64; read the newest
     docs/ledger/session-<n>.md, older bodies in docs/ledger/archive-*.md)
   git log --oneline -10
-  gh pr list   (read 2026-10-12 session 71: Dependabot PR #5 CLOSED by
-    Dependabot 2026-10-13T02:37:49Z after the bump landed locally, merge
-    8fe0ce4; no open PR seen)
+  gh pr list   (read 2026-10-13 session 72 /done: no open PR)
 Before planning any character build: docs/GOAL_SPEC_SEED_TEAM.md.
 Before adding any data source: docs/LICENSE_NOTES.md.
 Before re-litigating a past choice: docs/adr/README.md.
@@ -53,7 +51,7 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 17 [] (kit v17, read back at session 70 /done; vendored
+must print 17 [] (kit v17, read back at session 72 /done; vendored
 6f61e0d).
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
@@ -65,7 +63,27 @@ tmp_path_retention_count = 1. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures. Pass the suite
 interpreter to the suite gate as an ABSOLUTE path (sys.executable).
 
-STATE OBSERVED 2026-10-12 AT d142bd8 (session 71 /done gate run)
+STATE OBSERVED 2026-10-13 AT 6f0cfc9 (session 72 /done gate run)
+  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
+  skipped 4 noted; ruff clean; tests 4513 passed 6 skipped (same six host
+  skip reasons, read with -rs; collect-only 4519); pity_engine 191
+  passed; node 110 pass 0 fail; dry run 0 pass 0 fail 7 skip; mypy 44
+  files clean; kit check 17 []. Whole suites ran through the suite gate;
+  the app suite waited about 420 s for the single slot.
+  core.hooksPath read the ABSOLUTE spelling at /done start; accepted
+  under the 0z rule (either spelling resolving to .githooks is fine).
+  READ BACK before the paperwork commit: origin/main 6f0cfc9 (ls-remote);
+  ci 38486807882, docs-guards 38486807919, codeql 38486807925 success at
+  6f0cfc9. tools/send_note.py audit printed nothing. watch_inbox read back
+  unread: none after --mark. Paperwork push and its CI: see
+  docs/ledger/session-72.md.
+  LANDED session 72: 0w merge c921c5c (attended sends and /done through
+  tools/send_note.py; adversary NOT REFUTED); 0y merge e2179b2 plus F1
+  1fa7f3b (ui-auditor routing defers to the ui-audit skip list); 0z
+  4fd8b9c (hooksPath drift root-caused to Claude Code's worktree setup);
+  seam floors 135 -> 155 (5555ce6, 6f0cfc9); 0x INFORMATION note to MAIN
+  sent, sha256 e8ef7559...0fed4 (local copy re-hashed at /done).
+PRIOR READING 2026-10-12 AT d142bd8 (session 71 /done gate run)
   Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
   skipped 4 noted; ruff clean; tests 4479 passed 6 skipped (same six host
   skip reasons, read with -rs); pity_engine 191 passed; node 110 pass
@@ -244,26 +262,13 @@ PRIOR READINGS sessions 57-62: see docs/ledger/archive-2026-10.md and
   trap, not a regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
-  0w. ATTENDED SENDS MUST USE tools/send_note.py (NEW session 71). 0q
-     landed the attended send path (merge 20d9d29) and the audit/backfill,
-     but nothing forces an attended session or /done to send through it, so
-     a hand-written send can still skip the outbound-ledger row. Wire it in
-     (.claude/commands/done.md, the orchestrated-run protocol, or a
-     guard), or record why not. Interim:
-     run python tools/send_note.py audit at /done; it must print nothing.
-  0x. KIT DEFECT TO MAIN (NEW session 71, 0q P2): OutboundCap.record /
-     _append in ops/fleet_kit/fleet_inbox.py take no lock (concurrent sends
-     can double a row or lose an append on Windows). Put it in the NEXT
-     BATCHED note to MAIN; never patch the vendored kit. Reversed by: a kit
-     version that locks record, or a MAIN ruling the ledger must never
-     exceed the cap. ROADMAP "Session 71 residue" (a).
-  0y. .claude/agents/builder.md:43-44 (any shell/ or surface/ diff needs
-     ui-auditor) should defer to the skip list at
-     .claude/commands/ui-audit.md:77-85 (NEW session 71; the 0u electron
-     bump needed an adjudicator waiver). ROADMAP session 71 residue (b).
-  0z. FIND WHAT REWRITES core.hooksPath TO AN ABSOLUTE PATH (NEW session
-     71; recurred sessions 58, 60, 64, 68, 70, 71). ROADMAP session 71
-     residue (c).
+  0x. AWAIT MAIN'S REPLY to the 1852 INFORMATION note (sent session 72,
+     sha256 e8ef75592e297643e4ee1fc5d944838e4a23145571bbc4eb6f9529574820fed4,
+     reached 2/2): the OutboundCap.record / _append no-lock kit defect in
+     ops/fleet_kit/fleet_inbox.py and the fleet-wide hooksPath finding.
+     Triage the reply when it lands; never patch the vendored kit.
+     Reversed by: a kit version that locks record, or a MAIN ruling the
+     ledger must never exceed the cap. ROADMAP "Session 71 residue" (a).
   O8. MAIN 2246 ORDER s4 HISTORY REWRITE + FORCE PUSH, and s8 - NOT DONE,
      AWAITING EXPLICIT OPERATOR APPROVAL IN PERSON (attended session's
      instruction 2026-10-09; not for an unattended run). s4: the
@@ -358,9 +363,18 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      is unreachable; an idle status over a non-oldest epoch-ms row reads
      120/120 while the kit still counts it as one; a one-off kit read error
      reads Backing Off, not the limit.
-  13. Inbox: at session 71 /done scripts/watch_inbox.py read back
-     unread: none (no MAIN reply to the 1258 note yet, item 0t). Each session: triage
+  13. Inbox: at session 72 /done scripts/watch_inbox.py read back
+     unread: none after --mark (SS 1830 ANSWER to MAIN on TEMP-2 triaged
+     not-applicable; no MAIN reply to the 1258 or 1852 notes yet, items 0t
+     and 0x). Each session: triage
      new entries into the four buckets, then --mark only what was triaged.
+  DONE session 72 (see docs/ledger/session-72.md): 0w send path wired
+  (merge c921c5c); 0y ui-auditor skip-list routing (merge e2179b2, F1
+  1fa7f3b); 0z hooksPath root cause (4fd8b9c); seam floors 135 -> 155;
+  0x note sent (now a waiting item); inbox triage and mark. 0e: the
+  subagent-first jsonl showed 0 main-thread rows on 2026-10-13, so no
+  would-deny for undispatchable work; mode stays deny. All other items
+  carried forward.
   DONE session 71 (see docs/ledger/session-71.md): 0v CI red test
   root-caused (rootdir fallback at a filesystem-root common ancestor, not
   the pytest pin) and fixed, merge f1a2121, ci 38337579557 green; 0r
@@ -455,9 +469,22 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   .claude/commands/ui-audit.md exemption, a MAIN ruling, or a rendered regression); 0q
   ruling B, an over-cap send still records its row (reversed by the kit
   locking record or a MAIN ruling that the ledger must never exceed the
-  cap).
+  cap); 0y adjudicated A, accept the merge plus follow-up F1, rejecting
+  B (block 0y until 0w merged) and C (roadmap only) (reversed if the
+  tests/test_builder_ui_audit_rule.py guard never reds on the old text);
+  0z keeps either hooksPath spelling and does NOT enable
+  extensions.worktreeConfig, because agent worktrees would then get no
+  hooks (reversed by Claude Code no longer rewriting the value, or a MAIN
+  ruling).
 
 TRAPS MEASURED - none are hypothetical
+  A BUILDER'S NEW TEST THAT READS A .md MUST BE REGISTERED in
+  tests/_markers.py (READS_DOCS or PLUMBING) (session 72: two slices
+  blocked on it). Put it in every builder prompt that adds such a test.
+
+  THE CLAIMS HOOK REJECTS AN INVENTED --owner (session 72 again). Use the
+  agent's own id, exactly as the hook's deny reason names it.
+
   THE HARNESS KILLS BACKGROUND SUITE RUNS UNDER LOW HOST MEMORY (session
   71, twice). Re-run in the foreground; a suite gate timeout fails closed.
 
@@ -514,8 +541,11 @@ TRAPS MEASURED - none are hypothetical
   main session can dispatch planner, builders, verifier and adversaries.
 
   core.hooksPath DRIFTS TO AN ABSOLUTE PATH (seen sessions 58, 60, 64, 68,
-  70 and 71; it read .githooks at session 71 /done start). Read it back at
-  session start; python scripts/install_hooks.py restores it.
+  70, 71 and 72). Root-caused session 72 (0z): Claude Code's worktree setup
+  writes the absolute <main root>\.githooks into the shared .git/config.
+  Harmless; .claude/commands/done.md accepts either spelling. Run
+  python scripts/install_hooks.py only when it is empty or resolves
+  elsewhere.
 
   THE SESSION SCRATCHPAD IS SHARED ACROSS TREES (MAIN 0905, observed).
   Another tree's session ran a generic-named helper found there. Use a
@@ -600,4 +630,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 72
+SESSION: 73
