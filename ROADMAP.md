@@ -13,6 +13,26 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-14. Session 73 residue (see `docs/ledger/session-73.md`).**
+  (a) KIT DEFECT, report to MAIN in the next batched note:
+  `ops/fleet_kit/fleet_gitlock.py` wraps only `git commit` and `git push`,
+  so a bare `git merge` is refused; the merger used `git merge --no-ff
+  --no-commit` and then a gitlock commit. Never patch the kit. Reversed
+  by: a kit version that wraps `git merge`, or a MAIN ruling.
+  (b) WATCH: a stale empty `.git/index.lock` (826 s, no git process)
+  blocked the first merge of session 73; the gitlock dry-run commit
+  cleared it and logged it. Watch for a repeat and root-cause it then.
+  (c) TRAP, recorded: the commit-msg hook rejects a `merge:` subject; the
+  repo form is `Merge slice ...`.
+  (d) PLUMBING SLICE: `tools/roots_map_probe.py` locates the map relative
+  to its own file, so a worktree copy prints "map not present" (a false
+  negative). Consider resolving the map via the git common dir, in its own
+  slice; until then run it from the main checkout.
+  (e) 0i residue from merge 72b2336: no git call in
+  `scripts/prepush_select.py` has a timeout (pre-existing); in a partial
+  clone the missing-sha rev-parse could reach the network. 2c-b push-run
+  cancellation stays watch-only.
+
 - **NEW 2026-10-12. Session 71 residue (0q merge 20d9d29).**
   (a) KIT DEFECT, report to MAIN in the next batched note:
   `OutboundCap.record` / `_append` in `ops/fleet_kit/fleet_inbox.py` take no
@@ -28,10 +48,9 @@ version. What follows is everything the scaffold deliberately did not do.
 - **NEW 2026-10-12. Session 70 residue (see `docs/ledger/session-70.md`).**
   (a), (c), (d) and (g) DONE session 71 - moved to
   `docs/roadmap-archive/2026-10.md`; see `docs/ledger/session-71.md`.
-  (b) 0i(2c) residuals: an untracked dot-prefixed
-  pytest ini file in the checkout makes `scripts/prepush_select.py` report
-  SKIP locally; a force-push diff taken against the merge-base can miss
-  engine changes the force-push discarded. (e) The
+  (b) DONE session 73 (merge 72b2336, `scripts/prepush_select.py`,
+  `tests/test_prepush_select.py`; see `docs/ledger/session-73.md`);
+  residue in the session 73 residue entry above. (e) The
   FLEET_SUITE_SLOTS=1 observation went to MAIN in the 1258 INFORMATION
   note; watch the inbox for a reply (none at session 71 /done). (f) Flaky
   watch carried from the kit
@@ -121,6 +140,13 @@ version. What follows is everything the scaffold deliberately did not do.
   tracked digest of a URL, path or commit id is ruled out as a confirmation
   oracle; quorum with verify_main recorded as settled by ADR-011; five
   operator asks listed in the ADR. Code waits on the asks.
+  Session 73: ADJUDICATED - interim d built now (read-only session-start
+  probe, `tools/roots_map_probe.py`, merge f6234b3; see
+  `docs/ledger/session-73.md`), A2 (the beacon) stays the target. OPEN:
+  A2 waits on operator asks 1, 2 and 4 (unanswered). Reversed by: an
+  operator or verified MAIN yes to asks 1 and 2 (build A2 test-first);
+  MAIN's outbox becoming tracked-only makes A2 unworkable. Common-mode
+  risk: nothing tests that MAIN's outbox can hold an untracked file.
 
 - **AMENDED 2026-10-08 (session 63, adjudicated ruling 0f, DECISION C):
   THE RESPONDER RUN LEDGER IS RETIRED; ONE RUN LEDGER, THE KIT'S.** The
