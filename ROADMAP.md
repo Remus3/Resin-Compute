@@ -19,17 +19,12 @@ version. What follows is everything the scaffold deliberately did not do.
   lock, so two concurrent sends can write a duplicate row or lose an append
   on Windows. This is 0q's P2, filed rather than patched because the kit is
   vendored byte-for-byte. Reversed by: a kit version that locks `record`,
-  or a MAIN ruling that the ledger must never exceed the cap.
-  (b) `.claude/agents/builder.md:43-44` (the general path rule that sends
-  any `shell/` or `surface/` diff to ui-auditor) should defer to the
-  exemptions at `.claude/commands/ui-audit.md:77-85`; the 0u electron bump
-  needed an adjudicator waiver because the two files disagree.
-  (c) DONE session 72 - root-caused and moved to
+  or a MAIN ruling that the ledger must never exceed the cap. REPORTED
+  session 72 in the 1852 INFORMATION note to MAIN (see
+  `docs/ledger/session-72.md`); open until MAIN replies or a kit version
+  locks `record`.
+  (b), (c) and (d) DONE session 72 - moved to
   `docs/roadmap-archive/2026-10.md`; see `docs/ledger/session-72.md`.
-  (d) Nothing yet forces an attended session or `/done` to send notes
-  through `tools/send_note.py`, so a hand-written send can still skip the
-  outbound-ledger row. Wire it in, or record why not; interim, run
-  `python tools/send_note.py audit` at /done (it must print nothing).
 - **NEW 2026-10-12. Session 70 residue (see `docs/ledger/session-70.md`).**
   (a), (c), (d) and (g) DONE session 71 - moved to
   `docs/roadmap-archive/2026-10.md`; see `docs/ledger/session-71.md`.
