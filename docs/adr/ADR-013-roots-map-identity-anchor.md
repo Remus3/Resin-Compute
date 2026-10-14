@@ -9,15 +9,15 @@
 
 The responder decides whether a note naming MAIN as its sender carries the
 operator's authority. `tools/moon_sync_responder.py::main_provenance` (line
-2098) finds MAIN's tree through one row of a per-host, gitignored roots map:
-`load_roots` (lines 1615-1638) reads the file named by `DEFAULT_ROOTS_CONFIG`
-(line 673), that file is gitignored by design (.gitignore line 125, the only
+2215) finds MAIN's tree through one row of a per-host, gitignored roots map:
+`load_roots` (lines 1732-1755) reads the file named by `DEFAULT_ROOTS_CONFIG`
+(line 704), that file is gitignored by design (.gitignore line 127, the only
 file that resolves a codename to a real checkout), and `main_provenance` takes
-the MAIN row at line 2119, derives the outbox as the sibling of MAIN's inbox
-at line 2125, requires the outbox to list the exact filename (line 2135),
-compares bytes and digests (line 2164) and checks that the verified bytes
-address this tree (line 2170) before returning MATCH (line 2175). Only MATCH
-is treated as verified downstream (`_verified`, lines 1412-1415). No git runs
+the MAIN row at line 2236, derives the outbox as the sibling of MAIN's inbox
+at line 2242, requires the outbox to list the exact filename (line 2252),
+compares bytes and digests (line 2281) and checks that the verified bytes
+address this tree (line 2287) before returning MATCH (line 2292). Only MATCH
+is treated as verified downstream (`_verified`, lines 1529-1532). No git runs
 anywhere on that path.
 
 The failure this ADR is about is the VALUE of one row in a per-host file that
@@ -27,7 +27,7 @@ wrong row passes both, their agreement says nothing about the map, and
 neither check tests the map.
 
 One check runs at tick time. The kit's `verify_main`
-(`ops/fleet_kit/fleet_headless.py` lines 562-585) is adoption-only under
+(`ops/fleet_kit/fleet_headless.py` lines 828-851) is adoption-only under
 ADR-011 (lines 40-43): it takes the outbox location as an argument, checks no
 identity of the repository it is handed, and has no tracked call site - a
 grep finds its definition and prose only. At tick time the row is a single
@@ -109,12 +109,12 @@ Mechanism, in four steps:
    file is fixed here.
 3. `main_provenance`, only when a MAIN note is queued and only after the
    existing byte match has succeeded, reads the beacon relative to the row -
-   the same outbox directory derived at line 2125 - hashes it once and
+   the same outbox directory derived at line 2242 - hashes it once and
    compares with the pin. One file read and one hash per tick, no git, and
    nothing at all on an idle tick.
 4. A missing or different beacon makes the note UNVERIFIABLE and retryable,
    so it falls under the deferral ADR-011 was amended with (lines 85-90):
-   `defer_unverified` (line 3035) re-checks it for 3 counted checks 240 s
+   `defer_unverified` (line 3176) re-checks it for 3 counted checks 240 s
    apart or 900 s (`DEFER_MAX_CHECKS`, `DEFER_CHECK_SPACING_S`,
    `DEFER_MAX_AGE_S`), then releases it as UNVERIFIABLE data. Fail closed;
    liveness through the deferral.
@@ -209,6 +209,25 @@ ops/loop/control/ directory. Session cadence only - it catches drift when a
 human looks and nothing between sessions. No responder change, no git, no
 leak, no kit change. Where the ritual is encoded is the accepting session's
 choice.
+
+### Interim: D shipped (session 73, 2026-10-14)
+
+An adjudicator ruled on the hand-off item: build interim d now; a2 stays the
+target, pending asks 1 and 2. Shipped as `tools/roots_map_probe.py`, pinned by
+`tests/test_roots_map_probe.py`, and named in the bootstrap reading order of
+`.claude/commands/done.md`. It locates the outbox through the responder's own
+`load_roots` and the same derivation as `main_provenance`, prints the four
+facts and one DRIFT line per field that moved since the stored reading, never
+prints the row's value, and keeps its state in the gitignored control
+directory. It exits 0 on every outcome but invalid arguments: a reporter, not
+a gate, because legitimate re-roots and new notes are expected drift and the
+control here is a human reading it. This ADR stays Proposed; d is the interim,
+not an acceptance.
+
+Reversed by: an operator or SHA-256-verified MAIN yes to asks 1 and 2, which
+starts the a2 slice (the probe may then retire); or MAIN's outbox becoming a
+tracked-only location, which makes a2 unworkable and leaves d as the standing
+control until another design is ruled.
 
 ## Timing
 
