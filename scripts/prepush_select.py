@@ -95,6 +95,35 @@ FULL_TRIGGERS = frozenset(
     }
 )
 
+#: Every file name pytest 9 accepts as its configuration
+#: (_pytest/config/findpaths.py locate_config), in its search order. pytest
+#: takes the FIRST one it meets walking up from each argument, so one of these
+#: directly under a suite's directory replaces the root pytest.ini outright.
+PYTEST_CONFIG_NAMES: tuple[str, ...] = (
+    "pytest.toml",
+    ".pytest.toml",
+    "pytest.ini",
+    ".pytest.ini",
+    "pyproject.toml",
+    "tox.ini",
+    "setup.cfg",
+)
+
+#: Directories the two suites are invoked on (`pytest tests`,
+#: `pytest agents/pity_engine`): pytest's config search starts in each.
+SUITE_DIRS: tuple[str, ...] = ("tests", "agents/pity_engine")
+
+
+def is_full_trigger(path: str) -> bool:
+    """True for a path that can reconfigure every module: a FULL_TRIGGERS path,
+    any pytest config name directly under a suite directory, or a
+    `conftest.py` anywhere (adversary round 1, session 73)."""
+    p = PurePosixPath(path)
+    if path in FULL_TRIGGERS or p.name == "conftest.py":
+        return True
+    return p.name in PYTEST_CONFIG_NAMES and str(p.parent) in SUITE_DIRS
+
+
 #: Basenames too common to identify anything.
 GENERIC_BASENAMES = frozenset({"__init__.py", "__main__.py", "conftest.py"})
 
@@ -204,7 +233,7 @@ def select(
     changed = sorted(set(changed))
     if len(changed) > MAX_CHANGED:
         return Selection(FULL, f"{len(changed)} changed paths exceed MAX_CHANGED={MAX_CHANGED}")
-    triggers = [c for c in changed if c in FULL_TRIGGERS]
+    triggers = [c for c in changed if is_full_trigger(c)]
     if triggers:
         return Selection(FULL, f"changed FULL trigger(s): {', '.join(triggers)}")
 
@@ -254,7 +283,7 @@ def ci_mark_for(changed: Sequence[str]) -> str:
     changed = sorted(set(changed))
     if len(changed) > MAX_CHANGED:
         return ""
-    if any(c in FULL_TRIGGERS or c.startswith(PLUMBING_ROOTS) for c in changed):
+    if any(is_full_trigger(c) or c.startswith(PLUMBING_ROOTS) for c in changed):
         return ""
     return "not plumbing"
 
@@ -375,7 +404,7 @@ def engine_decision(
     for c in changed:
         p = PurePosixPath(c)
         top = p.parts[0].removesuffix(".py") if p.parts else ""
-        if c in FULL_TRIGGERS:
+        if is_full_trigger(c):
             why = "a FULL trigger"
         elif c in ENGINE_CONFIG_FILES:
             why = "a root pytest configuration file"
@@ -450,9 +479,19 @@ def _git(root: Path, *args: str, ok: Sequence[int] = (0,)) -> str | None:
 
 
 def _resolve_base(root: Path, base: str | None) -> str | None:
-    for candidate in (base, "@{u}"):
-        if not candidate or candidate == _ZERO_SHA:
-            continue
+    """The commit to diff against, or None (the caller degrades to FULL).
+
+    A non-zero `base` that does not resolve locally - the usual force-push
+    over unfetched remote commits - returns None and NEVER falls back to
+    @{u}: the remote tip is unknown, so no diff can describe the push
+    (adversary round 1, session 73). Only an absent or all-zero base (a new
+    remote ref) takes the @{u} route.
+    """
+    if base and base != _ZERO_SHA:
+        candidates: tuple[str, ...] = (base,)
+    else:
+        candidates = ("@{u}",)
+    for candidate in candidates:
         out = _git(root, "rev-parse", "--verify", "-q", f"{candidate}^{{commit}}")
         if out and out.strip():
             return out.strip()
@@ -501,7 +540,8 @@ def compute(root: Path, base: str | None) -> Selection:
     if changed is None:
         return Selection(
             FULL,
-            "no upstream or base commit to diff against, or git diff failed",
+            "no upstream or base commit to diff against (a base missing locally"
+            " counts), or git diff failed",
             engine_reason="no base to diff against",
         )
     failed_keys = _last_failed_keys(root / ".pytest_cache" / "v" / "cache" / "lastfailed")

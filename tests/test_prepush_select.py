@@ -948,3 +948,101 @@ def test_a_force_push_discarding_only_a_doc_still_skips_the_engine(repo_with_eng
     base = _diverge(repo_with_engine, "docs/old.md")
     lines = _cli_lines(repo_with_engine, "--base", base)
     assert lines[3].startswith(f"{sel.ENGINE_SKIP} "), lines
+
+
+# ---------------------------------------------------------------------------
+# Adversary round 1 on the session 73 slice. (1) `pytest tests` reads the
+# first config it finds IN tests/ before the root pytest.ini, and `pytest
+# agents/pity_engine` the first in agents/pity_engine/; a conftest.py anywhere
+# can change collection. (2) A non-zero base sha absent from the local object
+# store (a force-push over unfetched commits) must not fall back to @{u}.
+# ---------------------------------------------------------------------------
+
+_PYTEST_CONFIG_NAMES = [
+    "pytest.toml", ".pytest.toml", "pytest.ini", ".pytest.ini",
+    "pyproject.toml", "tox.ini", "setup.cfg",
+]
+
+
+@pytest.mark.parametrize("name", _PYTEST_CONFIG_NAMES)
+def test_a_pytest_config_directly_under_tests_forces_full(name: str):
+    path = f"tests/{name}"
+    got = _select(["core/resin.py", path])
+    assert got.mode == sel.FULL, got
+    assert path in got.reason
+    assert sel.ci_mark_for([path]) == ""
+
+
+@pytest.mark.parametrize("name", _PYTEST_CONFIG_NAMES)
+def test_an_untracked_pytest_config_under_tests_makes_the_cli_select_full(
+    repo_with_engine: Path, name: str
+):
+    base = _git(repo_with_engine, "rev-parse", "HEAD").strip()
+    _commit_tools_change(repo_with_engine)
+    (repo_with_engine / "tests" / name).write_text("[pytest]\n", encoding="ascii", newline="\n")
+    lines = _cli_lines(repo_with_engine, "--base", base)
+    assert lines[0] == sel.FULL, lines
+
+
+@pytest.mark.parametrize("name", _PYTEST_CONFIG_NAMES)
+def test_an_untracked_pytest_config_in_the_engine_package_runs_the_engine(
+    repo_with_engine: Path, name: str
+):
+    base = _git(repo_with_engine, "rev-parse", "HEAD").strip()
+    _commit_tools_change(repo_with_engine)
+    (repo_with_engine / "agents" / "pity_engine" / name).write_text(
+        "[pytest]\n", encoding="ascii", newline="\n"
+    )
+    lines = _cli_lines(repo_with_engine, "--base", base)
+    assert lines[3].startswith(f"{sel.ENGINE_RUN} "), lines
+
+
+@pytest.mark.parametrize("path", ["tests/sub/conftest.py", "core/conftest.py", "tools/conftest.py"])
+def test_a_conftest_anywhere_forces_full_and_runs_the_engine(path: str):
+    got = _select(["core/resin.py", path])
+    assert got.mode == sel.FULL, got
+    verdict, reason = _engine([path])
+    assert verdict == sel.ENGINE_RUN, reason
+
+
+@pytest.mark.parametrize("path", ["tests/data/sample.ini", "docs/setup.cfg.md", "tools/tox_helper.py"])
+def test_config_like_neighbours_keep_their_mapping(path: str):
+    """The legitimate neighbours: only the exact config names directly under
+    tests/ (or the root) are FULL triggers, never a lookalike or a deeper ini."""
+    assert _select([path]).mode != sel.FULL
+
+
+def test_a_base_sha_missing_locally_forces_full(repo: Path):
+    """The adversary's probe: an upstream exists at HEAD~1, so the old code
+    silently diffed against it and SELECTed."""
+    first = _git(repo, "rev-parse", "HEAD").strip()
+    (repo / "core" / "thing.py").write_text("X = 2\n", encoding="ascii", newline="\n")
+    _git(repo, "commit", "-q", "-am", "change")
+    _git(repo, "remote", "add", "origin", ".")
+    _git(repo, "update-ref", "refs/remotes/origin/main", first)
+    _git(repo, "branch", "-M", "master")
+    _git(repo, "config", "branch.master.remote", "origin")
+    _git(repo, "config", "branch.master.merge", "refs/heads/main")
+    assert _git(repo, "rev-parse", "@{u}").strip() == first, "non-vacuity: @{u} resolves"
+    missing = "1234567890" * 4
+    mode, reason, _ = _cli(repo, "--base", missing)
+    assert mode == sel.FULL, (mode, reason)
+    assert "missing" in reason, reason
+    lines = _cli_lines(repo, "--base", missing)
+    assert lines[3].startswith(sel.ENGINE_RUN), lines
+    assert _cli_raw(repo, "--ci-mark", "--base", missing).strip() == ""
+
+
+def test_an_all_zero_base_still_takes_the_upstream_route(repo: Path):
+    """The legitimate neighbour: a new remote ref (all-zero sha) keeps @{u}."""
+    first = _git(repo, "rev-parse", "HEAD").strip()
+    (repo / "core" / "thing.py").write_text("X = 2\n", encoding="ascii", newline="\n")
+    _git(repo, "commit", "-q", "-am", "change")
+    _git(repo, "remote", "add", "origin", ".")
+    _git(repo, "update-ref", "refs/remotes/origin/main", first)
+    _git(repo, "branch", "-M", "master")
+    _git(repo, "config", "branch.master.remote", "origin")
+    _git(repo, "config", "branch.master.merge", "refs/heads/main")
+    mode, reason, modules = _cli(repo, "--base", "0" * 40)
+    assert mode == sel.SELECT, (mode, reason)
+    assert "tests/test_thing.py" in modules.split(","), modules
