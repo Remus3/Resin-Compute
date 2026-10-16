@@ -320,6 +320,40 @@ def test_worktree_run_with_no_main_baseline_never_claims_to_store_one(
     _assert_no_identity(out, tmp_path, main, wt, target)
 
 
+@pytest.mark.parametrize("failure", ["returns_false", "raises_oserror"])
+def test_failed_baseline_write_never_claims_storage(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    """Sibling of N5(a): a first run whose baseline write fails printed "this
+    one is stored as the baseline" and then "could not be stored". The stored
+    claim may appear only after a successful write. `atomic_write_json`
+    reports failure by returning False; a raised OSError is covered too."""
+    cfg = _map(tmp_path, _main_tree(tmp_path))
+    state = _state(tmp_path)
+
+    def _fail(*_a: object, **_k: object) -> bool:
+        if failure == "raises_oserror":
+            raise OSError("simulated write failure")
+        return False
+
+    monkeypatch.setattr(probe._atomic, "atomic_write_json", _fail)
+    rc, text = _run(cfg, state, capsys)
+    assert rc == 0
+    assert "stored as the baseline" not in text
+    assert "could not be stored" in text
+    assert "no previous reading" in text
+    assert not state.exists()
+    _assert_no_identity(text, tmp_path, cfg, state)
+    # Non-vacuity: with the real writer the same first run claims storage.
+    monkeypatch.undo()
+    rc, text = _run(cfg, state, capsys)
+    assert rc == 0
+    assert "stored as the baseline" in text
+    assert "could not be stored" not in text
+    assert state.is_file()
+
+
 def test_failed_common_dir_resolution_says_it_fell_back(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
