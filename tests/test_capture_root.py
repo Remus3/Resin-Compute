@@ -79,16 +79,32 @@ def test_no_consumer_calls_path_home(rel: str) -> None:
     assert "default_capture_root" in text, rel
 
 
-def test_every_consumer_imports_with_no_user_profile() -> None:
+def _fallback_pil(root: Path) -> Path:
+    """An empty PIL package, APPENDED to sys.path so a real Pillow still wins.
+
+    tools/screen_capture.py hard-stops at import without Pillow, by design
+    (its guarded-import block), and the runtime is stdlib-only, so CI has no
+    Pillow. What this test pins is "no Path.home() at import", which has
+    nothing to do with PIL: the stub lets that arm run where Pillow is absent
+    instead of skipping the one consumer it exists for.
+    """
+    pkg = root / "PIL"
+    pkg.mkdir()
+    for name in ("__init__.py", "Image.py", "ImageGrab.py"):
+        (pkg / name).write_bytes(b"")
+    return root
+
+
+def test_every_consumer_imports_with_no_user_profile(tmp_path: Path) -> None:
     env = {k: v for k, v in os.environ.items()
            if k.upper() not in {"USERPROFILE", "HOME", "HOMEDRIVE", "HOMEPATH"}}
     code = (
-        "import sys; sys.path.insert(0, sys.argv[1]);"
+        "import sys; sys.path.insert(0, sys.argv[1]); sys.path.append(sys.argv[2]);"
         "import tools.first_run_capture, tools.screen_capture, "
         "tools.capture_supervisor; print('ok')"
     )
     done = subprocess.run(
-        [sys.executable, "-c", code, str(REPO_ROOT)],
+        [sys.executable, "-c", code, str(REPO_ROOT), str(_fallback_pil(tmp_path))],
         cwd=str(REPO_ROOT), env=env, capture_output=True, text=True,
         check=False, timeout=60,
     )
