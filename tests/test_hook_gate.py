@@ -1998,6 +1998,18 @@ def test_positive_control_a_merge_topic_subject_lands(gate_repo: _ThrowawayRepo)
     assert _landed_message(gate_repo).splitlines()[0] == b"merge: P3 merge subject template"
 
 
+def test_a_merge_subject_on_an_ordinary_commit_is_refused(gate_repo: _ThrowawayRepo):
+    """`merge:` is legal only while MERGE_HEAD exists; a plain commit is refused."""
+    gate_repo.stage("note.txt", CLEAN_CONTENT)
+    before = gate_repo.head()
+    assert before, "the fixture left HEAD unborn, so 'HEAD did not move' proves nothing"
+    proc = gate_repo.commit(b"merge: P3 merge subject template\n")
+    assert gate_repo.head() == before, (
+        f"a `merge:` subject LANDED on a non-merge commit.\nstderr: {proc.stderr}"
+    )
+    assert proc.returncode != 0 and SUBJECT_MARKER in proc.stderr, proc.stderr
+
+
 _EDITOR_SCRIPT = (
     b"import sys\n"
     b"path = sys.argv[-1]\n"
