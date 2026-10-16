@@ -40,6 +40,11 @@ EXEMPTIONS - the complete list, each with its reason:
 7. `FAKE_UNC_HOSTS` below: invented share hosts in UNC fixtures.
 8. Files matching `ALLOWLIST` (the vendored fleet kit only).
 
+Each exemption is armed both ways (slice N5d): NECESSARY - a tracked file
+other than this one needs it, or it is named in `PROSPECTIVE_RULES` with a
+reason and pinned as still unused - and NARROW - a non-exempt neighbour of
+the same shape still reds.
+
 KNOWN GAPS, stated rather than hidden: a percent-encoded or drive-relative
 path is caught only when it names the repo; a binary file (one holding a NUL
 byte) is not swept, and an arm below pins that every such file is an image.
@@ -94,7 +99,8 @@ FAKE_PATHS: dict[str, str] = {
 
 #: Invented UNC hosts. Exemption 7.
 FAKE_UNC_HOSTS: dict[str, str] = {
-    "server": "UNC locator fixture (tests/test_provenance.py)",
+    "server": "UNC known-gap example (tests/test_machine_identity.py docstring); "
+              "tests/test_provenance.py builds its fixture at run time",
     "fileserver": "planted UNC hook path (tests/test_session_hooks.py)",
     "localhost": "loopback admin-share alias of a drive (conftest.py, "
                  "tests/test_headless_runner*.py); names no machine",
@@ -203,27 +209,33 @@ def _is_fake(prefix: str, rest: str) -> bool:
     return False
 
 
-def _rest_is_exempt(prefix: str, rest: str) -> bool:
+def _exempt_rule(prefix: str, rest: str) -> int | None:
+    """The EXEMPTIONS number (docstring) that spares this candidate, else None."""
     if not rest or rest[0] in "`'\" \t)]},;":
-        return True  # 1: a bare drive root names no directory
+        return 1  # a bare drive root names no directory
     if _is_fake(prefix, rest):
-        return True  # 6
+        return 6
     if rest.startswith("<"):
         tail = _wide(rest[rest.find(">") + 1:]) if ">" in rest else ""
-        return not _FORBIDDEN_SEGMENT.search(tail)  # 2
+        return None if _FORBIDDEN_SEGMENT.search(tail) else 2
     system = _SYSTEM_ROOT.match(rest)
     if system:
-        return not _FORBIDDEN_SEGMENT.search(_wide(rest[system.end():]))  # 4
+        return None if _FORBIDDEN_SEGMENT.search(_wide(rest[system.end():])) else 4
     token = _token(rest)
     if _DOTDOT.search(_wide(rest)):
-        return False  # a `..` segment escapes any root: never exempt
+        return None  # a `..` segment escapes any root: never exempt
     if token.startswith("...") and (len(token) == 3 or token[3] in "\\/"):
-        return not _FORBIDDEN_SEGMENT.search(_wide(rest)[3:])  # 3
+        return None if _FORBIDDEN_SEGMENT.search(_wide(rest)[3:]) else 3
     segs = _segments(token)
     if segs and segs[0].lower() == "users":
         account = segs[1].rstrip(_TRAILING) if len(segs) > 1 else ""
-        return not account or account.lower() in PLACEHOLDER_ACCOUNTS  # 5
-    return False
+        if not account or account.lower() in PLACEHOLDER_ACCOUNTS:
+            return 5
+    return None
+
+
+def _rest_is_exempt(prefix: str, rest: str) -> bool:
+    return _exempt_rule(prefix, rest) is not None
 
 
 def _excerpt(line: str, start: int) -> str:
@@ -273,12 +285,74 @@ def _sweep() -> tuple[tuple[str, ...], int, tuple[str, ...]]:
         if b"\x00" in data:
             binary.append(name)
             continue
-        text = data.decode("utf-8", errors="replace")
         scanned += 1
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            for hit in machine_paths(line):
-                offenders.append(f"{name}:{lineno}: {hit}")
+        offenders.extend(_offenders_in(name, data.decode("utf-8", errors="replace")))
     return tuple(offenders), scanned, tuple(binary)
+
+
+def _offenders_in(name: str, text: str) -> list[str]:
+    """What the sweep reports for one file: nothing if allowlisted."""
+    if _allowlisted(name):
+        return []
+    return [
+        f"{name}:{lineno}: {hit}"
+        for lineno, line in enumerate(text.splitlines(), start=1)
+        for hit in machine_paths(line)
+    ]
+
+
+@functools.cache
+def _corpus() -> tuple[tuple[str, str], ...]:
+    """(name, line) for every line of every tracked text file, allowlisted
+    files included, THIS file excluded: its own tables spell every exempt
+    entry, so counting it would make every exemption look necessary."""
+    lines: list[tuple[str, str]] = []
+    for name in _tracked_files():
+        path = REPO_ROOT / name
+        if name == "tests/test_no_machine_paths.py" or not path.is_file():
+            continue
+        data = path.read_bytes()
+        if b"\x00" in data:
+            continue
+        text = data.decode("utf-8", errors="replace")
+        lines.extend((name, line) for line in text.splitlines())
+    return tuple(lines)
+
+
+@functools.cache
+def _rule_users() -> dict[int, list[str]]:
+    """Corpus lines holding a drive or mount candidate spared by each rule."""
+    users: dict[int, list[str]] = {}
+    for name, raw in _corpus():
+        if _allowlisted(name):
+            continue
+        line = _FILE_URL.sub(_unwrap_file_url, raw)
+        for match in _DRIVE.finditer(line):
+            rule = _exempt_rule(match.group(1) + ":/", match.group(2))
+            if rule is not None:
+                users.setdefault(rule, []).append(name)
+        for match in _MOUNT.finditer(line):
+            rule = _exempt_rule("/" + match.group(1).lower() + "/", match.group(2))
+            if rule is not None:
+                users.setdefault(rule, []).append(name)
+        for match in _UNC.finditer(line):
+            if (match.group(1) or match.group(2) or match.group(3)).lower() in FAKE_UNC_HOSTS:
+                users.setdefault(7, []).append(name)
+    for name, raw in _corpus():
+        if _allowlisted(name) and machine_paths(raw):
+            users.setdefault(8, []).append(name)
+    return users
+
+
+#: Exemptions with NO tracked user, measured 2026-10-16 (slice N5d). Kept,
+#: not deleted, each for the stated reason; the necessity arm below pins
+#: that each is STILL unused, so a first user forces this table to move.
+PROSPECTIVE_RULES: dict[int, str] = {
+    2: "no tracked line puts an angle placeholder right after a drive; "
+       "kept so a doc may write a drive plus <clone-dir> without a red",
+    8: "no vendored kit file holds a machine path today; kept because this "
+       "tree may never edit a kit file, so a kit-shipped path must not red",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +410,7 @@ OFFENDERS: dict[str, str] = {
     "temp dir": _win("C", B, "Temp", "x"),
     "8.3 documents": _win("C", B, "DOCUME" + "~1", "x"),
     "elided then repo": "`" + _win("C", B, "...", _ROOT_NAME) + "`",
+    "placeholder then user": _win("C", B, "<clone-dir>", "Users", _ACCT),
     # Refute round 2, item a: an exempt path earlier on a line masks nothing.
     "after an exempt path": "Install `" + _win("C", B, "Program Files", "Git")
     + "` and `" + _win("C", B, "Users", _ACCT, "AppData") + "`.",
@@ -444,3 +519,88 @@ def test_this_file_does_not_need_its_own_allowlist() -> None:
     assert not _allowlisted("tests/test_no_machine_paths.py")
     text = Path(__file__).read_text(encoding="utf-8")
     assert not [m for line in text.splitlines() for m in machine_paths(line)]
+
+
+# ---------------------------------------------------------------------------
+# Every exemption is NECESSARY (a tracked file needs it) and NARROW (a
+# non-exempt neighbour with the same shape still reds). Slice N5d.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("rule", range(1, 9))
+def test_every_exemption_rule_has_a_tracked_user_or_is_declared_prospective(
+    rule: int,
+) -> None:
+    users = _rule_users().get(rule, [])
+    if rule in PROSPECTIVE_RULES:
+        assert len(PROSPECTIVE_RULES[rule]) > 40
+        assert not users, (rule, "now has a user - drop it from PROSPECTIVE_RULES",
+                           sorted(set(users))[:5])
+    else:
+        assert users, (rule, "spares nothing in the tree - unnecessary?")
+
+
+@functools.cache
+def _candidate_lines() -> tuple[str, ...]:
+    """Swept lines holding any drive, mount or UNC candidate at all. Every
+    other line is spared by no exemption, so it cannot show one is needed."""
+    found: list[str] = []
+    for name, raw in _corpus():
+        line = _FILE_URL.sub(_unwrap_file_url, raw)
+        if not _allowlisted(name) and any(
+            rx.search(line) for rx in (_DRIVE, _MOUNT, _UNC)
+        ):
+            found.append(raw)
+    return tuple(found)
+
+
+@pytest.mark.parametrize("fake", sorted(FAKE_PATHS))
+def test_every_fake_path_is_needed_by_a_tracked_file(
+    fake: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lines = _candidate_lines()
+    assert not [line for line in lines if machine_paths(line)]
+    monkeypatch.delitem(FAKE_PATHS, fake)
+    assert [line for line in lines if machine_paths(line)], fake
+
+
+@pytest.mark.parametrize("host", sorted(FAKE_UNC_HOSTS))
+def test_every_fake_unc_host_is_needed_by_a_tracked_file(
+    host: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lines = _candidate_lines()
+    assert not [line for line in lines if machine_paths(line)]
+    monkeypatch.delitem(FAKE_UNC_HOSTS, host)
+    assert [line for line in lines if machine_paths(line)], host
+
+
+@pytest.mark.parametrize("fake", sorted(FAKE_PATHS))
+def test_every_fake_path_is_matched_whole_never_as_a_prefix(fake: str) -> None:
+    assert machine_paths(fake) == [], fake
+    neighbours = [fake + "z", fake + "/deeper"]
+    if ":" in fake:  # a drive path; a backslash mount is no path shape at all
+        neighbours.append(fake.replace("/", B) + B + "deeper")
+    for neighbour in neighbours:
+        assert machine_paths(neighbour), neighbour
+
+
+@pytest.mark.parametrize("host", sorted(FAKE_UNC_HOSTS))
+def test_every_fake_unc_host_is_matched_whole(host: str) -> None:
+    assert machine_paths(B * 2 + host + B + "share" + B + "x") == [], host
+    for neighbour in (host + "z", "z" + host, host + "-2"):
+        assert machine_paths(B * 2 + neighbour + B + "share" + B + "x"), neighbour
+        assert machine_paths(" /" + "/" + neighbour + "/share/x"), neighbour
+
+
+_KIT_LINE = "hook = " + _win("E", B, _ROOT_NAME, "ops", "x.py")
+
+
+@pytest.mark.parametrize("glob", sorted(ALLOWLIST))
+def test_the_allowlist_spares_its_own_files_only(glob: str) -> None:
+    inside = glob.replace("*", "fleet_done.py")
+    assert _offenders_in(inside, _KIT_LINE) == [], inside
+    stem = glob.rstrip("*").rstrip("/")
+    for outside in (stem + ".py", stem + "x/fleet_done.py", "tests/" + inside,
+                    "ops/fleet_done.py"):
+        assert not _allowlisted(outside), outside
+        assert _offenders_in(outside, _KIT_LINE), outside
