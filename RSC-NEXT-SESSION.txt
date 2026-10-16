@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-15 (session 74), gates measured at commit 1372540 on main
+Stamped 2026-10-16 (session 75), gates measured at commit 069ba52 on main
 by the /done ritual; this paperwork commit landed after it. Everything below
 is a READING taken that day, not a promise about now. Re-measure before
 citing.
@@ -14,7 +14,7 @@ BOOTSTRAP - READ IN THIS ORDER
   docs/LEDGER.md (an INDEX since session 64; read the newest
     docs/ledger/session-<n>.md, older bodies in docs/ledger/archive-*.md)
   git log --oneline -10
-  gh pr list   (read 2026-10-15 session 74 /done: no open PR)
+  gh pr list   (read 2026-10-16 session 75 /done: no open PR)
   python tools/roots_map_probe.py   (FROM THE MAIN CHECKOUT; since merge
     303b839 it resolves the map via the git common dir, and a run from a
     linked worktree is read-only and writes no baseline. Read every DRIFT
@@ -55,7 +55,7 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 17 [] (kit v17, read back at session 74 /done; vendored 6f61e0d).
+must print 17 [] (kit v17, read back at session 75 /done; vendored 6f61e0d).
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
 shared pytest temp dir: if a run needs an explicit --basetemp, use ONE
@@ -69,41 +69,30 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
-STATE OBSERVED 2026-10-15 AT 1372540 (session 74 /done gate run)
-  Python 3.14 (CI is 3.11): every gate in the order above GREEN (counts
-  in docs/ledger/session-74.md); mypy advisory clean; kit check 17 [].
-  Whole suites ran through the suite gate. core.hooksPath read the
-  ABSOLUTE spelling (0z rule). tools/send_note.py audit printed nothing;
-  scripts/watch_inbox.py read unread: none.
-  CI at 1372540 READ BACK success: ci 38850581182, codeql 38850581216.
-  CI was RED at 44c97ec (ci 38845389790) and 6fb8a88 (ci 38846798268):
-  the CI image has no Pillow and tests/test_capture_root.py imported it;
-  fixed by F1 (merge 1372540). Paperwork push and its CI: see
-  docs/ledger/session-74.md.
-  origin: main 1372540 and annotated tag v0.1.0 (tag object 5eab7d8,
-  peels to 6fb8a88), both read back with git ls-remote.
-  git config --get-all fleet.operatorIdent read back 1 value.
-  WORKTREES read back at /done: removed (clean, merged; git worktree
-  remove then git branch -d, which printed each tip) agent-a355f4 (N4,
-  5161d42), agent-ad10c1 (P4, bfb2e07), agent-aef746 (P7b, 558a714).
-  LEFT: agent-a0228d (P5), agent-a0956d (P2), agent-a60657 (P3),
-  agent-ae36a4 (F1) - merged into main but LOCKED by the session's live
-  claude.exe, so not removable without force; agent-aeb93e (merged) left
-  by instruction. Four merged branches with no worktree also remain
-  (worktree-agent-a085507, -a52543, -a902f3, -af74f8). Remove all of
-  these next session with git worktree remove plus git branch -d once
-  unlocked and read back clean and merged; never force (item N6).
-  LANDED session 74 (details docs/ledger/session-74.md): W0 session 72
-  worktrees removed; P1 operatorIdent down to one value; P2 machine-path
-  scrub and guard merge 1efb846; P3 merge: <topic> template merge b888286;
-  N4 roots-map probe via git common dir merge 303b839; P5 hashed runtime
-  lock merge 1db6c73; P4 README build and licence statement merge 44c97ec;
-  P7b pre-push peels annotated tags merge 6fb8a88 and tag v0.1.0; F1
-  Pillow-less capture-root test merge 1372540; P6 GitHub sweep; A1 ONE
-  ANSWER to MAIN (2328 note, sha256 d1235551...6cedc re-hashed at /done);
-  I1 inbox marked.
-PRIOR READINGS (sessions 57-73): see docs/ledger/session-64.md through
-  docs/ledger/session-73.md and docs/ledger/archive-2026-10.md and
+STATE OBSERVED 2026-10-16 AT 069ba52 (session 75 /done gate run)
+  Python 3.14.4 (CI is 3.11): every gate in the order above GREEN (counts
+  in docs/ledger/session-75.md); mypy advisory clean; kit check 17 [].
+  Whole suites ran through the suite gate (tests waited over 600 s for
+  the single machine slot). core.hooksPath read the ABSOLUTE spelling (0z
+  rule). tools/send_note.py audit printed nothing; scripts/watch_inbox.py
+  read unread: none and no inbox file was newer than the session 74
+  hand-off commit, so nothing was triaged or marked.
+  tools/roots_map_probe.py from the main checkout: no drift, 153 outbox
+  entries.
+  CI at 069ba52 READ BACK success: ci 38961106089, codeql 38961106069.
+  origin: main 069ba52 (git ls-remote) and annotated tag v0.1.0 (tag
+  object 5eab7d8). Paperwork push and its CI: see
+  docs/ledger/session-75.md.
+  WORKTREES read back at /done: exactly four besides main, all merged and
+  LOCKED by this session's live pid: agent-a2fcbd2a915e87790,
+  agent-ae145f6da3153d16e, agent-a1fefe71ae6a4056e and
+  agent-a6ee21a202bdbfc72, each on its worktree-agent-* branch (item N7).
+  LANDED session 75 (details docs/ledger/session-75.md): 0i git-call
+  timeouts merge 0c6a644; N5a merge 9791c2f; N5b merge b50773d; N5d
+  merge 4865fc4; N5e merge 069ba52; N5cf adjudicated (c KEEP, f RECORD);
+  N6 session 74 worktrees and branches removed.
+PRIOR READINGS (sessions 57-74): see docs/ledger/session-64.md through
+  docs/ledger/session-74.md and docs/ledger/archive-2026-10.md and
   docs/ledger/archive-2026-09.md. A worktree shows MORE skips (no POSIX
   sh on PATH), and a clone or worktree under AppData fails
   test_the_session_cache_lives_under_the_runtime_directory and
@@ -156,12 +145,9 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      environment kill, not a test failure; re-run in the foreground.
   0i. MAIN 2246 s2 residue (ROADMAP 2246 entry; 2b and 4b DONE session
      68). (2c) the 30 s target MET session 70 (merge 3c61cc8). Session 70
-     residue (b) DONE session 73 (merge 72b2336: untracked files, nested
-     pytest configs and conftest.py force FULL; force-push diffs the base
-     directly; an unfetched base forces FULL). NEW RESIDUE (ROADMAP
-     session 73 residue (e)): no git call in scripts/prepush_select.py
-     has a timeout; in a partial clone the missing-sha rev-parse could
-     reach the network. (2c-b)
+     residue (b) DONE session 73 (merge 72b2336). Session 73 residue (e)
+     DONE session 75 (git-call timeouts, merge 0c6a644; its residue is
+     N7 (a)). (2c-b)
      3 pushes inside one CI run (~213 s) still replace the pending run;
      reverse to a per-commit concurrency group if any push run is ever
      cancelled. The 10.4 GB process is still unexplained. xdist and
@@ -205,23 +191,23 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   N2. WATCH: a stale empty .git/index.lock (826 s, no git process)
      blocked session 73's first merge; the gitlock dry-run commit cleared
      and logged it. Root-cause on a repeat. ROADMAP session 73 residue (b).
-  N5. SESSION 74 RESIDUE (ROADMAP "Session 74 residue", items a-f):
-     (a) roots_map_probe from a worktree with no main baseline prints
-     "stored as the baseline" then "baseline not updated"; (b) no pre-push
-     arm pushes several refs at once, and the rev-parse raw error line on
-     a blob tag is cosmetic; (c) core/capture_root.py ValueError branch
-     unreachable (defence only); (d) the exemption list of
-     tests/test_no_machine_paths.py was never independently tested
-     (adjudicator common-mode note); (e)
-     tests/test_responder_no_console_window.py line 260 monkeypatch is a
-     no-op (pre-existing); (f) tests/test_watch_inbox_session.py line 767
-     fails when a clone lives under AppData (environment).
-  N6. WORKTREE AND BRANCH CLEAN-UP (ROADMAP session 74 residue (g)):
-     agent-a0228d, agent-a0956d, agent-a60657, agent-ae36a4 (merged,
-     locked by the live session at session 74 /done), agent-aeb93e
-     (merged), and branches worktree-agent-a085507, -a52543, -a902f3,
-     -af74f8 (merged, no worktree). git worktree remove plus git branch -d
-     only when unlocked, clean and merged, read back; never force.
+  N7. SESSION 75 RESIDUE (ROADMAP "Session 75 residue", items a-f):
+     (a) 0i: the hung --ci-mark test in tests/test_prepush_select.py also
+     passes on the parent commit (non-discriminating arm). (b) N5d: rule
+     5's home-dir half (/home/ and /Users/ placeholder accounts, near
+     tests/test_no_machine_paths.py lines 255-258) has no necessity arm.
+     (c) N5a: a non-OSError exception in the baseline write of
+     tools/roots_map_probe.py escapes as a traceback (no false claim).
+     (d) N5b: the first-plus-last-only mutant is caught by one arm only
+     (middle of three); the all-zero (delete) skip branch was never
+     mutated. (e) Worktrees .claude/worktrees/agent-a2fcbd2a915e87790,
+     agent-ae145f6da3153d16e, agent-a1fefe71ae6a4056e,
+     agent-a6ee21a202bdbfc72 and their worktree-agent-* branches (all
+     merged) were locked by session 75's live pid; remove them with plain
+     git worktree remove plus git branch -d once that pid is dead, read
+     back clean and merged; never force. (f) Common-mode: the N5cf KEEP
+     and RECORD rulings both rest on an unverified 2026-09-15 MSIX
+     measurement.
   9. Commit-msg gate known FALSE BLOCKS, each worked around with
      git commit -F <file>: a localised git; an editor commit with
      --no-status or commit.status=false after a merge conflict on a
@@ -246,10 +232,18 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      is unreachable; an idle status over a non-oldest epoch-ms row reads
      120/120 while the kit still counts it as one; a one-off kit read error
      reads Backing Off, not the limit.
-  13. Inbox: at session 74 /done scripts/watch_inbox.py read unread: none
-     (no MAIN reply yet to the 1258, 1852 or 2328 notes, items 0t, 0x
-     and N1). Each session: triage
-     new entries into the four buckets, then --mark only what was triaged.
+  DONE session 75 (see docs/ledger/session-75.md): P roots-map probe
+  (no DRIFT); 0i session 73 residue (e) (merge 0c6a644); N5 a, b, d, e
+  (merges 9791c2f, b50773d, 4865fc4, 069ba52) and c, f adjudicated
+  (N5cf: c KEEP the core/capture_root.py defence, reversed if a regex or
+  fallback change makes it reachable; f RECORD the AppData failure of
+  tests/test_watch_inbox_session.py as environment, reversed by a false
+  red from 'packages' outside AppData or runtime_dir() moving off the
+  repo root); N6 worktrees and branches removed (four unlocked: their
+  pid was dead, trees clean and merged; reversed by a lock whose pid is
+  alive); M merged and pushed; 13 inbox read, nothing new, nothing
+  marked (per-session triage stays a standing directive). Outbound
+  notes: none. All other items carried forward.
   DONE session 74 (see docs/ledger/session-74.md): W0, P1, P2 (merge
   1efb846), P3 (merge b888286), N4 (merge 303b839), P5 (merge 1db6c73),
   P6, P4 (merge 44c97ec), P7 tag v0.1.0, P7b (merge 6fb8a88), F1 (merge
@@ -547,4 +541,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 75
+SESSION: 76
