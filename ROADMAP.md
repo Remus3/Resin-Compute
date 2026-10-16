@@ -13,29 +13,30 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-10-15. Session 74 residue (see `docs/ledger/session-74.md`).**
-  (a) `tools/roots_map_probe.py` run from a worktree while the main
-  checkout has no baseline prints "stored as the baseline" and then
-  "baseline not updated" - contradictory output; make the worktree branch
-  say only that it did not store one.
-  (b) No pre-push test arm pushes several refs at once (`.githooks/pre-push`
-  annotated-tag peel, merge 6fb8a88); the rev-parse raw error line on a
-  blob tag is cosmetic.
-  (c) `core/capture_root.py`: the `ValueError` branch is unreachable
-  (defence only); keep or cover it deliberately.
-  (d) The exemption list of `tests/test_no_machine_paths.py` was never
-  independently tested (adjudicator common-mode note): prove each
-  exemption is needed and that a non-exempt path still reds.
-  (e) `tests/test_responder_no_console_window.py` line 260: the monkeypatch
-  is a no-op (pre-existing).
-  (f) `tests/test_watch_inbox_session.py` line 767 fails when a clone lives
-  under AppData (environment, same family as the scratchpad location
-  trap).
-  (g) Four merged branches with no worktree remain
-  (`worktree-agent-a085507...`, `-a52543...`, `-a902f3...`, `-af74f8...`),
-  and four merged worktrees of session 74 (P2, P3, P5, F1) were still
-  locked by the live session at /done; remove each with `git worktree
-  remove` plus `git branch -d` once unlocked, never force.
+- **NEW 2026-10-16. Session 75 residue (see `docs/ledger/session-75.md`).**
+  (a) 0i (merge 0c6a644, `tests/test_prepush_select.py`): the hung
+  `--ci-mark` test also passes on the parent commit, so that arm does not
+  discriminate; make it red on the pre-timeout code.
+  (b) N5d (merge 4865fc4, `tests/test_no_machine_paths.py`): rule 5's
+  home-dir half (the `/home/` and `/Users/` placeholder accounts, near
+  lines 255-258) has no necessity arm; the slice reported tracked users
+  of it (not re-measured at /done).
+  (c) N5a (merge 9791c2f, `tools/roots_map_probe.py`): a non-OSError
+  exception in the baseline write escapes as a traceback (no false
+  baseline claim is printed).
+  (d) N5b (merge b50773d, `tests/test_hook_interpreter.py`): the
+  first-plus-last-only mutant is caught by one arm only (middle of three);
+  the all-zero (delete) skip branch was never mutated.
+  (e) Four merged session 75 worktrees (`agent-a2fcbd2a915e87790`,
+  `agent-ae145f6da3153d16e`, `agent-a1fefe71ae6a4056e`,
+  `agent-a6ee21a202bdbfc72`) and their `worktree-agent-*` branches were
+  LOCKED by the live session pid at /done; remove each next session with
+  `git worktree remove` plus `git branch -d` once that pid is dead; never
+  force.
+  (f) Common-mode note from the N5cf adjudication: KEEP of the
+  `core/capture_root.py` defence branch and the accepted AppData
+  environment failure of `tests/test_watch_inbox_session.py` both rest on
+  an unverified 2026-09-15 MSIX measurement; re-measure when convenient.
 
 - **NEW 2026-10-14. Session 73 residue (see `docs/ledger/session-73.md`).**
   (a) KIT DEFECT, report to MAIN in the next batched note:
@@ -55,10 +56,10 @@ version. What follows is everything the scaffold deliberately did not do.
   (d) DONE session 74: `tools/roots_map_probe.py` resolves the map via
   the git common dir and is read-only from a worktree (merge 303b839; see
   `docs/ledger/session-74.md`); residue in the session 74 entry, item (a).
-  (e) 0i residue from merge 72b2336: no git call in
-  `scripts/prepush_select.py` has a timeout (pre-existing); in a partial
-  clone the missing-sha rev-parse could reach the network. 2c-b push-run
-  cancellation stays watch-only.
+  (e) DONE session 75 (merge 0c6a644, `tests/test_prepush_select.py`;
+  moved to `docs/roadmap-archive/2026-10.md`, see
+  `docs/ledger/session-75.md`); residue in the session 75 entry, item (a).
+  2c-b push-run cancellation stays watch-only.
 
 - **NEW 2026-10-12. Session 71 residue (0q merge 20d9d29).**
   (a) KIT DEFECT, report to MAIN in the next batched note:
