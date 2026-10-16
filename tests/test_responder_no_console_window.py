@@ -236,14 +236,22 @@ def test_the_other_spawn_kwargs_survived(spawned, rsp):
 
 
 @pytest.fixture()
-def polled(monkeypatch, tmp_path):
+def polled(monkeypatch):
     """Drive `poll_registry` with `subprocess.run` intercepted.
 
     The daemon's real `CaptureStore` writes outside the repo by design, so a
     minimal stand-in is used instead: `poll_registry` only ever calls `offer`, and
     returning False keeps the arm off every write path while still exercising the
-    spawn. `tmp_path` is requested so that if this ever does touch disk it lands
-    somewhere disposable rather than in the operator's capture root.
+    spawn.
+
+    THE STAND-IN IS THE WHOLE ISOLATION. `poll_registry` reads only
+    `WATCH_REGISTRY`, `subprocess.run`, `_NO_WINDOW` and the store it is handed;
+    it never resolves a capture root. This fixture used to patch the module's
+    `DEFAULT_CAPTURE_ROOT` onto `tmp_path`, but that attribute is `None` and is
+    read only by `main()`'s argparse default, so the patch isolated nothing
+    (session 74 residue (e)). It is replaced by the assertion below that every
+    spawn's output reached the stand-in's `offer`, which is the one route by
+    which `poll_registry` could write anything.
     """
     capture = _load("capture_daemon_under_test", CAPTURE)
 
@@ -257,11 +265,16 @@ def polled(monkeypatch, tmp_path):
 
     record = _Captured(stdout=b"")
     monkeypatch.setattr(subprocess, "run", record)
-    monkeypatch.setattr(capture, "DEFAULT_CAPTURE_ROOT", tmp_path / "unused")
 
-    capture.poll_registry(_Store())
+    store = _Store()
+    capture.poll_registry(store)
     assert record.calls >= 1, (
         f"poll_registry spawned nothing, so this arm graded no spawn: {record.calls}"
+    )
+    assert store.offers == record.calls, (
+        f"poll_registry ran {record.calls} spawn(s) but offered {store.offers} to "
+        "the stand-in store - its output went somewhere other than the store this "
+        "arm isolates, so the arm no longer proves it stays off the capture root"
     )
     return record
 
