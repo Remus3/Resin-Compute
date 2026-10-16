@@ -2358,3 +2358,75 @@ def test_a_tree_tag_after_two_good_refs_is_refused(tag_repo):
     assert "names no commit" in result.stderr
     assert "refs/tags/tree-annotated" in result.stderr, result.stderr
     assert "GRADED-PASSED" not in result.stdout
+
+
+# Position coverage (N5b refute round 1): the arms above put every bad ref
+# LAST, so a loop that read only the LAST line stayed green. The arms below
+# put the bad ref FIRST, in the MIDDLE, and on one of two branches, so a loop
+# that grades only the first line or only the last line reds on at least one.
+
+
+def test_a_stale_branch_first_then_a_good_annotated_tag_is_refused(tag_repo):
+    """Bad ref FIRST: a loop that graded only the last line would pass."""
+    result = _run_graded_lines(tag_repo["repo"], [
+        ("refs/heads/stale", tag_repo["old"], _ZERO),
+        ("refs/tags/head-annotated", tag_repo["head-annotated"], _ZERO),
+    ])
+    assert result.returncode != 0
+    assert "REFUSED" in result.stderr
+    assert tag_repo["old"] in result.stderr, result.stderr
+    assert "GRADED-PASSED" not in result.stdout
+
+
+def test_a_stale_annotated_tag_in_the_middle_of_three_is_refused(tag_repo):
+    """Bad ref in the MIDDLE: neither a first-line nor a last-line loop sees it."""
+    result = _run_graded_lines(tag_repo["repo"], [
+        ("refs/heads/main", tag_repo["head"], _ZERO),
+        ("refs/tags/old-annotated", tag_repo["old-annotated"], _ZERO),
+        ("refs/tags/head-annotated", tag_repo["head-annotated"], _ZERO),
+    ])
+    assert result.returncode != 0
+    assert "REFUSED" in result.stderr
+    assert tag_repo["old"] in result.stderr, result.stderr
+    assert "GRADED-PASSED" not in result.stdout
+
+
+@pytest.mark.parametrize("stale_first", [True, False], ids=["stale-first", "stale-last"])
+def test_two_branches_in_one_push_with_one_stale_is_refused(tag_repo, stale_first):
+    good = ("refs/heads/main", tag_repo["head"], _ZERO)
+    bad = ("refs/heads/stale", tag_repo["old"], _ZERO)
+    lines = [bad, good] if stale_first else [good, bad]
+    result = _run_graded_lines(tag_repo["repo"], lines)
+    assert result.returncode != 0
+    assert "REFUSED" in result.stderr
+    assert tag_repo["old"] in result.stderr, result.stderr
+    assert "GRADED-PASSED" not in result.stdout
+
+
+def test_two_branches_both_on_the_graded_head_push_together(tag_repo):
+    """Legitimate neighbour of the arm above: two good branches still pass."""
+    result = _run_graded_lines(tag_repo["repo"], [
+        ("refs/heads/main", tag_repo["head"], _ZERO),
+        ("refs/heads/release", tag_repo["head"], _ZERO),
+    ])
+    assert result.returncode == 0, result.stderr
+    assert "GRADED-PASSED" in result.stdout
+
+
+@pytest.mark.parametrize("blob_first", [True, False], ids=["blob-first", "blob-last"])
+def test_a_tag_on_a_blob_mixed_with_a_good_branch_is_refused(tag_repo, blob_first):
+    """A tag on a BLOB names no commit, so it cannot have been graded: the
+    push is refused (fail closed), wherever the line sits."""
+    repo = Path(tag_repo["repo"])
+    blob = _git_tmp(repo, "rev-parse", "HEAD:a.txt")
+    _git_tmp(repo, "tag", "-a", "-m", "blob", "blob-annotated", blob)
+    blob_tag = _git_tmp(repo, "rev-parse", "refs/tags/blob-annotated")
+    assert blob_tag != blob
+    tagged = ("refs/tags/blob-annotated", blob_tag, _ZERO)
+    good = ("refs/heads/main", tag_repo["head"], _ZERO)
+    lines = [tagged, good] if blob_first else [good, tagged]
+    result = _run_graded_lines(tag_repo["repo"], lines)
+    assert result.returncode != 0
+    assert "names no commit" in result.stderr
+    assert "refs/tags/blob-annotated" in result.stderr, result.stderr
+    assert "GRADED-PASSED" not in result.stdout
