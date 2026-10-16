@@ -76,6 +76,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from core.capture_root import default_capture_root  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Guarded third-party import. PIL is the only third-party package this tool
 # needs to do anything at all (grab a frame), so a missing dependency is a
@@ -112,8 +118,8 @@ except ImportError:  # pragma: no cover - depends on local environment
 # Constants
 # ---------------------------------------------------------------------------
 
-#: Root of the home directory's drive, resolved at run time; no drive letter is baked in.
-DEFAULT_ROOT = Path(Path.home().anchor) / "rsc-first-run"
+#: None means: resolve at the point of use via core/capture_root.py.
+DEFAULT_ROOT: Path | None = None
 DEFAULT_INTERVAL_S = 3.0
 DEFAULT_DEDUPE_THRESHOLD = 3
 DEFAULT_KEEPALIVE_EVERY = 100
@@ -595,7 +601,7 @@ def main(argv: list | None = None) -> int:
         parser.error("--max-bytes-total must be >= 0")
 
     return run(
-        args.root,
+        args.root or default_capture_root(),
         args.interval,
         args.once,
         args.dedupe_threshold,
