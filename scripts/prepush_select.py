@@ -53,7 +53,9 @@ pull-request jobs pass to the application suite - "not plumbing", or empty
 for every module (see `ci_mark_for`).
 
 Any internal error prints FULL with the error's type as the reason and exits
-0, so a broken selector costs time and never coverage. Stdlib only.
+0, so a broken selector costs time and never coverage. Every git child is
+bounded by GIT_TIMEOUT_S; a timeout counts as a failed git call and fails
+closed the same way. Stdlib only.
 """
 from __future__ import annotations
 
@@ -165,6 +167,15 @@ CI_ONLY: frozenset[str] = frozenset(
 )
 
 _ZERO_SHA = "0" * 40
+
+#: Seconds any one git child may run (0i residue (e), session 73). Every call
+#: here is local and finishes in well under a second on this tree; the bound
+#: exists for a HANG - a partial clone whose missing-sha rev-parse reaches
+#: the network, a credential prompt, a held lock. Generous enough for a cold
+#: cache on a slow disk, short enough that a hung push gives up in seconds.
+#: A timeout is a failed git call: it fails CLOSED (FULL application suite,
+#: engine RUN, --ci-mark every module), never open.
+GIT_TIMEOUT_S = 30
 
 #: The engine-suite verdicts on the fourth output line. The hook skips the
 #: engine suite on the exact first word SKIP and runs it on anything else.
@@ -474,9 +485,22 @@ def load_plumbing(root: Path = REPO_ROOT) -> frozenset[str]:
 
 
 def _git(root: Path, *args: str, ok: Sequence[int] = (0,)) -> str | None:
-    completed = subprocess.run(
-        ["git", *args], cwd=root, capture_output=True, text=True, check=False
-    )
+    """stdout of `git <args>`, or None when git fails OR outlives GIT_TIMEOUT_S.
+
+    A timeout is a failed call, never a crash: every caller already treats
+    None as fail-closed (FULL, engine RUN, --ci-mark every module).
+    """
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=GIT_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        return None
     if completed.returncode not in ok:
         return None
     return completed.stdout
@@ -545,7 +569,7 @@ def compute(root: Path, base: str | None) -> Selection:
         return Selection(
             FULL,
             "no upstream or base commit to diff against (a base missing locally"
-            " counts), or git diff failed",
+            " counts), or a git call failed or timed out",
             engine_reason="no base to diff against",
         )
     failed_keys = _last_failed_keys(root / ".pytest_cache" / "v" / "cache" / "lastfailed")
