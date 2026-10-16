@@ -213,15 +213,29 @@ HEAD_SHA="$(git rev-parse HEAD)"
 # different commit from the one shipping. That is Sibling-C's incident exactly,
 # and it is the one case worth refusing outright: the verdict is not merely
 # imprecise, it is about another commit.
+#
+# PEEL BEFORE COMPARING. git hands this hook the LOCAL OBJECT of each ref, and
+# for an annotated tag that is the TAG object, not the commit it names - so a
+# raw compare refused every annotated tag push (slice P7b, measured: "graded
+# HEAD 44c97ec... but this push ships 0713dcc..."). `^{commit}` peels any
+# chain of tags to its commit; a ref that names no commit at all (a tag on a
+# tree or blob) cannot have been graded and is refused. A delete (all-zero
+# local sha) ships nothing and is skipped. Pinned by the tag arms at the end
+# of tests/test_hook_interpreter.py.
 echo "$PUSH_REFS" | while read -r _localref localsha _remoteref _remotesha; do
     [ -z "$localsha" ] && continue
     case "$localsha" in
         *[!0]*) ;;
         *) continue ;;
     esac
-    if [ "$localsha" != "$HEAD_SHA" ]; then
+    if ! shipsha="$(git rev-parse --verify -q "$localsha^{commit}")"; then
         echo "pre-push REFUSED: the suites graded HEAD $HEAD_SHA" >&2
-        echo "  but this push ships $localsha - a different commit." >&2
+        echo "  but $_localref ships $localsha, which names no commit." >&2
+        exit 1
+    fi
+    if [ "$shipsha" != "$HEAD_SHA" ]; then
+        echo "pre-push REFUSED: the suites graded HEAD $HEAD_SHA" >&2
+        echo "  but this push ships $shipsha - a different commit." >&2
         echo "  The local ref moved while the gate was running." >&2
         exit 1
     fi
