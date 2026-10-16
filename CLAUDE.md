@@ -182,6 +182,21 @@ edit. Tree-specific rules go BELOW this block, never inside it.
 
 Everything below is this tree's own. The common block above is not repeated here.
 
+**Terms for an outside reader.** This file is written for agents working in
+the repository, so it uses the operator's internal vocabulary:
+
+- **The operator** is the person who owns this repository and its commits.
+- **MAIN** is the operator's supervisor repository. It sends ORDER, FIX and
+  RULING notes through the cross-repository channel (`docs/CHANNEL.md`).
+- **RSC** is this repository's codename. Two-letter codes (CS, LW, RC, SS,
+  LL) and `Sibling-<letter>` names are opaque codenames for the operator's
+  other repositories; real names never appear in a tracked file.
+- **Fleet kit** is MAIN's shared tooling, vendored at `ops/fleet_kit/`.
+- **Slice, lane, merger, adjudicator, adversary**: see
+  `.claude/session-default.md` and `.claude/agents/`.
+- **Hand-off** is `RSC-NEXT-SESSION.txt`, the only state carried between
+  agent sessions.
+
 ## Hard rules
 
 - **`py_compile` before any restart.** A syntax error crashes silently under

@@ -658,7 +658,7 @@ def _check_staged(command: str) -> int:
             "precommit_gate WARNING: no working ruff found - the net-new ruff "
             "half did NOT run on this commit.\n  Tried: "
             + " | ".join(" ".join(c) for c in _ruff_candidates())
-            + "\n  Install it (pip install -r requirements-dev.txt) or CI is "
+            + "\n  Install it (python -m pip install --require-hashes -r requirements-dev.txt) or CI is "
             "your only lint gate.\n"
         )
     if pyfiles and ruff is not None:
