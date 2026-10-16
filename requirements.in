@@ -10,6 +10,18 @@
 #
 #   python -m piptools compile --generate-hashes --strip-extras --output-file=requirements.txt requirements.in
 #
+# The header of requirements.txt then records the command as:
+#
+#   pip-compile --generate-hashes --no-index --output-file=requirements.txt --strip-extras requirements.in
+#
+# The two differ ONLY by `--no-index`, which pip-tools 7.5.3 writes into the
+# header itself although it is not passed (measured 2026-10-15: the command
+# above, run under Python 3.11.9, emits exactly that header line; the same
+# quirk is recorded in requirements-dev.in). Do not add --no-index to the
+# command you run: pip would ignore PyPI, and the first real pin added here
+# would fail to resolve. tests/test_runtime_lock.py checks the recorded line
+# names --generate-hashes, this input and this output file.
+#
 # tests/test_runtime_lock.py grades the pair: every pin in the compiled file
 # carries a hash, and every name declared here is pinned there.
 #
