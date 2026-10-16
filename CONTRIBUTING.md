@@ -28,11 +28,16 @@ proof that it fires - the only honest test is end to end.
 ## Setting up
 
 Python 3.11 or newer. The runtime is stdlib-only on purpose, so `requirements.txt`
-is deliberately empty and only the development toolchain needs installing:
+pins no packages and only the development toolchain needs installing. Both
+files are hashed lockfiles; install them exactly as CI does:
 
 ```
-python -m pip install -r requirements-dev.txt
+python -m pip install --require-hashes -r requirements.txt
+python -m pip install --require-hashes -r requirements-dev.txt
 ```
+
+`docs/INSTALL_PROOF.md` records how the locks are generated and the install
+proof per interpreter.
 
 ## The gates
 
@@ -104,8 +109,14 @@ The subject line must match Conventional Commits:
 `<type>(<scope>)?: <description>`. The accepted types are `feat`, `fix`, `docs`,
 `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore` and `revert`. The
 validator is `scripts/precommit_msg_check.py`; auto-generated subjects such as
-merges, reverts and fixups are skipped. Subjects over 100 characters get a
-warning, not a rejection.
+reverts and fixups are skipped. Subjects over 100 characters get a warning, not
+a rejection.
+
+Merge commits use the template `merge: <topic>`, for example
+`merge: P3 merge subject template`. `merge:` is accepted only while a merge is
+in progress or when HEAD is already a merge commit, and a merge subject - this
+template or the default `Merge ...` text - is rejected if it names a worktree
+or an agent.
 
 **Do not add agent trailers.** `Co-Authored-By: Claude` and `Claude-Session:`
 lines are STRIPPED by the commit-msg hook per project policy, so a commit that
