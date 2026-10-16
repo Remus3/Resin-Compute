@@ -5,6 +5,9 @@ Validates the commit's SUBJECT line against the Conventional Commits shape:
 
 Auto-generated subjects (Merge / Revert / Reapply / fixup! / squash! / amend!)
 are skipped - git writes those itself and rejecting them would break a rebase.
+The one exception: a merge subject (`merge: <topic>`, the authored template,
+or git's `Merge ...`) is rejected when it names a worktree or agent - see
+MERGE SUBJECTS below.
 
 Runs LAST in .githooks/commit-msg, after the trailer strip and the glyph gate,
 so it validates the message that will actually be committed rather than a
@@ -74,11 +77,102 @@ SKIP_PREFIXES = (
 
 SOFT_LINE_LIMIT = 100
 
+# MERGE SUBJECTS (MAIN ORDER 1925 item b). The authored merge template is
+# `merge: <topic>`; it replaces the old `Merge slice ...` form, which this check
+# used to force by rejecting `merge:` outright. A merge subject - authored
+# `merge:` or git's own `Merge ...` - never names a worktree: no agent-<hex>
+# id, no worktree-* branch, no `.claude/worktrees` path, and no branch or
+# directory name of a live linked worktree. Non-merge subjects are not swept:
+# a `fix(worktree-cleanup): ...` is about worktrees, not a leak of one.
+MERGE_SUBJECT_RE = re.compile(r"^merge:\s+\S")
+MERGE_TEMPLATE = "merge: <topic>"
 
-def validate(subject: str) -> tuple[bool, str | None]:
-    """Return (ok, error_message). error_message is None on success."""
+WORKTREE_NAME_PATTERNS = (
+    re.compile(r"(?<!\w)agent-[0-9a-f]{6,}", re.IGNORECASE),
+    re.compile(r"(?<!\w)worktree-[\w./-]+", re.IGNORECASE),
+    re.compile(r"\.claude[/\\]+worktrees", re.IGNORECASE),
+)
+
+
+def _parse_worktree_porcelain(text: str) -> tuple[str, ...]:
+    """Branch short names and directory basenames of every LINKED worktree in
+    `git worktree list --porcelain` output. The first entry is the main
+    checkout and is skipped: its branch (`main`) is the merge target, not a
+    worktree name."""
+    names: list[str] = []
+    for index, block in enumerate(text.replace("\r\n", "\n").split("\n\n")):
+        if index == 0:
+            continue
+        for line in block.splitlines():
+            if line.startswith("worktree "):
+                base = re.split(r"[/\\]", line[len("worktree ") :].rstrip("/\\"))[-1]
+                if base:
+                    names.append(base)
+            elif line.startswith("branch "):
+                ref = line[len("branch ") :].strip()
+                short = ref[len("refs/heads/") :] if ref.startswith("refs/heads/") else ref
+                if short:
+                    names.append(short)
+    return tuple(dict.fromkeys(names))
+
+
+def linked_worktree_names() -> tuple[str, ...]:
+    """Live names of this repo's linked worktrees.
+
+    ADDITIVE, not the floor: `WORKTREE_NAME_PATTERNS` reject every agent and
+    worktree-* shape with no git call at all. A git that cannot answer yields
+    no extra names rather than a refusal - failing closed here would block
+    every merge commit over a listing problem unrelated to its subject.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ()
+    if proc.returncode != 0:
+        return ()
+    return _parse_worktree_porcelain(proc.stdout.decode("utf-8", "replace"))
+
+
+def _worktree_name_in(subject: str, worktree_names: tuple[str, ...]) -> str | None:
+    for pattern in WORKTREE_NAME_PATTERNS:
+        match = pattern.search(subject)
+        if match:
+            return match.group(0)
+    for name in worktree_names:
+        if re.search(rf"(?<![\w./-]){re.escape(name)}(?![\w./-])", subject, re.IGNORECASE):
+            return name
+    return None
+
+
+def validate(
+    subject: str, worktree_names: tuple[str, ...] | None = None
+) -> tuple[bool, str | None]:
+    """Return (ok, error_message). error_message is None on success.
+
+    `worktree_names` defaults to the live `linked_worktree_names()`, read only
+    for a merge subject.
+    """
     if not subject.strip():
         return False, "empty subject line"
+    is_merge = subject.startswith("Merge ") or subject.startswith("merge:")
+    if is_merge:
+        if worktree_names is None:
+            worktree_names = linked_worktree_names()
+        leaked = _worktree_name_in(subject, worktree_names)
+        if leaked is not None:
+            return False, (
+                f"merge subject names a worktree or agent ({leaked!r}); "
+                f"write {MERGE_TEMPLATE} with no worktree, agent or branch name"
+            )
+        if subject.startswith("merge:"):
+            if MERGE_SUBJECT_RE.match(subject):
+                return True, None
+            return False, f"merge subject has no topic; write {MERGE_TEMPLATE}"
     if any(subject.startswith(p) for p in SKIP_PREFIXES):
         return True, None
     if not SUBJECT_RE.match(subject):
@@ -246,6 +340,8 @@ def main() -> int:
             "  expected: <type>(<scope>)?: <description>\n"
             f"  types:    {', '.join(TYPES)}\n"
             "  example:  feat(engine): add weapon-banner fate point carry\n"
+            f"  merges:   {MERGE_TEMPLATE} - never a worktree, agent or branch name\n"
+            "  example:  merge: P3 merge subject template\n"
             "Bypass with --no-verify if absolutely necessary.",
             file=sys.stderr,
         )

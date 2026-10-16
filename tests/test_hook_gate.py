@@ -1948,6 +1948,56 @@ def test_commit_cleanup_strip_lets_a_hash_first_line_through_dash_F(gate_repo: _
     assert _landed_message(gate_repo) == CLEAN_MESSAGE
 
 
+# P3 (MAIN ORDER 1925 item b): a REAL merge commit, end to end. The merge
+# subject template is `merge: <topic>`; a subject naming a worktree or agent is
+# refused and HEAD does not move. The positive control is load-bearing: a hook
+# that refused every merge would pass the negative arm alone.
+_WORKTREE_BRANCH = "worktree-agent-a60657c9d2bd57fd6"
+
+
+def _side_branch_for_merge(repo: _ThrowawayRepo) -> str:
+    base = repo.git("rev-parse", "--abbrev-ref", "HEAD", check=True).stdout.strip()
+    repo.git("checkout", "-q", "-b", _WORKTREE_BRANCH, check=True)
+    repo.stage("side.txt", CLEAN_CONTENT)
+    assert repo.commit(b"feat(gate-probe): side\n", no_verify=True).returncode == 0
+    repo.git("checkout", "-q", base, check=True)
+    return base
+
+
+@pytest.mark.parametrize(
+    "subject",
+    [
+        "merge: P3 from agent-a60657c9d2bd57fd6",
+        "Merge branch '" + _WORKTREE_BRANCH + "'",
+    ],
+    ids=["authored-agent-id", "git-default-worktree-branch"],
+)
+def test_a_merge_subject_naming_a_worktree_is_refused(gate_repo: _ThrowawayRepo, subject: str):
+    _side_branch_for_merge(gate_repo)
+    before = gate_repo.head()
+    assert before, "the fixture left HEAD unborn, so 'HEAD did not move' proves nothing"
+
+    proc = gate_repo.git("merge", "--no-ff", "-m", subject, _WORKTREE_BRANCH)
+
+    assert gate_repo.head() == before, (
+        f"a merge subject naming a worktree LANDED: {subject!r}\n"
+        f"stdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+    assert proc.returncode != 0 and SUBJECT_MARKER in proc.stderr, (
+        f"refused, but not by the subject check.\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+
+
+def test_positive_control_a_merge_topic_subject_lands(gate_repo: _ThrowawayRepo):
+    _side_branch_for_merge(gate_repo)
+    before = gate_repo.head()
+    proc = gate_repo.git("merge", "--no-ff", "-m", "merge: P3 merge subject template", _WORKTREE_BRANCH)
+    assert proc.returncode == 0 and gate_repo.head() != before, (
+        f"FALSE BLOCK: `merge: <topic>` was refused.\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+    assert _landed_message(gate_repo).splitlines()[0] == b"merge: P3 merge subject template"
+
+
 _EDITOR_SCRIPT = (
     b"import sys\n"
     b"path = sys.argv[-1]\n"
