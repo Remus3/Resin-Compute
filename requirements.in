@@ -1,0 +1,65 @@
+# ResinCompute runtime dependencies: NONE, deliberately.
+#
+# LAYOUT (MAIN ORDER 1925 item e, 2026-10-15): this .in file is the
+# HUMAN-EDITED, UNHASHED declaration of runtime dependencies. requirements.txt
+# is GENERATED from it by pip-compile with --generate-hashes - the full
+# transitive closure with a sha256 for every distribution - and is installed
+# with `pip install --require-hashes -r requirements.txt`. Do not hand-edit
+# requirements.txt. Regenerate after editing this file, from the repo root,
+# with pip-tools under Python 3.11:
+#
+#   python -m piptools compile --generate-hashes --strip-extras --output-file=requirements.txt requirements.in
+#
+# The header of requirements.txt then records the command as:
+#
+#   pip-compile --generate-hashes --no-index --output-file=requirements.txt --strip-extras requirements.in
+#
+# The two differ ONLY by `--no-index`, which pip-tools 7.5.3 writes into the
+# header itself although it is not passed (measured 2026-10-15: the command
+# above, run under Python 3.11.9, emits exactly that header line; the same
+# quirk is recorded in requirements-dev.in). Do not add --no-index to the
+# command you run: pip would ignore PyPI, and the first real pin added here
+# would fail to resolve. tests/test_runtime_lock.py checks the recorded line
+# names --generate-hashes, this input and this output file.
+#
+# tests/test_runtime_lock.py grades the pair: every pin in the compiled file
+# carries a hash, and every name declared here is pinned there.
+#
+# This file is intentionally empty of requirements. It is kept - rather than
+# deleted - because an absent declaration reads as an oversight, while an
+# empty one with this note records a decision. The compiled closure of an
+# empty declaration is empty, so requirements.txt holds only its header.
+#
+# THE DECISION
+# ------------
+# Everything the runtime needs is in the standard library:
+#
+#   urllib.request   the Enka / Project Amber HTTP fetch. A custom User-Agent
+#                    is required by Enka policy and urllib sets headers fine,
+#                    so `requests` buys nothing here.
+#   http.server      the PityEngine local compute service on :8790, and the
+#                    dashboard surface on :8791. Ports are owned by
+#                    core/ports.py; ADR-004 records why the engine moved off
+#                    :8870, which sits inside a sibling project's block.
+#   json             every payload and every state file.
+#   dataclasses      the type contract in core/types.py. SPEC_SCAFFOLD section 1
+#                    delivers the brief's TypeScript interfaces as dataclasses,
+#                    so no pydantic dependency is implied by them.
+#   decimal          exact arithmetic where a float would drift.
+#
+# WHY IT MATTERS
+# --------------
+# The headless lane and the engine service both have to start on a bare
+# interpreter with no install step. Sibling-C has a standing ban on a
+# dep-less interpreter running a tracked invocation precisely because the two
+# channels there disagree about which Python owns the packages; a zero-runtime-
+# dependency tree cannot have that class of bug at all.
+#
+# A third-party runtime dependency is therefore a real decision, not a
+# convenience: add it here only with the reason recorded next to the pin,
+# check docs/LICENSE_NOTES.md first, recompile requirements.txt, and re-check
+# that the headless lane still starts on a clean interpreter.
+#
+# Development and CI tooling (ruff / pytest / mypy) lives in the
+# requirements-dev.in / requirements-dev.txt pair and is never imported by
+# shipped code.

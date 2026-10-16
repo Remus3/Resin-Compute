@@ -175,7 +175,9 @@ jobs:
         # the runner's bundled pip is sufficient.
         #
         # requirements.txt is deliberately EMPTY - the runtime is stdlib-only
-        # (see that file). Installing it anyway, also under --require-hashes, is
+        # (see requirements.in, which it is pip-compiled from with
+        # --generate-hashes, MAIN ORDER 1925 item e; tests/test_runtime_lock.py
+        # grades the pair). Installing it anyway, also under --require-hashes, is
         # the cheap way to notice the day that stops being true: a pin added
         # there without a hash fails this step.
         run: |
