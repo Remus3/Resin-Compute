@@ -14,6 +14,7 @@ table is driven directly, including the ones this host cannot easily produce.
 from __future__ import annotations
 
 import importlib.util
+import os
 import shutil
 import subprocess
 import sys
@@ -447,11 +448,68 @@ def test_merge_in_progress_reads_merge_head_from_the_git_path(tmp_path):
     assert msg_check.merge_in_progress(lambda: None) is False
 
 
+def test_an_amend_of_a_merge_commit_keeps_its_merge_subject():
+    """Round 2, ruling C: amending a merge commit has no MERGE_HEAD, but HEAD
+    has a second parent, so `merge:` stays legal."""
+    assert msg_check.validate(
+        "merge: P3 merge subject template", head_is_merge=True, worktree_names=()
+    ) == (True, None)
+
+
+def test_an_amend_of_a_merge_commit_still_refuses_a_leaked_worktree_id():
+    ok, err = msg_check.validate(
+        "merge: P3 from agent-a60657c9d2bd57fd6", head_is_merge=True, worktree_names=()
+    )
+    assert not ok and err is not None and "worktree" in err, err
+
+
+def test_residual_head_is_merge_is_the_only_thing_that_admits_a_plain_merge_subject():
+    """RESIDUAL of ruling C, pinned: a NEW non-merge commit made right after a
+    merge also carries HEAD^2 and is admitted. Without either flag it is not."""
+    subject = "merge: P3 merge subject template"
+    assert msg_check.validate(subject, head_is_merge=True)[0] is True
+    assert msg_check.validate(subject, head_is_merge=False)[0] is False
+
+
+def _git_in(repo, *args):
+    return subprocess.run(
+        ["git", *args], cwd=str(repo), capture_output=True, text=True, timeout=60, check=False
+    )
+
+
+def test_head_is_merge_reads_the_second_parent(tmp_path, monkeypatch):
+    if shutil.which("git") is None:
+        pytest.skip("git is not on PATH")
+    repo = tmp_path / "r"
+    repo.mkdir()
+    for key in [k for k in list(os.environ) if k.startswith("GIT_")]:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "no-global"))
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", str(tmp_path / "no-system"))
+    monkeypatch.chdir(repo)
+    assert _git_in(repo, "init", "-q").returncode == 0
+    for key, value in (("user.name", "p"), ("user.email", "p@example.invalid"),
+                       ("commit.gpgsign", "false")):
+        _git_in(repo, "config", key, value)
+    # Unborn HEAD.
+    assert msg_check.head_is_merge() is False
+    assert _git_in(repo, "commit", "-q", "--allow-empty", "-m", "chore: root").returncode == 0
+    # Root commit: no second parent.
+    assert msg_check.head_is_merge() is False
+    base = _git_in(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    _git_in(repo, "checkout", "-q", "-b", "side")
+    assert _git_in(repo, "commit", "-q", "--allow-empty", "-m", "chore: side").returncode == 0
+    _git_in(repo, "checkout", "-q", base)
+    assert _git_in(repo, "merge", "-q", "--no-ff", "-m", "merge: side", "side").returncode == 0
+    assert msg_check.head_is_merge() is True
+
+
 def test_main_rejection_text_names_the_merge_template(tmp_path, monkeypatch, capsys):
     for key in ("GIT_INDEX_FILE", "GIT_EDITOR"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(msg_check, "linked_worktree_names", lambda: ())
     monkeypatch.setattr(msg_check, "merge_in_progress", lambda *a: True)
+    monkeypatch.setattr(msg_check, "head_is_merge", lambda *a: False)
     f = tmp_path / "msg"
     f.write_bytes(b"merge: P3 from agent-a60657c9d2bd57fd6\n")
     monkeypatch.setattr(sys, "argv", ["precommit_msg_check.py", str(f)])
