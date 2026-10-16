@@ -306,7 +306,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   0. RENEW THE RESPONDER BEFORE 2026-11-06T23:00 LOCAL (window ends
      2026-11-07T00:45; the PT43200M repeat may stop about 1 h early because
      DST ends Nov 1). Re-run ops/install_responder_task.ps1 -TaskName
-     RSC-InboxResponder -InstallRoot 'E:\Resin Compute', fresh gitignored
+     RSC-InboxResponder from the main checkout (-InstallRoot defaults to
+     the script's own checkout, resolved at run time), fresh gitignored
      agreement record, then ops/check_task_liveness.py must exit 0.
   0b. WATCH THE HELD MAIN BACKLOG DRAIN. Since a487d15 old MAIN ORDERs the
      cap held get auto-replies (2251 ACKed MAIN 0020, kit v5). The 1454

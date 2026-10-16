@@ -110,8 +110,8 @@ LOCAL_PYTEST_CMD = 'cd "/srv/example-tree" && python -m pytest tests'
 CI_FETCH_CMD = 'cd "/srv/example-tree" && gh run view 34084946425 --log'
 # `gh` by absolute path, with the `.exe` and the closing quote between the name
 # and the subcommand. Measured on the real corpus; the old pattern missed it.
-CI_FETCH_ABSOLUTE_CMD = 'cd "/srv/example-tree" && "C:/Tools/GitHub CLI/gh.exe" run view 31874678071 --log'
-INVENTED_PYTHON = '"C:/Tools/py311/python.exe"'
+CI_FETCH_ABSOLUTE_CMD = 'cd "/srv/example-tree" && "C:/Program Files/GitHub CLI/gh.exe" run view 31874678071 --log'
+INVENTED_PYTHON = '"C:/Program Files/Python311/python.exe"'
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +328,7 @@ def test_gh_invoked_by_absolute_path_is_still_a_ci_fetch():
     without a fetch. The bare-name arm is the paired control.
     """
     assert gate.classify_command(CI_FETCH_ABSOLUTE_CMD) == gate.SOURCE_CI
-    assert gate.classify_command('"C:/Tools/GitHub CLI/gh.exe" run list') == gate.SOURCE_CI
+    assert gate.classify_command('"C:/Program Files/GitHub CLI/gh.exe" run list') == gate.SOURCE_CI
     assert gate.classify_command("gh run view 1 --log") == gate.SOURCE_CI
 
 

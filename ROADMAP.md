@@ -2445,12 +2445,12 @@ version. What follows is everything the scaffold deliberately did not do.
   than edited, deliberately.
 
 - **OPEN 2026-09-12 UNDER CLAUSE (a), AND IT IS ONE DIRECTORY RATHER THAN A
-  CLASS.** `C:/rsc-wt-atomic` is a worktree OF THIS REPO living OUTSIDE this repo
+  CLASS.** `<drive>:/rsc-wt-atomic` is a worktree OF THIS REPO living OUTSIDE this repo
   root, at detached HEAD `3533965`. Its dirty content is fully captured in
   `main`'s history by the same blob-reachability test above, so it is prunable on
   the merits. Removing it writes outside this tree, which clause (a) reserves to
   the operator. It is the last worktree standing besides `main` itself. The
-  command is `git worktree remove --force C:/rsc-wt-atomic`. NOT DONE, and
+  command is `git worktree remove --force <drive>:/rsc-wt-atomic`. NOT DONE, and
   deliberately not done.
 
 
@@ -2949,7 +2949,7 @@ version. What follows is everything the scaffold deliberately did not do.
   MACHINE-WIDE slot bucket under `C:\ProgramData`, the `Global\` mutex
   namespace, and another party's tree - it is not a general prohibition on
   every path outside the repo root. THE ASYMMETRY THAT REMAINS IS REAL AND IS
-  NOT COVERED BY THIS RULING: the worktree registered at `C:/rsc-wt-atomic` is
+  NOT COVERED BY THIS RULING: the worktree registered at `<drive>:/rsc-wt-atomic` is
   outside the repo root and is NOT a scratchpad path, so it stays untouched.
 
 - **NO NEW ADJUDICATED CALL WAS NEEDED ON 2026-09-10 EITHER, AND THE SECOND
@@ -2967,7 +2967,7 @@ version. What follows is everything the scaffold deliberately did not do.
   UNATTENDED, AND "43 STALE WORKTREES" WAS A WRONG POPULATION.** The 43
   directory entries under `.claude/worktrees` are 42 worktrees plus ONE STRAY
   FILE, `conftest_backup.bytes`, 8822 bytes. A 44th worktree is registered at
-  `C:/rsc-wt-atomic`, OUTSIDE THIS REPO ROOT and dirty, so removing it would
+  `<drive>:/rsc-wt-atomic`, OUTSIDE THIS REPO ROOT and dirty, so removing it would
   cross clause (a) of the halt boundary and it was left alone. Of the 42, ZERO
   are removable: all 42 are DIRTY, and reachability was never the binding
   constraint since all 42 HEADs are ancestors of `main`. 35 carry tracked
@@ -4279,7 +4279,7 @@ version. What follows is everything the scaffold deliberately did not do.
   row yet, and a schema with no producer has never met a real value.
 - **NEW 2026-09-07 (third session). The remaining capture-store work is the
   OTHER nine observations.** Only line 9 was re-measured. The store is still
-  15 GB at `C:/rsc-first-run/` outside this tree, 6062 file events over 5971
+  15 GB at `<system-drive>/rsc-first-run/` outside this tree, 6062 file events over 5971
   blobs, 1542 screenshots, 29 video segments. Every other observation was
   recorded by the same process that got line 9 wrong and none has been
   re-checked against the full-rate sweep. Do that before any of them is trusted

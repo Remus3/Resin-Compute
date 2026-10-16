@@ -112,7 +112,8 @@ except ImportError:  # pragma: no cover - depends on local environment
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_ROOT = Path("C:/rsc-first-run")
+#: Root of the home directory's drive, resolved at run time; no drive letter is baked in.
+DEFAULT_ROOT = Path(Path.home().anchor) / "rsc-first-run"
 DEFAULT_INTERVAL_S = 3.0
 DEFAULT_DEDUPE_THRESHOLD = 3
 DEFAULT_KEEPALIVE_EVERY = 100

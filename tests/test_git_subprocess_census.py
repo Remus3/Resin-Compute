@@ -438,7 +438,7 @@ _GIT_BUCKET_ROWS: tuple[ShapeRow, ...] = (
         "quoted absolute path in a shell string",
         SHELL_STRING_QUOTED_PATH,
         census.GIT,
-        "a naive whitespace split cuts this at 'C:\\Program' and reports a false "
+        "a naive whitespace split cuts this at the space inside 'Program Files' and reports a false "
         "NOT-GIT, which is the same class of error as the name filter this census "
         "replaces",
         (),
