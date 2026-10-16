@@ -22,8 +22,10 @@ version. What follows is everything the scaffold deliberately did not do.
   (b) WATCH: a stale empty `.git/index.lock` (826 s, no git process)
   blocked the first merge of session 73; the gitlock dry-run commit
   cleared it and logged it. Watch for a repeat and root-cause it then.
-  (c) TRAP, recorded: the commit-msg hook rejects a `merge:` subject; the
-  repo form is `Merge slice ...`.
+  (c) SUPERSEDED by MAIN ORDER 1925 item b (merge 1efb846): the merge
+  template is now `merge: <topic>`, with no worktree or agent name, accepted
+  only while a merge is in progress or HEAD is a merge
+  (`scripts/precommit_msg_check.py`). The old `Merge slice ...` form is retired.
   (d) PLUMBING SLICE: `tools/roots_map_probe.py` locates the map relative
   to its own file, so a worktree copy prints "map not present" (a false
   negative). Consider resolving the map via the git common dir, in its own

@@ -16,7 +16,7 @@ stdlib-only Python, no game data vendored.**
 
 [What it is](#what-it-is) - [Status](#status) - [Quickstart](#quickstart) -
 [Example](#example-output) - [How it works](#how-it-works) -
-[How it is built](#how-it-is-built) - [Docs](#documentation) -
+[How this repo is built](#how-this-repo-is-built) - [Docs](#documentation) -
 [Licence](#licence)
 
 **Not affiliated with, endorsed by, or connected to HoYoverse / miHoYo /
@@ -66,7 +66,8 @@ POSIX equivalent of the forecast call is in
 git clone https://github.com/Remus3/Resin-Compute.git
 cd Resin-Compute
 python scripts/install_hooks.py          # FIRST: a fresh clone runs no hooks
-python -m pip install -r requirements-dev.txt
+python -m pip install --require-hashes -r requirements.txt
+python -m pip install --require-hashes -r requirements-dev.txt
 
 python -m pytest tests                   # application suite
 python -m pytest agents/pity_engine      # engine suite - run the two separately
@@ -157,21 +158,47 @@ Removal commands are in
 - `tools/wish_authkey.py` handles a short-lived Wish History credential; see
   [`SECURITY.md`](SECURITY.md).
 
-## How it is built
+## How this repo is built
 
-Developed with Claude Code agents under rules that live in the repository and
-are enforced by tests and hooks.
+One person (the operator) builds this repository with AI coding agents, using
+Claude Code. The operator sets the direction and owns every commit; the agents
+write most of the code, tests and documents. The process is written down in
+the repository and enforced by tests, hooks and CI, so it can be read rather
+than taken on trust:
 
-- **Multi-agent by default.** Disjoint slices, and the agent that produced a
-  change never grades it -
-  [`docs/adr/ADR-007-orchestration-doctrine.md`](docs/adr/ADR-007-orchestration-doctrine.md).
-- **Gates a fresh clone installs.** Git hooks for glyphs, lint, message shape
-  and both suites, plus CI on Python 3.11 - [`CONTRIBUTING.md`](CONTRIBUTING.md).
-- **Cross-repo notes.** Answered unattended, SHA-256 checked, delivered only to
-  the sender - [`docs/CHANNEL.md`](docs/CHANNEL.md).
-- **Headless lanes.** One vendored, fail-closed spawn helper and a slotted
-  supervisor -
-  [`docs/OPERATIONS.md`](docs/OPERATIONS.md#the-engine-the-lane-the-supervisor-and-the-dashboard).
+- **`CLAUDE.md`** is the instruction file every agent session reads first: the
+  project's hard rules, test commands and domain constants. Its top block is a
+  shared rule set copied unedited into each of the operator's repositories;
+  the rest is specific to this one. `docs/claude-md-history.md` keeps the
+  reasoning behind each rule.
+- **`.claude/`** holds the agent roster (`.claude/agents/`), the session
+  commands (`.claude/commands/`), the hook settings and
+  `.claude/session-default.md`. Work is split into slices that touch disjoint
+  files, built in parallel by separate agents, then checked by a different
+  agent whose job is to refute the result - the agent that produced a change
+  never grades it
+  ([`docs/adr/ADR-007-orchestration-doctrine.md`](docs/adr/ADR-007-orchestration-doctrine.md)).
+- **`.githooks/`** is the authoritative gate: ASCII and glyph checks, lint,
+  commit-message shape and both test suites, inert until
+  `python scripts/install_hooks.py` points git at it. CI repeats the gates on
+  Python 3.11 ([`CONTRIBUTING.md`](CONTRIBUTING.md)).
+- **`ops/`** holds the supervisor and the Windows scheduled-task definitions,
+  plus two vendored directories pinned by digest: `ops/fleet_kit/` (the shared
+  tooling for agent runs - spawn, locks, checklists) and `ops/loop/` (a
+  machine-wide concurrency governor). Agent runs that happen without anyone
+  watching go through that kit and are logged
+  ([`docs/OPERATIONS.md`](docs/OPERATIONS.md#the-engine-the-lane-the-supervisor-and-the-dashboard)).
+- **`RSC-NEXT-SESSION.txt`** is the hand-off: the one file that carries open
+  work from one session to the next. Closed work is recorded in
+  [`docs/LEDGER.md`](docs/LEDGER.md) and open work in [`ROADMAP.md`](ROADMAP.md).
+- **Cross-repository notes** between the operator's repositories are
+  SHA-256 checked and answered by a scheduled responder -
+  [`docs/CHANNEL.md`](docs/CHANNEL.md).
+
+The licence is the GNU General Public License, version 3 or (at your option)
+any later version (GPL-3.0-or-later): free software, with source available to
+anyone who receives a copy. The vendored `ops/fleet_kit/` is Apache-2.0. See
+[Licence](#licence) below.
 
 ## Documentation
 
