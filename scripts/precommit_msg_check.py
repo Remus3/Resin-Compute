@@ -5,6 +5,9 @@ Validates the commit's SUBJECT line against the Conventional Commits shape:
 
 Auto-generated subjects (Merge / Revert / Reapply / fixup! / squash! / amend!)
 are skipped - git writes those itself and rejecting them would break a rebase.
+The one exception: a merge subject (`merge: <topic>`, the authored template,
+or git's `Merge ...`) is rejected when it names a worktree or agent - see
+MERGE SUBJECTS below.
 
 Runs LAST in .githooks/commit-msg, after the trailer strip and the glyph gate,
 so it validates the message that will actually be committed rather than a
@@ -74,11 +77,167 @@ SKIP_PREFIXES = (
 
 SOFT_LINE_LIMIT = 100
 
+# MERGE SUBJECTS (MAIN ORDER 1925 item b). The authored merge template is
+# `merge: <topic>`; it replaces the old `Merge slice ...` form, which this check
+# used to force by rejecting `merge:` outright. `merge:` is legal ONLY on a
+# real merge commit - a merge in progress, read from MERGE_HEAD by the hook
+# entry point and passed in, so `validate` stays pure. On any other commit it
+# is rejected exactly as before.
+#
+# A merge commit's subject never carries a worktree or agent ID. Refute round 1
+# narrowed the shapes to real ids: harness agent ids are 17 hex digits, so
+# `agent-<15+ hex>`; `worktree-agent-<hex>` branches; any `.claude/worktrees`
+# path; and a live linked worktree's branch or directory name ONLY when it
+# carries a 6+ hex run. Topic words such as `worktree-cleanup`, `agent-facade`
+# or a worktree named `lane` never block. Non-merge subjects are not swept:
+# `fix(worktree-cleanup): ...` is about worktrees, not a leak of one.
+MERGE_SUBJECT_RE = re.compile(r"^merge:\s+\S")
+MERGE_TEMPLATE = "merge: <topic>"
 
-def validate(subject: str) -> tuple[bool, str | None]:
-    """Return (ok, error_message). error_message is None on success."""
+WORKTREE_NAME_PATTERNS = (
+    re.compile(r"(?<![0-9a-z])worktree-agent-[0-9a-f]+", re.IGNORECASE),
+    re.compile(r"(?<![0-9a-z])agent-[0-9a-f]{15,}(?![0-9a-z])", re.IGNORECASE),
+    re.compile(r"\.claude[/\\]+worktrees", re.IGNORECASE),
+)
+
+#: A live worktree name is treated as an id only when it carries this.
+_HEX_RUN = re.compile(r"[0-9a-f]{6,}", re.IGNORECASE)
+
+
+def _parse_worktree_porcelain(text: str) -> tuple[str, ...]:
+    """Branch short names and directory basenames of every LINKED worktree in
+    `git worktree list --porcelain` output. The first entry is the main
+    checkout and is skipped: its branch (`main`) is the merge target, not a
+    worktree name."""
+    names: list[str] = []
+    for index, block in enumerate(text.replace("\r\n", "\n").split("\n\n")):
+        if index == 0:
+            continue
+        for line in block.splitlines():
+            if line.startswith("worktree "):
+                base = re.split(r"[/\\]", line[len("worktree ") :].rstrip("/\\"))[-1]
+                if base:
+                    names.append(base)
+            elif line.startswith("branch "):
+                ref = line[len("branch ") :].strip()
+                short = ref[len("refs/heads/") :] if ref.startswith("refs/heads/") else ref
+                if short:
+                    names.append(short)
+    return tuple(dict.fromkeys(names))
+
+
+def _git_stdout(*args: str) -> str | None:
+    """stdout of `git <args>`, or None when git could not answer."""
+    try:
+        proc = subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.decode("utf-8", "replace")
+
+
+def linked_worktree_names() -> tuple[str, ...]:
+    """Live names of this repo's linked worktrees.
+
+    ADDITIVE, not the floor: `WORKTREE_NAME_PATTERNS` reject every agent and
+    worktree-agent shape with no git call at all. A git that cannot answer
+    yields no extra names rather than a refusal - failing closed here would
+    block every merge commit over a listing problem unrelated to its subject.
+    """
+    out = _git_stdout("worktree", "list", "--porcelain")
+    return () if out is None else _parse_worktree_porcelain(out)
+
+
+def _merge_head_path() -> str | None:
+    out = _git_stdout("rev-parse", "--git-path", "MERGE_HEAD")
+    return None if out is None else out.strip() or None
+
+
+def merge_in_progress(path_of_merge_head: Callable[[], str | None] | None = None) -> bool:
+    """True when MERGE_HEAD exists, i.e. this commit is a merge commit.
+
+    `git rev-parse --git-path MERGE_HEAD` resolves the per-worktree git dir,
+    so a linked worktree reads its own merge state. A git that cannot answer
+    reads as NOT a merge, which fails closed for `merge:`: it is rejected.
+    """
+    path = (path_of_merge_head or _merge_head_path)()
+    return path is not None and Path(path).is_file()
+
+
+def head_is_merge() -> bool:
+    """True iff HEAD has a second parent (`git rev-parse --verify -q HEAD^2`).
+
+    Refute round 2, ruling C: `git commit --amend` of a merge commit runs
+    commit-msg with no MERGE_HEAD, so MERGE_HEAD alone refused a legitimate
+    amend. False on any failure, an unborn HEAD included.
+
+    RESIDUAL, accepted by the ruling and pinned by a test: a NEW non-merge
+    commit made directly on top of a merge also sees HEAD^2, so it may carry
+    a `merge:` subject. The worktree-name leak check is unaffected.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--verify", "-q", "HEAD^2"],
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0
+
+
+def _worktree_name_in(subject: str, worktree_names: tuple[str, ...]) -> str | None:
+    for pattern in WORKTREE_NAME_PATTERNS:
+        match = pattern.search(subject)
+        if match:
+            return match.group(0)
+    for name in worktree_names:
+        if not _HEX_RUN.search(name):
+            continue
+        if re.search(rf"(?<![\w./-]){re.escape(name)}(?![\w./-])", subject, re.IGNORECASE):
+            return name
+    return None
+
+
+def validate(
+    subject: str,
+    *,
+    merge_in_progress: bool = False,
+    worktree_names: tuple[str, ...] = (),
+    head_is_merge: bool = False,
+) -> tuple[bool, str | None]:
+    """Return (ok, error_message). error_message is None on success.
+
+    Pure: the hook entry point reads `merge_in_progress` (MERGE_HEAD),
+    `head_is_merge` (HEAD^2) and the live `worktree_names` and passes them in.
+    `head_is_merge` admits `merge:` only; it never widens the leak check.
+    """
     if not subject.strip():
         return False, "empty subject line"
+    merge_form = subject.startswith("Merge ") or subject.startswith("merge:")
+    if merge_in_progress or merge_form:
+        leaked = _worktree_name_in(subject, worktree_names)
+        if leaked is not None:
+            return False, (
+                f"merge subject names a worktree or agent ({leaked!r}); "
+                f"write {MERGE_TEMPLATE} with no worktree, agent or branch name"
+            )
+    if subject.startswith("merge:"):
+        if not (merge_in_progress or head_is_merge):
+            return False, (
+                f"{MERGE_TEMPLATE} is only for a merge commit, and no merge is in "
+                "progress (no MERGE_HEAD) nor is HEAD a merge"
+            )
+        if MERGE_SUBJECT_RE.match(subject):
+            return True, None
+        return False, f"merge subject has no topic; write {MERGE_TEMPLATE}"
     if any(subject.startswith(p) for p in SKIP_PREFIXES):
         return True, None
     if not SUBJECT_RE.match(subject):
@@ -237,7 +396,12 @@ def main() -> int:
     subject = _read_subject(
         msg_file, hash_is_content=not hash_lines_are_stripped(message=message)
     )
-    ok, err = validate(subject)
+    merging = merge_in_progress()
+    names = linked_worktree_names() if merging or subject.startswith(("Merge ", "merge:")) else ()
+    head_merge = head_is_merge() if subject.startswith("merge:") and not merging else False
+    ok, err = validate(
+        subject, merge_in_progress=merging, worktree_names=names, head_is_merge=head_merge
+    )
     if not ok:
         print(
             "commit-msg: subject line rejected.\n"
@@ -246,6 +410,8 @@ def main() -> int:
             "  expected: <type>(<scope>)?: <description>\n"
             f"  types:    {', '.join(TYPES)}\n"
             "  example:  feat(engine): add weapon-banner fate point carry\n"
+            f"  merges:   {MERGE_TEMPLATE} - never a worktree, agent or branch name\n"
+            "  example:  merge: P3 merge subject template\n"
             "Bypass with --no-verify if absolutely necessary.",
             file=sys.stderr,
         )
