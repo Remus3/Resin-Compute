@@ -47,6 +47,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from core.capture_root import default_capture_root  # noqa: E402
 
 FILE_DAEMON = "first_run_capture.py"
 SCREEN_DAEMON = "screen_capture.py"
@@ -290,12 +294,13 @@ def one_pass(root: Path, restart: bool, restarts: dict[str, int]) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path("C:/rsc-first-run"))
+    parser.add_argument("--root", type=Path, default=None)
     parser.add_argument("--interval", type=float, default=15.0)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--no-restart", action="store_true",
                         help="report only, never spawn a replacement")
     args = parser.parse_args(argv)
+    args.root = args.root or default_capture_root()
     args.root.mkdir(parents=True, exist_ok=True)
     restarts: dict[str, int] = {}
     while True:

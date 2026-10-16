@@ -489,7 +489,7 @@ _SLOT_BUCKET_ABS_NORM = _bucket_norm() if _SLOT_BUCKET_IS_ABS else ""
 
 
 # 8.3 SHORT NAMES ARE THE SAME PATH TO THE KERNEL (S3 residual c, 2026-10-03).
-# Measured on this host: `C:\RESINC~1\...\ops\runtime\responder_runs.json`
+# Measured on this host: `<8.3 repo root>\...\ops\runtime\responder_runs.json`
 # (the run record, retired in session 63; the 8.3 finding holds for any path),
 # the 8.3 spelling of the home directory's `.claude.json` and `C:\PROGRA~3\...` all normcased to
 # strings that matched no fenced root, so a write by the short spelling passed

@@ -42,13 +42,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from core.capture_root import default_capture_root  # noqa: E402
 from core.walkprune import NEVER_WALKED_DIR_NAMES, is_pruned_dir_name  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Where things are
 # ---------------------------------------------------------------------------
 
-DEFAULT_CAPTURE_ROOT = Path("C:/rsc-first-run")
+#: None means: resolve at the point of use via core/capture_root.py.
+DEFAULT_CAPTURE_ROOT: Path | None = None
 
 LOCALLOW = Path(os.environ.get("USERPROFILE", "")) / "AppData" / "LocalLow"
 APPDATA_ROAMING = Path(os.environ.get("APPDATA", ""))
@@ -459,8 +461,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="poll the registry once every N ticks")
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args(argv)
-    args.root.mkdir(parents=True, exist_ok=True)
-    return run(args.root, args.interval, args.registry_every, args.once)
+    root = args.root or default_capture_root()
+    root.mkdir(parents=True, exist_ok=True)
+    return run(root, args.interval, args.registry_every, args.once)
 
 
 if __name__ == "__main__":

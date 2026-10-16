@@ -428,14 +428,14 @@ def test_non_merge_subjects_are_not_swept_by_the_worktree_check():
 
 def test_linked_worktree_names_excludes_the_main_checkout():
     porcelain = (
-        "worktree E:/Resin Compute\nHEAD abc\nbranch refs/heads/main\n\n"
-        "worktree E:/Resin Compute/.claude/worktrees/p3\nHEAD abc\n"
+        "worktree /srv/checkout\nHEAD abc\nbranch refs/heads/main\n\n"
+        "worktree /srv/checkout/.claude/worktrees/p3\nHEAD abc\n"
         "branch refs/heads/p3-subjects\n\n"
-        "worktree E:/Resin Compute/.claude/worktrees/det\nHEAD abc\ndetached\n\n"
+        "worktree /srv/checkout/.claude/worktrees/det\nHEAD abc\ndetached\n\n"
     )
     names = msg_check._parse_worktree_porcelain(porcelain)
     assert "main" not in names
-    assert "Resin Compute" not in names
+    assert "checkout" not in names
     assert {"p3-subjects", "p3", "det"} <= set(names)
 
 
