@@ -40,6 +40,31 @@ def test_the_helper_defaults_to_c_without_system_drive() -> None:
     assert PureWindowsPath(got) == PureWindowsPath("C:/") / "rsc-first-run"
 
 
+@pytest.mark.parametrize(
+    ("raw", "drive"),
+    [
+        ("D:", "D:"),
+        (" e: ", "e:"),
+        ("D:\\", "D:"),
+        ("D:/", "D:"),
+        ("C", "C:"),
+        ("/", "C:"),
+        ("D:foo", "C:"),
+        ("\\\\srv", "C:"),
+        ("\\\\srv" + "\\share", "C:"),
+        ("", "C:"),
+        ("DD:", "C:"),
+    ],
+)
+def test_the_helper_validates_system_drive(raw: str, drive: str) -> None:
+    """Refute round 2 item 1: only a bare drive letter is accepted."""
+    from core.capture_root import default_capture_root
+
+    got = PureWindowsPath(default_capture_root(environ={"SystemDrive": raw}, platform="win32"))
+    assert got == PureWindowsPath(drive + "/") / "rsc-first-run", (raw, got)
+    assert got.is_absolute() and not str(got).startswith("\\\\"), got
+
+
 def test_the_helper_uses_the_temp_dir_off_windows() -> None:
     from core.capture_root import default_capture_root
 
