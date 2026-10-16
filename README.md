@@ -178,10 +178,13 @@ than taken on trust:
   agent whose job is to refute the result - the agent that produced a change
   never grades it
   ([`docs/adr/ADR-007-orchestration-doctrine.md`](docs/adr/ADR-007-orchestration-doctrine.md)).
-- **`.githooks/`** is the authoritative gate: ASCII and glyph checks, lint,
-  commit-message shape and both test suites, inert until
-  `python scripts/install_hooks.py` points git at it. CI repeats the gates on
-  Python 3.11 ([`CONTRIBUTING.md`](CONTRIBUTING.md)).
+- **`.githooks/`** is the authoritative gate, inert until
+  `python scripts/install_hooks.py` points git at it: ASCII and glyph checks
+  and commit-message shape at commit time, then lint and a fast (`not slow`)
+  test selection, narrowed to what the push changed, before a push. CI on
+  Python 3.11 runs the engine suite in full and the application suite scoped
+  to the change, and a daily scheduled run covers every module
+  ([`CONTRIBUTING.md`](CONTRIBUTING.md)).
 - **`ops/`** holds the supervisor and the Windows scheduled-task definitions,
   plus two vendored directories pinned by digest: `ops/fleet_kit/` (the shared
   tooling for agent runs - spawn, locks, checklists) and `ops/loop/` (a
@@ -197,8 +200,9 @@ than taken on trust:
 
 The licence is the GNU General Public License, version 3 or (at your option)
 any later version (GPL-3.0-or-later): free software, with source available to
-anyone who receives a copy. The vendored `ops/fleet_kit/` is Apache-2.0. See
-[Licence](#licence) below.
+anyone who receives a copy. Three vendored parts keep their own Apache-2.0
+grant: `ops/fleet_kit/`, `ops/loop/slots.py` with `ops/loop/winmutex.py`, and
+`docs/CHANNEL.md`. See [Licence](#licence) below.
 
 ## Documentation
 
@@ -254,10 +258,17 @@ copyright line; ADR-006 records why. You may use, study, modify and redistribute
 this, including commercially, but any derivative you distribute must carry the
 same licence and its source must be available.
 
-One vendored directory carries its own grant: `ops/fleet_kit/` is the
-operator's FLEET-KIT under Apache-2.0, with its own `LICENSE` and `NOTICE`
-retained unedited beside it. Apache-2.0 code may be combined into a
-GPL-3.0-or-later work, so the combined work still ships under `LICENSE`.
+Some vendored files carry their own grant, all Apache-2.0:
+
+- `ops/fleet_kit/` is the operator's FLEET-KIT, with its own `LICENSE` and
+  `NOTICE` retained unedited beside it.
+- `ops/loop/slots.py` and `ops/loop/winmutex.py`, the concurrency governor,
+  are byte-identical copies from another of the operator's repositories.
+- `docs/CHANNEL.md` is likewise a byte-identical copy.
+
+Their provenance is recorded in `docs/LICENSE_NOTES.md`. Apache-2.0 code may be
+combined into a GPL-3.0-or-later work, so the combined work still ships under
+`LICENSE`.
 
 That licence covers this project's own code only. It grants nothing over
 Genshin Impact's data, names, statistics or assets, which belong to HoYoverse;
