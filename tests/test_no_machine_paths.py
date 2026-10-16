@@ -109,20 +109,29 @@ FAKE_UNC_HOSTS: dict[str, str] = {
 #: quote) from a real segment that starts with n, r or t.
 _PATH_CHAR = r"[A-Za-z0-9_\\/.~-]"
 
+#: Each candidate's remainder is captured INSIDE A LOOKAHEAD, so a match
+#: consumes only the drive and its separator. A later path on the same line
+#: is then its own candidate; an exempt path earlier on a line can never mask
+#: it (refute round 2, item a).
 _DRIVE = re.compile(
     r"(?<![A-Za-z])([A-Za-z]):"
     r"(?!\\+[nrt](?!" + _PATH_CHAR + r"))"
-    r"(?:\\\\|\\|/)+(?![\\/])(.*)"
+    r"(?:\\\\|\\|/)+(?![\\/])(?=(.*))"
 )
 
+#: A drive mount. Preceded by a non-path character, or by `:` as in a PATH
+#: list (a single slash only, so `scheme://a/b` stays a URL).
 _MOUNT = re.compile(
-    r"(?<![A-Za-z0-9._~:<>/\\-])(?:/mnt|/cygdrive)?/{1,2}([A-Za-z])/"
-    r"(?=[A-Za-z0-9_.~$ <-])(.*)",
+    r"(?:(?<=:)(?<!(?<![A-Za-z])[A-Za-z]:)|(?<![A-Za-z0-9._~:<>/\\-]))"
+    r"(?:/mnt|/cygdrive)?(?:/|(?<!:)//)([A-Za-z])/"
+    r"(?=[A-Za-z0-9_.~$ <-])(?=(.*))",
     re.IGNORECASE,
 )
 
 _POSIX_HOME = re.compile(
-    r"(?<![A-Za-z0-9._~:/<>\\-])/(?:home|Users)/([^\s\\/`'\"]+)", re.IGNORECASE
+    r"(?:(?<=:)|(?<![A-Za-z0-9._~:/<>\\-]))/(?!/)(?:home|Users)/"
+    r"([A-Za-z0-9_.<][^\s\\/`'\"]*)",
+    re.IGNORECASE,
 )
 
 #: Two backslashes, host, ONE backslash (prose), or four, host, two (a Python
@@ -135,6 +144,15 @@ _UNC = re.compile(
     r"|(?<![:/A-Za-z0-9\\])//([A-Za-z0-9][A-Za-z0-9.-]*)/[^\s/`'\"]"
 )
 
+#: `file:` URLs are unwrapped before matching, so their path is judged by the
+#: same rules as a bare path: three slashes leave one (a mount, a home dir or
+#: a drive path follows), two slashes stay two (a UNC host follows).
+_FILE_URL = re.compile(r"file:(/{1,3})", re.IGNORECASE)
+
+
+def _unwrap_file_url(match: re.Match[str]) -> str:
+    return " //" if len(match.group(1)) == 2 else " /"
+
 _REPO_NAME = re.compile(
     r"(?<![A-Za-z])[A-Za-z](?::|%3A)(?:[\\/]|%5C|%2F)*resin[ _-]?compute",
     re.IGNORECASE,
@@ -142,9 +160,11 @@ _REPO_NAME = re.compile(
 
 _FORBIDDEN_SEGMENT = re.compile(
     r"(?:^|[\\/])(?:users|documents and settings|resin[ _-]?compute|resinc~\d|"
-    r"rc-worktrees)(?:$|[\\/])",
+    r"rc-worktrees|\.\.)(?:$|[\\/])",
     re.IGNORECASE,
 )
+
+_DOTDOT = re.compile(r"(?:^|[\\/])\.\.(?:$|[\\/])")
 
 _SYSTEM_ROOT = re.compile(
     r"(?:ProgramData|Program Files(?: \(x86\))?|PROGRA~[1-3]|Windows)"
@@ -152,13 +172,20 @@ _SYSTEM_ROOT = re.compile(
     re.IGNORECASE,
 )
 
-_TOKEN_END = re.compile(r"[`'\"<>|*?)\],;]")
+_TOKEN_END = re.compile(r"[\s`'\"<>|*?(),;\]]")
+_WIDE_END = re.compile(r"[`'\"<>|*?(),;\]]")
 _TRAILING = ".,;:!?)]}"
 
 
 def _token(rest: str) -> str:
-    """The path text after the drive separator, up to the first delimiter."""
+    """The path text after the separator, up to whitespace or a delimiter."""
     end = _TOKEN_END.search(rest)
+    return rest[: end.start()] if end else rest
+
+
+def _wide(rest: str) -> str:
+    """As `_token` but through spaces, which a real segment may hold."""
+    end = _WIDE_END.search(rest)
     return rest[: end.start()] if end else rest
 
 
@@ -181,39 +208,48 @@ def _rest_is_exempt(prefix: str, rest: str) -> bool:
         return True  # 1: a bare drive root names no directory
     if _is_fake(prefix, rest):
         return True  # 6
-    token = _token(rest)
     if rest.startswith("<"):
-        return not _FORBIDDEN_SEGMENT.search(rest[rest.find(">") + 1:].split(" ")[0])
+        tail = _wide(rest[rest.find(">") + 1:]) if ">" in rest else ""
+        return not _FORBIDDEN_SEGMENT.search(tail)  # 2
+    system = _SYSTEM_ROOT.match(rest)
+    if system:
+        return not _FORBIDDEN_SEGMENT.search(_wide(rest[system.end():]))  # 4
+    token = _token(rest)
+    if _DOTDOT.search(_wide(rest)):
+        return False  # a `..` segment escapes any root: never exempt
     if token.startswith("...") and (len(token) == 3 or token[3] in "\\/"):
-        return not _FORBIDDEN_SEGMENT.search(token)  # 3
-    if _SYSTEM_ROOT.match(rest):
-        return not _FORBIDDEN_SEGMENT.search(token)  # 4
-    segs = _segments(token.split(" ")[0]) if token else []
-    if segs and segs[0].lower() in ("users", "documents and settings"):
+        return not _FORBIDDEN_SEGMENT.search(_wide(rest)[3:])  # 3
+    segs = _segments(token)
+    if segs and segs[0].lower() == "users":
         account = segs[1].rstrip(_TRAILING) if len(segs) > 1 else ""
         return not account or account.lower() in PLACEHOLDER_ACCOUNTS  # 5
     return False
 
 
+def _excerpt(line: str, start: int) -> str:
+    return line[start:start + 60]
+
+
 def machine_paths(line: str) -> list[str]:
     """Every non-exempt absolute machine path in `line`, as a short excerpt."""
+    line = _FILE_URL.sub(_unwrap_file_url, line)
     found: list[str] = []
     for match in _DRIVE.finditer(line):
         if not _rest_is_exempt(match.group(1) + ":/", match.group(2)):
-            found.append(match.group(0)[:60])
+            found.append(_excerpt(line, match.start()))
     for match in _MOUNT.finditer(line):
         if not _rest_is_exempt("/" + match.group(1).lower() + "/", match.group(2)):
-            found.append(match.group(0)[:60])
+            found.append(_excerpt(line, match.start()))
     for match in _POSIX_HOME.finditer(line):
         account = match.group(1).rstrip(_TRAILING)
         if account.lower() not in PLACEHOLDER_ACCOUNTS and not account.startswith("<"):
-            found.append(match.group(0)[:60])
+            found.append(_excerpt(line, match.start()))
     for match in _UNC.finditer(line):
         host = match.group(1) or match.group(2) or match.group(3)
         if host.lower() not in FAKE_UNC_HOSTS:
-            found.append(match.group(0)[:60])
+            found.append(_excerpt(line, match.start()))
     for match in _REPO_NAME.finditer(line):
-        found.append(match.group(0)[:60])
+        found.append(_excerpt(line, match.start()))
     return found
 
 
@@ -300,6 +336,22 @@ OFFENDERS: dict[str, str] = {
     "temp dir": _win("C", B, "Temp", "x"),
     "8.3 documents": _win("C", B, "DOCUME" + "~1", "x"),
     "elided then repo": "`" + _win("C", B, "...", _ROOT_NAME) + "`",
+    # Refute round 2, item a: an exempt path earlier on a line masks nothing.
+    "after an exempt path": "Install `" + _win("C", B, "Program Files", "Git")
+    + "` and `" + _win("C", B, "Users", _ACCT, "AppData") + "`.",
+    "after a fake path": "See " + _win("C", "/", "x") + " and "
+    + _win("E", B, "dev", "secret", "tool.ps1"),
+    "after a bare root": "`" + _win("C", B) + "` then `" + _win("D", B, "dev", "secret") + "`",
+    "path list home": "PATH=/usr/bin:/home/" + "moon" + "beam/bin",
+    # Item b: after a colon (PATH lists) and inside file URLs.
+    "path list mount": "PATH=/usr/bin:/c/Users/" + _ACCT + "/bin",
+    "file url mount": "file:///c/Users/" + _ACCT + "/x",
+    "file url home": "file:///home/" + "moon" + "beam/x",
+    "file url unc": "file:/" + "/DESKTOP-AB12CD/share/x",
+    # Item c: a `..` segment is never exempt.
+    "dotdot from a fixture account": _win("C", B, "Users", "x", "..", _ACCT, "AppData"),
+    "dotdot from a system root": _win("C", B, "Windows", "..", "Tools", "x.ps1"),
+    "dotdot from programdata": _win("C", B, "ProgramData", "..", "Users", _ACCT),
 }
 
 LEGITIMATE: dict[str, str] = {
@@ -327,6 +379,10 @@ LEGITIMATE: dict[str, str] = {
     "relative": "docs/e/x and ops/loop/control/progress and N/A/x",
     "runtime resolution": "Path(__file__).resolve().parents[1] / $PSScriptRoot",
     "bare drive root": "the root of `" + _win("E", B) + "`",
+    "path list of system dirs": "PATH=/usr/bin:/usr/local/bin",
+    "url with one-letter host": "http://a/b/c and https://x.com:8080/home",
+    "regex source": "(?:/home/[^/]+)|(?:/Users/[^/]+)",
+    "drive path after colon": "path: " + _win("D", "/", "x", "pytools", "watch.py"),
 }
 
 

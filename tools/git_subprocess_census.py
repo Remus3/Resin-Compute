@@ -221,7 +221,7 @@ def _is_git_executable(text: str, *, shell_string: bool) -> bool:
     `shell_string` is the WHOLE-COMMAND form passed under `shell=True`, such as
     `git log -n 1`, where only the first shell word is the executable. It is the
     only form that may be split on whitespace. Splitting a LIST ELEMENT instead
-    cuts `C:\\Program Files\\Git\\bin\\git.exe` at `C:\\Program` and reports a
+    cuts `C:\\Program Files\\Git\\bin\\git.exe` at the space and reports a
     false NOT-GIT - the same class of error as the name filter this census
     replaces - so the two cases are separated here rather than guessed at.
     Quoting is honoured through `shlex` so a quoted path survives the split.
