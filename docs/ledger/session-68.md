@@ -16,7 +16,7 @@ Hand-off chores and the MAIN 2246 ORDER section 2 residue (0i).
   `ops/fleet_kit/fleet_suite_gate.py` with the absolute interpreter path;
   the app suite waited about 1291 s for a slot (2 of 2 held by other
   owners), the engine suite about 150 s.
-- core.hooksPath read the absolute `E:\Resin Compute\.githooks` at /done
+- core.hooksPath read the absolute `<repo-root>\.githooks` at /done
   start (the drift trap again); `python scripts/install_hooks.py` restored
   it, read back `.githooks`.
 - Push of the 10 session commits (5538515..0e8612a) through

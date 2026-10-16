@@ -238,7 +238,7 @@ def test_no_tracked_file_names_a_sibling_project():
         # (SHA-256 MATCH), codenamed Sibling-K by MAIN 2305 RULING. Its
         # checkout path is the name itself, so this one needle covers both.
         "ported from the Ebonwake tree on 2026-10-05",
-        "see C:/ebonwake/moon_sync_inbox for the note",
+        "see <drive>:/ebonwake/moon_sync_inbox for the note",
         # The RETIRED member's internal name, named in the same ORDER. A
         # retired sibling's name is still a leak, so retirement adds needles
         # and removes none.

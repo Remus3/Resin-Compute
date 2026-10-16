@@ -183,7 +183,7 @@ added.
 
 A SIBLING'S ATTRIBUTION DID NOT SURVIVE THE SHARED INPUT. LW attributed a
 46-to-12 drop in that base to its own `pytest.ini` change. The machine sweep at
-`C:\Tools\ops\Temp-Hygiene.ps1` had already been fixed by another session to a
+`<tools-dir>\ops\Temp-Hygiene.ps1` had already been fixed by another session to a
 3-hour cutoff, and its 20:01 run removed 25 stale run dirs and recovered 27.5GB
 - which is what took the base from 42 children to 12. Post-change figures taken
 with NO change made here land within noise of the sibling's. AGREEMENT BETWEEN
@@ -888,7 +888,7 @@ returns ZERO genuine candidates across 151 tracked `.py` files, 3 shell scripts
 and 3 git hooks, reported with the six blind spots the instrument cannot see.
 
 RSC REFUSED A PRUNE AND GAVE THE REASON RATHER THAN THE VERDICT.
-`C:\rsc-first-run`, 8378 files and 15363146655 bytes, was proposed for pruning
+`<system-drive>\rsc-first-run`, 8378 files and 15363146655 bytes, was proposed for pruning
 at 12 days idle. It is the compiled-in default capture root of
 `tools/first_run_capture.py:45`, a live tool with no environment-variable
 override. But nothing scheduled or supervised drives it: `Get-ScheduledTask`
@@ -994,7 +994,7 @@ have proved nothing.
 A MEASUREMENT TRAP worth recording, because it produced a FALSE CLEAN here
 before it was caught. A shell loop over `git worktree list` output that word-
 splits on whitespace splits this repo root at the space in its name, so
-`git -C "C:/Resin"` runs against a path that does not exist, prints nothing,
+`git -C "<drive>:/Resin"` runs against a path that does not exist, prints nothing,
 and `wc -l` reports 0 - which reads as "not dirty" for every row. The correct
 form is `while IFS= read -r`, and the tell was that the first field of every
 pair was the same truncated string. Same family as the MSYS `/F` rewrite: the
@@ -2005,7 +2005,7 @@ NINE. Nine was "not present in RC", and two of those had legitimately reached
 their own addressee elsewhere. Against the right population, "present in ZERO
 sibling inboxes", the answer is SEVEN. State which population you counted.
 
-THE LAST WORKTREE. `C:/rsc-wt-atomic` was a worktree of this repo living OUTSIDE
+THE LAST WORKTREE. `<drive>:/rsc-wt-atomic` was a worktree of this repo living OUTSIDE
 this repo root, halted under clause (a) and pruned only on an explicit operator
 ruling, after re-verifying against the MOVED `main` rather than the measurement
 taken two hours earlier. Census closed at 58 to 0, 50 branches to 1.
@@ -5663,7 +5663,7 @@ first-run log history survives rather than only its final state.
 
 ### The capture store is not in this tree, and the absence was proven
 
-`C:/rsc-first-run/` holds the bytes. Genshin's logs carry the account UID and
+`<system-drive>/rsc-first-run/` holds the bytes. Genshin's logs carry the account UID and
 the miHoYo registry subtree carries a login token. A sweep over all 164 tracked
 files for any nine-digit run hashing to the account UID found 0, and the checker
 was proven to fire on a planted control first, because a clean result and an
@@ -6183,7 +6183,7 @@ because the remote was deleted FIRST, removing the thing that kept restoring it.
 
 **AN ERROR THIS SESSION MADE, recorded because the scoping mistake is
 transferable.** The cross-repo adversary was instructed "do NOT read any
-sibling tree on this machine - stay inside `C:\Resin Compute`", to stop it
+sibling tree on this machine - stay inside `<repo-root>`", to stop it
 rummaging in projects that are not ours. That instruction also made the one
 question that mattered structurally unaskable: `ops/loop/winmutex.py` and
 `slots.py` were already world-readable in Sibling-E's PUBLIC repository and had
@@ -6696,8 +6696,8 @@ still failed in the archive, and only at a path containing NO SPACE.
 embedding a quoted Windows-looking path inside an `sh -c` string. MSYS argv
 conversion mangles that and the closing quote is lost - `sh: -c: line 1:
 unexpected EOF while looking for matching quote`. A space in the path SUPPRESSES
-the conversion, which is the only reason it passed at `C:\Resin Compute`. It
-would have failed for anyone cloning to `C:\dev\ResinCompute`, which is the
+the conversion, which is the only reason it passed at `<repo-root>`. It
+would have failed for anyone cloning to `<drive>:\dev\ResinCompute`, which is the
 normal case. Fixed by passing the hook as an argv element and running
 `exec "$0"`, so sh never re-parses it. Same root cause as the recorded
 `taskkill //F //PID` rule.

@@ -665,7 +665,7 @@ def test_a_created_record_is_drift():
 
 # ---------------------------------------------------------------------------
 # S3 (c): an 8.3 SHORT spelling of a fenced path is the same path to the kernel.
-# Measured on this host 2026-10-03: `C:\RESINC~1\...\ops\runtime\responder_runs.json`
+# Measured on this host 2026-10-03: `<8.3 repo root>\...\ops\runtime\responder_runs.json`
 # and the 8.3 spelling of the home directory's `.claude.json` both read as NOT
 # live before the fix.
 # ---------------------------------------------------------------------------

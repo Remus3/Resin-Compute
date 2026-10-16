@@ -48,7 +48,8 @@ from core.walkprune import NEVER_WALKED_DIR_NAMES, is_pruned_dir_name  # noqa: E
 # Where things are
 # ---------------------------------------------------------------------------
 
-DEFAULT_CAPTURE_ROOT = Path("C:/rsc-first-run")
+#: Root of the home directory's drive, resolved at run time; no drive letter is baked in.
+DEFAULT_CAPTURE_ROOT = Path(Path.home().anchor) / "rsc-first-run"
 
 LOCALLOW = Path(os.environ.get("USERPROFILE", "")) / "AppData" / "LocalLow"
 APPDATA_ROAMING = Path(os.environ.get("APPDATA", ""))

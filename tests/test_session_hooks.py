@@ -1467,8 +1467,8 @@ def test_the_mark_guard_leaves_a_reporting_declaration_alone(tmp_path):
 #: cannot become an offender under tests/test_machine_identity.py while
 #: demonstrating the guard.
 PLANTED_ABSOLUTE = (
-    "D:/opt/pytools/watch.py",
-    "D:\\opt\\pytools\\watch.py",
+    "D:/x/pytools/watch.py",
+    "D:\\x\\pytools\\watch.py",
     "/opt/pytools/watch.py",
     "//fileserver/share/watch.py",
 )

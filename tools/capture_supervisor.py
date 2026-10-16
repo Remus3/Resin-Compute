@@ -290,7 +290,7 @@ def one_pass(root: Path, restart: bool, restarts: dict[str, int]) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path("C:/rsc-first-run"))
+    parser.add_argument("--root", type=Path, default=Path(Path.home().anchor) / "rsc-first-run")
     parser.add_argument("--interval", type=float, default=15.0)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--no-restart", action="store_true",

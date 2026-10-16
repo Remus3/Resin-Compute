@@ -782,7 +782,7 @@ def test_a_legitimate_payload_key_survives_the_forbidden_sweep():
     [
         ("a windows drive", "C:" + chr(92) + "evidence" + chr(92) + "frame.png"),
         ("a posix absolute path", "/var/captures/frame.png"),
-        ("an msys mount spelling", "/c/captures/frame.png"),
+        ("an msys mount spelling", "/c/x/frame.png"),
         ("a unc share", chr(92) * 2 + "server" + chr(92) + "share" + chr(92) + "frame.png"),
         ("a parent escape", "../outside/frame.png"),
         ("empty", ""),

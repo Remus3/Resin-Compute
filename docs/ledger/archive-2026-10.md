@@ -344,25 +344,25 @@ No open item was acted on; every hand-off item is carried forward. The MAIN
 
 ## 2026-10-08 - E: move steps b and c: C: copy retired behind a junction, responder re-armed from E: (session 60)
 
-Hand-off item 0a. Step a: this session ran from `E:\Resin Compute`.
+Hand-off item 0a. Step a: this session ran from `<repo-root>`.
 - Step b. No file under the C: inbox was newer than 2026-10-08T00:13. No
   process command line named the repo path. The C: copy was sent to the
   Recycle Bin (VisualBasic FileSystem.DeleteDirectory, SendToRecycleBin), and
-  `mklink /J "C:\Resin Compute" "E:\Resin Compute"` was run. Read back:
-  LinkType Junction, Target `E:\Resin Compute`, and the hand-off file
+  `mklink /J "<junction-root>" "<repo-root>"` was run. Read back:
+  LinkType Junction, Target `<repo-root>`, and the hand-off file
   resolves through it. This keeps the sibling roots maps delivering until
   MAIN updates them.
 - Step c, which also renews item 0. `ops/install_responder_task.ps1` was run
   with -TaskName RSC-InboxResponder and InstallRoot E: after a WhatIf pass.
   A fresh gitignored agreement record was written, OPERATOR shape, expiring at
   the window close. Read back by schtasks: Status Ready, Start In
-  `E:\Resin Compute`, window 2026-10-08T00:45:00 to 2026-11-07T00:45:00.
+  `<repo-root>`, window 2026-10-08T00:45:00 to 2026-11-07T00:45:00.
   `python ops/check_task_liveness.py RSC-InboxResponder` read rc 0.
   The first fire at 00:45 read back as progress rsc-responder "fire ended
   empty", status done. `inbox_status.json` read state limit, 7 runs against a
   cap of 3, frees at 09:36. Known trap: the PT43200M repeat may end about an
   hour before EndBoundary because of the Nov 1 DST change.
-- core.hooksPath read the absolute `E:\Resin Compute\.githooks` at /done.
+- core.hooksPath read the absolute `<repo-root>\.githooks` at /done.
   `python scripts/install_hooks.py` was re-run and the value read back as
   `.githooks`. The cause is filed in ROADMAP.md.
 - Gates at 8a1907d plus paperwork, 2026-10-08, Python 3.14: licence 52;
@@ -395,7 +395,7 @@ directories went to the Recycle Bin; the 14 with uncommitted residue were
 archived first to a gitignored runtime folder named in ROADMAP.md (one
 folder per worktree holding a tracked diff, an untracked tar and its HEAD). Every pruned
 branch was an ancestor of main; branches kept. The repo was then copied with
-robocopy to `E:\Resin Compute` (4579 files, 0 failed), `git fsck` clean there,
+robocopy to `<repo-root>` (4579 files, 0 failed), `git fsck` clean there,
 README, docs/OPERATIONS.md and tests/test_machine_identity.py moved to the E:
 canonical path in one commit. The C: checkout stays until the hand-off item
 0a steps retire it; the responder task is disabled until re-armed from E:.
