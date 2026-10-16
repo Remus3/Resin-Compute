@@ -211,13 +211,20 @@ def describe(reading: dict[str, Any]) -> list[str]:
     return lines
 
 
-def compare(previous: dict[str, Any] | None, current: dict[str, Any]) -> list[str]:
+def compare(
+    previous: dict[str, Any] | None, current: dict[str, Any], *, stores: bool = True
+) -> list[str]:
     """One DRIFT line per field that moved since `previous`, else one quiet line.
 
     Every compared value is a bool, an int, a digest or a safe filename, so a
-    DRIFT line can show both sides without naming a path.
+    DRIFT line can show both sides without naming a path. `stores` is True
+    only when this reading WAS written as the baseline: a read-only run or a
+    failed write must never claim it (session 74 residue N5(a): it printed
+    "stored" then "not updated", and "stored" then "could not be stored").
     """
     if previous is None:
+        if not stores:
+            return [f"{PREFIX} no previous reading"]
         return [f"{PREFIX} no previous reading; this one is stored as the baseline"]
     drift = [
         f"{PREFIX} DRIFT {field} {_show(previous.get(field))} -> {_show(current.get(field))}"
@@ -265,13 +272,23 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:  # noqa: BLE001 - a reporter never surfaces a raw error
         print(f"{PREFIX} the map could not be probed this session (no detail shown)")
         return 0
-    lines = describe(current)
-    lines += compare(_load_previous(args.baseline), current)
+    # The previous reading is loaded BEFORE the write replaces it, and the
+    # lines are built AFTER it, so "stored" is printed only for a write that
+    # succeeded.
+    previous = _load_previous(args.baseline)
     stored = {k: current.get(k) for k in FIELDS}
+    written = False
+    tail: list[str] = []
     if read_only:
-        lines.append(f"{PREFIX} linked worktree: read-only, baseline not updated")
-    elif not _atomic.atomic_write_json(args.baseline, {"schema": 1, "reading": stored}):
-        lines.append(f"{PREFIX} this reading could not be stored; next session sees no baseline")
+        tail.append(f"{PREFIX} linked worktree: read-only, baseline not updated")
+    else:
+        try:
+            written = bool(_atomic.atomic_write_json(args.baseline, {"schema": 1, "reading": stored}))
+        except OSError:
+            written = False
+        if not written:
+            tail.append(f"{PREFIX} this reading could not be stored; next session sees no baseline")
+    lines = describe(current) + compare(previous, current, stores=written) + tail
     for line in lines:
         print(line)
     return 0
