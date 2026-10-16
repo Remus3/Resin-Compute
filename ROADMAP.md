@@ -13,12 +13,38 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-15. Session 74 residue (see `docs/ledger/session-74.md`).**
+  (a) `tools/roots_map_probe.py` run from a worktree while the main
+  checkout has no baseline prints "stored as the baseline" and then
+  "baseline not updated" - contradictory output; make the worktree branch
+  say only that it did not store one.
+  (b) No pre-push test arm pushes several refs at once (`.githooks/pre-push`
+  annotated-tag peel, merge 6fb8a88); the rev-parse raw error line on a
+  blob tag is cosmetic.
+  (c) `core/capture_root.py`: the `ValueError` branch is unreachable
+  (defence only); keep or cover it deliberately.
+  (d) The exemption list of `tests/test_no_machine_paths.py` was never
+  independently tested (adjudicator common-mode note): prove each
+  exemption is needed and that a non-exempt path still reds.
+  (e) `tests/test_responder_no_console_window.py` line 260: the monkeypatch
+  is a no-op (pre-existing).
+  (f) `tests/test_watch_inbox_session.py` line 767 fails when a clone lives
+  under AppData (environment, same family as the scratchpad location
+  trap).
+  (g) Four merged branches with no worktree remain
+  (`worktree-agent-a085507...`, `-a52543...`, `-a902f3...`, `-af74f8...`),
+  and four merged worktrees of session 74 (P2, P3, P5, F1) were still
+  locked by the live session at /done; remove each with `git worktree
+  remove` plus `git branch -d` once unlocked, never force.
+
 - **NEW 2026-10-14. Session 73 residue (see `docs/ledger/session-73.md`).**
   (a) KIT DEFECT, report to MAIN in the next batched note:
   `ops/fleet_kit/fleet_gitlock.py` wraps only `git commit` and `git push`,
   so a bare `git merge` is refused; the merger used `git merge --no-ff
   --no-commit` and then a gitlock commit. Never patch the kit. Reversed
-  by: a kit version that wraps `git merge`, or a MAIN ruling.
+  by: a kit version that wraps `git merge`, or a MAIN ruling. REPORTED
+  session 74 in the 2328 ANSWER to MAIN (see `docs/ledger/session-74.md`);
+  open until MAIN replies or a kit version wraps `git merge`.
   (b) WATCH: a stale empty `.git/index.lock` (826 s, no git process)
   blocked the first merge of session 73; the gitlock dry-run commit
   cleared it and logged it. Watch for a repeat and root-cause it then.
@@ -26,10 +52,9 @@ version. What follows is everything the scaffold deliberately did not do.
   template is now `merge: <topic>`, with no worktree or agent name, accepted
   only while a merge is in progress or HEAD is a merge
   (`scripts/precommit_msg_check.py`). The old `Merge slice ...` form is retired.
-  (d) PLUMBING SLICE: `tools/roots_map_probe.py` locates the map relative
-  to its own file, so a worktree copy prints "map not present" (a false
-  negative). Consider resolving the map via the git common dir, in its own
-  slice; until then run it from the main checkout.
+  (d) DONE session 74: `tools/roots_map_probe.py` resolves the map via
+  the git common dir and is read-only from a worktree (merge 303b839; see
+  `docs/ledger/session-74.md`); residue in the session 74 entry, item (a).
   (e) 0i residue from merge 72b2336: no git call in
   `scripts/prepush_select.py` has a timeout (pre-existing); in a partial
   clone the missing-sha rev-parse could reach the network. 2c-b push-run

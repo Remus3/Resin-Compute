@@ -1,23 +1,24 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-14 (session 73), gates measured at commit f6234b3 on main
+Stamped 2026-10-15 (session 74), gates measured at commit 1372540 on main
 by the /done ritual; this paperwork commit landed after it. Everything below
 is a READING taken that day, not a promise about now. Re-measure before
 citing.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
-  README.md (a landing page; depth is in docs/OVERVIEW.md and
-    docs/OPERATIONS.md)
+  README.md (a landing page plus "How this repo is built"; depth is in
+    docs/OVERVIEW.md and docs/OPERATIONS.md)
   docs/SPEC_SCAFFOLD.md
   ROADMAP.md (OPEN work only since session 64; closed entries live in
     docs/roadmap-archive/<YYYY-MM>.md)
   docs/LEDGER.md (an INDEX since session 64; read the newest
     docs/ledger/session-<n>.md, older bodies in docs/ledger/archive-*.md)
   git log --oneline -10
-  gh pr list   (read 2026-10-14 session 73 /done: no open PR)
-  python tools/roots_map_probe.py   (FROM THE MAIN CHECKOUT, never a
-    worktree - a worktree copy prints "map not present", a false negative;
-    read every DRIFT line it prints. ADR-013 interim d, session 73)
+  gh pr list   (read 2026-10-15 session 74 /done: no open PR)
+  python tools/roots_map_probe.py   (FROM THE MAIN CHECKOUT; since merge
+    303b839 it resolves the map via the git common dir, and a run from a
+    linked worktree is read-only and writes no baseline. Read every DRIFT
+    line it prints. ADR-013 interim d)
 Before planning any character build: docs/GOAL_SPEC_SEED_TEAM.md.
 Before adding any data source: docs/LICENSE_NOTES.md.
 Before re-litigating a past choice: docs/adr/README.md.
@@ -25,7 +26,7 @@ CLAUDE.md's pre-condense text is verbatim in docs/claude-md-history.md.
 FLEET-COMMON item 13 (kit v7+): print the Session <n> checklist at session
 start (n = the SESSION line at the bottom of this file); run /done unprompted
 when no task remains. Kit v10+: the main thread dispatches work (and /done)
-to sub-agents; the subagent-first hook is now in DENY mode (OPEN WORK 0e).
+to sub-agents; the subagent-first hook is in DENY mode (OPEN WORK 0e).
 Kit v12/v13 (FLEET-COMMON 16, 17): commits and pushes go through
 ops/fleet_kit/fleet_gitlock.py run --owner <id>; whole suites through
 ops/fleet_kit/fleet_suite_gate.py run --owner <id>; the claims hook's
@@ -54,8 +55,7 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 17 [] (kit v17, read back at session 73 /done; vendored
-6f61e0d).
+must print 17 [] (kit v17, read back at session 74 /done; vendored 6f61e0d).
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
 shared pytest temp dir: if a run needs an explicit --basetemp, use ONE
@@ -65,226 +65,50 @@ read-only-safe rmtree. pytest.ini now pins
 tmp_path_retention_count = 1. Do NOT export RESINCOMPUTE_RUNTIME_DIR in the
 shell for a full-suite run: it causes 3 false failures. Pass the suite
 interpreter to the suite gate as an ABSOLUTE path (sys.executable).
+Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
+count in any doc); each session's measured figures are in its
+docs/ledger/session-<n>.md entry, stamped with the date.
 
-STATE OBSERVED 2026-10-14 AT f6234b3 (session 73 /done gate run)
-  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
-  skipped 4 noted; ruff clean; tests 4570 passed 6 skipped (same six host
-  skip reasons, read with -rs; collect-only 4576); pity_engine 191
-  passed; node 110 pass 0 fail; dry run 0 pass 0 fail 7 skip; mypy 45
-  files clean; kit check 17 []. Whole suites ran through the suite gate,
-  no slot wait. core.hooksPath read the ABSOLUTE spelling (0z rule).
-  READ BACK: push 991b455..f6234b3, pre-push OK (13 modules, 435 passed
-  1 skipped); git ls-remote origin refs/heads/main f6234b3.
-  tools/send_note.py audit printed nothing; watch_inbox unread: none;
-  roots_map_probe first run stored its baseline (144 outbox entries),
-  exit 0. CI at f6234b3 READ BACK success: ci 38572023498, docs-guards
-  38572023501, codeql 38572023519. Paperwork push and its CI: see
-  docs/ledger/session-73.md.
-  git worktree list read back 4 entries: main, agent-aeb93 (merged,
-  LOCKED by a live claude.exe, left), agent-a056d and agent-a1bf3
-  (session 72 leftovers, merged and clean, left - remove with git
-  worktree remove plus git branch -d next session if still unused).
-  LANDED session 73: 0i residue (b) merge 72b2336 (3257ee6, b5fad62;
-  round 1 REFUTED, fixed, round 2 NOT REFUTED); 8 ADJUDICATED, interim d
-  merge f6234b3 (d58aa93, tools/roots_map_probe.py, leak-lens adversary
-  NOT REFUTED); worktree agent-a38699 removed, branch deleted.
-PRIOR READING 2026-10-13 AT 6f0cfc9 (session 72 /done gate run)
-  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
-  skipped 4 noted; ruff clean; tests 4513 passed 6 skipped (same six host
-  skip reasons, read with -rs; collect-only 4519); pity_engine 191
-  passed; node 110 pass 0 fail; dry run 0 pass 0 fail 7 skip; mypy 44
-  files clean; kit check 17 []. Whole suites ran through the suite gate;
-  the app suite waited about 420 s for the single slot.
-  core.hooksPath read the ABSOLUTE spelling at /done start; accepted
-  under the 0z rule (either spelling resolving to .githooks is fine).
-  READ BACK before the paperwork commit: origin/main 6f0cfc9 (ls-remote);
-  ci 38486807882, docs-guards 38486807919, codeql 38486807925 success at
-  6f0cfc9. tools/send_note.py audit printed nothing. watch_inbox read back
-  unread: none after --mark. Paperwork push and its CI: see
-  docs/ledger/session-72.md.
-  LANDED session 72: 0w merge c921c5c (attended sends and /done through
-  tools/send_note.py; adversary NOT REFUTED); 0y merge e2179b2 plus F1
-  1fa7f3b (ui-auditor routing defers to the ui-audit skip list); 0z
-  4fd8b9c (hooksPath drift root-caused to Claude Code's worktree setup);
-  seam floors 135 -> 155 (5555ce6, 6f0cfc9); 0x INFORMATION note to MAIN
-  sent, sha256 e8ef7559...0fed4 (local copy re-hashed at /done).
-PRIOR READING 2026-10-12 AT d142bd8 (session 71 /done gate run)
-  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
-  skipped 4 noted; ruff clean; tests 4479 passed 6 skipped (same six host
-  skip reasons, read with -rs); pity_engine 191 passed; node 110 pass
-  0 fail; dry run 0 pass 0 fail 7 skip; mypy 44 files clean; kit check
-  17 []. Whole suites ran through the suite gate; the app suite waited
-  about 720 s for the single slot.
-  core.hooksPath read .githooks at /done start (it had drifted mid
-  session 71 and install_hooks restored it).
-  READ BACK before the paperwork commit: origin/main d142bd8 (ls-remote);
-  ci 38337579557, docs-guards 38337579717, codeql 38337579576 success at
-  20d9d29; docs-guards 38337658754 success at d142bd8 (docs-only push,
-  no ci run). CI RED AT 960ef34 / bac5edc (item 0v) is FIXED.
-  LANDED session 71 (mostly unattended): 0v merge f1a2121; 0r merge
-  dec5217; 0u merge 8fe0ce4 (PR #5 closed by Dependabot); 0q merge
-  20d9d29 plus a 9-row outbound-ledger backfill (send_note audit printed
-  nothing at /done); 0s CS codename confirmed; d142bd8 roadmap residue.
-  INCIDENTS: the harness killed background suite runs twice for low host
-  memory; suite slot waits of about 15-30 min. Paperwork push and its
-  CI: see docs/ledger/session-71.md.
-PRIOR READING 2026-10-12 AT 960ef34 (session 70 /done gate run)
-  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
-  skipped 4 noted; ruff clean; tests 4438 passed 6 skipped (same six host
-  skip reasons, read with -rs); pity_engine 191 passed; node 110 pass
-  0 fail; dry run 0
-  pass 0 fail 7 skip; mypy 43 files clean; kit check 17 []. Whole suites
-  ran through the suite gate (FLEET_SUITE_SLOTS=1, machine policy).
-  core.hooksPath read the ABSOLUTE path at /done start; install_hooks
-  restored it, read back .githooks.
-  READ BACK before the paperwork commit: origin/main 960ef34 (ls-remote).
-  CI AT 960ef34 RED: ci 38288918481 failed 1 test (item 0v); docs-guards
-  38288918702 and codeql 38288918456 success. Paperwork push and its CI:
-  see docs/ledger/session-70.md.
-  LANDED session 70: 0g merge b47887e (ruff.toml comment; all 11 kit
-  ignores still fire on v17 bytes); 1 merge 38fbe43
-  (tests/test_requirements_dev_markers.py, 4 failed with the marker
-  stripped); 0h(i) merge cc2d86a (--confcutdir, adversary NOT REFUTED);
-  0i(2c) merge 3c61cc8 (plumbing push median 35.1 s -> 25.1 s; round 1
-  REFUTED, fixed, round 2 NOT REFUTED); 0l claude/new-session-19dmsr
-  deleted on origin (tip 154d5f8, ls-remote read back empty); ledger
-  07e54d1 and 960ef34 (origin/main read back 960ef34); 0j INFORMATION
-  note to MAIN, sha256 80a3a5c4...ab69 (local copy re-hashed at /done),
-  reached 2/2, outbound 2 of 6 on 2026-10-12; inbox 8 notes triaged and
-  marked. INCIDENT: a round-1 adversary's failed chained cd ran git reset
-  --hard in the main checkout; verifier read back NOTHING-LOST. Details:
-  docs/ledger/session-70.md.
-PRIOR READING 2026-10-12 AT 6f61e0d (session 69 /done gate run)
-  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
-  skipped 4 noted; ruff clean; tests 4385 passed 6 skipped; pity_engine
-  191 passed; node 110 pass 0 fail; dry run 0 pass 0 fail 7 skip; mypy 43
-  files clean; kit check 17 []. Whole suites ran through the suite gate.
-  READ BACK: origin/main 6f61e0d; ci 38228507163 and codeql 38228507246
-  success. LANDED session 69: FLEET-KIT v17 (GITLOCK-SWEEP) vendored,
-  commit 6f61e0d; ONE ANSWER to MAIN (v17 adopted), delivered, recipient
-  copy hash-verified. TRAP: the gate owner id is the session-id form the
-  claims hook prints, not an invented name. Details:
-  docs/ledger/session-69.md.
-PRIOR READING 2026-10-10 AT 0e8612a (session 68 /done gate run)
-  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
-  skipped 4 noted; ruff clean; tests 4385 passed 6 skipped (same six host
-  skip reasons, read with -rs; collect-only 4391); pity_engine 191
-  passed; node 110 pass 0 fail; dry run 0 pass 0 fail 7 skip; mypy 43
-  files clean; kit check 15 []. Whole suites ran through the suite gate;
-  the app suite WAITED about 1291 s for a slot (2 of 2 held elsewhere).
-  core.hooksPath read the absolute path at /done start; install_hooks
-  restored it, read back .githooks.
-  READ BACK at /done: push 5538515..0e8612a, pre-push OK, origin/main
-  0e8612a (git fetch); git ls-remote origin lists main and
-  claude/new-session-19dmsr only; git stash list empty; watch_inbox
-  unread: none; git worktree list shows only the main checkout. CI at
-  0e8612a and the paperwork push: see docs/ledger/session-68.md.
-  LANDED session 68: 0i(2b) merge 079c7fa (census 190 -> 94 items);
-  0i(2c) merge 0127b26 PARTIAL (six modules CI_ONLY, push CI runs never
-  cancelled); 0i(4b) merge d57226d DECISION B (pytest-timeout 2.4.0
-  pinned, xdist and execnet deferred); 0p merge 9cd50b7 (arm-proving rule
-  into CLAUDE.md, stash dropped); 0l rsc-v8-slice-a deleted on origin;
-  0j measured; follow-up 0e8612a. Rulings: docs/ledger/session-68.md.
-PRIOR READING 2026-10-10 AT 7a11186 (session 67 /done gate run)
-  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
-  skipped 3 noted; ruff clean; tests 4467 passed 6 skipped (same six host
-  skip reasons, read with -rs); pity_engine 191 passed; node 110 pass 0
-  fail; dry run 0 pass 0 fail 7 skip; mypy 43 files clean; kit check
-  15 []. Whole suites ran through the suite gate.
-  Session 67 was a RECOVERY after a system hang mid session 66: it found
-  5 unpushed commits, half-built slice 0m in a worktree, a dead 0m
-  progress file, and the merge-e1-0o progress file failed on the
-  task_liveness int32 probe (host WMI condition, see 0h).
-  READ BACK at /done before the paperwork commit: origin/main 7a11186;
-  CI at 476623a ci 38063033075 and codeql 38063033074 success; CI at
-  7a11186 ci 38066774852 and codeql 38066774848 success; git worktree
-  list shows only the main checkout; git branch lists 1 branch.
-  LANDED (made in session 66 pre-hang, pushed session 67): A1 merge
-  15af0d0; 0o slice 93a08fd, merge 476623a; E1 kit v15 vendoring
-  028afc6, merge 226a60f. LANDED session 67: 0m commit 5896365, merge
-  7a11186 (adversary correctness+scope lens NOT REFUTED). CLEAN:
-  worktrees agent-a0315, agent-a19b, agent-afb4 and b-0m removed, their
-  branches deleted with -d. E1-ANS: ONE ANSWER to MAIN (HOP 2, TERMINAL)
-  for the v15 2055 ORDER, local copy sha256 41252173...12d6 re-hashed at
-  /done, reached 2/2, outbound 1 of 6 on 2026-10-10. Paperwork push and
-  its CI run: see docs/ledger/session-67.md. Details there.
-PRIOR READING 2026-10-09 AT aaa4d7d (session 66 /done gate run)
-  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
-  skipped 3 noted; ruff clean; tests 4450 passed 6 skipped (same six host
-  skip reasons); pity_engine 191 passed; node 110 pass 0 fail; dry run 0
-  pass 0 fail 7 skip; mypy 43 files clean; kit check 14 []. Whole suites
-  ran through the suite gate, no slot wait.
-  PUSH/CI: the /done agent's first push of aaa4d7d was refused by the
-  pre-push hook (it tests the WORKING TREE, which held uncommitted ROADMAP
-  edits citing the unwritten session ledger file); nothing reached origin.
-  The paperwork commit 969b0eb was pushed after (origin/main read back
-  969b0eb); CI at 969b0eb: ci 38017609190, docs-guards 38017609208,
-  codeql 38017609220, all success. A ledger-only follow-up commit
-  recording this landed after it.
-  LANDED (session 66): B1 merge aaa4d7d (slice c260c05, stale responder
-  run record comments, adversary NOT REFUTED); C1 41 merged branches
-  deleted with git branch -d (44 seen, all merged) and the stale-locked
-  slice B worktree removed, git branch --list read back; D1 2055 REPORT
-  to MAIN (HOP 1) sha256 fcd0a755..., reached 2/2, outbound 5 of 6 on
-  2026-10-09; items 3 and 0n RETRACTED (see below). Details:
-  docs/ledger/session-66.md.
-  (Its two live worktrees, A1 and E1, were merged and removed in
-  session 67.)
-PRIOR READING 2026-10-09 AT e12b0ef (session 65 /done gate run)
-  Python 3.14 (CI is 3.11): licence 52; docs 46; qa 16 passed 0 failed 2
-  skipped 3 noted; ruff clean; tests 4450 passed 6 skipped (same six host
-  skip reasons); pity_engine 191 passed; node 110 pass 0 fail; dry run 0
-  pass 0 fail 7 skip; mypy 43 files clean; kit check 14 []. Whole suites
-  ran through the suite gate.
-  CI at e12b0ef: ci 38012355089, docs-guards 38012355068, codeql
-  38012355054, all success. origin/main read back e12b0ef before the
-  /done paperwork commit.
-  LANDED (session 65): FLEET-KIT v14 (slice 546647f, merge e47af71);
-  MAIN FIX TEMP-1 (slice a9de110, merge afdd733); ledger and hand-off
-  cd1a769; verifier correction e12b0ef. ANSWER 2020 to MAIN (HOP 2) on
-  kit v14 and TEMP-1, delivered 2/2, sha256 7e24ed1a...; outbound 4 of 6
-  on 2026-10-09. Inbox: 8 notes triaged (3 MAIN items SHA-256 verified;
-  SS notes SS-to-MAIN, not applicable); watermark marked at /done, then
-  read back unread: none. Identity section-4 survey: history TRIGGER
-  tier, 2 ai-or-bot author/committer commits including the root (main
-  then 499 commits). Details: docs/ledger/session-65.md.
-PRIOR READING 2026-10-09 AT 4cf15be (session 64 /done gate run, at E:)
-  Python 3.14: licence 52; docs 46; qa 16 passed 0 failed 2 skipped 3
-  noted; ruff clean; tests 4449 passed 6 skipped in run 1 with 1 teardown
-  error (fleet_test_guard caught the /done agent's own mid-run write of the
-  hook mode file, not a test defect); run 2 4448 passed 1 failed 6 skipped
-  (test_docs_consistency: the rewritten hand-off cited bare kit filenames;
-  fixed, test_docs_consistency re-run 46 passed, hand-off sweeps 159
-  passed); same six host skip reasons; pity_engine 191 passed; node 110 pass
-  0 fail; dry run 0 pass 0 fail
-  7 skip; mypy 43 files clean; kit check 13 [].
-  CI at 4cf15be: ci 37888329042, docs-guards 37888329012, codeql
-  37888329039, all success. origin/main read back 4cf15be before the /done
-  paperwork commit.
-  The kit identity check over HEAD refuses 4 violations on 2 commits
-  (9c2817d8bc, 569f9dc630), ai-or-bot author and committer only, no
-  trailer class.
-  LANDED (session 64): FLEET-KIT v12 (89fe0d9, merge 93bab89) and v13
-  (3438a82, bb51879, 1b3e860, merge a695f93); MAIN 2246 ORDER s1 rest
-  (merge 68b32fa, Desktop shortcut tooling gone; hand-off checks now in
-  tools/check_handoff.py), s2 (merges fe5a3b4, 466a4aa, 7c059ae, e39d0ae),
-  s3 (merge 19784ca), s4 Dependabot (3ef3d2b, 74a8710, 7b80f5d), ledger
-  775fd12, CI shallow-clone fix 4cf15be. ANSWERs 2301 and 0019 (HOP 2,
-  carries the correction of 2301) to MAIN. Details:
-  docs/ledger/session-64.md and docs/ledger/archive-2026-10.md.
-  Inbox: SS 0025 ANSWER to MAIN triaged (information, not for RSC, no
-  reply) and the watermark marked. ops/loop/control/subagent_first.jsonl
-  read 1361 rows, all sub-thread allow, 0 main-thread, 0 would-deny; the
-  mode file now reads deny.
-PRIOR READING 2026-10-08 AT afa7fc7 (session 63 /done)
-  licence 52; docs 42; qa 17/0/2; tests 4344 passed 6 skipped;
-  pity_engine 191; node 110/0; dry run 0/0/7; mypy 43 clean; kit 11 [].
-PRIOR READINGS sessions 57-62: see docs/ledger/archive-2026-10.md and
-  docs/ledger/archive-2026-09.md. A worktree shows MORE skips (no POSIX sh
-  on PATH), and
-  a worktree under the AppData scratchpad fails
-  test_the_session_cache_lives_under_the_runtime_directory - the location
-  trap, not a regression.
+STATE OBSERVED 2026-10-15 AT 1372540 (session 74 /done gate run)
+  Python 3.14 (CI is 3.11): every gate in the order above GREEN (counts
+  in docs/ledger/session-74.md); mypy advisory clean; kit check 17 [].
+  Whole suites ran through the suite gate. core.hooksPath read the
+  ABSOLUTE spelling (0z rule). tools/send_note.py audit printed nothing;
+  scripts/watch_inbox.py read unread: none.
+  CI at 1372540 READ BACK success: ci 38850581182, codeql 38850581216.
+  CI was RED at 44c97ec (ci 38845389790) and 6fb8a88 (ci 38846798268):
+  the CI image has no Pillow and tests/test_capture_root.py imported it;
+  fixed by F1 (merge 1372540). Paperwork push and its CI: see
+  docs/ledger/session-74.md.
+  origin: main 1372540 and annotated tag v0.1.0 (tag object 5eab7d8,
+  peels to 6fb8a88), both read back with git ls-remote.
+  git config --get-all fleet.operatorIdent read back 1 value.
+  WORKTREES read back at /done: removed (clean, merged; git worktree
+  remove then git branch -d, which printed each tip) agent-a355f4 (N4,
+  5161d42), agent-ad10c1 (P4, bfb2e07), agent-aef746 (P7b, 558a714).
+  LEFT: agent-a0228d (P5), agent-a0956d (P2), agent-a60657 (P3),
+  agent-ae36a4 (F1) - merged into main but LOCKED by the session's live
+  claude.exe, so not removable without force; agent-aeb93e (merged) left
+  by instruction. Four merged branches with no worktree also remain
+  (worktree-agent-a085507, -a52543, -a902f3, -af74f8). Remove all of
+  these next session with git worktree remove plus git branch -d once
+  unlocked and read back clean and merged; never force (item N6).
+  LANDED session 74 (details docs/ledger/session-74.md): W0 session 72
+  worktrees removed; P1 operatorIdent down to one value; P2 machine-path
+  scrub and guard merge 1efb846; P3 merge: <topic> template merge b888286;
+  N4 roots-map probe via git common dir merge 303b839; P5 hashed runtime
+  lock merge 1db6c73; P4 README build and licence statement merge 44c97ec;
+  P7b pre-push peels annotated tags merge 6fb8a88 and tag v0.1.0; F1
+  Pillow-less capture-root test merge 1372540; P6 GitHub sweep; A1 ONE
+  ANSWER to MAIN (2328 note, sha256 d1235551...6cedc re-hashed at /done);
+  I1 inbox marked.
+PRIOR READINGS (sessions 57-73): see docs/ledger/session-64.md through
+  docs/ledger/session-73.md and docs/ledger/archive-2026-10.md and
+  docs/ledger/archive-2026-09.md. A worktree shows MORE skips (no POSIX
+  sh on PATH), and a clone or worktree under AppData fails
+  test_the_session_cache_lives_under_the_runtime_directory and
+  tests/test_watch_inbox_session.py near line 767 - the location trap, not
+  a regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   0x. AWAIT MAIN'S REPLY to the 1852 INFORMATION note (sent session 72,
@@ -371,16 +195,33 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      and 2 (then build A2 test-first); MAIN's outbox becoming tracked-only
      makes A2 unworkable. Common-mode risk left: nothing tests that MAIN's
      outbox can hold an untracked file.
-  N1. KIT DEFECT for the next batched note to MAIN:
+  N1. KIT DEFECT REPORTED session 74 in the 2328 ANSWER to MAIN (sha256
+     d1235551333a5fa40ed0b6e932c3b3e203069f16c11b6cd906d1518d3cb16edc):
      ops/fleet_kit/fleet_gitlock.py wraps only git commit and git push, so
      a bare git merge is refused (merger used git merge --no-ff --no-commit, then
-     a gitlock commit). Never patch the kit. ROADMAP session 73 residue (a).
+     a gitlock commit). AWAIT MAIN'S REPLY; never patch the kit. ROADMAP
+     session 73 residue (a). Reversed by: a kit version that wraps git
+     merge, or a MAIN ruling.
   N2. WATCH: a stale empty .git/index.lock (826 s, no git process)
      blocked session 73's first merge; the gitlock dry-run commit cleared
      and logged it. Root-cause on a repeat. ROADMAP session 73 residue (b).
-  N4. PLUMBING SLICE: roots_map_probe worktree false negative - resolve
-     the map via the git common dir, own slice. ROADMAP session 73
-     residue (d).
+  N5. SESSION 74 RESIDUE (ROADMAP "Session 74 residue", items a-f):
+     (a) roots_map_probe from a worktree with no main baseline prints
+     "stored as the baseline" then "baseline not updated"; (b) no pre-push
+     arm pushes several refs at once, and the rev-parse raw error line on
+     a blob tag is cosmetic; (c) core/capture_root.py ValueError branch
+     unreachable (defence only); (d) the exemption list of
+     tests/test_no_machine_paths.py was never independently tested
+     (adjudicator common-mode note); (e)
+     tests/test_responder_no_console_window.py line 260 monkeypatch is a
+     no-op (pre-existing); (f) tests/test_watch_inbox_session.py line 767
+     fails when a clone lives under AppData (environment).
+  N6. WORKTREE AND BRANCH CLEAN-UP (ROADMAP session 74 residue (g)):
+     agent-a0228d, agent-a0956d, agent-a60657, agent-ae36a4 (merged,
+     locked by the live session at session 74 /done), agent-aeb93e
+     (merged), and branches worktree-agent-a085507, -a52543, -a902f3,
+     -af74f8 (merged, no worktree). git worktree remove plus git branch -d
+     only when unlocked, clean and merged, read back; never force.
   9. Commit-msg gate known FALSE BLOCKS, each worked around with
      git commit -F <file>: a localised git; an editor commit with
      --no-status or commit.status=false after a merge conflict on a
@@ -405,10 +246,16 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      is unreachable; an idle status over a non-oldest epoch-ms row reads
      120/120 while the kit still counts it as one; a one-off kit read error
      reads Backing Off, not the limit.
-  13. Inbox: at session 73 /done scripts/watch_inbox.py read unread:
-     none (nothing new this session; no MAIN reply to the 1258 or 1852
-     notes yet, items 0t and 0x). Each session: triage
+  13. Inbox: at session 74 /done scripts/watch_inbox.py read unread: none
+     (no MAIN reply yet to the 1258, 1852 or 2328 notes, items 0t, 0x
+     and N1). Each session: triage
      new entries into the four buckets, then --mark only what was triaged.
+  DONE session 74 (see docs/ledger/session-74.md): W0, P1, P2 (merge
+  1efb846), P3 (merge b888286), N4 (merge 303b839), P5 (merge 1db6c73),
+  P6, P4 (merge 44c97ec), P7 tag v0.1.0, P7b (merge 6fb8a88), F1 (merge
+  1372540), A1 ONE ANSWER to MAIN (2328, carries N1), I1 inbox marked.
+  Old item 13's per-session inbox triage done. All other items carried
+  forward.
   DONE session 73 (see docs/ledger/session-73.md): 0i residue (b) merge
   72b2336; 8 adjudicated and interim d merge f6234b3 (A2 residue in 8);
   N3 recorded as a trap. Outbound notes: none. All other items carried
@@ -520,12 +367,30 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   0z keeps either hooksPath spelling and does NOT enable
   extensions.worktreeConfig, because agent worktrees would then get no
   hooks (reversed by Claude Code no longer rewriting the value, or a MAIN
-  ruling).
+  ruling); P2 adjudicated B, fix every refute finding and close with a
+  verifier, no third adversary (reversed by a verifier finding an arm
+  that does not red); P3 DECISION C, merge: <topic> accepted only with
+  MERGE_HEAD or a merge HEAD, rejecting A (ship as is, breaks an amend of
+  a merge) and B (amend detection, infeasible on git 2.53) (reversed by
+  git exposing an amend signal to commit-msg, or a MAIN ruling); P5
+  DECISION B, no install.bat, the installer is the pip --require-hashes
+  pair, rejecting A (literal wrapper) and C (partial) (reversed by a MAIN
+  ruling asking for a wrapper).
 
 TRAPS MEASURED - none are hypothetical
   ops/fleet_kit/fleet_gitlock.py REFUSES A BARE git merge (session 73).
   Merge with git merge --no-ff --no-commit, then commit through gitlock.
-  The commit-msg hook rejects a merge: subject; write Merge slice ...
+  The merge subject is merge: <topic> (MAIN 1925 item b, merge b888286),
+  accepted only while MERGE_HEAD exists or HEAD is a merge, and never with
+  a worktree or agent name in it. The old Merge slice form is retired.
+
+  THE CI IMAGE HAS NO PILLOW (session 74). A test that imports
+  tools/screen_capture.py turned ci red at 44c97ec and 6fb8a88; stub PIL
+  in the test (F1, merge 1372540). Read CI after every merge.
+
+  SCRATCHPAD HELPERS NEED UNIQUE PER-SLICE NAMES (session 74). Two slices
+  ran one shared generic helper and cross-wrote progress files rsc-n4 and
+  rsc-p5. Name each helper after its slice.
 
   A STALE EMPTY .git/index.lock CAN BLOCK A MERGE (session 73, 826 s old,
   no git process). A gitlock dry-run commit clears it safely and logs it.
@@ -682,4 +547,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 74
+SESSION: 75
