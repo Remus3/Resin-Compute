@@ -19,6 +19,10 @@ from `tools/moon_sync_responder.py`, and the outbox is derived exactly as
 `main_provenance` derives it, so the probe watches the row the responder trusts.
 The map and the baseline are anchored on the MAIN checkout, found through the
 git common dir, so a run from a linked worktree reads the same map (slice N4).
+A linked-worktree run is READ-ONLY: it compares against the main checkout's
+baseline and prints DRIFT but stores nothing, so it never consumes drift the
+operator's main session should see. A failed resolution prints one stderr line
+saying it fell back to the invoking checkout.
 
 NO IDENTITY IN OUTPUT OR STATE. No line and no persisted field names a
 directory path, an account id or an email: the row's VALUE is never printed,
@@ -85,6 +89,14 @@ def main_checkout(repo: Path) -> Path:
     work tree, or any git failure, answers `repo` itself.
     """
     repo = Path(repo).resolve()
+    found = _resolve_main(repo)
+    return repo if found is None else found
+
+
+def _resolve_main(repo: Path) -> Path | None:
+    """The main checkout via the git common dir, or None when that fails
+    (not a work tree, no git, git < 2.31 rejecting --path-format, a bare or
+    separate-git-dir layout with no main work tree to name)."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     try:
         proc = subprocess.run(
@@ -92,13 +104,13 @@ def main_checkout(repo: Path) -> Path:
             cwd=repo, capture_output=True, text=True, timeout=30, check=False, env=env,
         )
     except (OSError, subprocess.SubprocessError):
-        return repo
+        return None
     common = proc.stdout.strip()
     if proc.returncode != 0 or not common:
-        return repo
+        return None
     common_dir = Path(common)
     if common_dir.name != ".git":
-        return repo  # a bare or separate-git-dir layout: no main work tree to name
+        return None
     return common_dir.parent.resolve()
 
 
@@ -234,10 +246,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--baseline", type=Path, default=None, help="stored previous reading")
     args = parser.parse_args(argv)
     # Resolved here, not at import: REPO may be a linked worktree (slice N4).
+    here = Path(REPO).resolve()
+    resolved = _resolve_main(here)
+    if resolved is None:
+        print(f"{PREFIX} git common dir not resolved; fell back to this checkout", file=sys.stderr)
+        resolved = here
+    # Merger ruling, N4 refute round 1: drift belongs to the operator's main
+    # session. From a linked worktree the probe compares against the MAIN
+    # baseline and prints DRIFT, but stores nothing, so it never consumes it.
+    # An explicit --baseline is the caller's own file and is written as before.
+    read_only = resolved != here and args.baseline is None
     if args.config is None:
-        args.config = default_config(REPO)
+        args.config = resolved / _CONFIG_REL
     if args.baseline is None:
-        args.baseline = default_baseline(REPO)
+        args.baseline = resolved / _BASELINE_REL
     try:
         current = read_map(args.config)
     except Exception:  # noqa: BLE001 - a reporter never surfaces a raw error
@@ -246,7 +268,9 @@ def main(argv: list[str] | None = None) -> int:
     lines = describe(current)
     lines += compare(_load_previous(args.baseline), current)
     stored = {k: current.get(k) for k in FIELDS}
-    if not _atomic.atomic_write_json(args.baseline, {"schema": 1, "reading": stored}):
+    if read_only:
+        lines.append(f"{PREFIX} linked worktree: read-only, baseline not updated")
+    elif not _atomic.atomic_write_json(args.baseline, {"schema": 1, "reading": stored}):
         lines.append(f"{PREFIX} this reading could not be stored; next session sees no baseline")
     for line in lines:
         print(line)
