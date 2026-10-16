@@ -183,9 +183,133 @@ def test_no_write_outside_the_control_dir(
 
 
 def test_default_state_lives_under_the_control_dir() -> None:
-    control = REPO_ROOT / "ops" / "loop" / "control"
-    assert probe.DEFAULT_BASELINE.parent == control
-    assert probe.DEFAULT_CONFIG == responder.DEFAULT_ROOTS_CONFIG
+    main = probe.main_checkout(REPO_ROOT)
+    assert probe.default_baseline(REPO_ROOT).parent == main / "ops" / "loop" / "control"
+    # The map path is the responder's, re-anchored on the MAIN checkout.
+    rel = responder.DEFAULT_ROOTS_CONFIG.relative_to(responder.REPO_ROOT)
+    assert probe.default_config(REPO_ROOT) == main / rel
+
+
+# ------------------------------------------- linked worktree (slice N4)
+
+
+def _git(cwd: Path, *args: str) -> str:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(
+        GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
+        GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid",
+    )
+    return subprocess.run(
+        ["git", *args], cwd=cwd, capture_output=True, text=True, check=True,
+        env=env, timeout=60,
+    ).stdout
+
+
+def _repo_with_worktree(tmp_path: Path) -> tuple[Path, Path]:
+    """A tmp main checkout plus a linked worktree of it."""
+    main = tmp_path / "checkout"
+    main.mkdir()
+    _git(main, "init", "-q")
+    _git(main, "commit", "-q", "--allow-empty", "-m", "seed")
+    wt = tmp_path / "linked"
+    _git(main, "worktree", "add", "-q", "--detach", str(wt))
+    return main, wt
+
+
+def test_main_checkout_resolves_a_linked_worktree_to_its_main(tmp_path: Path) -> None:
+    main, wt = _repo_with_worktree(tmp_path)
+    assert probe.main_checkout(wt) == main.resolve()
+    # Non-vacuity: the main checkout answers itself, so the arm above cannot
+    # pass on a resolver that returns its argument's parent or a constant.
+    assert probe.main_checkout(main) == main.resolve()
+
+
+def test_main_checkout_outside_git_answers_the_path_itself(tmp_path: Path) -> None:
+    plain = tmp_path / "not_a_repo"
+    plain.mkdir()
+    assert probe.main_checkout(plain) == plain.resolve()
+
+
+def test_probe_in_a_linked_worktree_reads_the_main_checkouts_map(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The N4 false negative: run from a linked worktree, the probe located the
+    map relative to its own file - the worktree, which never holds the
+    gitignored map - and printed "map not present". The map lives in the MAIN
+    checkout, found through the git common dir."""
+    main, wt, target = _worktree_with_map(tmp_path)
+    monkeypatch.setattr(probe, "REPO", wt)
+    rc = probe.main([])
+    out = capsys.readouterr()
+    text = out.out + out.err
+    assert rc == 0
+    assert "map not present" not in text
+    assert "outbox_exists=yes" in text
+    assert "outbox_entries=1" in text
+    assert "fell back" not in text
+    # Read-only from a worktree: no baseline is written in either checkout.
+    assert not (main / _BASELINE_REL).exists()
+    assert not (wt / _BASELINE_REL).exists()
+    _assert_no_identity(text, tmp_path, main, wt, target)
+
+
+_BASELINE_REL = Path("ops") / "loop" / "control" / "roots_map_probe.json"
+
+
+def _worktree_with_map(tmp_path: Path) -> tuple[Path, Path, Path]:
+    main, wt = _repo_with_worktree(tmp_path)
+    target = _main_tree(tmp_path)
+    rel = responder.DEFAULT_ROOTS_CONFIG.relative_to(responder.REPO_ROOT)
+    cfg = main / rel
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_bytes(json.dumps({"channel_codes": {"MAIN": str(target)}}).encode("ascii"))
+    assert not (wt / rel).exists()
+    return main, wt, target
+
+
+def test_worktree_run_reports_drift_but_leaves_the_main_baseline_alone(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Merger ruling on N4 refute round 1: drift belongs to the operator's main
+    session. A worktree run compares against the MAIN baseline and prints the
+    DRIFT, but must not consume it by storing its own reading."""
+    main, wt, target = _worktree_with_map(tmp_path)
+    # The main checkout's own run still writes its baseline (unchanged path).
+    monkeypatch.setattr(probe, "REPO", main)
+    assert probe.main([]) == 0
+    capsys.readouterr()
+    baseline = main / _BASELINE_REL
+    assert baseline.is_file()
+    os.utime(baseline, (1_500_000, 1_500_000))
+    before = (baseline.read_bytes(), baseline.stat().st_mtime_ns)
+    later = target / responder.OUTBOX_DIRNAME / "b-from-MAIN-RULING.txt"
+    later.write_bytes(b"x\n")
+    os.utime(later, (2_000_000, 2_000_000))
+    monkeypatch.setattr(probe, "REPO", wt)
+    for _ in range(2):  # twice: the second run must STILL see the drift
+        assert probe.main([]) == 0
+        out = capsys.readouterr()
+        assert "DRIFT outbox_entries 1 -> 2" in out.out
+        assert (baseline.read_bytes(), baseline.stat().st_mtime_ns) == before
+        assert not (wt / _BASELINE_REL).exists()
+        _assert_no_identity(out.out + out.err, tmp_path, main, wt, target)
+
+
+def test_failed_common_dir_resolution_says_it_fell_back(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """E.g. git < 2.31 rejects --path-format: one stderr line, no path."""
+    plain = tmp_path / "not_a_repo"
+    plain.mkdir()
+    root = _main_tree(tmp_path)
+    cfg = _map(tmp_path, root)
+    monkeypatch.setattr(probe, "REPO", plain)
+    assert probe.main(["--config", str(cfg), "--baseline", str(_state(tmp_path))]) == 0
+    out = capsys.readouterr()
+    fell = [ln for ln in out.err.splitlines() if "fell back" in ln]
+    assert len(fell) == 1
+    assert "outbox_exists=yes" in out.out
+    _assert_no_identity(out.out + out.err, tmp_path, plain, root)
 
 
 # --------------------------------------------------------------- degrade
