@@ -81,7 +81,7 @@ if RUFF_PY="$(resin_pick_python ruff)"; then
 else
     echo "pre-push WARNING: ruff not importable - the lint half did NOT run." >&2
     echo "  tried: $(resin_python_candidates)" >&2
-    echo "  pip install -r requirements-dev.txt" >&2
+    echo "  python -m pip install --require-hashes -r requirements-dev.txt" >&2
 fi
 
 # 2. Both suites, separately. See pytest.ini: the engine package is
@@ -198,7 +198,7 @@ EOF
 else
     echo "pre-push WARNING: pytest not importable - the suites did NOT run." >&2
     echo "  tried: $(resin_python_candidates)" >&2
-    echo "  pip install -r requirements-dev.txt" >&2
+    echo "  python -m pip install --require-hashes -r requirements-dev.txt" >&2
 fi
 
 # --- Say WHAT was graded, so a green line is never ambiguous ----------------
