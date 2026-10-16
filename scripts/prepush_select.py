@@ -89,6 +89,10 @@ FULL_TRIGGERS = frozenset(
         ".pytest.toml",
         "requirements.txt",
         "requirements-dev.txt",
+        # The unhashed declarations the two locks are compiled from (MAIN
+        # ORDER 1925 item e); tests/test_runtime_lock.py grades each pair.
+        "requirements.in",
+        "requirements-dev.in",
         "tests/__init__.py",
         "tests/conftest.py",
         "tests/_markers.py",

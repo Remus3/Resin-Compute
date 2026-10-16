@@ -14,7 +14,7 @@ payload. See `docs/SPEC_SCAFFOLD.md` section 4 and `data/fixtures/README.md`.
 
 Stdlib only, by design: `urllib.request` sets a custom header perfectly well, so
 a third-party HTTP library buys nothing and would break the zero-runtime-
-dependency rule in `requirements.txt`.
+dependency rule in `requirements.in`.
 
 UPSTREAM POLICY, quoted verbatim from the published docs
 --------------------------------------------------------
