@@ -79,8 +79,8 @@ def _prefix_pattern(prefix: str) -> re.Pattern[str] | None:
 
     Two tolerances, both measured rather than defensive:
 
-    - CASE. Windows compares paths case-insensitively, so `C:\\Resin Compute`
-      and `c:\\resin compute` name the same directory and an exact-case matcher
+    - CASE. Windows compares paths case-insensitively, so `<repo-root>`
+      and its lower-cased spelling name the same directory and an exact-case matcher
       would leak the second one.
     - SEPARATOR. `Path` renders one separator and a string literal in this tree
       carries the other, and the same path can reach a log line either way. Each

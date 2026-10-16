@@ -548,7 +548,7 @@ def assert_outside_repo(out_path: Path) -> Path:
             f"({REPO_ROOT}). The wish-history authkey is a live account "
             "credential and this repo's hard rule is that no secret is ever "
             "written inside it. Pick a path outside the repository, for "
-            "example C:/rsc-first-run/wish."
+            "example <system-drive>/rsc-first-run/wish."
         )
     return resolved
 

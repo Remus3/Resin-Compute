@@ -203,7 +203,7 @@ MEASURED BLIND SPOTS in arm 6, written down rather than left to be discovered:
     arm"; measured here it is a false positive rather than a blind spot, which
     fails safe but misdirects. `test_the_path_extractor_shatters_a_space_bearing
     _path` pins it. Separately and cleanly: the space in THIS checkout root
-    (`C:\\Resin Compute`) breaks nothing, because resolution is pathlib plus an
+    (`<repo-root>`) breaks nothing, because resolution is pathlib plus an
     argument LIST to `git check-ignore` and never a shell string - a distinct
     question, pinned separately so the two cannot be confused.
   * A path WRAPPED ACROSS A LINE is seen only as its first fragment, with the
@@ -1202,7 +1202,7 @@ def test_a_space_in_this_checkout_root_does_not_break_resolution():
 
     CS notes the space narrowing "matters more than it looks because at least
     one participating tree's root contains a space". THIS tree is that tree:
-    the repo root is `C:\\Resin Compute`. Measured here, the space in the ROOT
+    the repo root is `<repo-root>`, which has one. Measured here, the space in the ROOT
     breaks nothing, and the two are separate questions that are easy to run
     together and get wrong.
 
