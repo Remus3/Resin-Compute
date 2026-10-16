@@ -1948,6 +1948,102 @@ def test_commit_cleanup_strip_lets_a_hash_first_line_through_dash_F(gate_repo: _
     assert _landed_message(gate_repo) == CLEAN_MESSAGE
 
 
+# P3 (MAIN ORDER 1925 item b): a REAL merge commit, end to end. The merge
+# subject template is `merge: <topic>`; a subject naming a worktree or agent is
+# refused and HEAD does not move. The positive control is load-bearing: a hook
+# that refused every merge would pass the negative arm alone.
+_WORKTREE_BRANCH = "worktree-agent-a60657c9d2bd57fd6"
+
+
+def _side_branch_for_merge(repo: _ThrowawayRepo) -> str:
+    base = repo.git("rev-parse", "--abbrev-ref", "HEAD", check=True).stdout.strip()
+    repo.git("checkout", "-q", "-b", _WORKTREE_BRANCH, check=True)
+    repo.stage("side.txt", CLEAN_CONTENT)
+    assert repo.commit(b"feat(gate-probe): side\n", no_verify=True).returncode == 0
+    repo.git("checkout", "-q", base, check=True)
+    return base
+
+
+@pytest.mark.parametrize(
+    "subject",
+    [
+        "merge: P3 from agent-a60657c9d2bd57fd6",
+        "Merge branch '" + _WORKTREE_BRANCH + "'",
+    ],
+    ids=["authored-agent-id", "git-default-worktree-branch"],
+)
+def test_a_merge_subject_naming_a_worktree_is_refused(gate_repo: _ThrowawayRepo, subject: str):
+    _side_branch_for_merge(gate_repo)
+    before = gate_repo.head()
+    assert before, "the fixture left HEAD unborn, so 'HEAD did not move' proves nothing"
+
+    proc = gate_repo.git("merge", "--no-ff", "-m", subject, _WORKTREE_BRANCH)
+
+    assert gate_repo.head() == before, (
+        f"a merge subject naming a worktree LANDED: {subject!r}\n"
+        f"stdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+    assert proc.returncode != 0 and SUBJECT_MARKER in proc.stderr, (
+        f"refused, but not by the subject check.\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+
+
+def test_positive_control_a_merge_topic_subject_lands(gate_repo: _ThrowawayRepo):
+    _side_branch_for_merge(gate_repo)
+    before = gate_repo.head()
+    proc = gate_repo.git("merge", "--no-ff", "-m", "merge: P3 merge subject template", _WORKTREE_BRANCH)
+    assert proc.returncode == 0 and gate_repo.head() != before, (
+        f"FALSE BLOCK: `merge: <topic>` was refused.\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+    assert _landed_message(gate_repo).splitlines()[0] == b"merge: P3 merge subject template"
+
+
+def _land_a_merge(repo: _ThrowawayRepo) -> str:
+    _side_branch_for_merge(repo)
+    proc = repo.git("merge", "--no-ff", "-m", "merge: P3 merge subject template", _WORKTREE_BRANCH)
+    assert proc.returncode == 0, f"setup merge refused: {proc.stderr}"
+    return repo.head()
+
+
+def test_an_amend_of_a_merge_commit_keeps_its_merge_subject(gate_repo: _ThrowawayRepo):
+    """Round 2, ruling C: `--amend` of a merge has no MERGE_HEAD; HEAD^2 admits it."""
+    merged = _land_a_merge(gate_repo)
+    proc = gate_repo.git("commit", "--amend", "-m", "merge: P3 merge subject template, amended")
+    assert proc.returncode == 0 and gate_repo.head() != merged, (
+        f"FALSE BLOCK: amending a merge commit was refused.\nstderr: {proc.stderr}"
+    )
+    assert _landed_message(gate_repo).splitlines()[0] == b"merge: P3 merge subject template, amended"
+
+
+def test_an_amend_of_a_merge_commit_still_refuses_a_leaked_worktree_id(gate_repo: _ThrowawayRepo):
+    merged = _land_a_merge(gate_repo)
+    proc = gate_repo.git("commit", "--amend", "-m", "merge: P3 from agent-a60657c9d2bd57fd6")
+    assert gate_repo.head() == merged, f"a leaked agent id LANDED on amend.\nstderr: {proc.stderr}"
+    assert proc.returncode != 0 and SUBJECT_MARKER in proc.stderr, proc.stderr
+
+
+def test_residual_a_plain_merge_subject_lands_right_after_a_merge(gate_repo: _ThrowawayRepo):
+    """RESIDUAL of ruling C, pinned so it cannot widen silently: HEAD^2 cannot
+    tell an amend of the merge from a NEW commit on top of it. The ordinary-commit
+    arm below is the other half - with no merge at HEAD the same subject is refused."""
+    merged = _land_a_merge(gate_repo)
+    gate_repo.stage("after.txt", CLEAN_CONTENT)
+    proc = gate_repo.commit(b"merge: P3 merge subject template\n")
+    assert proc.returncode == 0 and gate_repo.head() != merged, proc.stderr
+
+
+def test_a_merge_subject_on_an_ordinary_commit_is_refused(gate_repo: _ThrowawayRepo):
+    """`merge:` is legal only while MERGE_HEAD exists; a plain commit is refused."""
+    gate_repo.stage("note.txt", CLEAN_CONTENT)
+    before = gate_repo.head()
+    assert before, "the fixture left HEAD unborn, so 'HEAD did not move' proves nothing"
+    proc = gate_repo.commit(b"merge: P3 merge subject template\n")
+    assert gate_repo.head() == before, (
+        f"a `merge:` subject LANDED on a non-merge commit.\nstderr: {proc.stderr}"
+    )
+    assert proc.returncode != 0 and SUBJECT_MARKER in proc.stderr, proc.stderr
+
+
 _EDITOR_SCRIPT = (
     b"import sys\n"
     b"path = sys.argv[-1]\n"

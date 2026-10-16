@@ -14,6 +14,7 @@ table is driven directly, including the ones this host cannot easily produce.
 from __future__ import annotations
 
 import importlib.util
+import os
 import shutil
 import subprocess
 import sys
@@ -327,3 +328,195 @@ def test_non_vacuity_the_glyph_half_passes_ascii_hash_lines(tmp_path, monkeypatc
             b"# with '#' will be ignored, and an empty message aborts the commit.\n"
         )
         assert precommit_gate._check_message_file(str(f)) == 0
+
+
+# ---------------------------------------------------------------------------
+# P3 (MAIN ORDER 1925 item b): the merge subject template is `merge: <topic>`,
+# and a merge subject never carries a worktree or agent id. Before this the
+# check rejected `merge:` outright, and the recorded trap said to write
+# `Merge slice ...` instead. `merge:` is legal ONLY while a merge is in
+# progress (MERGE_HEAD exists); on an ordinary commit it is rejected as before.
+# ---------------------------------------------------------------------------
+
+GOOD_MERGE_SUBJECTS = [
+    "merge: P3 merge subject template",
+    "merge: slice 0i residue - prepush selector catches nested configs",
+    # Refute round 1: topic words that merely LOOK like worktree names.
+    "merge: worktree-cleanup fix",
+    "merge: refresh worktree-list parser",
+    "merge: agent-facade rework",
+    # Git's own generated merge subjects still pass when they name no worktree.
+    "Merge branch 'side'",
+    "Merge branch 'main' of https://example.invalid/repo",
+    "Merge remote-tracking branch 'origin/main'",
+]
+
+BAD_MERGE_SUBJECTS = [
+    "merge: slice P3 from agent-a60657c9d2bd57fd6",
+    "merge: worktree-agent-a60657c9d2bd57fd6 into main",
+    "merge: P3 from .claude/worktrees/agent-a60657c9d2bd57fd6",
+    "merge: P3 from .claude\\worktrees\\p3",
+    "merge: P3 from AGENT-A60657C9D2BD57FD6",
+    "Merge branch 'worktree-agent-a0228dfee641cde39'",
+    "Merge branch 'worktree-agent-a0228dfee641cde39' into main",
+]
+
+
+@pytest.mark.parametrize("subject", GOOD_MERGE_SUBJECTS)
+def test_merge_topic_subject_is_accepted_during_a_merge(subject):
+    assert msg_check.validate(subject, merge_in_progress=True, worktree_names=()) == (True, None)
+
+
+@pytest.mark.parametrize("subject", BAD_MERGE_SUBJECTS)
+def test_merge_subject_naming_a_worktree_or_agent_is_rejected(subject):
+    ok, err = msg_check.validate(subject, merge_in_progress=True, worktree_names=())
+    assert not ok, subject
+    assert err is not None and "worktree" in err, err
+
+
+@pytest.mark.parametrize("subject", BAD_MERGE_SUBJECTS[-2:])
+def test_a_git_merge_subject_naming_a_worktree_is_rejected_even_unflagged(subject):
+    """The static id shapes need no merge-state read: a `Merge ...` subject
+    naming a worktree branch is refused even when MERGE_HEAD could not be seen."""
+    ok, _ = msg_check.validate(subject, merge_in_progress=False, worktree_names=())
+    assert not ok, subject
+
+
+@pytest.mark.parametrize(
+    "subject", ["merge: P3 merge subject template", "merge: worktree-cleanup fix"]
+)
+def test_a_merge_subject_on_a_non_merge_commit_is_rejected(subject):
+    ok, err = msg_check.validate(subject, merge_in_progress=False, worktree_names=())
+    assert not ok, subject
+    assert err is not None and "merge" in err, err
+
+
+def test_merge_subject_naming_a_live_linked_worktree_is_rejected():
+    """A live worktree name carrying a 6+ hex run is an id and is refused."""
+    names = ("lane-a0b1c2d3",)
+    ok, err = msg_check.validate(
+        "merge: land lane-a0b1c2d3 on main", merge_in_progress=True, worktree_names=names
+    )
+    assert not ok and err is not None and "lane-a0b1c2d3" in err, err
+    # The legitimate neighbour: the same name inside a longer token is not it.
+    assert msg_check.validate(
+        "merge: land xlane-a0b1c2d3z on main", merge_in_progress=True, worktree_names=names
+    ) == (True, None)
+
+
+def test_a_plain_word_live_worktree_name_never_blocks():
+    """A worktree named `lane` (no hex run) must not block a topic using the word."""
+    assert msg_check.validate(
+        "merge: lane rework", merge_in_progress=True, worktree_names=("lane",)
+    ) == (True, None)
+
+
+def test_merge_without_a_topic_is_rejected():
+    for subject in ("merge:", "merge: ", "merge:topic-without-space"):
+        ok, _ = msg_check.validate(subject, merge_in_progress=True, worktree_names=())
+        assert not ok, subject
+
+
+def test_non_merge_subjects_are_not_swept_by_the_worktree_check():
+    """The worktree-name arm is for MERGE subjects only; a fix ABOUT worktrees lands."""
+    for subject in (
+        "fix(worktree-cleanup): reap stale agent-a60657c9d2bd57fd6 dirs",
+        "docs: explain .claude/worktrees layout",
+    ):
+        assert msg_check.validate(subject, worktree_names=()) == (True, None), subject
+
+
+def test_linked_worktree_names_excludes_the_main_checkout():
+    porcelain = (
+        "worktree E:/Resin Compute\nHEAD abc\nbranch refs/heads/main\n\n"
+        "worktree E:/Resin Compute/.claude/worktrees/p3\nHEAD abc\n"
+        "branch refs/heads/p3-subjects\n\n"
+        "worktree E:/Resin Compute/.claude/worktrees/det\nHEAD abc\ndetached\n\n"
+    )
+    names = msg_check._parse_worktree_porcelain(porcelain)
+    assert "main" not in names
+    assert "Resin Compute" not in names
+    assert {"p3-subjects", "p3", "det"} <= set(names)
+
+
+def test_merge_in_progress_reads_merge_head_from_the_git_path(tmp_path):
+    head = tmp_path / "MERGE_HEAD"
+    assert msg_check.merge_in_progress(lambda: str(head)) is False
+    head.write_bytes(b"0" * 40 + b"\n")
+    assert msg_check.merge_in_progress(lambda: str(head)) is True
+    # git could not answer: not a merge, so `merge:` falls back to rejection.
+    assert msg_check.merge_in_progress(lambda: None) is False
+
+
+def test_an_amend_of_a_merge_commit_keeps_its_merge_subject():
+    """Round 2, ruling C: amending a merge commit has no MERGE_HEAD, but HEAD
+    has a second parent, so `merge:` stays legal."""
+    assert msg_check.validate(
+        "merge: P3 merge subject template", head_is_merge=True, worktree_names=()
+    ) == (True, None)
+
+
+def test_an_amend_of_a_merge_commit_still_refuses_a_leaked_worktree_id():
+    ok, err = msg_check.validate(
+        "merge: P3 from agent-a60657c9d2bd57fd6", head_is_merge=True, worktree_names=()
+    )
+    assert not ok and err is not None and "worktree" in err, err
+
+
+def test_residual_head_is_merge_is_the_only_thing_that_admits_a_plain_merge_subject():
+    """RESIDUAL of ruling C, pinned: a NEW non-merge commit made right after a
+    merge also carries HEAD^2 and is admitted. Without either flag it is not."""
+    subject = "merge: P3 merge subject template"
+    assert msg_check.validate(subject, head_is_merge=True)[0] is True
+    assert msg_check.validate(subject, head_is_merge=False)[0] is False
+
+
+def _git_in(repo, *args):
+    return subprocess.run(
+        ["git", *args], cwd=str(repo), capture_output=True, text=True, timeout=60, check=False
+    )
+
+
+def test_head_is_merge_reads_the_second_parent(tmp_path, monkeypatch):
+    if shutil.which("git") is None:
+        pytest.skip("git is not on PATH")
+    repo = tmp_path / "r"
+    repo.mkdir()
+    for key in [k for k in list(os.environ) if k.startswith("GIT_")]:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "no-global"))
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", str(tmp_path / "no-system"))
+    monkeypatch.chdir(repo)
+    assert _git_in(repo, "init", "-q").returncode == 0
+    for key, value in (("user.name", "p"), ("user.email", "p@example.invalid"),
+                       ("commit.gpgsign", "false")):
+        _git_in(repo, "config", key, value)
+    # Unborn HEAD.
+    assert msg_check.head_is_merge() is False
+    assert _git_in(repo, "commit", "-q", "--allow-empty", "-m", "chore: root").returncode == 0
+    # Root commit: no second parent.
+    assert msg_check.head_is_merge() is False
+    base = _git_in(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    _git_in(repo, "checkout", "-q", "-b", "side")
+    assert _git_in(repo, "commit", "-q", "--allow-empty", "-m", "chore: side").returncode == 0
+    _git_in(repo, "checkout", "-q", base)
+    assert _git_in(repo, "merge", "-q", "--no-ff", "-m", "merge: side", "side").returncode == 0
+    assert msg_check.head_is_merge() is True
+
+
+def test_main_rejection_text_names_the_merge_template(tmp_path, monkeypatch, capsys):
+    for key in ("GIT_INDEX_FILE", "GIT_EDITOR"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(msg_check, "linked_worktree_names", lambda: ())
+    monkeypatch.setattr(msg_check, "merge_in_progress", lambda *a: True)
+    monkeypatch.setattr(msg_check, "head_is_merge", lambda *a: False)
+    f = tmp_path / "msg"
+    f.write_bytes(b"merge: P3 from agent-a60657c9d2bd57fd6\n")
+    monkeypatch.setattr(sys, "argv", ["precommit_msg_check.py", str(f)])
+    assert msg_check.main() == 1
+    err = capsys.readouterr().err
+    assert "subject line rejected" in err
+    assert "merge: <topic>" in err
+    assert "Merge slice" not in err
+
+
