@@ -170,6 +170,29 @@ def merge_in_progress(path_of_merge_head: Callable[[], str | None] | None = None
     return path is not None and Path(path).is_file()
 
 
+def head_is_merge() -> bool:
+    """True iff HEAD has a second parent (`git rev-parse --verify -q HEAD^2`).
+
+    Refute round 2, ruling C: `git commit --amend` of a merge commit runs
+    commit-msg with no MERGE_HEAD, so MERGE_HEAD alone refused a legitimate
+    amend. False on any failure, an unborn HEAD included.
+
+    RESIDUAL, accepted by the ruling and pinned by a test: a NEW non-merge
+    commit made directly on top of a merge also sees HEAD^2, so it may carry
+    a `merge:` subject. The worktree-name leak check is unaffected.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--verify", "-q", "HEAD^2"],
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0
+
+
 def _worktree_name_in(subject: str, worktree_names: tuple[str, ...]) -> str | None:
     for pattern in WORKTREE_NAME_PATTERNS:
         match = pattern.search(subject)
@@ -188,11 +211,13 @@ def validate(
     *,
     merge_in_progress: bool = False,
     worktree_names: tuple[str, ...] = (),
+    head_is_merge: bool = False,
 ) -> tuple[bool, str | None]:
     """Return (ok, error_message). error_message is None on success.
 
-    Pure: the hook entry point reads `merge_in_progress` (MERGE_HEAD) and the
-    live `worktree_names` and passes them in.
+    Pure: the hook entry point reads `merge_in_progress` (MERGE_HEAD),
+    `head_is_merge` (HEAD^2) and the live `worktree_names` and passes them in.
+    `head_is_merge` admits `merge:` only; it never widens the leak check.
     """
     if not subject.strip():
         return False, "empty subject line"
@@ -205,10 +230,10 @@ def validate(
                 f"write {MERGE_TEMPLATE} with no worktree, agent or branch name"
             )
     if subject.startswith("merge:"):
-        if not merge_in_progress:
+        if not (merge_in_progress or head_is_merge):
             return False, (
                 f"{MERGE_TEMPLATE} is only for a merge commit, and no merge is in "
-                "progress (no MERGE_HEAD)"
+                "progress (no MERGE_HEAD) nor is HEAD a merge"
             )
         if MERGE_SUBJECT_RE.match(subject):
             return True, None
@@ -373,7 +398,10 @@ def main() -> int:
     )
     merging = merge_in_progress()
     names = linked_worktree_names() if merging or subject.startswith(("Merge ", "merge:")) else ()
-    ok, err = validate(subject, merge_in_progress=merging, worktree_names=names)
+    head_merge = head_is_merge() if subject.startswith("merge:") and not merging else False
+    ok, err = validate(
+        subject, merge_in_progress=merging, worktree_names=names, head_is_merge=head_merge
+    )
     if not ok:
         print(
             "commit-msg: subject line rejected.\n"

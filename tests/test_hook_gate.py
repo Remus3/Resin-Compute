@@ -1998,6 +1998,40 @@ def test_positive_control_a_merge_topic_subject_lands(gate_repo: _ThrowawayRepo)
     assert _landed_message(gate_repo).splitlines()[0] == b"merge: P3 merge subject template"
 
 
+def _land_a_merge(repo: _ThrowawayRepo) -> str:
+    _side_branch_for_merge(repo)
+    proc = repo.git("merge", "--no-ff", "-m", "merge: P3 merge subject template", _WORKTREE_BRANCH)
+    assert proc.returncode == 0, f"setup merge refused: {proc.stderr}"
+    return repo.head()
+
+
+def test_an_amend_of_a_merge_commit_keeps_its_merge_subject(gate_repo: _ThrowawayRepo):
+    """Round 2, ruling C: `--amend` of a merge has no MERGE_HEAD; HEAD^2 admits it."""
+    merged = _land_a_merge(gate_repo)
+    proc = gate_repo.git("commit", "--amend", "-m", "merge: P3 merge subject template, amended")
+    assert proc.returncode == 0 and gate_repo.head() != merged, (
+        f"FALSE BLOCK: amending a merge commit was refused.\nstderr: {proc.stderr}"
+    )
+    assert _landed_message(gate_repo).splitlines()[0] == b"merge: P3 merge subject template, amended"
+
+
+def test_an_amend_of_a_merge_commit_still_refuses_a_leaked_worktree_id(gate_repo: _ThrowawayRepo):
+    merged = _land_a_merge(gate_repo)
+    proc = gate_repo.git("commit", "--amend", "-m", "merge: P3 from agent-a60657c9d2bd57fd6")
+    assert gate_repo.head() == merged, f"a leaked agent id LANDED on amend.\nstderr: {proc.stderr}"
+    assert proc.returncode != 0 and SUBJECT_MARKER in proc.stderr, proc.stderr
+
+
+def test_residual_a_plain_merge_subject_lands_right_after_a_merge(gate_repo: _ThrowawayRepo):
+    """RESIDUAL of ruling C, pinned so it cannot widen silently: HEAD^2 cannot
+    tell an amend of the merge from a NEW commit on top of it. The ordinary-commit
+    arm below is the other half - with no merge at HEAD the same subject is refused."""
+    merged = _land_a_merge(gate_repo)
+    gate_repo.stage("after.txt", CLEAN_CONTENT)
+    proc = gate_repo.commit(b"merge: P3 merge subject template\n")
+    assert proc.returncode == 0 and gate_repo.head() != merged, proc.stderr
+
+
 def test_a_merge_subject_on_an_ordinary_commit_is_refused(gate_repo: _ThrowawayRepo):
     """`merge:` is legal only while MERGE_HEAD exists; a plain commit is refused."""
     gate_repo.stage("note.txt", CLEAN_CONTENT)
