@@ -132,6 +132,15 @@ def test_every_full_trigger_falls_back_to_the_whole_suite(trigger):
     assert trigger in got.reason
 
 
+@pytest.mark.parametrize("declaration", ["requirements.in", "requirements-dev.in"])
+def test_a_requirements_declaration_forces_the_whole_suite(declaration):
+    """Named literally, not drawn from FULL_TRIGGERS, so dropping either .in
+    from the set reds here (MAIN ORDER 1925 item e)."""
+    got = _select(["core/resin.py", declaration])
+    assert got.mode == sel.FULL
+    assert declaration in got.reason
+
+
 def test_a_huge_diff_falls_back_to_the_whole_suite():
     changed = [f"core/f{i}.py" for i in range(sel.MAX_CHANGED + 1)]
     assert _select(changed).mode == sel.FULL
