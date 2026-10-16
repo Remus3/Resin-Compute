@@ -1055,3 +1055,107 @@ def test_an_all_zero_base_still_takes_the_upstream_route(repo: Path):
     mode, reason, modules = _cli(repo, "--base", "0" * 40)
     assert mode == sel.SELECT, (mode, reason)
     assert "tests/test_thing.py" in modules.split(","), modules
+
+
+# ---------------------------------------------------------------------------
+# 0i residue (e), session 73: every git call is bounded by a timeout. A hung
+# git child (a partial clone whose missing-sha rev-parse reaches the network,
+# a lock another process holds) used to hang the pre-push hook forever. Every
+# call now carries GIT_TIMEOUT_S, and a timeout is a FAILED git call: the
+# selector fails closed to FULL and --ci-mark to every module.
+# ---------------------------------------------------------------------------
+
+
+def _recording_run(calls: list[dict], stdout: str = ""):
+    def run(cmd, **kwargs):
+        calls.append({"cmd": list(cmd), **kwargs})
+        return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+
+    return run
+
+
+def _hung_run(calls: list[dict]):
+    def run(cmd, **kwargs):
+        calls.append({"cmd": list(cmd), **kwargs})
+        raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout") or 0)
+
+    return run
+
+
+def test_every_runtime_git_call_carries_the_documented_timeout(monkeypatch, tmp_path: Path):
+    calls: list[dict] = []
+    monkeypatch.setattr(sel.subprocess, "run", _recording_run(calls, stdout="deadbeef\n"))
+    assert sel._changed(tmp_path, "deadbeef") is not None
+    sel._git_grep(tmp_path)(["core/thing.py"])
+    assert len(calls) == 6, "non-vacuity: rev-parse, three diffs, ls-files, grep"
+    for call in calls:
+        assert call.get("timeout") is not None, f"no timeout on {call['cmd']}"
+        assert call["timeout"] == sel.GIT_TIMEOUT_S, call
+    assert 0 < sel.GIT_TIMEOUT_S <= 120
+
+
+def test_every_subprocess_call_in_the_source_passes_a_timeout():
+    """The sibling sweep: a future subprocess call added without one reds here."""
+    import ast
+
+    tree = ast.parse((REPO_ROOT / "scripts" / "prepush_select.py").read_bytes())
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "subprocess"
+    ]
+    assert calls, "non-vacuity: the selector does shell out to git"
+    for node in calls:
+        assert "timeout" in {kw.arg for kw in node.keywords}, f"line {node.lineno}"
+
+
+def test_a_hung_git_call_is_a_failed_git_call(monkeypatch, tmp_path: Path):
+    calls: list[dict] = []
+    monkeypatch.setattr(sel.subprocess, "run", _hung_run(calls))
+    assert sel._git(tmp_path, "rev-parse", "HEAD") is None
+    assert len(calls) == 1, "non-vacuity: the fake git was reached"
+
+
+def test_a_hung_git_call_fails_closed_to_the_whole_suite(
+    monkeypatch, tmp_path: Path, capsysbinary
+):
+    monkeypatch.setattr(sel.subprocess, "run", _hung_run([]))
+    assert sel.main(["--root", str(tmp_path), "--base", "deadbeef"]) == 0
+    lines = capsysbinary.readouterr().out.decode("ascii").split("\n")
+    assert lines[0] == sel.FULL, lines
+    assert "selector error" not in lines[1], "a timeout is a git failure, not a crash"
+    assert lines[3].startswith(sel.ENGINE_RUN), lines
+
+
+def test_a_hung_git_grep_fails_closed_to_the_whole_suite(
+    monkeypatch, tmp_path: Path, capsysbinary
+):
+    """Only the grep hangs: the diff succeeds, so the FULL comes from the grep."""
+
+    def run(cmd, **kwargs):
+        if cmd[1] == "grep":
+            raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout") or 0)
+        out = "deadbeef\n" if cmd[1] == "rev-parse" else "core/thing.py\n"
+        return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+
+    monkeypatch.setattr(sel.subprocess, "run", run)
+    with pytest.raises(RuntimeError, match="git grep"):
+        sel._git_grep(tmp_path)(["core/thing.py"])
+    assert sel.main(["--root", str(tmp_path), "--base", "deadbeef"]) == 0
+    assert capsysbinary.readouterr().out.decode("ascii").split("\n")[0] == sel.FULL
+
+
+def test_a_hung_git_call_under_ci_mark_runs_every_module(
+    monkeypatch, tmp_path: Path, capsysbinary
+):
+    monkeypatch.setattr(sel.subprocess, "run", _hung_run([]))
+    assert sel.main(["--root", str(tmp_path), "--base", "deadbeef", "--ci-mark"]) == 0
+    assert capsysbinary.readouterr().out == b"\n"
+
+
+def test_a_healthy_git_call_is_untouched_by_the_timeout(repo: Path):
+    """The legitimate neighbour: a real, fast git call still answers."""
+    assert sel._git(repo, "rev-parse", "HEAD") == _git(repo, "rev-parse", "HEAD")
