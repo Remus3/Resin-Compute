@@ -211,13 +211,19 @@ def describe(reading: dict[str, Any]) -> list[str]:
     return lines
 
 
-def compare(previous: dict[str, Any] | None, current: dict[str, Any]) -> list[str]:
+def compare(
+    previous: dict[str, Any] | None, current: dict[str, Any], *, stores: bool = True
+) -> list[str]:
     """One DRIFT line per field that moved since `previous`, else one quiet line.
 
     Every compared value is a bool, an int, a digest or a safe filename, so a
-    DRIFT line can show both sides without naming a path.
+    DRIFT line can show both sides without naming a path. `stores` is False on
+    a read-only run, which must never claim the reading becomes the baseline
+    (session 74 residue N5(a): it printed "stored" then "not updated").
     """
     if previous is None:
+        if not stores:
+            return [f"{PREFIX} no previous reading"]
         return [f"{PREFIX} no previous reading; this one is stored as the baseline"]
     drift = [
         f"{PREFIX} DRIFT {field} {_show(previous.get(field))} -> {_show(current.get(field))}"
@@ -266,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{PREFIX} the map could not be probed this session (no detail shown)")
         return 0
     lines = describe(current)
-    lines += compare(_load_previous(args.baseline), current)
+    lines += compare(_load_previous(args.baseline), current, stores=not read_only)
     stored = {k: current.get(k) for k in FIELDS}
     if read_only:
         lines.append(f"{PREFIX} linked worktree: read-only, baseline not updated")
