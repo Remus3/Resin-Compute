@@ -2145,3 +2145,129 @@ def test_the_gate_rejects_an_interpreter_that_cannot_import_ruff(monkeypatch):
         precommit_gate, "_ruff_candidates", lambda: [[sys.executable, "-m", "no_such_module_xyz"]]
     )
     assert precommit_gate._resolve_ruff() is None
+
+
+# ---------------------------------------------------------------------------
+# The graded-HEAD check, against REAL refs in a throwaway repository.
+#
+# MEASURED DEFECT (slice P7b): git hands a pre-push hook the LOCAL OBJECT of
+# each pushed ref. For an annotated tag that object is the TAG, not the commit
+# it names, so the old `[ "$localsha" != "$HEAD_SHA" ]` refused EVERY annotated
+# tag push - "the suites graded HEAD 44c97ec... but this push ships 0713dcc...
+# - a different commit" - although the tag pointed at the very commit graded.
+# The block is run from the hook's own bytes, so an arm here grades the hook
+# and not a copy of it. The safety intent is unchanged and pinned beside the
+# fix: a tag (annotated or lightweight) on a commit that is NOT HEAD, or on no
+# commit at all, is still refused; a delete ships nothing and passes.
+# ---------------------------------------------------------------------------
+
+_ZERO = "0" * 40
+_GRADED_START = "# --- Say WHAT was graded"
+_GRADED_END = "DIRTY_COUNT="
+
+
+def _graded_head_block() -> str:
+    text = (HOOKS_DIR / "pre-push").read_text(encoding="ascii")
+    start = text.index(_GRADED_START)
+    end = text.index(_GRADED_END, start)
+    return text[start:end]
+
+
+def _git_tmp(repo: Path, *args: str) -> str:
+    completed = subprocess.run(
+        ["git", "-c", "user.name=probe", "-c", "user.email=probe@example.invalid",
+         "-c", f"core.hooksPath={(repo / '.nohooks').as_posix()}",
+         "-c", "tag.gpgSign=false", "-c", "commit.gpgSign=false", *args],
+        cwd=str(repo), capture_output=True, text=True, check=True,
+    )
+    return completed.stdout.strip()
+
+
+@pytest.fixture
+def tag_repo(tmp_path: Path) -> dict[str, str]:
+    require_git_repository()
+    repo = tmp_path / "tagrepo"
+    repo.mkdir()
+    _git_tmp(repo, "init", "-q")
+    (repo / "a.txt").write_text("one\n", encoding="ascii", newline="\n")
+    _git_tmp(repo, "add", "a.txt")
+    _git_tmp(repo, "commit", "-q", "-m", "one")
+    old = _git_tmp(repo, "rev-parse", "HEAD")
+    _git_tmp(repo, "tag", "-a", "-m", "old", "old-annotated")
+    (repo / "a.txt").write_text("two\n", encoding="ascii", newline="\n")
+    _git_tmp(repo, "commit", "-q", "-am", "two")
+    head = _git_tmp(repo, "rev-parse", "HEAD")
+    _git_tmp(repo, "tag", "-a", "-m", "head", "head-annotated")
+    _git_tmp(repo, "tag", "-a", "-m", "nested", "nested-annotated", "head-annotated")
+    _git_tmp(repo, "tag", "head-light")
+    tree = _git_tmp(repo, "rev-parse", "HEAD^{tree}")
+    _git_tmp(repo, "tag", "-a", "-m", "tree", "tree-annotated", tree)
+    refs = {"repo": str(repo), "head": head, "old": old, "tree": tree}
+    for name in ("old-annotated", "head-annotated", "nested-annotated", "tree-annotated"):
+        refs[name] = _git_tmp(repo, "rev-parse", f"refs/tags/{name}")
+    return refs
+
+
+def _run_graded(repo: str, ref: str, localsha: str, remotesha: str = _ZERO):
+    script = 'cd "$1" || exit 2\nPUSH_REFS="$(cat)"\n' + _graded_head_block() + "echo GRADED-PASSED\n"
+    stdin = f"{ref} {localsha} {ref} {remotesha}\n"
+    return _run_sh(script, stdin=stdin, argv=("graded-head", repo))
+
+
+def test_the_fixture_builds_tag_objects_distinct_from_their_commits(tag_repo):
+    """Non-vacuity for the arms below: the annotated tags really are tag
+    objects, so a green arm cannot be the old `localsha == HEAD` comparison."""
+    assert tag_repo["head-annotated"] != tag_repo["head"]
+    assert tag_repo["nested-annotated"] != tag_repo["head-annotated"]
+    assert tag_repo["old-annotated"] != tag_repo["old"]
+    assert tag_repo["old"] != tag_repo["head"]
+
+
+def test_an_annotated_tag_on_the_graded_head_is_not_refused(tag_repo):
+    result = _run_graded(tag_repo["repo"], "refs/tags/head-annotated", tag_repo["head-annotated"])
+    assert result.returncode == 0, result.stderr
+    assert "GRADED-PASSED" in result.stdout
+    assert "REFUSED" not in result.stderr
+
+
+def test_a_tag_of_a_tag_on_the_graded_head_is_not_refused(tag_repo):
+    result = _run_graded(
+        tag_repo["repo"], "refs/tags/nested-annotated", tag_repo["nested-annotated"]
+    )
+    assert result.returncode == 0, result.stderr
+    assert "GRADED-PASSED" in result.stdout
+
+
+def test_an_annotated_tag_on_an_older_commit_is_still_refused(tag_repo):
+    result = _run_graded(tag_repo["repo"], "refs/tags/old-annotated", tag_repo["old-annotated"])
+    assert result.returncode != 0
+    assert "REFUSED" in result.stderr
+    assert "GRADED-PASSED" not in result.stdout
+
+
+def test_an_annotated_tag_on_a_tree_is_refused_not_waved_through(tag_repo):
+    result = _run_graded(tag_repo["repo"], "refs/tags/tree-annotated", tag_repo["tree-annotated"])
+    assert result.returncode != 0
+    assert "REFUSED" in result.stderr
+    assert "names no commit" in result.stderr
+    assert "GRADED-PASSED" not in result.stdout
+
+
+def test_a_lightweight_tag_on_the_graded_head_is_not_refused(tag_repo):
+    result = _run_graded(tag_repo["repo"], "refs/tags/head-light", tag_repo["head"])
+    assert result.returncode == 0, result.stderr
+    assert "GRADED-PASSED" in result.stdout
+
+
+def test_a_lightweight_ref_on_an_older_commit_is_still_refused(tag_repo):
+    result = _run_graded(tag_repo["repo"], "refs/heads/main", tag_repo["old"])
+    assert result.returncode != 0
+    assert "REFUSED" in result.stderr
+
+
+def test_a_tag_delete_push_is_not_refused(tag_repo):
+    result = _run_graded(
+        tag_repo["repo"], "(delete)", _ZERO, remotesha=tag_repo["old-annotated"]
+    )
+    assert result.returncode == 0, result.stderr
+    assert "GRADED-PASSED" in result.stdout
