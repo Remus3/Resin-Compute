@@ -327,3 +327,97 @@ def test_non_vacuity_the_glyph_half_passes_ascii_hash_lines(tmp_path, monkeypatc
             b"# with '#' will be ignored, and an empty message aborts the commit.\n"
         )
         assert precommit_gate._check_message_file(str(f)) == 0
+
+
+# ---------------------------------------------------------------------------
+# P3 (MAIN ORDER 1925 item b): the merge subject template is `merge: <topic>`,
+# and a merge subject never carries a worktree or agent name. Before this the
+# check rejected `merge:` outright, and the recorded trap said to write
+# `Merge slice ...` instead.
+# ---------------------------------------------------------------------------
+
+GOOD_MERGE_SUBJECTS = [
+    "merge: P3 merge subject template",
+    "merge: slice 0i residue - prepush selector catches nested configs",
+    # Git's own generated merge subjects still pass when they name no worktree.
+    "Merge branch 'side'",
+    "Merge branch 'main' of https://example.invalid/repo",
+    "Merge remote-tracking branch 'origin/main'",
+]
+
+BAD_MERGE_SUBJECTS = [
+    "merge: slice P3 from agent-a60657c9d2bd57fd6",
+    "merge: worktree-agent-a60657c9d2bd57fd6 into main",
+    "merge: P3 (worktree-p3-merge-subjects)",
+    "merge: P3 from .claude/worktrees/agent-a60657c9d2bd57fd6",
+    "merge: P3 from .claude\\worktrees\\p3",
+    "merge: P3 from AGENT-A60657C9D2BD57FD6",
+    "Merge branch 'worktree-agent-a0228dfee641cde39'",
+    "Merge branch 'worktree-agent-a0228dfee641cde39' into main",
+]
+
+
+@pytest.mark.parametrize("subject", GOOD_MERGE_SUBJECTS)
+def test_merge_topic_subject_is_accepted(subject):
+    assert msg_check.validate(subject, worktree_names=()) == (True, None)
+
+
+@pytest.mark.parametrize("subject", BAD_MERGE_SUBJECTS)
+def test_merge_subject_naming_a_worktree_or_agent_is_rejected(subject):
+    ok, err = msg_check.validate(subject, worktree_names=())
+    assert not ok, subject
+    assert err is not None and "worktree" in err, err
+
+
+def test_merge_subject_naming_a_live_linked_worktree_branch_is_rejected():
+    """A worktree branch with no agent-/worktree- shape is still a worktree name."""
+    names = ("p3-subjects",)
+    ok, err = msg_check.validate("merge: land p3-subjects on main", worktree_names=names)
+    assert not ok and err is not None and "p3-subjects" in err, err
+    # The legitimate neighbour: the same name inside a longer token is not it.
+    assert msg_check.validate("merge: land xp3-subjects2 on main", worktree_names=names) == (
+        True,
+        None,
+    )
+
+
+def test_merge_without_a_topic_is_rejected():
+    for subject in ("merge:", "merge: ", "merge:topic-without-space"):
+        ok, _ = msg_check.validate(subject, worktree_names=())
+        assert not ok, subject
+
+
+def test_non_merge_subjects_are_not_swept_by_the_worktree_check():
+    """The worktree-name arm is for MERGE subjects only; a fix ABOUT worktrees lands."""
+    for subject in (
+        "fix(worktree-cleanup): reap stale agent-a60657c9d2bd57fd6 dirs",
+        "docs: explain .claude/worktrees layout",
+    ):
+        assert msg_check.validate(subject, worktree_names=()) == (True, None), subject
+
+
+def test_linked_worktree_names_excludes_the_main_checkout():
+    porcelain = (
+        "worktree E:/Resin Compute\nHEAD abc\nbranch refs/heads/main\n\n"
+        "worktree E:/Resin Compute/.claude/worktrees/p3\nHEAD abc\n"
+        "branch refs/heads/p3-subjects\n\n"
+        "worktree E:/Resin Compute/.claude/worktrees/det\nHEAD abc\ndetached\n\n"
+    )
+    names = msg_check._parse_worktree_porcelain(porcelain)
+    assert "main" not in names
+    assert "Resin Compute" not in names
+    assert {"p3-subjects", "p3", "det"} <= set(names)
+
+
+def test_main_rejection_text_names_the_merge_template(tmp_path, monkeypatch, capsys):
+    for key in ("GIT_INDEX_FILE", "GIT_EDITOR"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(msg_check, "linked_worktree_names", lambda: ())
+    f = tmp_path / "msg"
+    f.write_bytes(b"merge: P3 from agent-a60657c9d2bd57fd6\n")
+    monkeypatch.setattr(sys, "argv", ["precommit_msg_check.py", str(f)])
+    assert msg_check.main() == 1
+    err = capsys.readouterr().err
+    assert "subject line rejected" in err
+    assert "merge: <topic>" in err
+    assert "Merge slice" not in err
