@@ -34,7 +34,9 @@ READ-ONLY on everything except its own state file, written through
 scoped exception, measured 2026-10-14: importing `core/atomic_io.py` runs
 `core/log_setup.py`, which opens the tree's shared day log under the
 gitignored logs/ directory (creating it if absent), as every tool here does.
-The probe itself logs nothing on any path it handles.
+The probe itself logs one thing only: a baseline write that raises a
+non-OSError (slice N7c) logs the raw error to that day log FILE, never to the
+console, and prints the same friendly "could not be stored" line as OSError.
 
 EXIT CODE: 0 always, including a missing or unreadable map; 2 only for invalid
 arguments (argparse). Decision recorded (slice D, session 73): this is a
@@ -54,6 +56,7 @@ import argparse
 import hashlib
 import importlib
 import json
+import logging
 import os
 import re
 import subprocess
@@ -71,6 +74,7 @@ if str(REPO) not in sys.path:
 
 _responder: Any = importlib.import_module("tools.moon_sync_responder")
 _atomic: Any = importlib.import_module("core.atomic_io")
+_log_setup: Any = importlib.import_module("core.log_setup")
 
 #: The roots map and the baseline, relative to a checkout root. The map's
 #: relative path is the responder's own, never restated.
@@ -234,6 +238,27 @@ def compare(
     return drift or [f"{PREFIX} no drift since previous reading"]
 
 
+def _file_handlers() -> list[logging.Handler]:
+    """The day-log FILE handlers of this module's logger, never the console.
+
+    `core/log_setup.get_logger` attaches a console handler too, and a raw
+    error string must not reach the console (it can carry a path). Empty when
+    file logging is unavailable; the raw detail is then simply not kept.
+    """
+    logger = _log_setup.get_logger(__name__)
+    return [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
+
+
+def _log_raw(msg: str, *args: object) -> None:
+    """Record a raw error in the day log file only. Never raises."""
+    try:
+        record = logging.LogRecord(__name__, logging.ERROR, __file__, 0, msg, args, None)
+        for handler in _file_handlers():
+            handler.handle(record)
+    except Exception:  # noqa: BLE001, S110 - logging is best-effort on a degraded path
+        pass
+
+
 def _load_previous(state: Path) -> dict[str, Any] | None:
     # Not `read_json`: a corrupt state file must not log a raw error with a
     # path to the console. A corrupt or missing baseline is simply no baseline.
@@ -286,6 +311,11 @@ def main(argv: list[str] | None = None) -> int:
             written = bool(_atomic.atomic_write_json(args.baseline, {"schema": 1, "reading": stored}))
         except OSError:
             written = False
+        except Exception as exc:  # noqa: BLE001 - slice N7c: degrade, never a raw traceback
+            # Same friendly outcome as OSError; the raw error goes to the log
+            # FILE only. BaseException (Ctrl-C, SystemExit) still propagates.
+            written = False
+            _log_raw("baseline write failed: %s: %s", type(exc).__name__, exc)
         if not written:
             tail.append(f"{PREFIX} this reading could not be stored; next session sees no baseline")
     lines = describe(current) + compare(previous, current, stores=written) + tail
