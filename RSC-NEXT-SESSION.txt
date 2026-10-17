@@ -191,23 +191,57 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   N2. WATCH: a stale empty .git/index.lock (826 s, no git process)
      blocked session 73's first merge; the gitlock dry-run commit cleared
      and logged it. Root-cause on a repeat. ROADMAP session 73 residue (b).
+     REPEAT session 76 wrap-up: an empty .git/index.lock stamped
+     2026-10-16 17:00:15 (about 16 h old, no git process in this repo)
+     blocked git add; the gitlock commit cleared it. Root-cause next.
   N7. SESSION 75 RESIDUE (ROADMAP "Session 75 residue", items a-f):
      (a) 0i: the hung --ci-mark test in tests/test_prepush_select.py also
-     passes on the parent commit (non-discriminating arm). (b) N5d: rule
-     5's home-dir half (/home/ and /Users/ placeholder accounts, near
+     passes on the parent commit (non-discriminating arm).
+     (b) N7b IN PROGRESS session 76, UNMERGED. Original: N5d: rule 5's
+     home-dir half (/home/ and /Users/ placeholder accounts, near
      tests/test_no_machine_paths.py lines 255-258) has no necessity arm.
-     (c) N5a: a non-OSError exception in the baseline write of
-     tools/roots_map_probe.py escapes as a traceback (no false claim).
+     Branch worktree-agent-a99537b1fd7133f5c (worktree
+     .claude/worktrees/agent-a99537b1fd7133f5c): NO commits over main;
+     UNCOMMITTED diff tests/test_no_machine_paths.py (+34 -1), the
+     necessity arm. Stopped mid suite run for CPU (its orphan suite-gate
+     shell was killed at wrap-up). Next: confirm red/green, then a
+     verifier, then merge.
+     (c) N7c IN PROGRESS session 76, UNMERGED. Original: N5a: a non-OSError
+     exception in the baseline write of tools/roots_map_probe.py escapes
+     as a traceback (no false claim). Branch
+     worktree-agent-ad40cf687743cc158 (worktree
+     .claude/worktrees/agent-ad40cf687743cc158), commit 6305211: the
+     baseline write in main() now catches any Exception, exit stays 0 per
+     slice D. Builder-reported: app 4800 passed and 6 skipped, pity 191
+     passed, py3.14; NOT independently verified. The adversary REFUTED it
+     on scope and siblings: (1) _load_previous (near line 263) catches
+     only (OSError, ValueError); a baseline of '['*200000 raises
+     RecursionError, a traceback with exit 1, reproduced. (2)
+     _resolve_main (near line 99) uses subprocess text=True, a possible
+     UnicodeDecodeError, not reproduced. The builder was resumed to fix
+     both plus sweep the module, then stopped mid-work for CPU.
+     UNCOMMITTED diff in that worktree: tests/test_roots_map_probe.py
+     (+85) and tools/roots_map_probe.py (+17 -2). Builder's last words:
+     "Green. Checking why the file now takes 31s." - the sibling-fix tests
+     were green, but tests/test_roots_map_probe.py went from fast to about
+     31 s, likely the '['*200000 RecursionError fixture. Next: shrink that
+     fixture BEFORE any merge (a depth just over sys.getrecursionlimit(),
+     or monkeypatch json.loads to raise RecursionError); finish (1) and
+     (2) TDD-first; then a 2nd adversary round (the cap is 2), then a
+     verifier, then merge.
      (d) N5b: the first-plus-last-only mutant is caught by one arm only
      (middle of three); the all-zero (delete) skip branch was never
-     mutated. (e) Worktrees .claude/worktrees/agent-a2fcbd2a915e87790,
-     agent-ae145f6da3153d16e, agent-a1fefe71ae6a4056e,
-     agent-a6ee21a202bdbfc72 and their worktree-agent-* branches (all
-     merged) were locked by session 75's live pid; remove them with plain
-     git worktree remove plus git branch -d once that pid is dead, read
-     back clean and merged; never force. (f) Common-mode: the N5cf KEEP
-     and RECORD rulings both rest on an unverified 2026-09-15 MSIX
-     measurement.
+     mutated.
+     (e) N7e DONE session 76: tools/roots_map_probe.py exit 0. The 4
+     session-75 worktrees were unlocked, then removed plainly, then
+     git branch -d. Probe DRIFT outbox 153 -> 154; the newest note is the
+     2026-10-17-0737 MAIN FIX to RC, not ours.
+     (f) Common-mode: the N5cf KEEP and RECORD rulings both rest on an
+     unverified 2026-09-15 MSIX measurement.
+  N8. NEW session 76: the session-76 builders overran because of the
+     machine-wide suite-gate queue (N7b took 45m+ against a 12m ETA). The
+     machine hit 100% CPU with two worktree suites plus other trees.
+     Next session: run at most ONE whole-suite builder at a time.
   9. Commit-msg gate known FALSE BLOCKS, each worked around with
      git commit -F <file>: a localised git; an editor commit with
      --no-status or commit.status=false after a merge conflict on a
@@ -541,4 +575,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 76
+SESSION: 77
