@@ -202,3 +202,74 @@ def test_legacy_lane_never_replies_to_the_incident_note(rsp, tmp_path, monkeypat
     sessions = Sessions(rsp)
     _fire(rsp, tmp_path, monkeypatch, sessions)
     assert sessions.work == [] and _sent(tmp_path) == []
+
+
+# ---------------------------------------------------------------- round 1 refutation
+# Bias: when uncertain, do NOT skip. Answering wrongly is cheaper than silence.
+
+#: The live note the round-1 adversary found silenced: RSC by its FULL NAME on
+#: a `To:` field (folded), in a note named `-to-RC-1030-`.
+LIVE_1930 = "2026-09-21-1930-from-SS-ANSWER-to-RC-1030-the-get-is-None-leak-reproduces.md"
+LIVE_1930_HEAD = (
+    b"# SS 1930 - ANSWER to RC 1030: the leak reproduces here.\n\n"
+    b"From: SS\n"
+    b"To: CS, LL, LW, Main, Resin Compute, RC\n"
+    b"    and more\n"
+    b"Date: 2026-09-21\n"
+)
+
+
+def test_r1_the_header_names_this_tree_by_its_full_name(rsp):
+    assert rsp.addressed_elsewhere(LIVE_1930, LIVE_1930_HEAD) is False
+
+
+@pytest.mark.parametrize("spelling", [b"Resin Compute", b"ResinCompute", b"resin compute", b"Resin-Compute"])
+def test_r1_every_spelling_of_the_full_name_counts(rsp, spelling):
+    head = b"# From SS - QUESTION\n\nTo: LW, " + spelling + b"\n"
+    assert rsp.addressed_elsewhere("x-from-SS-to-LW-x.md", head) is False
+
+
+def test_r1_a_folded_continuation_line_naming_the_code_counts(rsp):
+    assert rsp.addressed_elsewhere("x-from-SS-to-LW-x.md", b"# n\nTo: LW,\n    RSC\n") is False
+
+
+@pytest.mark.parametrize("name", [
+    "2026-10-18-1300-from-SS-to-LW-and-RSC-x.md",
+    "2026-10-18-1301-from-SS-ORDER-to-LW-RSC-x.md",
+    "2026-10-18-1302-from-SS-to-EW-cc-RSC-x.md",
+    "2026-10-18-1303-from-SS-QUESTION-to-LW-CC-RSC.md",
+    "2026-10-18-1304-from-SS-QUESTION-to-LW-AND-ALL-SIX-x.md",
+    "2026-10-18-1305-from-SS-QUESTION-to-LW-and-SS-x.md",
+])
+def test_r1_every_code_in_the_addressee_run_is_read(rsp, name):
+    assert rsp.addressed_elsewhere(name, b"# n\n\nwhy\n") is False
+
+
+@pytest.mark.parametrize("name", [
+    "2026-10-18-1310-from-SS-to-LW-and-RC-x.md",
+    "2026-10-18-1311-from-SS-ORDER-to-LW-CS-x.md",
+    "2026-10-18-1312-from-SS-to-EW-cc-MAIN-x.md",
+])
+def test_r1_non_vacuity_a_run_of_only_other_trees_is_still_skipped(rsp, name):
+    assert rsp.addressed_elsewhere(name, b"# n\n\nwhy\n") is True
+
+
+def test_r1_a_mention_below_the_header_does_not_count(rsp):
+    """Non-vacuity for the header rule: the body is not the header."""
+    body = b"# From SS - REQUEST to MAIN\n\nHOP: 1\n\n## Ask\n\nRSC and Resin Compute need not act.\n"
+    assert rsp.addressed_elsewhere(N9_NAME, body) is True
+
+
+def test_r1_the_live_1930_note_stays_pending(rsp, tmp_path):
+    _note(tmp_path / "inbox", LIVE_1930, LIVE_1930_HEAD.decode("ascii"))
+    assert [p.name for p in rsp.pending(tmp_path / "inbox", rsp.OPTED_IN, set())] == [LIVE_1930]
+
+
+def test_r1_the_legacy_filter_records_nothing_by_design(rsp, tmp_path):
+    """Item 4: `pending` is a pure per-fire filter. Like its terminal and
+    auto-reply skips it writes no record (triage off writes no seen ledger -
+    pinned by the v8 legacy-switch arm); the triage lane is where the
+    `not-addressed` ack is recorded."""
+    _note(tmp_path / "inbox", N9_NAME, N9_BODY)
+    assert rsp.pending(tmp_path / "inbox", rsp.OPTED_IN, set()) == []
+    assert _seen(rsp) == {}
