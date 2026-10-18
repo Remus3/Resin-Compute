@@ -1427,6 +1427,9 @@ def pending(
             continue
         if kit.should_skip(child.name, SELF_CODE, text[:NOTE_HEAD_CHARS]) is not None:
             continue
+        # DEFECT N9: a sibling note addressed to another tree is not ours to answer.
+        if addressed_elsewhere(child.name, text.encode("utf-8")):
+            continue
         # LOOP BREAKER (c): never spawn on a note its sender marked TERMINAL or
         # no-reply. MAIN 0845 makes this a fleet floor. KEPT BESIDE THE KIT:
         # v4 reads only a marker-ONLY line, so a declaration inside a sentence
@@ -2068,6 +2071,40 @@ def addresses_self(raw: bytes) -> bool:
         if _SELF_WORD.search(line) and _ADDRESS_WORD.search(line):
             return True
     return False
+
+
+#: The addressee segment of a note filename: `-from-<SENDER>-[<CLASS>-]to-<CODE>`
+#: where CLASS is upper-case tokens only, so a prose slug such as
+#: `...-a-retraction-owed-to-LL-...` or `...-yes-to-six-...` is not an addressee.
+_ADDRESSEE = re.compile(r"-from-([A-Z]{2,4})-(?:[A-Z][A-Z0-9]*-)*?to-([A-Z]{2,4})(?=-|\.)")
+
+#: Addressee tokens that mean everyone.
+BROADCAST_CODES: tuple[str, ...] = ("ALL",)
+
+
+def addressed_elsewhere(name: str, raw: bytes) -> bool:
+    """Whether a SIBLING note is addressed to another tree and not to this one
+    (defect N9, 2026-10-18: an SS OPERATOR-REQUEST to MAIN was triaged and
+    "confirmed" by this responder).
+
+    True only when the filename's addressee segment names a known fleet code
+    that is not this tree, not a broadcast (`ALL`, `ALL-SIX`) and not the
+    sender itself (`-from-SS-CORRECTION-to-SS-1700-` corrects SS's own note),
+    AND the header does not address this tree (`addresses_self`, e.g. a cc).
+    A MAIN note is never decided here: its provenance path applies
+    `addresses_self` already. A name with no addressee segment is unchanged.
+    """
+    found = _ADDRESSEE.search(name)
+    if found is None:
+        return False
+    sender, to = found.group(1), found.group(2)
+    if sender in (MAIN_CODE, SELF_CODE) or to == sender:
+        return False
+    if to == SELF_CODE or to in BROADCAST_CODES:
+        return False
+    if to not in OPTED_IN and to not in RETIRED:
+        return False
+    return not addresses_self(raw)
 
 
 def _bytes_of(path: Path) -> tuple[bytes | None, str | None, str | None]:
@@ -5436,6 +5473,10 @@ def _inbox_triage(
             else:
                 mark(path, _decision(inbox_kit.WORK, d, "MAIN to the work lane"), None)
                 work_now.add(name)
+            continue
+        if code != SELF_CODE and addressed_elsewhere(name, _note_head(path).encode("utf-8")):
+            # DEFECT N9: another tree's mail is never triaged, worked or answered.
+            mark(path, _decision(inbox_kit.ACK, d, "addressed to another tree"), "not-addressed")
             continue
         if d.action in (inbox_kit.SKIP, inbox_kit.ACK):
             mark(path, d, None)
