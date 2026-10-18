@@ -176,6 +176,13 @@ edit. Tree-specific rules go BELOW this block, never inside it.
     strips, pre-push refuses; operator identity only from local git config
     `fleet.operatorIdent`), fleet_gitlock and the account attribution keys.
     A history rewrite runs only on MAIN's ORDER, via `fleet_rewrite.py`.
+18. STATUS BOARD (kit v19; operator order 2026-10-18). Each tree's claude.ai
+    board URL lives in `ops/status_board.json` {"url"}. An interactive
+    session pushes its board ONLY at session start, after every item-13 b
+    reprint and at /done (`--final`): `fleet_board.py calls --session <n>`
+    (checklist on stdin) renders status.json and prints the exact two tool
+    calls - one Artifact asset upload of that file, one ArtifactData update
+    of datasets/board pinned with if_version. Headless runs never push.
 <!-- FLEET-COMMON END -->
 
 # Tree-specific rules (ResinCompute)
@@ -453,6 +460,16 @@ lives here.
   writes it. The read-only child it spawns never prints one.
 - **Runner.** `headless/runner.py` writes progress task `rsc-runner` on live
   passes.
+- **Status board (FLEET-KIT v19, FLEET-COMMON 18).** An interactive session
+  pushes its board at session start (after the 13a block) and after every
+  13b reprint: `python ops/fleet_kit/fleet_board.py calls --session <n>
+  --checklist <file>`, then the two printed calls. /done pushes once with
+  `--final` (`.claude/commands/done.md` section 8b). Headless runs never
+  push. A failed push is a hand-off line, never a failure. Config
+  `ops/status_board.json`. Stop sentinels: `ops/stop_sentinels.json`
+  declares ops/runtime/HALT (the runner and responder HALT file), so a
+  kit spawn refuses "halted" while it exists. Reversed by: a MAIN ruling
+  or a later kit version.
 - **ASCII sinks** (logs, progress files read by 7-bit tools, committed bytes)
   render the box as `[ ]`. U+2610 is never a literal in a tracked file; the kit
   carries it as an escape, and `tests/test_fleet_kit.py` pins that.

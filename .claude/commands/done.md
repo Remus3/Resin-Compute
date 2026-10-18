@@ -242,6 +242,29 @@ first. Rewrite it, then commit it with the rest of the paperwork.
 Check `~/.claude/projects/C--Resin-Compute/memory/` for anything written this
 session and confirm `MEMORY.md` indexes it.
 
+## 8b. The status board push (FLEET-KIT v19, FLEET-COMMON 18)
+
+After the hand-off and the commit are READ BACK and before the done marker,
+push the board once. Pipe the last printed item-13 checklist into the kit
+(n = the counter this session ran under):
+
+```
+python ops/fleet_kit/fleet_board.py calls --final --session <n> --checklist <checklist file>
+```
+
+Make the two tool calls it prints, exactly: (1) Artifact publish of the
+status.json asset, (2) ArtifactData update of datasets/board with the printed
+if_version and data, `__URL__` replaced by the blob url call (1) returned. On a
+version mismatch run `python ops/fleet_kit/fleet_board.py pushed --version
+<current>` and redo call (2). A headless run prints `no push: headless` and
+pushes nothing. A FAILED PUSH IS A HAND-OFF LINE, NEVER A RITUAL FAILURE:
+add `board push failed: <reason>` to `RSC-NEXT-SESSION.txt`, re-run
+`python tools/check_handoff.py`, commit that one file through fleet_gitlock,
+read it back, and continue to section 9 with `--status done`. The checklist
+file is the last printed checklist text, written to the session scratchpad.
+The board URL lives in `ops/status_board.json`; runtime state in
+the gitignored board dir under ops/loop/control.
+
 ## 9. The done marker, then the one line
 
 The LAST act of the ritual (FLEET-KIT v9, FLEET-COMMON item 15, MAIN 2354

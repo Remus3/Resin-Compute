@@ -163,10 +163,11 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
         "sys.executable as its head, so it never reaches a bare interpreter.",
     ),
     "ops/fleet_kit/fleet_identity.py": (
-        1,
+        2,
         "FLEET-KIT v13, vendored and never edited; triaged 2026-10-08 by "
         "reading the site. _git: env FLEET_GIT or the literal git. Never a "
-        "Python.",
+        "Python. FLEET-KIT v19 adds _git_in (stdin variant, line 198), same "
+        "head: env FLEET_GIT or the literal git; triaged 2026-10-18.",
     ),
     "ops/fleet_kit/fleet_rewrite.py": (
         2,

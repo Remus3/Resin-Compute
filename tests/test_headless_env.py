@@ -1754,7 +1754,7 @@ def test_v4_survives_a_non_object_print(tmp_path, raw):
         return subprocess.CompletedProcess(argv, 0, stdout=raw, stderr="")
 
     line = kit.spawn(
-        tmp_path, "RSC", "p", run=run, stdin=True,
+        tmp_path, "RSC", "p", note="non-object-print.txt", kind="build", run=run, stdin=True,
         url_source=lambda: STUB_URL, connect=Dialer(), exe_source=lambda: str(FAKE_EXE),
     )
     assert line["result"] is None and line["rc"] == 0

@@ -49,6 +49,7 @@ import time
 import types
 from pathlib import Path
 
+import fleet_test_guard  # on sys.path via tests/conftest.py (FLEET-KIT v18 s3.5)
 import pytest
 
 from headless import jobs as jobs_mod
@@ -442,7 +443,7 @@ def test_a_hung_job_is_failed_within_its_deadline(
     outcome = runner_mod.run_pass(dry_run=True, job_names=[HUNG], runtime_dir=str(runtime))
     elapsed = time.monotonic() - start
 
-    assert elapsed < SMALL_DEADLINE + SMALL_GRACE + 2.0, "the pass waited on the hung job"
+    assert elapsed < SMALL_DEADLINE + SMALL_GRACE + fleet_test_guard.budget(2.0), "the pass waited on the hung job"
     (result,) = outcome.results
     assert result.status == jobs_mod.STATUS_FAIL, "a hung job is never a success"
     assert "deadline" in result.message
@@ -785,7 +786,7 @@ def test_the_process_dies_holding_its_slot_and_the_late_write_never_lands(
     # The dead-pid reap path frees the lock promptly for the next holder.
     t0 = time.monotonic()
     assert _try_second_holder(work / "slots"), "a dead-pid lock was not reaped"
-    assert time.monotonic() - t0 < 2.0
+    assert time.monotonic() - t0 < fleet_test_guard.budget(2.0)
 
 
 def test_the_job_deadline_is_read_at_call_time() -> None:
