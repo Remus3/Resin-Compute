@@ -1427,7 +1427,7 @@ def pending(
             continue
         if kit.should_skip(child.name, SELF_CODE, text[:NOTE_HEAD_CHARS]) is not None:
             continue
-        # DEFECT N9: a sibling note addressed to another tree is not ours to answer.
+        # DEFECT N9 (DECISION C): a sibling note that is MAIN's mail only is not ours.
         # NOT RECORDED, like every other skip in this filter: `pending` is a pure
         # per-fire filter and the triage-off path writes no seen ledger. The
         # `not-addressed` ack is recorded by `_inbox_triage`.
@@ -2090,11 +2090,6 @@ _RUN_JOINERS = frozenset({"and", "cc"})
 #: Addressee tokens that mean everyone (`-to-ALL-`, `-to-ALL-SIX-`).
 BROADCAST_CODES: tuple[str, ...] = ("ALL",)
 
-#: This tree's FULL NAME in any spacing or case (`Resin Compute`, `ResinCompute`,
-#: `Resin-Compute`). Notes address trees by name as often as by code.
-_SELF_NAME = re.compile(r"(?i:\bresin[\s_-]*compute\b)")
-
-
 def _addressee_run(name: str) -> tuple[str, list[str]] | None:
     """(sender, every code in the filename's addressee run), or None when the
     name carries no `-from-<SENDER>-[<CLASS>-]to-<CODE>...` segment. The run
@@ -2122,48 +2117,42 @@ def _addressee_run(name: str) -> tuple[str, list[str]] | None:
     return (sender, codes) if codes else None
 
 
-def _header_names_self(raw: bytes) -> bool:
-    """Whether this tree's code or full name appears ANYWHERE in the note's
-    header (the title line plus up to `ADDRESS_HEADER_LINES` lines, ending at
-    the first `## ` heading or `---` rule). Wider than `addresses_self` on
-    purpose: no address word is required, so a folded `To:` continuation line
-    (`    RSC`) counts. That breadth is right HERE and wrong for MAIN
-    provenance: here a false match only means a reply that might be unneeded,
-    while a false miss silences mail sent to this tree."""
-    lines = _decode_note(raw).splitlines()
-    for n, line in enumerate(lines[:ADDRESS_HEADER_LINES]):
-        if n and (line.startswith("## ") or line.startswith("---")):
-            break
-        if _SELF_WORD.search(line) or _SELF_NAME.search(line):
-            return True
-    return False
+#: How far into a note the N9 override looks: ANY line in the first 3000
+#: characters, past headings, rules, bold and table rows alike.
+ADDRESSEE_WINDOW_CHARS = 3000
+
+#: The N9 override. This tree's code (any case), its FULL NAME in any spacing or
+#: case, or a broadcast `ALL` (`ALL`, `ALL-SIX`, exact case: lower-case `all`
+#: is ordinary prose).
+_ADDRESSEE_OVERRIDE = re.compile(r"(?i:\brsc\b)|(?i:\bresin[\s_-]*compute\b)|\bALL\b")
 
 
 def addressed_elsewhere(name: str, raw: bytes) -> bool:
-    """Whether a SIBLING note is addressed to another tree and not to this one
-    (defect N9, 2026-10-18: an SS OPERATOR-REQUEST to MAIN was triaged and
-    "confirmed" by this responder).
+    """Whether a SIBLING note is MAIN's mail and not this tree's (defect N9,
+    2026-10-18: an SS OPERATOR-REQUEST to MAIN was triaged and "confirmed" by
+    this responder).
 
-    BIAS: WHEN UNCERTAIN, DO NOT SKIP. A wrong answer is cheaper than silence.
-    True only when ALL of these hold:
-      - the filename has an addressee run (`-to-LW-`, `-to-LW-and-RC-`,
-        `-to-EW-cc-MAIN-`), and EVERY code in it is another known tree: none
-        is this tree, a broadcast (`ALL`, `ALL-SIX`) or the sender itself
-        (`-from-SS-CORRECTION-to-SS-1700-` corrects SS's own note);
-      - the header nowhere names this tree, by code or full name
-        (`_header_names_self`).
-    A MAIN note is never decided here: its provenance path applies
-    `addresses_self` already. A name with no addressee run is unchanged.
+    ADJUDICATOR DECISION C (N9, after two refute rounds). True ONLY when:
+      - the filename addressee run is exactly `[MAIN]` (`-to-MAIN-`,
+        `-to-MAIN-KIT-`, but not `-to-MAIN-and-RC-`), and
+      - the sender is neither MAIN nor this tree, and
+      - no line in the first `ADDRESSEE_WINDOW_CHARS` characters names this
+        tree by code or full name, or names ALL.
+    Every other shape (`-to-LW-`, `-to-RC-`, multi-code runs, no run at all)
+    is answered exactly as before N9.
+    Alternatives rejected: A (merge a0902d8 as is) and B (skip every note not
+    addressed to this tree), because a wrong skip silences mail addressed to
+    this tree and silence is the costlier error. Reversed by: a MAIN ruling,
+    or a measured sibling-to-sibling reply cost that outweighs it.
     """
     run = _addressee_run(name)
     if run is None:
         return False
     sender, codes = run
-    if sender in (MAIN_CODE, SELF_CODE):
+    if sender in (MAIN_CODE, SELF_CODE) or codes != [MAIN_CODE]:
         return False
-    if any(c == SELF_CODE or c == sender or c in BROADCAST_CODES for c in codes):
-        return False
-    return not _header_names_self(raw)
+    window = _decode_note(raw)[:ADDRESSEE_WINDOW_CHARS]
+    return _ADDRESSEE_OVERRIDE.search(window) is None
 
 
 def _bytes_of(path: Path) -> tuple[bytes | None, str | None, str | None]:
@@ -5148,6 +5137,18 @@ def _note_head(path: Path) -> str:
         return ""
 
 
+def _note_window(path: Path) -> str:
+    """The first `ADDRESSEE_WINDOW_CHARS` characters, for the N9 override. A
+    SEPARATE reader so `_note_head` (the kit's classify / hop input) keeps its
+    1500 bytes; 4 bytes a character covers any UTF-8 text."""
+    try:
+        with path.open("rb") as handle:
+            raw = handle.read(ADDRESSEE_WINDOW_CHARS * 4)
+    except OSError:
+        return ""
+    return _decode_note(raw)[:ADDRESSEE_WINDOW_CHARS]
+
+
 def _reply_hop(note: Path, only: Any = True) -> int | None:
     """The HOP a reply to `note` carries: its own plus one. None when triage
     is off for this fire (`only` None), so the pre-v8 bytes are unchanged."""
@@ -5533,8 +5534,8 @@ def _inbox_triage(
                 mark(path, _decision(inbox_kit.WORK, d, "MAIN to the work lane"), None)
                 work_now.add(name)
             continue
-        if code != SELF_CODE and addressed_elsewhere(name, _note_head(path).encode("utf-8")):
-            # DEFECT N9: another tree's mail is never triaged, worked or answered.
+        if code != SELF_CODE and addressed_elsewhere(name, _note_window(path).encode("utf-8")):
+            # DEFECT N9 (DECISION C): MAIN's mail is never triaged, worked or answered.
             mark(path, _decision(inbox_kit.ACK, d, "addressed to another tree"), "not-addressed")
             continue
         if d.action in (inbox_kit.SKIP, inbox_kit.ACK):
