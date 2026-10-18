@@ -16,6 +16,10 @@
   N7c worktrees are kept with their uncommitted diffs (carried forward).
 - Not worked this session, carried in the hand-off: N7c, N7b, N2.
 - Opened: ROADMAP "Session 77 residue" (a)-(d).
+- Paperwork commit e1db5d1 pushed (origin/main read back e1db5d1); ci
+  39164666039 and docs-guards 39164666010 success. Final board push:
+  status.json asset uploaded, datasets/board updated 3 -> 4, recorded with
+  `fleet_board.py pushed --version 4` (board state read back version 4).
 
 ## 2026-10-18 - N9 follow-up fix b7cbe7f
 
