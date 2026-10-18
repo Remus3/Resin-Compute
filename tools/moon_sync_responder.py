@@ -2123,8 +2123,10 @@ ADDRESSEE_WINDOW_CHARS = 3000
 
 #: The N9 override. This tree's code (any case), its FULL NAME in any spacing or
 #: case, or a broadcast `ALL` (`ALL`, `ALL-SIX`, exact case: lower-case `all`
-#: is ordinary prose).
-_ADDRESSEE_OVERRIDE = re.compile(r"(?i:\brsc\b)|(?i:\bresin[\s_-]*compute\b)|\bALL\b")
+#: is ordinary prose). The word boundaries sit OUTSIDE the scoped-flag groups:
+#: the group text followed by a backslash reads as a Windows drive path to
+#: `tests/test_no_machine_paths.py`.
+_ADDRESSEE_OVERRIDE = re.compile(r"\b(?i:rsc)\b|\b(?i:resin[\s_-]*compute)\b|\bALL\b")
 
 
 def addressed_elsewhere(name: str, raw: bytes) -> bool:
