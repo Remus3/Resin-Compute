@@ -1428,6 +1428,9 @@ def pending(
         if kit.should_skip(child.name, SELF_CODE, text[:NOTE_HEAD_CHARS]) is not None:
             continue
         # DEFECT N9: a sibling note addressed to another tree is not ours to answer.
+        # NOT RECORDED, like every other skip in this filter: `pending` is a pure
+        # per-fire filter and the triage-off path writes no seen ledger. The
+        # `not-addressed` ack is recorded by `_inbox_triage`.
         if addressed_elsewhere(child.name, text.encode("utf-8")):
             continue
         # LOOP BREAKER (c): never spawn on a note its sender marked TERMINAL or
@@ -2073,13 +2076,67 @@ def addresses_self(raw: bytes) -> bool:
     return False
 
 
-#: The addressee segment of a note filename: `-from-<SENDER>-[<CLASS>-]to-<CODE>`
-#: where CLASS is upper-case tokens only, so a prose slug such as
-#: `...-a-retraction-owed-to-LL-...` or `...-yes-to-six-...` is not an addressee.
-_ADDRESSEE = re.compile(r"-from-([A-Z]{2,4})-(?:[A-Z][A-Z0-9]*-)*?to-([A-Z]{2,4})(?=-|\.)")
+#: The sender and the tokens after it in a note filename: `-from-<SENDER>-<rest>`.
+_FROM_REST = re.compile(r"-from-([A-Z]{2,4})-(.*)$")
 
-#: Addressee tokens that mean everyone.
+#: An upper-case CLASS token between the sender and `to` (`OPERATOR`, `FIX`).
+#: A lower-case token there means the slug is prose (`...-owed-to-LL-...`,
+#: `...-yes-to-six-...`), and prose is not an addressee.
+_CLASS_TOKEN = re.compile(r"[A-Z][A-Z0-9]*")
+
+#: Joiners inside an addressee run: `-to-LW-and-RSC-`, `-to-EW-cc-RSC-`.
+_RUN_JOINERS = frozenset({"and", "cc"})
+
+#: Addressee tokens that mean everyone (`-to-ALL-`, `-to-ALL-SIX-`).
 BROADCAST_CODES: tuple[str, ...] = ("ALL",)
+
+#: This tree's FULL NAME in any spacing or case (`Resin Compute`, `ResinCompute`,
+#: `Resin-Compute`). Notes address trees by name as often as by code.
+_SELF_NAME = re.compile(r"(?i:\bresin[\s_-]*compute\b)")
+
+
+def _addressee_run(name: str) -> tuple[str, list[str]] | None:
+    """(sender, every code in the filename's addressee run), or None when the
+    name carries no `-from-<SENDER>-[<CLASS>-]to-<CODE>...` segment. The run
+    is read up to the first token that is neither a known code nor a joiner."""
+    found = _FROM_REST.search(name.rsplit(".", 1)[0] if name.lower().endswith((".md", ".txt")) else name)
+    if found is None:
+        return None
+    sender, tokens = found.group(1), found.group(2).split("-")
+    known = {SELF_CODE, MAIN_CODE, *OPTED_IN, *RETIRED, *BROADCAST_CODES}
+    i = 0
+    while i < len(tokens) and tokens[i] != "to":
+        if not _CLASS_TOKEN.fullmatch(tokens[i]):
+            return None
+        i += 1
+    if i >= len(tokens):
+        return None
+    codes: list[str] = []
+    for tok in tokens[i + 1:]:
+        if tok in known:
+            codes.append(tok)
+        elif tok.lower() in _RUN_JOINERS:
+            continue
+        else:
+            break
+    return (sender, codes) if codes else None
+
+
+def _header_names_self(raw: bytes) -> bool:
+    """Whether this tree's code or full name appears ANYWHERE in the note's
+    header (the title line plus up to `ADDRESS_HEADER_LINES` lines, ending at
+    the first `## ` heading or `---` rule). Wider than `addresses_self` on
+    purpose: no address word is required, so a folded `To:` continuation line
+    (`    RSC`) counts. That breadth is right HERE and wrong for MAIN
+    provenance: here a false match only means a reply that might be unneeded,
+    while a false miss silences mail sent to this tree."""
+    lines = _decode_note(raw).splitlines()
+    for n, line in enumerate(lines[:ADDRESS_HEADER_LINES]):
+        if n and (line.startswith("## ") or line.startswith("---")):
+            break
+        if _SELF_WORD.search(line) or _SELF_NAME.search(line):
+            return True
+    return False
 
 
 def addressed_elsewhere(name: str, raw: bytes) -> bool:
@@ -2087,24 +2144,26 @@ def addressed_elsewhere(name: str, raw: bytes) -> bool:
     (defect N9, 2026-10-18: an SS OPERATOR-REQUEST to MAIN was triaged and
     "confirmed" by this responder).
 
-    True only when the filename's addressee segment names a known fleet code
-    that is not this tree, not a broadcast (`ALL`, `ALL-SIX`) and not the
-    sender itself (`-from-SS-CORRECTION-to-SS-1700-` corrects SS's own note),
-    AND the header does not address this tree (`addresses_self`, e.g. a cc).
+    BIAS: WHEN UNCERTAIN, DO NOT SKIP. A wrong answer is cheaper than silence.
+    True only when ALL of these hold:
+      - the filename has an addressee run (`-to-LW-`, `-to-LW-and-RC-`,
+        `-to-EW-cc-MAIN-`), and EVERY code in it is another known tree: none
+        is this tree, a broadcast (`ALL`, `ALL-SIX`) or the sender itself
+        (`-from-SS-CORRECTION-to-SS-1700-` corrects SS's own note);
+      - the header nowhere names this tree, by code or full name
+        (`_header_names_self`).
     A MAIN note is never decided here: its provenance path applies
-    `addresses_self` already. A name with no addressee segment is unchanged.
+    `addresses_self` already. A name with no addressee run is unchanged.
     """
-    found = _ADDRESSEE.search(name)
-    if found is None:
+    run = _addressee_run(name)
+    if run is None:
         return False
-    sender, to = found.group(1), found.group(2)
-    if sender in (MAIN_CODE, SELF_CODE) or to == sender:
+    sender, codes = run
+    if sender in (MAIN_CODE, SELF_CODE):
         return False
-    if to == SELF_CODE or to in BROADCAST_CODES:
+    if any(c == SELF_CODE or c == sender or c in BROADCAST_CODES for c in codes):
         return False
-    if to not in OPTED_IN and to not in RETIRED:
-        return False
-    return not addresses_self(raw)
+    return not _header_names_self(raw)
 
 
 def _bytes_of(path: Path) -> tuple[bytes | None, str | None, str | None]:
