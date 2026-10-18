@@ -85,7 +85,7 @@ exclude = [
 # Kit v17: fleet_claims.py also B007 x1 (unused loop var in the merge sweep).
 "ops/fleet_kit/fleet_claims.py" = ["UP032", "BLE001", "B007"]
 "ops/fleet_kit/fleet_gitlock.py" = ["UP032"]
-"ops/fleet_kit/fleet_suite_gate.py" = ["UP032"]
+"ops/fleet_kit/fleet_suite_gate.py" = ["UP032", "I001"]  # kit v18: import block unsorted (I001 x1), measured 2026-10-18
 # Kit v13 (MAIN bundle 2128 of 2026-10-08), measured 2026-10-08: the v12
 # entries above still hold (fleet_gitlock.py now UP032 x4); new files
 # fleet_identity.py UP032 x4 and fleet_rewrite.py UP032 x4.

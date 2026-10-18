@@ -46,6 +46,7 @@ import sys
 import time
 from pathlib import Path
 
+import fleet_test_guard  # on sys.path via tests/conftest.py (FLEET-KIT v18 s3.5)
 import pytest
 
 from core import config as core_config
@@ -623,7 +624,7 @@ def test_a_live_in_process_once_without_a_slot_root_fails_fast_through_the_fence
         f"the live pass ended with {type(info.value).__name__}, not the fence"
     )
     assert ran == [], "the pass RAN - the fence fired after the work, not before it"
-    assert elapsed < 5.0, f"the fence took {elapsed:.1f}s to fire; it must be immediate"
+    assert elapsed < fleet_test_guard.budget(5.0), f"the fence took {elapsed:.1f}s to fire; it must be immediate"
     # Two hits: the precondition's synthetic probe, then the runner's mkdir.
     assert len(slot_fence_ledger.hits()) == 2, slot_fence_ledger.hits()
     slot_fence_ledger.acknowledge(2)
