@@ -1,5 +1,5 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-16 (session 75), gates measured at commit 069ba52 on main
+Stamped 2026-10-18 (session 77), gates measured at commit b7cbe7f on main
 by the /done ritual; this paperwork commit landed after it. Everything below
 is a READING taken that day, not a promise about now. Re-measure before
 citing.
@@ -14,7 +14,7 @@ BOOTSTRAP - READ IN THIS ORDER
   docs/LEDGER.md (an INDEX since session 64; read the newest
     docs/ledger/session-<n>.md, older bodies in docs/ledger/archive-*.md)
   git log --oneline -10
-  gh pr list   (read 2026-10-16 session 75 /done: no open PR)
+  gh pr list   (read 2026-10-18 session 77 /done: no open PR)
   python tools/roots_map_probe.py   (FROM THE MAIN CHECKOUT; since merge
     303b839 it resolves the map via the git common dir, and a run from a
     linked worktree is read-only and writes no baseline. Read every DRIFT
@@ -69,14 +69,14 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
-STATE OBSERVED 2026-10-16 AT 069ba52 (session 75 /done gate run)
+STATE OBSERVED 2026-10-18 AT b7cbe7f (session 77 /done gate run)
   Python 3.14.4 (CI is 3.11): every gate GREEN (counts in
-  docs/ledger/session-75.md); mypy advisory clean; kit check 17 []. CI at
-  069ba52 success: ci 38961106089, codeql 38961106069. origin main
-  069ba52, annotated tag v0.1.0 (object 5eab7d8). Suite-gate wait, hooks,
-  inbox, probe and worktree readings: that ledger file (its 4 worktrees
-  were removed session 76, N7e) and what landed.
-PRIOR READINGS (sessions 57-74): docs/ledger/ session and archive
+  docs/ledger/session-77.md); mypy advisory clean. CI at b7cbe7f
+  success: ci 39163905044, docs-guards 39163905016, codeql 39163905021.
+  send_note audit empty. Worktrees left: N7b agent-a99537b1fd7133f5c and
+  N7c agent-ad40cf687743cc158, both with uncommitted diffs; the merged N9
+  worktree was removed at /done.
+PRIOR READINGS (sessions 57-76): docs/ledger/ session and archive
   files. A worktree shows MORE skips (no POSIX
   sh on PATH), and a clone or worktree under AppData fails
   test_the_session_cache_lives_under_the_runtime_directory and
@@ -174,7 +174,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      and logged it. Root-cause on a repeat. ROADMAP session 73 residue (b).
      REPEAT session 76 wrap-up: an empty .git/index.lock stamped
      2026-10-16 17:00:15 (about 16 h old, no git process in this repo)
-     blocked git add; the gitlock commit cleared it. Root-cause next.
+     blocked git add; the gitlock commit cleared it. Root-cause next
+     (not worked session 77).
   N7. SESSION 75 RESIDUE (ROADMAP "Session 75 residue", items a-f):
      (a) 0i: the hung --ci-mark test in tests/test_prepush_select.py also
      passes on the parent commit (non-discriminating arm).
@@ -186,7 +187,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      UNCOMMITTED diff tests/test_no_machine_paths.py (+34 -1), the
      necessity arm. Stopped mid suite run for CPU (its orphan suite-gate
      shell was killed at wrap-up). Next: confirm red/green, then a
-     verifier, then merge.
+     verifier, then merge. (Not worked session 77; diff still present
+     at /done.)
      (c) N7c IN PROGRESS session 76, UNMERGED. Original: N5a: a non-OSError
      exception in the baseline write of tools/roots_map_probe.py escapes
      as a traceback (no false claim). Branch
@@ -201,6 +203,7 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      _resolve_main (near line 99) uses subprocess text=True, a possible
      UnicodeDecodeError, not reproduced. The builder was resumed to fix
      both plus sweep the module, then stopped mid-work for CPU.
+     (Not worked session 77; worktree diff still present at /done.)
      UNCOMMITTED diff in that worktree: tests/test_roots_map_probe.py
      (+85) and tools/roots_map_probe.py (+17 -2). Builder's last words:
      "Green. Checking why the file now takes 31s." - the sibling-fix tests
@@ -217,6 +220,21 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      the 4 session-75 worktrees and branches removed).
      (f) Common-mode: the N5cf KEEP and RECORD rulings both rest on an
      unverified 2026-09-15 MSIX measurement.
+  N9. NEW session 77 (ROADMAP "Session 77 residue" a): N9 DONE (merge
+     64a160c, fix b7cbe7f, decision C) but a note with no -to- filename
+     segment is never skipped and sibling-to-sibling chatter is still
+     answered. Watch inbox-kind spend in the gitignored headless usage log.
+     Reversed by: a MAIN ruling or a measured week of that reply cost.
+  N10. NEW session 77 (residue b): machine-wide suite gate saturation (1
+     slot, 5-6 queued, about 35 min waits; SS rolled v19 back for it).
+     Reported to MAIN in the 1502 ANSWER (sha256 4db10948828ae425c2a09d98
+     39492b8e5b59b35329c12b86b488d1c543019040, 1/1 reached). AWAIT REPLY.
+  N11. NEW session 77 (residue c): the board push at session start and the
+     13b reprint are session acts, not hook-wired; consider a SessionStart
+     hint (/done 8b pushes the final board).
+  N12. NEW session 77 (residue d): a stale claims file from 2026-10-17 (dead
+     pid 24768, a roots_map_probe builder) was seen in claims state; the
+     claims dir read empty at /done. Root-cause on a repeat.
   N8. NEW session 76: the session-76 builders overran because of the
      machine-wide suite-gate queue (N7b took 45m+ against a 12m ETA). The
      machine hit 100% CPU with two worktree suites plus other trees.
@@ -245,7 +263,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      is unreachable; an idle status over a non-oldest epoch-ms row reads
      120/120 while the kit still counts it as one; a one-off kit read error
      reads Backing Off, not the limit.
-  DONE 64-76: docs/ledger/session-<n>.md (76 partial, see N7). Old DONE
+  DONE 64-77: docs/ledger/session-<n>.md (76 partial, see N7; 77: kit
+  v18+v19 6a3360f, 1502 ANSWER, board v3, N9). Old DONE
   blocks and full DO NOT REDO wording: docs/LEDGER.md, "Hand-off blocks
   retired session 77". DO NOT REDO - decision -> what reverses it:
   kit v3/v4/v7-v17 vendoring, provenance -> a new MAIN FLEET-KIT-vN note
@@ -474,4 +493,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 77
+SESSION: 78

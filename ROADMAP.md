@@ -13,6 +13,21 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-18. Session 77 residue (see `docs/ledger/session-77.md`).**
+  (a) N9 residual (decision C, merge 64a160c, `tools/moon_sync_responder.py`):
+  a note with no `-to-` filename segment is never skipped, and
+  sibling-to-sibling chatter is still answered. Watch the inbox-kind spend
+  in the gitignored headless usage log under ops/loop/control. Reversed by:
+  a MAIN ruling, or a measured week of sibling-to-sibling reply cost.
+  (b) Machine-wide suite gate saturation: 1 slot with 5-6 queued and about
+  35 min waits seen this session; SS rolled kit v19 back for it. Reported
+  to MAIN in the 1502 ANSWER; await MAIN's reply, never patch the kit.
+  (c) The board push at session start and the item-13 b reprint are
+  session acts, not hook-wired; consider a SessionStart hint.
+  (d) A stale claims file from 2026-10-17 (dead pid 24768, a
+  roots_map_probe builder) was seen in claims state this session; the
+  claims dir read empty at /done. Root-cause on a repeat.
+
 - **NEW 2026-10-16. Session 75 residue (see `docs/ledger/session-75.md`).**
   (a) 0i (merge 0c6a644, `tests/test_prepush_select.py`): the hung
   `--ci-mark` test also passes on the parent commit, so that arm does not
