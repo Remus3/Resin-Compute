@@ -30,6 +30,11 @@
   ci 39212439662 success, docs-guards 39212439637 success. 8b: board
   rendered with `fleet_board.py calls --final`; no Artifact call made
   (target not_found).
+- Section 9: the first `fleet_done.py mark` wrote status failed, "hand-off
+  32 KB > 30 KB" (kit v20 cap); `fleet_done.py archive` dry-run found 0
+  framed closed blocks. The hand-off was tightened by hand (no item
+  dropped; N7b/N7c, O8, 0h, 9-12, N8 and duplicate traps reworded)
+  from 32739 to 30534 bytes, check_handoff ok, then re-marked.
 
 ## 2026-10-19 - FLEET-KIT v20 and v20.1 adopted (3d4e4d9)
 
