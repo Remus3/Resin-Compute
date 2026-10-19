@@ -98,6 +98,12 @@ exclude = [
 # x1, B007 x1; fleet_gitlock UP032 x5; fleet_suite_gate UP032 x2;
 # fleet_identity UP032 x4; fleet_rewrite UP032 x4. The whole kit dir under
 # this select/ignore set shows no rule outside these entries. None dropped.
+# Kit v20 (MAIN 1812 ORDER of 2026-10-18), measured 2026-10-19 under this
+# config: two new deliberate never-fail `except Exception` sites,
+# fleet_headless.py BLE001 x1 and fleet_lanes.py BLE001 x1 (a broken usage
+# source never blocks the lane). Every entry above still holds.
+"ops/fleet_kit/fleet_headless.py" = ["BLE001"]
+"ops/fleet_kit/fleet_lanes.py" = ["BLE001"]
 "agents/pity_engine/tests/*.py" = ["B011"]
 
 [lint.isort]
