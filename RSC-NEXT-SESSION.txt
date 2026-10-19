@@ -86,9 +86,8 @@ STATE OBSERVED 2026-10-19 AT 9f69c40 (session 78 /done gate run)
   39207185227 at 9f69c40. send_note audit empty. Worktrees left: N7b
   agent-a99537b1fd7133f5c and N7c agent-ad40cf687743cc158 (untouched
   since session 76). No claims, no held suite slot at /done start.
-PRIOR READINGS (sessions 57-76): docs/ledger/ session and archive
-  files. A worktree shows MORE skips (no POSIX
-  sh on PATH), and a clone or worktree under AppData fails
+PRIOR READINGS (sessions 57-77): docs/ledger/ files. A worktree shows
+  MORE skips (no POSIX sh on PATH); a clone or worktree under AppData fails
   test_the_session_cache_lives_under_the_runtime_directory and
   tests/test_watch_inbox_session.py near line 767 - the location trap, not
   a regression.
@@ -135,14 +134,12 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      Reversed by: a kit version that locks record, or a MAIN ruling the
      ledger must never exceed the cap. ROADMAP "Session 71 residue" (a).
   O8. MAIN 2246 ORDER s4 HISTORY REWRITE + FORCE PUSH, and s8 - NOT DONE,
-     AWAITING EXPLICIT OPERATOR APPROVAL IN PERSON (attended session's
-     instruction 2026-10-09; not for an unattended run). s4: the
-     operator-approved rewrite via ops/fleet_kit/fleet_rewrite.py plan /
-     bundle (to the sidecar folder) / run, then the force push; scope
-     measured at /done = the 2 commits the kit identity check over HEAD refuses
-     (every SHA but the root changes). s8: queue ONE headless repo-review
-     driver through the kit spawn (kind build, progress task repo-review).
-     Reversed by: the operator starting it. Do NOT force-push otherwise.
+     AWAITING OPERATOR APPROVAL IN PERSON (2026-10-09; never unattended).
+     s4: ops/fleet_kit/fleet_rewrite.py plan / bundle (sidecar folder) /
+     run, then the force push; scope = the 2 commits the kit identity
+     check refuses (every SHA but the root changes). s8: queue ONE
+     headless repo-review driver via the kit spawn (kind build, progress
+     task repo-review). Reversed by: the operator starting it.
   0. RENEW THE RESPONDER BEFORE 2026-11-06T23:00 LOCAL (window ends
      2026-11-07T00:45; the PT43200M repeat may stop about 1 h early because
      DST ends Nov 1). Re-run ops/install_responder_task.ps1 -TaskName
@@ -161,14 +158,10 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   0t. WATCH FOR MAIN'S REPLY (NEW session 70) to the 1258 INFORMATION note
      (TEMP-1 numbers, FLEET_SUITE_SLOTS=1 observed). Triage it when it
      lands. ROADMAP item (e).
-  0h. FLAKY-TEST WATCH. (i) DONE session 70 (merge cc2d86a).
-     (ii) tests/test_task_liveness.py int32 probe failed once in session
-     66 (pre-hang merge-e1-0o run; the liveness-diag progress file put it
-     down to a host WMI 0x800700a4 condition with a taskkill.exe pileup, no
-     code change); it passed in the session 67 /done gate. Watch (ii) for a
-     repeat. ROADMAP session 70 residue (f). Session 71: the harness
-     killed background suite runs twice for host low memory - an
-     environment kill, not a test failure; re-run in the foreground.
+  0h. FLAKY-TEST WATCH (ii): tests/test_task_liveness.py int32 probe
+     failed once in session 66 (host WMI 0x800700a4 with a taskkill.exe
+     pileup, no code change); green since. Watch for a repeat. ROADMAP
+     session 70 residue (f).
   0i. MAIN 2246 s2 residue (ROADMAP 2246 entry). DONE: 2b, 4b (s68), 2c
      30 s target (s70, 3c61cc8), s70 (b) (s73, 72b2336), s73 (e) (s75,
      0c6a644; residue N7 (a)). (2c-b)
@@ -225,37 +218,24 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      (b) N7b IN PROGRESS session 76, UNMERGED. Original: N5d: rule 5's
      home-dir half (/home/ and /Users/ placeholder accounts, near
      tests/test_no_machine_paths.py lines 255-258) has no necessity arm.
-     Branch worktree-agent-a99537b1fd7133f5c (worktree
-     .claude/worktrees/agent-a99537b1fd7133f5c): NO commits over main;
-     UNCOMMITTED diff tests/test_no_machine_paths.py (+34 -1), the
-     necessity arm. Stopped mid suite run for CPU (its orphan suite-gate
-     shell was killed at wrap-up). Next: confirm red/green, then a
-     verifier, then merge. (Not worked session 77; diff still present
-     at /done.)
-     (c) N7c IN PROGRESS session 76, UNMERGED. Original: N5a: a non-OSError
-     exception in the baseline write of tools/roots_map_probe.py escapes
-     as a traceback (no false claim). Branch
-     worktree-agent-ad40cf687743cc158 (worktree
-     .claude/worktrees/agent-ad40cf687743cc158), commit 6305211: the
-     baseline write in main() now catches any Exception, exit stays 0 per
-     slice D. Builder-reported: app 4800 passed and 6 skipped, pity 191
-     passed, py3.14; NOT independently verified. The adversary REFUTED it
-     on scope and siblings: (1) _load_previous (near line 263) catches
-     only (OSError, ValueError); a baseline of '['*200000 raises
-     RecursionError, a traceback with exit 1, reproduced. (2)
-     _resolve_main (near line 99) uses subprocess text=True, a possible
-     UnicodeDecodeError, not reproduced. The builder was resumed to fix
-     both plus sweep the module, then stopped mid-work for CPU.
-     (Not worked session 77; worktree diff still present at /done.)
-     UNCOMMITTED diff in that worktree: tests/test_roots_map_probe.py
-     (+85) and tools/roots_map_probe.py (+17 -2). Builder's last words:
-     "Green. Checking why the file now takes 31s." - the sibling-fix tests
-     were green, but tests/test_roots_map_probe.py went from fast to about
-     31 s, likely the '['*200000 RecursionError fixture. Next: shrink that
-     fixture BEFORE any merge (a depth just over sys.getrecursionlimit(),
-     or monkeypatch json.loads to raise RecursionError); finish (1) and
-     (2) TDD-first; then a 2nd adversary round (the cap is 2), then a
-     verifier, then merge.
+     Worktree .claude/worktrees/agent-a99537b1fd7133f5c: no commits over
+     main; UNCOMMITTED diff tests/test_no_machine_paths.py (+34 -1), the
+     necessity arm; stopped mid suite run for CPU. Next: confirm
+     red/green, verifier, merge. Not worked sessions 77-78.
+     (c) N7c IN PROGRESS session 76, UNMERGED. N5a: a non-OSError in the
+     baseline write of tools/roots_map_probe.py escapes as a traceback.
+     Worktree .claude/worktrees/agent-ad40cf687743cc158, commit 6305211
+     (main() catches any Exception, exit 0); builder-reported green, NOT
+     verified. Adversary REFUTED on siblings: (1) _load_previous (near line
+     263) catches only (OSError, ValueError); '['*200000 raises
+     RecursionError, exit 1, reproduced; (2) _resolve_main (near line 99)
+     subprocess text=True, possible UnicodeDecodeError, not reproduced.
+     UNCOMMITTED diff: tests/test_roots_map_probe.py (+85),
+     tools/roots_map_probe.py (+17 -2); that test file slowed to ~31 s,
+     likely the '['*200000 fixture. Next: shrink the fixture (depth just
+     over sys.getrecursionlimit(), or monkeypatch json.loads), finish (1)
+     and (2) TDD-first, 2nd adversary round (cap 2), verifier, merge. Not
+     worked sessions 77-78.
      (d) N5b: the first-plus-last-only mutant is caught by one arm only
      (middle of three); the all-zero (delete) skip branch was never
      mutated.
@@ -278,34 +258,27 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   N12. NEW session 77 (residue d): a stale claims file from 2026-10-17 (dead
      pid 24768, a roots_map_probe builder) was seen in claims state; the
      claims dir read empty at /done. Root-cause on a repeat.
-  N8. NEW session 76: the session-76 builders overran because of the
-     machine-wide suite-gate queue (N7b took 45m+ against a 12m ETA). The
-     machine hit 100% CPU with two worktree suites plus other trees.
-     Next session: run at most ONE whole-suite builder at a time.
-  9. Commit-msg gate known FALSE BLOCKS, each worked around with
-     git commit -F <file>: a localised git; an editor commit with
-     --no-status or commit.status=false after a merge conflict on a
-     non-ASCII path (adjudicated KEEP fail-closed, pinned BLOCKED in
-     tests/test_hook_gate.py); git commit -v scanning below the scissors
-     line (predates, reasoned not measured). RESIDUAL under-block: -F/-m
-     with commit.cleanup=strip configured plus an explicit keeping flag. The
-     commit-msg hook also rejects a comma inside the scope: feat(a,b): fails.
-     The PR #1 merge subject is 106 chars, over the 100 warning (warn only;
-     recorded, not rewritten).
-  10. Orphan-temp sweep notes (round 2 NOT REFUTED): halt clause (a) also
-     covers WRITES - with RESINCOMPUTE_RUNTIME_DIR or RC_DATA_DIR pointing
-     outside the repo the health file and other atomic writes still land
-     there (predates); a dir swapped for a junction between root check and
+  N8. Session 76 builders overran on the suite-gate queue (N7b 45m+ vs a
+     12m ETA; host at 100% CPU). Run at most ONE whole-suite builder at a
+     time.
+  9. Commit-msg gate FALSE BLOCKS (work around with git commit -F): a
+     localised git; an editor commit with --no-status or
+     commit.status=false after a non-ASCII-path merge conflict (KEEP
+     fail-closed, pinned in tests/test_hook_gate.py); git commit -v below
+     the scissors (reasoned). Under-block: -F/-m with commit.cleanup=strip
+     plus a keeping flag. A comma in the scope (feat(a,b):) is rejected.
+     PR #1 merge subject 106 chars (warn only, not rewritten).
+  10. Orphan-temp sweep notes: halt clause (a) also covers WRITES (with
+     RESINCOMPUTE_RUNTIME_DIR or RC_DATA_DIR outside the repo, atomic
+     writes land there; predates); a junction swap between root check and
      sweep is not caught.
-  11. Prov-defer notes, not defects: a deleted-then-redropped MAIN note gets
-     a fresh first_seen (each hold still bounded at 900 s); entries for notes
-     that leave the candidates unanswered stay until pruned at 24 h; a
-     scheduled tick and a manual --once can lose one record update (no lock).
-  12. /120 counter notes, not defects (re-read against ruling 0f, which
-     retired the responder run ledger): the MAIN-replies printability check
-     is unreachable; an idle status over a non-oldest epoch-ms row reads
-     120/120 while the kit still counts it as one; a one-off kit read error
-     reads Backing Off, not the limit.
+  11. Prov-defer notes, not defects: a re-dropped MAIN note gets a fresh
+     first_seen (hold still <= 900 s); unanswered entries prune at 24 h; a
+     scheduled tick plus a manual --once can lose one update (no lock).
+  12. /120 counter notes, not defects (ruling 0f): MAIN-replies
+     printability check unreachable; idle status over a non-oldest
+     epoch-ms row reads 120/120; a one-off kit read error reads Backing
+     Off.
   WATCHERS 0x, 0b, 0t, N1, N10: no MAIN reply in the session 78 batch
   (v20, v20.1 and 2243 do not answer them). N7b / N7c worktrees untouched
   session 78 (both still listed by git worktree list at /done).
@@ -400,11 +373,9 @@ TRAPS MEASURED - none are hypothetical
   tests/_markers.py (READS_DOCS or PLUMBING) (session 72: two slices
   blocked on it). Put it in every builder prompt that adds such a test.
 
-  THE CLAIMS HOOK REJECTS AN INVENTED --owner (session 72 again). Use the
-  agent's own id, exactly as the hook's deny reason names it.
-
   THE HARNESS KILLS BACKGROUND SUITE RUNS UNDER LOW HOST MEMORY (session
-  71, twice). Re-run in the foreground; a suite gate timeout fails closed.
+  71, twice; an environment kill, not a test failure). Re-run in the
+  foreground; a suite gate timeout fails closed.
 
   A FAILED CHAINED cd RUNS GIT IN THE MAIN CHECKOUT (session 70). An
   adversary's cd into its scratch clone failed and its git mv, git rm and
@@ -416,9 +387,8 @@ TRAPS MEASURED - none are hypothetical
   suite runs at a time machine-wide; a sibling tree held the only slot for
   over an hour. Do not override it; queue with --timeout 7200.
 
-  THE SUITE GATE CAN HOLD A WHOLE SUITE FOR OVER 20 MINUTES (session 68
-  /done: about 1291 s waiting, 2 of 2 slots held by other owners). Run
-  the gate in the background and poll its output file for EXIT=.
+  THE SUITE GATE CAN HOLD A WHOLE SUITE FOR OVER 20 MINUTES (sessions 68,
+  78). Run the gate in the background and poll its output for the exit.
 
   A SYSTEM HANG CAN LEAVE MERGES UNPUSHED AND SLICES HALF-BUILT (session
   67). On "continue" after a crash: git log origin/main..main, git
@@ -429,10 +399,8 @@ TRAPS MEASURED - none are hypothetical
   a push of already-green commits fail 5 tests. Push before editing, or
   commit the paperwork first.
 
-  ANOTHER PROCESS CAN DELETE A SHARED TEMP DIR MID PRE-PUSH (session 65).
-  The first pre-push run of e12b0ef failed 1 test when an ew-gate temp dir
-  under the user Temp folder vanished; the retry was green. Read the
-  failing test before retrying; a single vanished-dir failure is this.
+  ANOTHER PROCESS CAN DELETE A SHARED TEMP DIR MID PRE-PUSH (session 65):
+  one vanished-dir failure, green on retry. Read the failing test first.
 
   DO NOT WRITE LIVE TREE STATE DURING A WHOLE-SUITE RUN (session 64 /done).
   fleet_test_guard fails the suite at teardown of whichever test was last,
@@ -442,9 +410,9 @@ TRAPS MEASURED - none are hypothetical
   red (session 64 /done): write the tracked path, e.g. ops/fleet_kit/...,
   or describe it in prose.
 
-  THE CLAIMS HOOK READS --owner LITERALLY (session 64 /done). An owner id
-  passed through a shell variable is denied; type the id the deny reason
-  names. A guessed interpreter path that does not exist makes the suite
+  THE CLAIMS HOOK READS --owner LITERALLY (sessions 64, 72). An invented
+  id, or one passed through a shell variable, is denied; type the id the
+  deny reason names. A guessed interpreter path that does not exist makes the suite
   gate raise FileNotFoundError; use the real sys.executable path.
 
   A SHALLOW CI CHECKOUT CHANGES GIT-ENV TEST PREMISES (session 64, fixed in
