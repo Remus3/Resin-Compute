@@ -13,6 +13,30 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-19. Session 78 residue (see `docs/ledger/session-78.md`).**
+  (a) Kit v20 ETA clock (FLEET-COMMON 13 a): this tree's own progress
+  writers (`tools/moon_sync_responder.py` task rsc-responder and
+  `headless/runner.py` task rsc-runner) write through `core/atomic_io.py`,
+  not the kit's `write_progress`, so their files carry no top-level
+  "started" key and the clock falls back to `~ETA` for them. Add a
+  "started" ISO key carried across writes, test-first. Reversed by: a MAIN
+  ruling that tree writers may omit it.
+  (b) MAIN's 2026-10-18 1215 GH-HYGIENE ORDER was NOT delivered to this
+  tree: MAIN deferred it (tree not clean during its run, uncommitted v19
+  kit files) and will re-run it here once the tree is clean. Nothing to do
+  until it lands; then triage it as an ORDER. Reversed by: delivery.
+  (c) Three open Dependabot version-update PRs, read 2026-10-19: #6 ruff
+  0.16.10 -> 0.17.1 (pip-dev), #7 electron 44.7.0 -> 44.8.0 (shell),
+  #8 github-actions group (2 updates). Merge each after its CI is green.
+  (d) Repository setting: Dependabot security updates read disabled
+  (vulnerability alerts, secret scanning and push protection enabled; 0
+  open alerts of any kind). Turning it on is a settings call reported to
+  MAIN, not taken.
+  (e) The status board URL in `ops/status_board.json` answered not_found
+  on the session-start Artifact asset upload and is absent from the
+  account's artifact list; the board push failed. Recreate or re-point the
+  board, then push.
+
 - **NEW 2026-10-18. Session 77 residue (see `docs/ledger/session-77.md`).**
   (a) N9 residual (decision C, merge 64a160c, `tools/moon_sync_responder.py`):
   a note with no `-to-` filename segment is never skipped, and
