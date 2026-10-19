@@ -35,7 +35,12 @@ version. What follows is everything the scaffold deliberately did not do.
   (e) The status board URL in `ops/status_board.json` answered not_found
   on the session-start Artifact asset upload and is absent from the
   account's artifact list; the board push failed. Recreate or re-point the
-  board, then push.
+  board, then push. The /done final push failed the same way.
+  (f) /done has no duration record: a session 78 /done agent waited 40+
+  min on the machine-wide suite gate and was killed mid-run. Consider
+  letting `.claude/commands/done.md` reuse the session's last gated green
+  when the /done diff is docs-only (adjudicate first). Reversed by: a MAIN
+  ruling on /done gating, or a /done that never waits on the gate.
 
 - **NEW 2026-10-18. Session 77 residue (see `docs/ledger/session-77.md`).**
   (a) N9 residual (decision C, merge 64a160c, `tools/moon_sync_responder.py`):
