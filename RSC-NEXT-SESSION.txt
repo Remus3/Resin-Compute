@@ -1,8 +1,13 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-18 (session 77), gates measured at commit b7cbe7f on main
+Stamped 2026-10-19 (session 78), gates measured at commit 9f69c40 on main
 by the /done ritual; this paperwork commit landed after it. Everything below
 is a READING taken that day, not a promise about now. Re-measure before
 citing.
+
+NEXT ACTION (operator direction for session 79: "next session is all other
+open items"): work ALL remaining OPEN WORK items below, highest priority
+first (the new session 78 items S78a-S78f first where actionable, then the
+list in order). Carry every item not acted on forward again.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -14,7 +19,8 @@ BOOTSTRAP - READ IN THIS ORDER
   docs/LEDGER.md (an INDEX since session 64; read the newest
     docs/ledger/session-<n>.md, older bodies in docs/ledger/archive-*.md)
   git log --oneline -10
-  gh pr list   (read 2026-10-18 session 77 /done: no open PR)
+  gh pr list   (read 2026-10-19 session 78 /done: #6 #7 #8 open,
+    Dependabot version updates, see S78c)
   python tools/roots_map_probe.py   (FROM THE MAIN CHECKOUT; since merge
     303b839 it resolves the map via the git common dir, and a run from a
     linked worktree is read-only and writes no baseline. Read every DRIFT
@@ -55,7 +61,10 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 19 [] (kit v19, read back 2026-10-18 v19 rollout).
+must print 20 [] (kit v20.1: KIT_VERSION 20, KIT_PATCH 1, MANIFEST sha256
+8017eae27ba218ea51ab77885ab0a46cc3eceb39b9e9d5f4ee277f88e77d4602; read
+back 20 [] at session 78 /done). Kit v20.1 outbound cap is 12 notes a
+day (FLEET-COMMON 14 c); any text saying 6 a day is stale.
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
 shared pytest temp dir: if a run needs an explicit --basetemp, use ONE
@@ -69,13 +78,14 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
-STATE OBSERVED 2026-10-18 AT b7cbe7f (session 77 /done gate run)
-  Python 3.14.4 (CI is 3.11): every gate GREEN (counts in
-  docs/ledger/session-77.md); mypy advisory clean. CI at b7cbe7f
-  success: ci 39163905044, docs-guards 39163905016, codeql 39163905021.
-  send_note audit empty. Worktrees left: N7b agent-a99537b1fd7133f5c and
-  N7c agent-ad40cf687743cc158, both with uncommitted diffs; the merged N9
-  worktree was removed at /done.
+STATE OBSERVED 2026-10-19 AT 9f69c40 (session 78 /done gate run)
+  Python 3.14.4 (CI is 3.11): every gate GREEN, all three whole suites
+  through the suite gate (counts in docs/ledger/session-78.md); mypy
+  advisory clean; kit check 20 []. CI success: ci 39207099243, codeql
+  39207099232, docs-guards 39207099231 at 4e0e672; docs-guards
+  39207185227 at 9f69c40. send_note audit empty. Worktrees left: N7b
+  agent-a99537b1fd7133f5c and N7c agent-ad40cf687743cc158 (untouched
+  since session 76). No claims, no held suite slot at /done start.
 PRIOR READINGS (sessions 57-76): docs/ledger/ session and archive
   files. A worktree shows MORE skips (no POSIX
   sh on PATH), and a clone or worktree under AppData fails
@@ -84,6 +94,39 @@ PRIOR READINGS (sessions 57-76): docs/ledger/ session and archive
   a regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
+  S78a. RSC progress writers (tools/moon_sync_responder.py task
+     rsc-responder, headless/runner.py task rsc-runner) write no top-level
+     "started" key, so the kit v20 13a ETA clock shows ~ETA for them. Add a
+     "started" ISO key carried across writes, test-first. ROADMAP "Session
+     78 residue" (a). Reversed by: a MAIN ruling that tree writers may omit
+     it.
+  S78b. MAIN 1215 GH-HYGIENE ORDER was NEVER DELIVERED to RSC (MAIN
+     deferred it: tree not clean during its run). Not in the inbox. MAIN
+     re-runs it once RSC is clean; the session 78 ANSWER told MAIN the tree
+     is clean at the v20.1 commit. Triage it as an ORDER when it lands.
+     Reversed by: delivery.
+  S78c. Dependabot version PRs open (read 2026-10-19): #6 ruff 0.16.10 ->
+     0.17.1 (pip-dev), #7 electron 44.7.0 -> 44.8.0 (shell), #8
+     github-actions group (2 updates). Merge each after its CI is green.
+  S78d. Dependabot security updates setting reads DISABLED (vulnerability
+     alerts, secret scanning, push protection enabled; 0 open alerts of any
+     kind, read 2026-10-19). MAIN/operator settings call: reported, not
+     changed.
+  S78e. STATUS BOARD: board push failed: board artifact
+     NauEF9cRqx8Fx7YP7WrJqR not_found and absent from account artifact list
+     (session 78 start and final). Recreate the board artifact (or get the
+     right URL), update ops/status_board.json, then push.
+  S78f. /done HAS NO DURATION RECORD. Session 78: a /done agent waited 40+
+     min on the suite gate and was killed mid-run. Consider having /done
+     reuse the session's last gated green when the /done diff is docs-only
+     (a change to .claude/commands/done.md; adjudicate, then record).
+  GITHUB-SECURITY RECORD (MAIN 2243 s3 asks it here), read 2026-10-19 via
+     gh api on the origin repo, open and all states: code scanning open 0
+     -> 0, fixed 0, dismissed 0, left 0 (CodeQL analyses present,
+     results_count 0); Dependabot alerts open 0 -> 0 (vulnerability alerts
+     enabled), fixed 0, dismissed 0, left 0; secret scanning open 0 -> 0
+     (enabled, push protection on), fixed 0, dismissed 0, left 0. Setting:
+     Dependabot security updates disabled (S78d).
   0x. AWAIT MAIN'S REPLY to the 1852 INFORMATION note (sent session 72,
      sha256 e8ef75592e297643e4ee1fc5d944838e4a23145571bbc4eb6f9529574820fed4,
      reached 2/2): the OutboundCap.record / _append no-lock kit defect in
@@ -263,11 +306,17 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      is unreachable; an idle status over a non-oldest epoch-ms row reads
      120/120 while the kit still counts it as one; a one-off kit read error
      reads Backing Off, not the limit.
-  DONE 64-77: docs/ledger/session-<n>.md (76 partial, see N7; 77: kit
-  v18+v19 6a3360f, 1502 ANSWER, board v3, N9). Old DONE
+  WATCHERS 0x, 0b, 0t, N1, N10: no MAIN reply in the session 78 batch
+  (v20, v20.1 and 2243 do not answer them). N7b / N7c worktrees untouched
+  session 78 (both still listed by git worktree list at /done).
+  DONE 64-78: docs/ledger/session-<n>.md (76 partial, see N7; 77: kit
+  v18+v19 6a3360f, 1502 ANSWER, board v3, N9; 78: I1 inbox triage, kit
+  v20+v20.1 3d4e4d9, ledger 4e0e672 and 9f69c40, ANSWER 0056 to MAIN
+  2/2 reached, GitHub-security read). Old DONE
   blocks and full DO NOT REDO wording: docs/LEDGER.md, "Hand-off blocks
   retired session 77". DO NOT REDO - decision -> what reverses it:
-  kit v3/v4/v7-v17 vendoring, provenance -> a new MAIN FLEET-KIT-vN note
+  kit v3/v4/v7-v17 and v18-v20.1 vendoring, provenance -> a new MAIN
+    FLEET-KIT-vN note
   roster 0230/2305 -> a verified MAIN roster note; CLAUDE.md condense ->
     a MAIN kit change
   no Bash on the responder child floor -> a live probe that a Bash floor
@@ -324,6 +373,12 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
     a fresh bundle with one
 
 TRAPS MEASURED - none are hypothetical
+  /done HAS NO DURATION RECORD (session 78). A /done agent waited 40+ min
+  on the suite gate and was killed mid-suite; the next /done agent found
+  no orphan process, no claim and no held slot (the gate reaps dead
+  holders). Open item S78f: consider reusing the session's last gated
+  green when the /done diff is docs-only.
+
   ops/fleet_kit/fleet_gitlock.py REFUSES A BARE git merge (session 73).
   Merge with git merge --no-ff --no-commit, then commit through gitlock.
   The merge subject is merge: <topic> (MAIN 1925 item b, merge b888286),
@@ -493,4 +548,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 78
+SESSION: 79

@@ -1,5 +1,30 @@
 # Session 78
 
+## 2026-10-19 - /done ritual (gates at 9f69c40)
+
+- A first /done agent was killed mid-suite after a long suite-gate wait.
+  Cleanup read back: no python, node or pytest process referencing this
+  tree; `fleet_suite_gate.py status` 0 slots held; the one queue ticket
+  left (pid 39800) belonged to a dead pid, left for the gate's own sweep;
+  `fleet_claims.py list` empty; `git status -s` clean. Nothing to finish.
+- Gates measured 2026-10-19, Python 3.14.4 local (CI is 3.11): licence
+  posture 52 passed; docs consistency 46 passed; qa_companion 16 passed,
+  0 failed, 2 skipped; ruff clean; whole suites through
+  `ops/fleet_kit/fleet_suite_gate.py` (slot taken at once): `tests` 4859
+  passed, 6 skipped; `agents/pity_engine` 191 passed; `shell` node --test
+  110 passed; headless dry-run 0 pass, 0 fail, 7 skip; mypy advisory clean
+  (46 source files); kit check 20 [].
+- CI read back with gh run list: 4e0e672 ci 39207099243, codeql
+  39207099232, docs-guards 39207099231 success; 9f69c40 docs-guards
+  39207185227 success. `tools/send_note.py audit` printed nothing.
+- Pre-flight: checklist task I1 (triage inbox, adopt kit v20 + v20.1,
+  answer the GitHub-security ORDER) DONE, entries below; origin/main read
+  back 9f69c40 before the paperwork commit.
+- Board push failed at session start and at /done 8b: the board artifact
+  in `ops/status_board.json` reads not_found and is absent from the
+  account artifact list. Hand-off S78e; ROADMAP "Session 78 residue" (e).
+- Opened: ROADMAP "Session 78 residue" (f), /done has no duration record.
+
 ## 2026-10-19 - FLEET-KIT v20 and v20.1 adopted (3d4e4d9)
 
 - Provenance: the MAIN 1812 (v20) and 0001 (v20.1) ORDER notes each read
