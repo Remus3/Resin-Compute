@@ -124,7 +124,13 @@ def test_every_fire_ends_with_a_done_progress_file_and_an_empty_checklist(rsp, t
     path = _progress_path(rsp)
     assert tmp_path in path.parents, f"the progress file escaped tmp: {path}"
     doc = json.loads(path.read_text(encoding="ascii"))
-    assert set(doc) == {"task", "pct", "step", "eta_s", "status", "updated", "checklist"}, doc
+    # Kit v20 (MAIN 1812 ORDER s3): write_progress ALWAYS adds a top-level
+    # "started" ISO string, so the key set is the six-plus-checklist floor
+    # with "started" allowed and nothing else.
+    required = {"task", "pct", "step", "eta_s", "status", "updated", "checklist"}
+    assert required <= set(doc) <= required | {"started"}, doc
+    if "started" in doc:
+        assert isinstance(doc["started"], str) and doc["started"], doc
     assert doc["task"] == "rsc-responder"
     assert doc["status"] == "done" and doc["pct"] == 100
     assert doc["checklist"] == []

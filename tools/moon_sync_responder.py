@@ -1492,7 +1492,7 @@ def _cap_exempt(name: str) -> bool:
     (`kit.NEVER_DAMP`) carries operator authority from MAIN (FLEET-COMMON 6)
     and escalates to work under 14b, so a local per-sender loop breaker must
     not park it for 24h. NOT 14c: 14c exempts the OUTBOUND note's class, and a
-    reply is never an ORDER; the 6/day outbound accounting is untouched.
+    reply is never an ORDER; the 12/day (kit v20.1) outbound accounting is untouched.
 
     ONE PARSE (adversary on 4cdef6f). The class is the word right after the
     SAME `_SENDER` match `sender_of` reads, so the cap's sender and the

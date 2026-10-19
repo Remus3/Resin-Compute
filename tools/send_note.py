@@ -1,7 +1,8 @@
 """The ATTENDED outbound-note send path, and the audit that keeps the ledger whole.
 
 WHY THIS EXISTS (hand-off 0q, session 70). FLEET-COMMON item 14c caps this
-tree at 6 outbound notes a local day, counted by the kit's `OutboundCap` from
+tree at 12 outbound notes a local day (kit v20.1; 6 before), counted by
+the kit's `OutboundCap` from
 `ops/loop/control/outbound_notes.jsonl`. Before this module the only writers
 of that ledger were the responder's two `cap.record` calls
 (`tools/moon_sync_responder.py`, `_send_batch` and `_record_work_reply`). An

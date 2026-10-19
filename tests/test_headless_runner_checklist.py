@@ -156,7 +156,10 @@ def test_a_live_pass_writes_a_remaining_only_checklist(
         f"mid-pass the checklist must hold the REMAINING job only, got {rows}"
     )
     assert rows[0]["state"] == "running"
-    assert set(rows[0]) == {"id", "task", "state", "eta_s"}
+    # Kit v20 (MAIN 1812 ORDER s3): a row MAY carry an epoch "started" and a
+    # "pct", only when the writer passed them.
+    row_keys = {"id", "task", "state", "eta_s"}
+    assert row_keys <= set(rows[0]) <= row_keys | {"started", "pct"}
 
     final = _read_progress(runtime)
     assert final["status"] == "done"

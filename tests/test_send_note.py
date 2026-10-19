@@ -130,18 +130,18 @@ def test_send_delivers_byte_equal_copies_to_recipient_and_own_inbox(sn, world):
 def test_a_non_exempt_note_over_the_daily_cap_is_refused_and_not_delivered(sn, world):
     today = time.strftime("%Y-%m-%d")
     _seed_ledger(world, [{"ts": "x", "day": today, "note": f"n{i}.md", "cls": "ANSWER", "to": "MAIN", "parts": 1}
-                         for i in range(6)])
+                         for i in range(sn.inbox_kit.OUTBOUND_CAP)])
     result = _send(sn, world, _draft(world, NOTE_1258))
     assert not result["ok"]
     assert result["reason"] == "over-cap"
     assert not (world["main_inbox"] / NOTE_1258).exists()
-    assert len(_rows(world)) == 6
+    assert len(_rows(world)) == sn.inbox_kit.OUTBOUND_CAP
 
 
 def test_an_exempt_order_over_the_cap_is_still_sent_and_recorded(sn, world):
     today = time.strftime("%Y-%m-%d")
     _seed_ledger(world, [{"ts": "x", "day": today, "note": f"n{i}.md", "cls": "ANSWER", "to": "MAIN", "parts": 1}
-                         for i in range(6)])
+                         for i in range(sn.inbox_kit.OUTBOUND_CAP)])
     name = "2026-10-12-1300-from-RSC-ORDER-to-MAIN-x.md"
     result = _send(sn, world, _draft(world, name))
     assert result["ok"], result
@@ -181,6 +181,12 @@ def test_a_note_the_tool_cannot_attribute_is_refused(sn, world, name, reason):
     assert not any(world["main_inbox"].iterdir())
 
 
+def test_the_kit_default_cap_is_twelve_a_day(sn):
+    """Kit v20.1 (MAIN 0001 ORDER of 2026-10-19): FLEET-COMMON 14 c is 12."""
+    assert sn.inbox_kit.OUTBOUND_CAP == 12
+    assert set(sn.inbox_kit.EXEMPT) == {"ORDER", "FIX", "RULING"}
+
+
 def test_the_retired_codes_are_the_responders_own(sn):
     assert "LL" in sn.responder.RETIRED
     assert sn.SELF_CODE == sn.responder.SELF_CODE == "RSC"
@@ -205,7 +211,7 @@ def test_a_hyphenated_exempt_class_is_exempt_by_the_kits_rule(sn, world):
     assert sn.parse_name(name) == ("FIX", "MAIN")
     today = time.strftime("%Y-%m-%d")
     _seed_ledger(world, [{"ts": "x", "day": today, "note": f"n{i}.md", "cls": "ANSWER", "to": "MAIN", "parts": 1}
-                         for i in range(6)])
+                         for i in range(sn.inbox_kit.OUTBOUND_CAP)])
     result = _send(sn, world, _draft(world, name))
     assert result["ok"], result
     assert _rows(world)[-1]["cls"] == "FIX"
@@ -299,7 +305,7 @@ def test_an_already_delivered_send_is_recorded_even_over_the_cap(sn, world):
         (inbox / NOTE_1258).write_bytes(draft.read_bytes())
     today = time.strftime("%Y-%m-%d")
     _seed_ledger(world, [{"ts": "x", "day": today, "note": f"n{i}.md", "cls": "ANSWER", "to": "MAIN", "parts": 1}
-                         for i in range(6)])
+                         for i in range(sn.inbox_kit.OUTBOUND_CAP)])
     result = _send(sn, world, draft)
     assert (result["ok"], result["reason"]) == (True, "over-cap-recorded")
     assert _rows(world)[-1]["note"] == NOTE_1258
@@ -310,7 +316,7 @@ def test_a_fresh_send_that_loses_the_cap_race_says_over_cap_recorded(sn, world, 
     never silent: the result names it."""
     today = time.strftime("%Y-%m-%d")
     _seed_ledger(world, [{"ts": "x", "day": today, "note": f"n{i}.md", "cls": "ANSWER", "to": "MAIN", "parts": 1}
-                         for i in range(6)])
+                         for i in range(sn.inbox_kit.OUTBOUND_CAP)])
     # Another sender filled the cap between our allow() and our record().
     # The FIRST allow() (our pre-delivery check) passes; the kit's own
     # allow() inside record() then sees the full ledger and refuses.
@@ -325,7 +331,7 @@ def test_a_fresh_send_that_loses_the_cap_race_says_over_cap_recorded(sn, world, 
     result = _send(sn, world, _draft(world, NOTE_1258))
     assert (result["ok"], result["reason"]) == (True, "over-cap-recorded")
     assert result["row"]["note"] == NOTE_1258
-    assert len(_rows(world)) == 7
+    assert len(_rows(world)) == sn.inbox_kit.OUTBOUND_CAP + 1
 
 
 def test_a_non_ascii_note_is_refused(sn, world):
