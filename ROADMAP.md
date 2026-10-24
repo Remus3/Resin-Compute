@@ -13,34 +13,35 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-23. Session 79 residue (see `docs/ledger/session-79.md`).**
+  (a) Board kit gaps, for the next batched note to MAIN: the kit has no
+  board create flow (the session 79 board was recreated by hand as a
+  Dashboard-type artifact), and the gitignored board state kept a stale
+  dataset_version pin (6) against the new board. Never patch the kit.
+  (b) The N7b builder's mid-run progress writes (40, 50, 85 pct) never
+  landed in its progress file although the helper returned 0.
+  Investigate.
+  (c) `ops/fleet_kit/fleet_gitlock.py` refuses `git pull` (it runs only
+  commit, push, merge, reset, revert); `git merge --no-ff --no-commit` is
+  not gated by gitlock (the hook only suggests it). Report to MAIN.
+  (d) The commit-msg hook requires `merge: <topic>` subjects without a
+  worktree, agent or branch name and rejects commit type `ops`; record in
+  builder prompts.
+  (e) Worktree agent-a94458aaab08d1560 (S78a, merged) stays: locked by a
+  live session pid at /done. Remove with `git worktree remove` once that
+  pid is dead; never force.
+
 - **NEW 2026-10-19. Session 78 residue (see `docs/ledger/session-78.md`).**
-  (a) Kit v20 ETA clock (FLEET-COMMON 13 a): this tree's own progress
-  writers (`tools/moon_sync_responder.py` task rsc-responder and
-  `headless/runner.py` task rsc-runner) write through `core/atomic_io.py`,
-  not the kit's `write_progress`, so their files carry no top-level
-  "started" key and the clock falls back to `~ETA` for them. Add a
-  "started" ISO key carried across writes, test-first. Reversed by: a MAIN
-  ruling that tree writers may omit it.
   (b) MAIN's 2026-10-18 1215 GH-HYGIENE ORDER was NOT delivered to this
   tree: MAIN deferred it (tree not clean during its run, uncommitted v19
   kit files) and will re-run it here once the tree is clean. Nothing to do
   until it lands; then triage it as an ORDER. Reversed by: delivery.
-  (c) Three open Dependabot version-update PRs, read 2026-10-19: #6 ruff
-  0.16.10 -> 0.17.1 (pip-dev), #7 electron 44.7.0 -> 44.8.0 (shell),
-  #8 github-actions group (2 updates). Merge each after its CI is green.
   (d) Repository setting: Dependabot security updates read disabled
   (vulnerability alerts, secret scanning and push protection enabled; 0
   open alerts of any kind). Turning it on is a settings call reported to
   MAIN, not taken.
-  (e) The status board URL in `ops/status_board.json` answered not_found
-  on the session-start Artifact asset upload and is absent from the
-  account's artifact list; the board push failed. Recreate or re-point the
-  board, then push. The /done final push failed the same way.
-  (f) /done has no duration record: a session 78 /done agent waited 40+
-  min on the machine-wide suite gate and was killed mid-run. Consider
-  letting `.claude/commands/done.md` reuse the session's last gated green
-  when the /done diff is docs-only (adjudicate first). Reversed by: a MAIN
-  ruling on /done gating, or a /done that never waits on the gate.
+  (a), (c), (e), (f) DONE session 79, moved to
+  `docs/roadmap-archive/2026-10.md` (see `docs/ledger/session-79.md`).
 
 - **NEW 2026-10-18. Session 77 residue (see `docs/ledger/session-77.md`).**
   (a) N9 residual (decision C, merge 64a160c, `tools/moon_sync_responder.py`):
@@ -61,13 +62,8 @@ version. What follows is everything the scaffold deliberately did not do.
   (a) 0i (merge 0c6a644, `tests/test_prepush_select.py`): the hung
   `--ci-mark` test also passes on the parent commit, so that arm does not
   discriminate; make it red on the pre-timeout code.
-  (b) N5d (merge 4865fc4, `tests/test_no_machine_paths.py`): rule 5's
-  home-dir half (the `/home/` and `/Users/` placeholder accounts, near
-  lines 255-258) has no necessity arm; the slice reported tracked users
-  of it (not re-measured at /done).
-  (c) N5a (merge 9791c2f, `tools/roots_map_probe.py`): a non-OSError
-  exception in the baseline write escapes as a traceback (no false
-  baseline claim is printed).
+  (b), (c) DONE session 79 (merges 9b11e68, a2fc098), moved to
+  `docs/roadmap-archive/2026-10.md`.
   (d) N5b (merge b50773d, `tests/test_hook_interpreter.py`): the
   first-plus-last-only mutant is caught by one arm only (middle of three);
   the all-zero (delete) skip branch was never mutated.
@@ -83,16 +79,15 @@ version. What follows is everything the scaffold deliberately did not do.
   an unverified 2026-09-15 MSIX measurement; re-measure when convenient.
 
 - **NEW 2026-10-14. Session 73 residue (see `docs/ledger/session-73.md`).**
-  (a) KIT DEFECT, report to MAIN in the next batched note:
-  `ops/fleet_kit/fleet_gitlock.py` wraps only `git commit` and `git push`,
-  so a bare `git merge` is refused; the merger used `git merge --no-ff
-  --no-commit` and then a gitlock commit. Never patch the kit. Reversed
-  by: a kit version that wraps `git merge`, or a MAIN ruling. REPORTED
-  session 74 in the 2328 ANSWER to MAIN (see `docs/ledger/session-74.md`);
-  open until MAIN replies or a kit version wraps `git merge`.
+  (a) CLOSED session 79: its reversal condition already holds - kit v16
+  `ops/fleet_kit/fleet_gitlock.py` accepts `git merge` (lock only); moved
+  to `docs/roadmap-archive/2026-10.md`.
   (b) WATCH: a stale empty `.git/index.lock` (826 s, no git process)
   blocked the first merge of session 73; the gitlock dry-run commit
   cleared it and logged it. Watch for a repeat and root-cause it then.
+  Session 79 reading: no index.lock present; the gitlock log shows 3
+  index-lock-removed rows (2026-10-14, -15, -17); no log names the
+  creator. Still not root-caused.
   (c) SUPERSEDED by MAIN ORDER 1925 item b (merge 1efb846): the merge
   template is now `merge: <topic>`, with no worktree or agent name, accepted
   only while a merge is in progress or HEAD is a merge
