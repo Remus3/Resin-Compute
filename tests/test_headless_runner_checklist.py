@@ -433,3 +433,41 @@ def test_an_exhausted_retry_removes_only_this_processes_tmp(
     assert _leftover_tmps(runtime) == [_kit_tmp(runtime, os.getpid() + 1).name], (
         "only this process's own tmp may be removed"
     )
+
+
+STALE_STARTED = "2020-01-01T00:00:00+00:00"
+
+
+def test_started_is_set_once_per_pass_and_carried_on_every_write(
+    clean_registry, runtime: Path, slot_root: Path
+) -> None:
+    """S78a, FLEET-COMMON item 12/13a: every write of one live pass carries
+    the SAME top-level "started", set at this pass's start - never a crashed
+    predecessor's value left in a `running` file, which the kit's own
+    carry-forward inherits."""
+    import time as time_mod
+    from datetime import datetime
+
+    path = _progress_path(runtime)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(json.dumps({
+        "task": "rsc-runner", "pct": 50, "step": "job x running", "eta_s": 60,
+        "status": "running", "started": STALE_STARTED, "updated": STALE_STARTED,
+    }).encode("ascii"))
+    mid: list[dict] = []
+
+    def _probe(context: jobs_mod.JobContext) -> jobs_mod.JobResult:
+        mid.append(_read_progress(runtime))
+        return jobs_mod.passed(JOB_A, "ok")
+
+    _register(JOB_A, _probe)
+    before = time_mod.time()
+    rc = _once(runtime, slot_root, [JOB_A])
+    after = time_mod.time()
+    assert rc == runner_mod.EXIT_OK
+    final = _read_progress(runtime)
+    assert len(mid) == 1 and final["status"] == "done"
+    assert mid[0]["started"] == final["started"], (mid[0], final)
+    epoch = datetime.fromisoformat(final["started"]).timestamp()
+    assert epoch != 1577836800.0, "a crashed pass's start leaked in"
+    assert before - 1 <= epoch <= after + 1, (final["started"], before, after)
