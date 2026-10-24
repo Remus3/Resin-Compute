@@ -496,6 +496,9 @@ class _PassProgress:
         self._ids: dict[str, str] = {}
         self._total = len(specs)
         self._warned = False
+        #: S78a, item 12/13a: this pass's start, set once in `begin` and passed
+        #: on EVERY write, so a crashed pass's `running` file lends nothing.
+        self._started: str | None = None
         try:
             headless_kit, checklist_kit = _load_kit()
             rows = []
@@ -523,6 +526,7 @@ class _PassProgress:
     def begin(self) -> None:
         if self._checklist is None:
             return
+        self._started = _utc_now_iso()
         try:
             self._log_block(self._checklist.start())
         except Exception:  # noqa: BLE001 - reporting never fails a pass
@@ -601,6 +605,7 @@ class _PassProgress:
                             eta_s=eta,
                             status=status,
                             checklist=rows,
+                            started=self._started,
                         )
                         break
                     except OSError:
