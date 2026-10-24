@@ -61,6 +61,7 @@ from __future__ import annotations
 import fnmatch
 import functools
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -238,6 +239,12 @@ def _rest_is_exempt(prefix: str, rest: str) -> bool:
     return _exempt_rule(prefix, rest) is not None
 
 
+def _home_account_exempt(account: str) -> bool:
+    """EXEMPTIONS rule 5, home-dir half: a placeholder account under `/home/`
+    or `/Users/`. A function so its necessity arm can switch it off alone."""
+    return account.lower() in PLACEHOLDER_ACCOUNTS or account.startswith("<")
+
+
 def _excerpt(line: str, start: int) -> str:
     return line[start:start + 60]
 
@@ -254,7 +261,7 @@ def machine_paths(line: str) -> list[str]:
             found.append(_excerpt(line, match.start()))
     for match in _POSIX_HOME.finditer(line):
         account = match.group(1).rstrip(_TRAILING)
-        if account.lower() not in PLACEHOLDER_ACCOUNTS and not account.startswith("<"):
+        if not _home_account_exempt(account):
             found.append(_excerpt(line, match.start()))
     for match in _UNC.finditer(line):
         host = match.group(1) or match.group(2) or match.group(3)
@@ -572,6 +579,32 @@ def test_every_fake_unc_host_is_needed_by_a_tracked_file(
     assert not [line for line in lines if machine_paths(line)]
     monkeypatch.delitem(FAKE_UNC_HOSTS, host)
     assert [line for line in lines if machine_paths(line)], host
+
+
+@functools.cache
+def _home_candidate_lines() -> tuple[tuple[str, str], ...]:
+    """(name, line) for swept lines holding a `/home/` or `/Users/` candidate.
+    `_rule_users` never visits `_POSIX_HOME`, so rule 5's home-dir half
+    needs its own necessity arm (session 75 residue b)."""
+    found: list[tuple[str, str]] = []
+    for name, raw in _corpus():
+        line = _FILE_URL.sub(_unwrap_file_url, raw)
+        if not _allowlisted(name) and _POSIX_HOME.search(line):
+            found.append((name, raw))
+    return tuple(found)
+
+
+def test_rule_5_home_dir_half_is_needed_by_a_tracked_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pairs = _home_candidate_lines()
+    assert not [raw for _, raw in pairs if machine_paths(raw)]
+    monkeypatch.setattr(
+        sys.modules[__name__], "_home_account_exempt", lambda account: False
+    )
+    needing = sorted({name for name, raw in pairs if machine_paths(raw)})
+    assert needing, "rule 5 home-dir half spares nothing in the tree - unnecessary?"
+    assert "tests/test_no_machine_paths.py" not in needing
 
 
 @pytest.mark.parametrize("fake", sorted(FAKE_PATHS))
