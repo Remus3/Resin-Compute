@@ -137,12 +137,12 @@ FIELDS = ("map_present", "main_row", "outbox_exists", "outbox_entries", "newest"
 _ACCOUNT_PATH = re.compile(
     r"(?:[A-Za-z]:\\Users\\[^\\\s]+)|(?:/home/[^/\s]+)|(?:/Users/[^/\s]+)",
 )
-_SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
+_SAFE_NAME = re.compile(r"[A-Za-z0-9._-]+")
 
 
 def _safe_name(name: str) -> str:
     """A filename fit to print, or `(withheld)`."""
-    if not _SAFE_NAME.match(name) or "@" in name or _ACCOUNT_PATH.search(name):
+    if not _SAFE_NAME.fullmatch(name) or "@" in name or _ACCOUNT_PATH.search(name):
         return "(withheld)"
     return name
 
