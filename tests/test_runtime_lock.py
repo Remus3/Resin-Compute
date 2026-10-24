@@ -199,7 +199,13 @@ def test_a_declaration_missing_from_the_lock_reds(tmp_path: Path) -> None:
 def test_version_drift_between_declaration_and_lock_reds(tmp_path: Path) -> None:
     root = _copy_pair(tmp_path, *PAIRS[1])
     src = root / "requirements-dev.in"
-    src.write_bytes(src.read_bytes().replace(b"ruff==0.16.10", b"ruff==0.16.11"))
+    before = src.read_bytes()
+    # Derive the live pin so a Dependabot bump cannot turn this into a no-op.
+    pin = re.search(rb"^ruff==\S+$", before, re.MULTILINE)
+    assert pin is not None, "requirements-dev.in pins no ruff"
+    after = before.replace(pin.group(0), pin.group(0) + b".post99", 1)
+    assert after != before
+    src.write_bytes(after)
     problems = grade_pair(root, *PAIRS[1])
     assert any(p.startswith("ruff:") for p in problems), problems
 
