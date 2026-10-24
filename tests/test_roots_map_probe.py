@@ -597,3 +597,18 @@ def test_command_line_runs_from_another_directory(tmp_path: Path) -> None:
     assert proc.returncode == 0, proc.stderr
     assert "outbox_exists=yes" in proc.stdout
     _assert_no_identity(proc.stdout + proc.stderr, tmp_path, root)
+
+
+def test_trailing_newline_name_is_withheld_and_drift_stays_one_line() -> None:
+    """Refute round 2: `$` matches before a final newline, so `abc\n` passed
+    the safe-name pattern and split a DRIFT line in two. The whole name must
+    match; a newline-bearing value is withheld."""
+    assert probe._show("abc\n") == "(withheld)"
+    assert probe._safe_name("abc\n") == "(withheld)"
+    lines = probe.compare({"newest": "abc\n"}, {"newest": "b"})
+    assert lines, "compare emitted nothing"
+    assert all("\n" not in ln for ln in lines)
+    assert any("DRIFT newest (withheld) -> b" in ln for ln in lines)
+    # Non-vacuity: a legitimate neighbour still prints.
+    assert probe._show("abc") == "abc"
+    assert probe._show("a-from-MAIN-ORDER.txt") == "a-from-MAIN-ORDER.txt"
