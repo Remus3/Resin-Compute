@@ -4121,7 +4121,7 @@ def run_once(
     lock = _acquire_progress_lock()
     if lock is None:
         _log_fail_closed(None, "kit-progress-busy")
-    ctx = _FireContext(source, lock is not None)
+    ctx = _FireContext(source, lock is not None, started)
     _FIRE.ctx = ctx
     try:
         _progress(ctx, 0, "fire started", "running", CHECKLIST_ROWS, 0)
@@ -4916,10 +4916,13 @@ def _acquire_progress_lock() -> int | None:
 class _FireContext:
     """What one fire's progress writes and checklist block need to know."""
 
-    def __init__(self, source: str, holder: bool) -> None:
+    def __init__(self, source: str, holder: bool, started: float | None = None) -> None:
         self.source = source
         self.holder = holder
         self.block_logged = False
+        #: S78a, item 12/13a: this fire's start, set once and passed on EVERY
+        #: write, so a predecessor left `running` never lends its own start.
+        self.started = started
 
 
 #: The fire running on THIS thread. Per thread, so an arm that runs two fires
@@ -4955,7 +4958,7 @@ def _progress(
     if rows:
         eta_s = sum(CHECKLIST_ETA_S.get(i, 0) for i, _t in rows)
     try:
-        _write_progress_doc(_kit_root(), pct, step, eta_s, status, checklist)
+        _write_progress_doc(_kit_root(), pct, step, eta_s, status, checklist, ctx.started)
     except (OSError, ValueError, OverflowError) as exc:
         _log_fail_closed(None, f"kit-progress-{exc.__class__.__name__}")
 
@@ -4965,7 +4968,8 @@ def _progress(
 CHECKLIST_ETA_S: dict[str, int] = {"R1": 60, "R2": 5, "R3": 900, "R4": 10}
 
 def _write_progress_doc(
-    root: Path, pct: int, step: str, eta_s: int | None, status: str, checklist: list[dict]
+    root: Path, pct: int, step: str, eta_s: int | None, status: str, checklist: list[dict],
+    started: float | None = None,
 ) -> dict:
     """The item-12 progress file, written by the kit's `write_progress` (MAIN
     2246 ORDER section 2, PERF-AUDIT item 8: one `updated` format, the kit's
@@ -4975,7 +4979,7 @@ def _write_progress_doc(
     write a unique tmp name and removes only its own, so the private copy is
     retired. Returns the document as written, without the kit's `path` key."""
     doc = kit.write_progress(
-        root, PROGRESS_TASK, pct, step, eta_s, status, checklist=checklist
+        root, PROGRESS_TASK, pct, step, eta_s, status, checklist=checklist, started=started
     )
     doc.pop("path", None)
     return doc

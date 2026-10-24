@@ -384,3 +384,53 @@ def test_the_conftest_fence_leaves_a_neighbouring_progress_file_alone(runtime_fe
     assert not _conftest()._is_live_progress_record(str(LIVE_PROGRESS / "rsc-v8-slice-C.json"))
     assert _conftest()._is_live_progress_record(str(LIVE_PROGRESS / "rsc-responder.json"))
     assert runtime_fence_ledger.hits() == []
+
+
+STALE_STARTED = "2020-01-01T00:00:00+00:00"
+STALE_EPOCH = 1577836800.0
+
+
+def _seed_stale_running(path: Path) -> None:
+    """A predecessor fire that died mid-run: its file still says running."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(json.dumps({
+        "task": "rsc-responder", "pct": 25, "step": "inbox triaged", "eta_s": 0,
+        "status": "running", "started": STALE_STARTED, "updated": STALE_STARTED,
+    }).encode("ascii"))
+
+
+def test_started_is_set_once_per_fire_and_carried_on_every_write(
+    rsp, tmp_path, monkeypatch
+):
+    """S78a, FLEET-COMMON item 12/13a: total = elapsed / pct needs a fixed
+    start. Every write of one fire carries the SAME top-level "started", set
+    at this fire's start - never a crashed predecessor's value, which the
+    kit's own carry-forward inherits from a file left `running`."""
+    from datetime import datetime
+
+    _seed_stale_running(_progress_path(rsp))
+    docs = _recording(rsp, monkeypatch)
+    before = time.time()
+    result = rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
+    after = time.time()
+    assert result["termination"] == "empty", result
+    mine = [d for d in docs if d["task"] == "rsc-responder"]
+    assert len(mine) >= 2, mine
+    stamps = {d.get("started") for d in mine}
+    assert len(stamps) == 1, stamps
+    (started,) = stamps
+    epoch = datetime.fromisoformat(started).timestamp()
+    assert epoch != STALE_EPOCH, "a crashed fire's start leaked into this fire"
+    assert before - 1 <= epoch <= after + 1, (started, before, after)
+    on_disk = json.loads(_progress_path(rsp).read_text(encoding="ascii"))
+    assert on_disk["started"] == started and on_disk["status"] == "done"
+
+
+def test_the_stale_seed_alone_would_leak_through_the_kit_carry(rsp):
+    """Non-vacuity arm: the seed is a real hazard. With no explicit started,
+    the kit carries a `running` file's value forward unchanged."""
+    _seed_stale_running(_progress_path(rsp))
+    doc = kit.write_progress(rsp._kit_root(), rsp.PROGRESS_TASK, 50, "probe", 0, "running")
+    from datetime import datetime
+
+    assert datetime.fromisoformat(doc["started"]).timestamp() == STALE_EPOCH, doc
