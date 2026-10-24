@@ -1,13 +1,14 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-19 (session 78), gates measured at commit 9f69c40 on main
+Stamped 2026-10-23 (session 79), gates measured at commit 7efc3a4 on main
 by the /done ritual; this paperwork commit landed after it. Everything below
 is a READING taken that day, not a promise about now. Re-measure before
 citing.
 
-NEXT ACTION (operator direction for session 79: "next session is all other
-open items"): work ALL remaining OPEN WORK items below, highest priority
-first (the new session 78 items S78a-S78f first where actionable, then the
-list in order). Carry every item not acted on forward again.
+NEXT ACTION: work the remaining OPEN WORK items below, highest priority
+first (session 79 items S79a-S79e first where actionable, then the list in
+order). Session 79 worked "all other open items" (operator direction) and
+closed S78a, S78c, S78e, S78f, N7b, N7c and N1. Carry every item not acted
+on forward again.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -19,8 +20,7 @@ BOOTSTRAP - READ IN THIS ORDER
   docs/LEDGER.md (an INDEX since session 64; read the newest
     docs/ledger/session-<n>.md, older bodies in docs/ledger/archive-*.md)
   git log --oneline -10
-  gh pr list   (read 2026-10-19 session 78 /done: #6 #7 #8 open,
-    Dependabot version updates, see S78c)
+  gh pr list   (read 2026-10-23 session 79: #6 #7 #8 MERGED, none open)
   python tools/roots_map_probe.py   (FROM THE MAIN CHECKOUT; since merge
     303b839 it resolves the map via the git common dir, and a run from a
     linked worktree is read-only and writes no baseline. Read every DRIFT
@@ -63,7 +63,7 @@ Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
 must print 20 [] (kit v20.1: KIT_VERSION 20, KIT_PATCH 1, MANIFEST sha256
 8017eae27ba218ea51ab77885ab0a46cc3eceb39b9e9d5f4ee277f88e77d4602; read
-back 20 [] at session 78 /done). Kit v20.1 outbound cap is 12 notes a
+back 20 [] at session 79 /done). Kit v20.1 outbound cap is 12 notes a
 day (FLEET-COMMON 14 c); any text saying 6 a day is stale.
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
@@ -78,47 +78,54 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
-STATE OBSERVED 2026-10-19 AT 9f69c40 (session 78 /done gate run)
-  Python 3.14.4 (CI is 3.11): every gate GREEN, all three whole suites
-  through the suite gate (counts in docs/ledger/session-78.md); mypy
-  advisory clean; kit check 20 []. CI success: ci 39207099243, codeql
-  39207099232, docs-guards 39207099231 at 4e0e672; docs-guards
-  39207185227 at 9f69c40. send_note audit empty. Worktrees left: N7b
-  agent-a99537b1fd7133f5c and N7c agent-ad40cf687743cc158 (untouched
-  since session 76). No claims, no held suite slot at /done start.
-PRIOR READINGS (sessions 57-77): docs/ledger/ files. A worktree shows
+STATE OBSERVED 2026-10-23 AT 7efc3a4 (session 79 /done gate run)
+  Python 3.14.4 (CI is 3.11): every gate GREEN on the tree integrated
+  with origin/main (merge 7efc3a4 of the PR #6 merge 38b8ddb); all three
+  whole suites through the suite gate (counts in docs/ledger/session-79.md);
+  local ruff 0.15.12 is OLDER than the 0.17.1 pin (CI runs the pin; update
+  the local ruff before trusting a local ruff verdict); mypy advisory
+  clean; kit check 20 []. 7efc3a4 pushed with the pre-push hook,
+  ls-remote read back 7efc3a4. send_note audit empty. Worktrees left:
+  agent-a94458aaab08d1560 (S78a, merged; locked by a live session pid at
+  /done). No index.lock present.
+PRIOR READINGS (sessions 57-78): docs/ledger/ files. A worktree shows
   MORE skips (no POSIX sh on PATH); a clone or worktree under AppData fails
   test_the_session_cache_lives_under_the_runtime_directory and
   tests/test_watch_inbox_session.py near line 767 - the location trap, not
   a regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
-  S78a. RSC progress writers (tools/moon_sync_responder.py task
-     rsc-responder, headless/runner.py task rsc-runner) write no top-level
-     "started" key, so the kit v20 13a ETA clock shows ~ETA for them. Add a
-     "started" ISO key carried across writes, test-first. ROADMAP "Session
-     78 residue" (a). Reversed by: a MAIN ruling that tree writers may omit
-     it.
+  S79a. BOARD KIT GAPS (NEW session 79), for the next batched note to
+     MAIN: the kit has no board create flow (session 79 recreated the
+     board by hand as a Dashboard-type artifact
+     https://claude.ai/artifact/LLTZ76PHgZVWnP8CsoUdAQ, ops/status_board.json
+     8fa2d8d), and the gitignored board state kept a stale dataset_version
+     pin (6) against the new board. Never patch the kit. ROADMAP "Session
+     79 residue" (a).
+  S79b. PROGRESS WRITES LOST (NEW session 79): the N7b builder's mid-run
+     progress writes (40, 50, 85 pct) never landed in its progress file
+     although the helper returned 0. Investigate. Residue (b).
+  S79c. GITLOCK COVERAGE (NEW session 79), report to MAIN:
+     ops/fleet_kit/fleet_gitlock.py refuses git pull (it runs commit, push,
+     merge, reset, revert only); git merge --no-ff --no-commit is not gated
+     by gitlock (the hook only suggests it). Integrate origin with git
+     fetch then a gitlock git merge --no-ff origin/main. Residue (c).
+  S79d. COMMIT-MSG CONVENTIONS (NEW session 79): merge subjects must be
+     merge: <topic> with no worktree, agent or branch name; commit type ops
+     is rejected. Put both in every builder prompt. Residue (d).
+  S79e. WORKTREE agent-a94458aaab08d1560 (S78a, branch merged) is LOCKED
+     by a live session pid (27008 at session 79 /done). Remove with git
+     worktree remove plus git branch -d once that pid is dead; never
+     force. Residue (e).
   S78b. MAIN 1215 GH-HYGIENE ORDER was NEVER DELIVERED to RSC (MAIN
      deferred it: tree not clean during its run). Not in the inbox. MAIN
      re-runs it once RSC is clean; the session 78 ANSWER told MAIN the tree
      is clean at the v20.1 commit. Triage it as an ORDER when it lands.
      Reversed by: delivery.
-  S78c. Dependabot version PRs open (read 2026-10-19): #6 ruff 0.16.10 ->
-     0.17.1 (pip-dev), #7 electron 44.7.0 -> 44.8.0 (shell), #8
-     github-actions group (2 updates). Merge each after its CI is green.
   S78d. Dependabot security updates setting reads DISABLED (vulnerability
      alerts, secret scanning, push protection enabled; 0 open alerts of any
      kind, read 2026-10-19). MAIN/operator settings call: reported, not
      changed.
-  S78e. STATUS BOARD: board push failed: board artifact
-     NauEF9cRqx8Fx7YP7WrJqR not_found and absent from account artifact list
-     (session 78 start and final). Recreate the board artifact (or get the
-     right URL), update ops/status_board.json, then push.
-  S78f. /done HAS NO DURATION RECORD. Session 78: a /done agent waited 40+
-     min on the suite gate and was killed mid-run. Consider having /done
-     reuse the session's last gated green when the /done diff is docs-only
-     (a change to .claude/commands/done.md; adjudicate, then record).
   GITHUB-SECURITY RECORD (MAIN 2243 s3 asks it here), read 2026-10-19 via
      gh api on the origin repo, open and all states: code scanning open 0
      -> 0, fixed 0, dismissed 0, left 0 (CodeQL analyses present,
@@ -198,44 +205,26 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      and 2 (then build A2 test-first); MAIN's outbox becoming tracked-only
      makes A2 unworkable. Common-mode risk left: nothing tests that MAIN's
      outbox can hold an untracked file.
-  N1. KIT DEFECT REPORTED session 74 in the 2328 ANSWER to MAIN (sha256
-     d1235551333a5fa40ed0b6e932c3b3e203069f16c11b6cd906d1518d3cb16edc):
-     ops/fleet_kit/fleet_gitlock.py wraps only git commit and git push, so
-     a bare git merge is refused (merger used git merge --no-ff --no-commit, then
-     a gitlock commit). AWAIT MAIN'S REPLY; never patch the kit. ROADMAP
-     session 73 residue (a). Reversed by: a kit version that wraps git
-     merge, or a MAIN ruling.
+  N1. RETRACTED session 79: its reversal condition already holds - kit
+     v16 ops/fleet_kit/fleet_gitlock.py accepts git merge, lock only
+     (LOCK_ONLY_VERBS); merge 7efc3a4 ran through it. MAIN's reply to the
+     2328 ANSWER is no longer awaited for this item.
   N2. WATCH: a stale empty .git/index.lock (826 s, no git process)
      blocked session 73's first merge; the gitlock dry-run commit cleared
      and logged it. Root-cause on a repeat. ROADMAP session 73 residue (b).
      REPEAT session 76 wrap-up: an empty .git/index.lock stamped
      2026-10-16 17:00:15 (about 16 h old, no git process in this repo)
-     blocked git add; the gitlock commit cleared it. Root-cause next
-     (not worked session 77).
+     blocked git add; the gitlock commit cleared it. Session 79 reading:
+     no index.lock present; the gitignored gitlock log shows 3
+     index-lock-removed rows (2026-10-14 age 826 s, 2026-10-15 age 118682
+     s, 2026-10-17 age 57280 s, so last created about 2026-10-16 17:00);
+     no log names the creator. NOT root-caused; stays a watch. Root-cause
+     on the next repeat (capture the creating process then).
   N7. SESSION 75 RESIDUE (ROADMAP "Session 75 residue", items a-f):
      (a) 0i: the hung --ci-mark test in tests/test_prepush_select.py also
      passes on the parent commit (non-discriminating arm).
-     (b) N7b IN PROGRESS session 76, UNMERGED. Original: N5d: rule 5's
-     home-dir half (/home/ and /Users/ placeholder accounts, near
-     tests/test_no_machine_paths.py lines 255-258) has no necessity arm.
-     Worktree .claude/worktrees/agent-a99537b1fd7133f5c: no commits over
-     main; UNCOMMITTED diff tests/test_no_machine_paths.py (+34 -1), the
-     necessity arm; stopped mid suite run for CPU. Next: confirm
-     red/green, verifier, merge. Not worked sessions 77-78.
-     (c) N7c IN PROGRESS session 76, UNMERGED. N5a: a non-OSError in the
-     baseline write of tools/roots_map_probe.py escapes as a traceback.
-     Worktree .claude/worktrees/agent-ad40cf687743cc158, commit 6305211
-     (main() catches any Exception, exit 0); builder-reported green, NOT
-     verified. Adversary REFUTED on siblings: (1) _load_previous (near line
-     263) catches only (OSError, ValueError); '['*200000 raises
-     RecursionError, exit 1, reproduced; (2) _resolve_main (near line 99)
-     subprocess text=True, possible UnicodeDecodeError, not reproduced.
-     UNCOMMITTED diff: tests/test_roots_map_probe.py (+85),
-     tools/roots_map_probe.py (+17 -2); that test file slowed to ~31 s,
-     likely the '['*200000 fixture. Next: shrink the fixture (depth just
-     over sys.getrecursionlimit(), or monkeypatch json.loads), finish (1)
-     and (2) TDD-first, 2nd adversary round (cap 2), verifier, merge. Not
-     worked sessions 77-78.
+     (b), (c) DONE session 79 (N7b merge 9b11e68; N7c merge a2fc098,
+     fix ec07806; worktrees removed).
      (d) N5b: the first-plus-last-only mutant is caught by one arm only
      (middle of three); the all-zero (delete) skip branch was never
      mutated.
@@ -279,13 +268,16 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      printability check unreachable; idle status over a non-oldest
      epoch-ms row reads 120/120; a one-off kit read error reads Backing
      Off.
-  WATCHERS 0x, 0b, 0t, N1, N10: no MAIN reply in the session 78 batch
-  (v20, v20.1 and 2243 do not answer them). N7b / N7c worktrees untouched
-  session 78 (both still listed by git worktree list at /done).
+  WATCHERS 0x, 0b, 0t, N10: no MAIN reply through session 79 (the only
+  new note, MAIN 0730 QUIET-BENCH, is TERMINAL INFORMATION). N7b / N7c
+  worktrees and the PR #6 worktree removed session 79; git worktree list
+  read back main plus agent-a94458aaab08d1560 (S79e).
   DONE 64-78: docs/ledger/session-<n>.md (76 partial, see N7; 77: kit
   v18+v19 6a3360f, 1502 ANSWER, board v3, N9; 78: I1 inbox triage, kit
   v20+v20.1 3d4e4d9, ledger 4e0e672 and 9f69c40, ANSWER 0056 to MAIN
-  2/2 reached, GitHub-security read). Old DONE
+  2/2 reached, GitHub-security read; 79: S78a 5973ec2, S78c PRs #6-#8,
+  S78e board, S78f f33ec7c, N7b 9b11e68, N7c a2fc098, merge
+  7efc3a4). Old DONE
   blocks and full DO NOT REDO wording: docs/LEDGER.md, "Hand-off blocks
   retired session 77". DO NOT REDO - decision -> what reverses it:
   kit v3/v4/v7-v17 and v18-v20.1 vendoring, provenance -> a new MAIN
@@ -321,6 +313,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   dev-dep DECISION B, pytest-timeout only -> as in 0i
   claude/new-session-19dmsr deleted on origin -> a session or PR needing
     it; restore from 154d5f8
+  S78f B, docs-only /done reuse of the last gated green (section 1 of
+    .claude/commands/done.md) -> a docs-only change turning an unmarked test red
   pre-push engine skip outside its import closure -> a false SKIP letting
     an engine-breaking push through
   0v rootdir pins, not a pytest-version cause -> the arm red with pins in
@@ -346,14 +340,19 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
     a fresh bundle with one
 
 TRAPS MEASURED - none are hypothetical
-  /done HAS NO DURATION RECORD (session 78). A /done agent waited 40+ min
-  on the suite gate and was killed mid-suite; the next /done agent found
-  no orphan process, no claim and no held slot (the gate reaps dead
-  holders). Open item S78f: consider reusing the session's last gated
-  green when the /done diff is docs-only.
+  ORIGIN CAN HOLD COMMITS LOCAL MAIN LACKS (session 79: a Dependabot PR
+  merged on GitHub). git fetch origin, then a gitlock git merge --no-ff
+  origin/main (subject merge: <topic>) BEFORE the /done gates, so the gates
+  cover the integrated tree. gitlock refuses git pull. No force push.
 
-  ops/fleet_kit/fleet_gitlock.py REFUSES A BARE git merge (session 73).
-  Merge with git merge --no-ff --no-commit, then commit through gitlock.
+  /done HAS NO DURATION RECORD (session 78). A /done agent waited 40+ min
+  on the suite gate and was killed mid-suite. Since S78f (session 79) a
+  docs-only /done diff may reuse the session's last gated green under the
+  section 1 rule of .claude/commands/done.md; session 79's suite gate wait was about 2 s.
+
+  A BARE git merge IS REFUSED BY THE CLAIMS HOOK (session 73). Run it as
+  ops/fleet_kit/fleet_gitlock.py run --owner <id> -- git merge --no-ff ... (kit v16+,
+  lock only), or git merge --no-ff --no-commit then a gitlock commit.
   The merge subject is merge: <topic> (MAIN 1925 item b, merge b888286),
   accepted only while MERGE_HEAD exists or HEAD is a merge, and never with
   a worktree or agent name in it. The old Merge slice form is retired.
@@ -516,4 +515,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 79
+SESSION: 80
