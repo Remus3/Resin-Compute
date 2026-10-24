@@ -98,6 +98,17 @@ python -m mypy
   pre-existing failure unrelated to this session is recorded in the ledger and
   the hand-off, and the green-verified authored files still commit.
 - A skipped suite is not a passing suite. Record what was skipped and why.
+- DOCS-ONLY REUSE (S78f, adjudicated 2026-10-23). `python -m pytest tests`
+  may reuse the last gated green ONLY when: (a) it ran THIS session, its file
+  read back with `EXIT=0`, naming commit S; (b) S is an ancestor of HEAD;
+  (c) every path in `git diff --name-only S` and `git status --porcelain`
+  matches `*.md` - any other path, `RSC-NEXT-SESSION.txt` included, means no
+  reuse. Then run, to a file, read back:
+  `python tools/precommit_gate.py --expect-count <n> --scan-tracked docs`
+  (n = `git ls-files -z -- '*.md'` count), `python -m pytest tests -m
+  reads_docs`, and every other gate line above. The ledger cites S; a reuse
+  without S is a skipped suite.
+- Record each gate command's wall time and slot wait in the ledger entry.
 
 ## 2. Commit
 
