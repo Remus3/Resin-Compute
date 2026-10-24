@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import logging
 import os
 import re
 import subprocess
@@ -354,6 +355,173 @@ def test_failed_baseline_write_never_claims_storage(
     assert state.is_file()
 
 
+_RAW_SENTINEL = "raw-detail-sentinel-n7c"
+
+
+def _non_oserror(kind: str) -> Exception:
+    if kind == "value":
+        return ValueError(_RAW_SENTINEL)
+    if kind == "unicode":
+        return UnicodeEncodeError("ascii", _RAW_SENTINEL, 0, 1, _RAW_SENTINEL)
+    return RuntimeError(_RAW_SENTINEL)
+
+
+@pytest.mark.parametrize("kind", ["value", "unicode", "runtime"])
+def test_non_oserror_during_baseline_write_degrades_without_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+) -> None:
+    """Session 75 residue N7c: only OSError was caught around the baseline
+    write, so a ValueError or UnicodeEncodeError from the writer escaped as a
+    raw traceback. It must degrade exactly like the OSError path: the
+    friendly "could not be stored" line, no storage claim, exit 0 (the
+    module's recorded reporter idiom), and the raw error goes to the log file
+    only, never to the console."""
+    cfg = _map(tmp_path, _main_tree(tmp_path))
+    state = _state(tmp_path)
+    logged: list[str] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            logged.append(record.getMessage())
+
+    def _boom(*_a: object, **_k: object) -> bool:
+        raise _non_oserror(kind)
+
+    monkeypatch.setattr(probe._atomic, "atomic_write_json", _boom)
+    monkeypatch.setattr(probe, "_file_handlers", lambda: [_Capture()], raising=False)
+    rc, text = _run(cfg, state, capsys)
+    assert rc == 0
+    assert "Traceback" not in text
+    assert _RAW_SENTINEL not in text, "raw error string reached the console"
+    assert "could not be stored" in text
+    assert "stored as the baseline" not in text
+    assert not state.exists()
+    _assert_no_identity(text, tmp_path, cfg, state)
+    assert len(logged) == 1 and _RAW_SENTINEL in logged[0], "raw error was not logged"
+
+
+def test_baseline_write_never_swallows_keyboard_interrupt(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The N7c catch is `Exception`, never BaseException: Ctrl-C still stops it."""
+    cfg = _map(tmp_path, _main_tree(tmp_path))
+
+    def _interrupt(*_a: object, **_k: object) -> bool:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(probe._atomic, "atomic_write_json", _interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        probe.main(["--config", str(cfg), "--baseline", str(_state(tmp_path))])
+
+
+def test_deeply_nested_baseline_is_no_baseline_not_a_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """N7c refute sibling 1: `_load_previous` caught only (OSError,
+    ValueError); a deeply nested baseline raised RecursionError out of main."""
+    cfg = _map(tmp_path, _main_tree(tmp_path))
+    state = _state(tmp_path)
+    state.parent.mkdir(parents=True, exist_ok=True)
+    # A 3-byte stand-in: the real trigger depth is interpreter-specific
+    # (about 1001 on 3.11, about 20000 on 3.14), so the parse of exactly
+    # these bytes raises RecursionError and every other parse is untouched.
+    poison = "[[["
+    state.write_bytes(poison.encode("ascii"))
+    real_loads = json.loads
+
+    def _deep(text: str, *a: object, **k: object) -> object:
+        if text == poison:
+            raise RecursionError("maximum recursion depth exceeded")
+        return real_loads(text, *a, **k)
+
+    monkeypatch.setattr(probe.json, "loads", _deep)
+    logged: list[str] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            logged.append(record.getMessage())
+
+    monkeypatch.setattr(probe, "_file_handlers", lambda: [_Capture()], raising=False)
+    rc, text = _run(cfg, state, capsys)
+    assert rc == 0
+    assert "Traceback" not in text
+    assert "no previous reading" in text
+    _assert_no_identity(text, tmp_path, cfg, state)
+    assert len(logged) == 1 and "RecursionError" in logged[0]
+    # The run replaced the poisoned baseline with a good one.
+    assert probe._load_previous(state) is not None
+
+
+def test_common_dir_decode_failure_falls_back(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """N7c refute sibling 2: a UnicodeDecodeError out of the git call (a
+    non-UTF-8 locale) escaped `_resolve_main`. It must mean "not resolved"."""
+
+    def _undecodable(*_a: object, **_k: object) -> object:
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    monkeypatch.setattr(probe.subprocess, "run", _undecodable)
+    monkeypatch.setattr(probe, "_file_handlers", lambda: [], raising=False)
+    assert probe._resolve_main(tmp_path) is None
+    cfg = _map(tmp_path, _main_tree(tmp_path))
+    rc, text = _run(cfg, _state(tmp_path), capsys)
+    assert rc == 0
+    assert "fell back" in text
+    assert "Traceback" not in text
+
+
+def test_common_dir_git_output_is_decoded_leniently(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The git output is decoded as UTF-8 with replacement, never by locale."""
+    seen: dict[str, object] = {}
+
+    def _fake(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(cmd, 1, "", "")
+
+    monkeypatch.setattr(probe.subprocess, "run", _fake)
+    assert probe._resolve_main(tmp_path) is None
+    assert seen.get("encoding") == "utf-8"
+    assert seen.get("errors") == "replace"
+
+
+def test_tampered_baseline_values_print_ascii_and_no_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """N7c sweep sibling 3: DRIFT lines printed the PREVIOUS reading's values
+    raw. A non-ASCII value raises UnicodeEncodeError on a cp1252 console and a
+    path-shaped value leaks identity. Previous values render as safe or
+    `(withheld)`."""
+    cfg = _map(tmp_path, _main_tree(tmp_path))
+    state = _state(tmp_path)
+    state.parent.mkdir(parents=True, exist_ok=True)
+    leak = str(tmp_path / "leaked")
+    prior = {"map_present": True, "main_row": True, "outbox_exists": True,
+             "outbox_entries": [1, 2], "newest": "snow\u2603man", "map_sha256": leak}
+    state.write_bytes(json.dumps({"schema": 1, "reading": prior}).encode("ascii"))
+    rc, text = _run(cfg, state, capsys)
+    assert rc == 0
+    assert text.isascii(), "a DRIFT line carries a non-ASCII byte"
+    assert leak not in text
+    _assert_no_identity(text, tmp_path, cfg, state)
+    # Non-vacuity: the drift itself is still reported, values withheld.
+    assert "DRIFT newest (withheld) -> a-from-MAIN-ORDER.txt" in text
+    assert "DRIFT outbox_entries (withheld) -> 1" in text
+
+
+def test_file_handlers_are_file_only() -> None:
+    """The raw-error sink must never include a console stream handler."""
+    handlers = probe._file_handlers()
+    assert handlers, "no file handler: the raw error would be logged nowhere"
+    assert all(isinstance(h, logging.FileHandler) for h in handlers)
+    # Non-vacuity: the logger DOES carry a console handler that was filtered out.
+    every = probe._log_setup.get_logger(probe.__name__).handlers
+    assert any(not isinstance(h, logging.FileHandler) for h in every)
+
+
 def test_failed_common_dir_resolution_says_it_fell_back(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -429,3 +597,18 @@ def test_command_line_runs_from_another_directory(tmp_path: Path) -> None:
     assert proc.returncode == 0, proc.stderr
     assert "outbox_exists=yes" in proc.stdout
     _assert_no_identity(proc.stdout + proc.stderr, tmp_path, root)
+
+
+def test_trailing_newline_name_is_withheld_and_drift_stays_one_line() -> None:
+    """Refute round 2: `$` matches before a final newline, so `abc\n` passed
+    the safe-name pattern and split a DRIFT line in two. The whole name must
+    match; a newline-bearing value is withheld."""
+    assert probe._show("abc\n") == "(withheld)"
+    assert probe._safe_name("abc\n") == "(withheld)"
+    lines = probe.compare({"newest": "abc\n"}, {"newest": "b"})
+    assert lines, "compare emitted nothing"
+    assert all("\n" not in ln for ln in lines)
+    assert any("DRIFT newest (withheld) -> b" in ln for ln in lines)
+    # Non-vacuity: a legitimate neighbour still prints.
+    assert probe._show("abc") == "abc"
+    assert probe._show("a-from-MAIN-ORDER.txt") == "a-from-MAIN-ORDER.txt"

@@ -34,7 +34,9 @@ READ-ONLY on everything except its own state file, written through
 scoped exception, measured 2026-10-14: importing `core/atomic_io.py` runs
 `core/log_setup.py`, which opens the tree's shared day log under the
 gitignored logs/ directory (creating it if absent), as every tool here does.
-The probe itself logs nothing on any path it handles.
+The probe itself logs one thing only: a baseline write that raises a
+non-OSError (slice N7c) logs the raw error to that day log FILE, never to the
+console, and prints the same friendly "could not be stored" line as OSError.
 
 EXIT CODE: 0 always, including a missing or unreadable map; 2 only for invalid
 arguments (argparse). Decision recorded (slice D, session 73): this is a
@@ -54,6 +56,7 @@ import argparse
 import hashlib
 import importlib
 import json
+import logging
 import os
 import re
 import subprocess
@@ -71,6 +74,7 @@ if str(REPO) not in sys.path:
 
 _responder: Any = importlib.import_module("tools.moon_sync_responder")
 _atomic: Any = importlib.import_module("core.atomic_io")
+_log_setup: Any = importlib.import_module("core.log_setup")
 
 #: The roots map and the baseline, relative to a checkout root. The map's
 #: relative path is the responder's own, never restated.
@@ -101,9 +105,13 @@ def _resolve_main(repo: Path) -> Path | None:
     try:
         proc = subprocess.run(
             ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-            cwd=repo, capture_output=True, text=True, timeout=30, check=False, env=env,
+            cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30, check=False, env=env,
         )
     except (OSError, subprocess.SubprocessError):
+        return None
+    except Exception as exc:  # noqa: BLE001 - slice N7c sibling: degrade to "not resolved"
+        _log_raw("git common dir probe failed: %s: %s", type(exc).__name__, exc)
         return None
     common = proc.stdout.strip()
     if proc.returncode != 0 or not common:
@@ -129,12 +137,12 @@ FIELDS = ("map_present", "main_row", "outbox_exists", "outbox_entries", "newest"
 _ACCOUNT_PATH = re.compile(
     r"(?:[A-Za-z]:\\Users\\[^\\\s]+)|(?:/home/[^/\s]+)|(?:/Users/[^/\s]+)",
 )
-_SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
+_SAFE_NAME = re.compile(r"[A-Za-z0-9._-]+")
 
 
 def _safe_name(name: str) -> str:
     """A filename fit to print, or `(withheld)`."""
-    if not _SAFE_NAME.match(name) or "@" in name or _ACCOUNT_PATH.search(name):
+    if not _SAFE_NAME.fullmatch(name) or "@" in name or _ACCOUNT_PATH.search(name):
         return "(withheld)"
     return name
 
@@ -191,7 +199,15 @@ def _show(value: Any) -> str:
         return "-"
     if isinstance(value, bool):
         return "yes" if value else "no"
-    return str(value)
+    # Slice N7c sibling: a PREVIOUS value comes from the baseline file, which
+    # may be tampered with. Only an int or a safe name is printed; anything
+    # else (a path, non-ASCII, a list) is withheld, so a DRIFT line is always
+    # 7-bit and identity-free.
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return _safe_name(value)
+    return "(withheld)"
 
 
 def describe(reading: dict[str, Any]) -> list[str]:
@@ -234,12 +250,36 @@ def compare(
     return drift or [f"{PREFIX} no drift since previous reading"]
 
 
+def _file_handlers() -> list[logging.Handler]:
+    """The day-log FILE handlers of this module's logger, never the console.
+
+    `core/log_setup.get_logger` attaches a console handler too, and a raw
+    error string must not reach the console (it can carry a path). Empty when
+    file logging is unavailable; the raw detail is then simply not kept.
+    """
+    logger = _log_setup.get_logger(__name__)
+    return [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
+
+
+def _log_raw(msg: str, *args: object) -> None:
+    """Record a raw error in the day log file only. Never raises."""
+    try:
+        record = logging.LogRecord(__name__, logging.ERROR, __file__, 0, msg, args, None)
+        for handler in _file_handlers():
+            handler.handle(record)
+    except Exception:  # noqa: BLE001, S110 - logging is best-effort on a degraded path
+        pass
+
+
 def _load_previous(state: Path) -> dict[str, Any] | None:
     # Not `read_json`: a corrupt state file must not log a raw error with a
     # path to the console. A corrupt or missing baseline is simply no baseline.
     try:
         payload = json.loads(state.read_bytes().decode("utf-8"))
     except (OSError, ValueError):
+        return None
+    except Exception as exc:  # noqa: BLE001 - slice N7c sibling: e.g. RecursionError
+        _log_raw("baseline read failed: %s: %s", type(exc).__name__, exc)
         return None
     if not isinstance(payload, dict):
         return None
@@ -286,6 +326,11 @@ def main(argv: list[str] | None = None) -> int:
             written = bool(_atomic.atomic_write_json(args.baseline, {"schema": 1, "reading": stored}))
         except OSError:
             written = False
+        except Exception as exc:  # noqa: BLE001 - slice N7c: degrade, never a raw traceback
+            # Same friendly outcome as OSError; the raw error goes to the log
+            # FILE only. BaseException (Ctrl-C, SystemExit) still propagates.
+            written = False
+            _log_raw("baseline write failed: %s: %s", type(exc).__name__, exc)
         if not written:
             tail.append(f"{PREFIX} this reading could not be stored; next session sees no baseline")
     lines = describe(current) + compare(previous, current, stores=written) + tail
