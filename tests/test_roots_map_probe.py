@@ -415,6 +415,103 @@ def test_baseline_write_never_swallows_keyboard_interrupt(
         probe.main(["--config", str(cfg), "--baseline", str(_state(tmp_path))])
 
 
+def test_deeply_nested_baseline_is_no_baseline_not_a_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """N7c refute sibling 1: `_load_previous` caught only (OSError,
+    ValueError); a deeply nested baseline raised RecursionError out of main."""
+    cfg = _map(tmp_path, _main_tree(tmp_path))
+    state = _state(tmp_path)
+    state.parent.mkdir(parents=True, exist_ok=True)
+    # A 3-byte stand-in: the real trigger depth is interpreter-specific
+    # (about 1001 on 3.11, about 20000 on 3.14), so the parse of exactly
+    # these bytes raises RecursionError and every other parse is untouched.
+    poison = "[[["
+    state.write_bytes(poison.encode("ascii"))
+    real_loads = json.loads
+
+    def _deep(text: str, *a: object, **k: object) -> object:
+        if text == poison:
+            raise RecursionError("maximum recursion depth exceeded")
+        return real_loads(text, *a, **k)
+
+    monkeypatch.setattr(probe.json, "loads", _deep)
+    logged: list[str] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            logged.append(record.getMessage())
+
+    monkeypatch.setattr(probe, "_file_handlers", lambda: [_Capture()], raising=False)
+    rc, text = _run(cfg, state, capsys)
+    assert rc == 0
+    assert "Traceback" not in text
+    assert "no previous reading" in text
+    _assert_no_identity(text, tmp_path, cfg, state)
+    assert len(logged) == 1 and "RecursionError" in logged[0]
+    # The run replaced the poisoned baseline with a good one.
+    assert probe._load_previous(state) is not None
+
+
+def test_common_dir_decode_failure_falls_back(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """N7c refute sibling 2: a UnicodeDecodeError out of the git call (a
+    non-UTF-8 locale) escaped `_resolve_main`. It must mean "not resolved"."""
+
+    def _undecodable(*_a: object, **_k: object) -> object:
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    monkeypatch.setattr(probe.subprocess, "run", _undecodable)
+    monkeypatch.setattr(probe, "_file_handlers", lambda: [], raising=False)
+    assert probe._resolve_main(tmp_path) is None
+    cfg = _map(tmp_path, _main_tree(tmp_path))
+    rc, text = _run(cfg, _state(tmp_path), capsys)
+    assert rc == 0
+    assert "fell back" in text
+    assert "Traceback" not in text
+
+
+def test_common_dir_git_output_is_decoded_leniently(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The git output is decoded as UTF-8 with replacement, never by locale."""
+    seen: dict[str, object] = {}
+
+    def _fake(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(cmd, 1, "", "")
+
+    monkeypatch.setattr(probe.subprocess, "run", _fake)
+    assert probe._resolve_main(tmp_path) is None
+    assert seen.get("encoding") == "utf-8"
+    assert seen.get("errors") == "replace"
+
+
+def test_tampered_baseline_values_print_ascii_and_no_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """N7c sweep sibling 3: DRIFT lines printed the PREVIOUS reading's values
+    raw. A non-ASCII value raises UnicodeEncodeError on a cp1252 console and a
+    path-shaped value leaks identity. Previous values render as safe or
+    `(withheld)`."""
+    cfg = _map(tmp_path, _main_tree(tmp_path))
+    state = _state(tmp_path)
+    state.parent.mkdir(parents=True, exist_ok=True)
+    leak = str(tmp_path / "leaked")
+    prior = {"map_present": True, "main_row": True, "outbox_exists": True,
+             "outbox_entries": [1, 2], "newest": "snow\u2603man", "map_sha256": leak}
+    state.write_bytes(json.dumps({"schema": 1, "reading": prior}).encode("ascii"))
+    rc, text = _run(cfg, state, capsys)
+    assert rc == 0
+    assert text.isascii(), "a DRIFT line carries a non-ASCII byte"
+    assert leak not in text
+    _assert_no_identity(text, tmp_path, cfg, state)
+    # Non-vacuity: the drift itself is still reported, values withheld.
+    assert "DRIFT newest (withheld) -> a-from-MAIN-ORDER.txt" in text
+    assert "DRIFT outbox_entries (withheld) -> 1" in text
+
+
 def test_file_handlers_are_file_only() -> None:
     """The raw-error sink must never include a console stream handler."""
     handlers = probe._file_handlers()
