@@ -105,9 +105,13 @@ def _resolve_main(repo: Path) -> Path | None:
     try:
         proc = subprocess.run(
             ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-            cwd=repo, capture_output=True, text=True, timeout=30, check=False, env=env,
+            cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30, check=False, env=env,
         )
     except (OSError, subprocess.SubprocessError):
+        return None
+    except Exception as exc:  # noqa: BLE001 - slice N7c sibling: degrade to "not resolved"
+        _log_raw("git common dir probe failed: %s: %s", type(exc).__name__, exc)
         return None
     common = proc.stdout.strip()
     if proc.returncode != 0 or not common:
@@ -195,7 +199,15 @@ def _show(value: Any) -> str:
         return "-"
     if isinstance(value, bool):
         return "yes" if value else "no"
-    return str(value)
+    # Slice N7c sibling: a PREVIOUS value comes from the baseline file, which
+    # may be tampered with. Only an int or a safe name is printed; anything
+    # else (a path, non-ASCII, a list) is withheld, so a DRIFT line is always
+    # 7-bit and identity-free.
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return _safe_name(value)
+    return "(withheld)"
 
 
 def describe(reading: dict[str, Any]) -> list[str]:
@@ -265,6 +277,9 @@ def _load_previous(state: Path) -> dict[str, Any] | None:
     try:
         payload = json.loads(state.read_bytes().decode("utf-8"))
     except (OSError, ValueError):
+        return None
+    except Exception as exc:  # noqa: BLE001 - slice N7c sibling: e.g. RecursionError
+        _log_raw("baseline read failed: %s: %s", type(exc).__name__, exc)
         return None
     if not isinstance(payload, dict):
         return None
