@@ -63,6 +63,10 @@ ast-serialize==0.12.1 \
     --hash=sha256:f896fa38e0af38821e1ab1425c5dee89e359623e165765bdeae7d0eb6909e76d \
     --hash=sha256:fafe1471e8aca6c87b4913b7b54ff97197adf702fbe28692284b929dfa62ff96
     # via mypy
+colorama==0.4.6 ; sys_platform == "win32" \
+    --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
+    --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
+    # via pytest
 iniconfig==2.3.1 \
     --hash=sha256:67f4b9c50da0dedf52af349e7749a80a9057a5031199791b906c3bb3ae878960 \
     --hash=sha256:9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7
