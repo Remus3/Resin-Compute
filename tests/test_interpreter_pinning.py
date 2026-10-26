@@ -140,12 +140,14 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
         "default_child_python() in that same file.",
     ),
     "ops/fleet_kit/fleet_done.py": (
-        1,
+        2,
         "FLEET-KIT v11, vendored and never edited; triaged 2026-10-08 by "
         "reading the site. _git: the head is find_git(), git resolved to an "
         "absolute PATH entry with empty, relative and cwd-equal entries "
         "skipped, never a bare name and never the working directory. Never a "
-        "Python.",
+        "Python. 1 -> 2 on 2026-10-25 (FLEET-KIT v23, carrying v22 reap): "
+        "the second head is the reap git helper, the same find_git() exe, "
+        "read at its site.",
     ),
     "ops/fleet_kit/fleet_gitlock.py": (
         3,
