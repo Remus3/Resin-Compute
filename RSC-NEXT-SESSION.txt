@@ -1,14 +1,13 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-23 (session 79), gates measured at commit 7efc3a4 on main
+Stamped 2026-10-25 (session 80), gates measured at commit 866f49e on main
 by the /done ritual; this paperwork commit landed after it. Everything below
 is a READING taken that day, not a promise about now. Re-measure before
 citing.
 
-NEXT ACTION: work the remaining OPEN WORK items below, highest priority
-first (session 79 items S79a-S79e first where actionable, then the list in
-order). Session 79 worked "all other open items" (operator direction) and
-closed S78a, S78c, S78e, S78f, N7b, N7c and N1. Carry every item not acted
-on forward again.
+NEXT ACTION: triage the inbox first (S80a), then work the remaining OPEN
+WORK items below, highest priority first (S79a-S79d where actionable, then
+the list in order). Session 80 worked the worktree survey (W1) and closed
+S79e. Carry every item not acted on forward again.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -78,23 +77,30 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
-STATE OBSERVED 2026-10-23 AT 7efc3a4 (session 79 /done gate run)
-  Python 3.14.4 (CI is 3.11): every gate GREEN on the tree integrated
-  with origin/main (merge 7efc3a4 of the PR #6 merge 38b8ddb); all three
-  whole suites through the suite gate (counts in docs/ledger/session-79.md);
-  local ruff 0.15.12 is OLDER than the 0.17.1 pin (CI runs the pin; update
-  the local ruff before trusting a local ruff verdict); mypy advisory
-  clean; kit check 20 []. 7efc3a4 pushed with the pre-push hook,
-  ls-remote read back 7efc3a4. send_note audit empty. Worktrees left:
-  agent-a94458aaab08d1560 (S78a, merged; locked by a live session pid at
-  /done). No index.lock present.
-PRIOR READINGS (sessions 57-78): docs/ledger/ files. A worktree shows
+STATE OBSERVED 2026-10-25 AT 866f49e (session 80 /done gate run)
+  Python 3.14.4 (CI is 3.11): every gate GREEN; origin/main equal to local
+  main after git fetch (no merge); all three whole suites through the
+  suite gate (counts in docs/ledger/session-80.md); local ruff 0.15.12 is
+  OLDER than the 0.17.1 pin (CI runs the pin; update the local ruff before
+  trusting a local ruff verdict); mypy advisory clean; kit check 20 [].
+  send_note audit empty. git worktree list read back: main only; git
+  branch read back: main only (remote Dependabot branches exist, not
+  worktrees, left untouched).
+PRIOR READINGS (sessions 57-79): docs/ledger/ files. A worktree shows
   MORE skips (no POSIX sh on PATH); a clone or worktree under AppData fails
   test_the_session_cache_lives_under_the_runtime_directory and
   tests/test_watch_inbox_session.py near line 767 - the location trap, not
   a regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
+  S80a. INBOX TRIAGE NOT DONE (NEW session 80): 4 unread items listed by
+     the hook - MAIN 2026-10-25 1801 FIX to RSC/SS (stale repo-map root,
+     SS entry at a pre-migration root; RSC auto-replied at 1815), SS
+     2026-10-24 1525 FIX to MAIN (fleet_test_guard IGNORE misses the two
+     board files), SS 2026-10-24 1243 INFORMATION to MAIN (seeded boards
+     artifact not found, TERMINAL). Triage into the four buckets, answer
+     if due (one batched note), then mark. Inbox NOT marked session 80.
+     ROADMAP "Session 80 residue" (a).
   S79a. BOARD KIT GAPS (NEW session 79), for the next batched note to
      MAIN: the kit has no board create flow (session 79 recreated the
      board by hand as a Dashboard-type artifact
@@ -113,10 +119,9 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   S79d. COMMIT-MSG CONVENTIONS (NEW session 79): merge subjects must be
      merge: <topic> with no worktree, agent or branch name; commit type ops
      is rejected. Put both in every builder prompt. Residue (d).
-  S79e. WORKTREE agent-a94458aaab08d1560 (S78a, branch merged) is LOCKED
-     by a live session pid (27008 at session 79 /done). Remove with git
-     worktree remove plus git branch -d once that pid is dead; never
-     force. Residue (e).
+  S79e. DONE session 80 (W1): worktree agent-a94458aaab08d1560 removed,
+     branch deleted with git branch -d; git worktree list read back main
+     only. docs/ledger/session-80.md.
   S78b. MAIN 1215 GH-HYGIENE ORDER was NEVER DELIVERED to RSC (MAIN
      deferred it: tree not clean during its run). Not in the inbox. MAIN
      re-runs it once RSC is clean; the session 78 ANSWER told MAIN the tree
@@ -269,15 +274,15 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      epoch-ms row reads 120/120; a one-off kit read error reads Backing
      Off.
   WATCHERS 0x, 0b, 0t, N10: no MAIN reply through session 79 (the only
-  new note, MAIN 0730 QUIET-BENCH, is TERMINAL INFORMATION). N7b / N7c
-  worktrees and the PR #6 worktree removed session 79; git worktree list
-  read back main plus agent-a94458aaab08d1560 (S79e).
+  new note, MAIN 0730 QUIET-BENCH, is TERMINAL INFORMATION); session 80
+  did not triage the inbox (S80a), so re-check them there. Session 80
+  read back git worktree list: main only.
   DONE 64-78: docs/ledger/session-<n>.md (76 partial, see N7; 77: kit
   v18+v19 6a3360f, 1502 ANSWER, board v3, N9; 78: I1 inbox triage, kit
   v20+v20.1 3d4e4d9, ledger 4e0e672 and 9f69c40, ANSWER 0056 to MAIN
   2/2 reached, GitHub-security read; 79: S78a 5973ec2, S78c PRs #6-#8,
   S78e board, S78f f33ec7c, N7b 9b11e68, N7c a2fc098, merge
-  7efc3a4). Old DONE
+  7efc3a4; 80: W1 worktree cleanup, S79e). Old DONE
   blocks and full DO NOT REDO wording: docs/LEDGER.md, "Hand-off blocks
   retired session 77". DO NOT REDO - decision -> what reverses it:
   kit v3/v4/v7-v17 and v18-v20.1 vendoring, provenance -> a new MAIN
@@ -515,4 +520,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 80
+SESSION: 81

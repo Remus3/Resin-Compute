@@ -13,6 +13,12 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-25. Session 80 residue (see `docs/ledger/session-80.md`).**
+  (a) Inbox triage not done in session 80: 4 unread items (MAIN 1801 FIX
+  to RSC/SS on a stale repo-map root, auto-replied by RSC 1815; SS 1525
+  FIX to MAIN on fleet_test_guard IGNORE; SS 1243 INFORMATION to MAIN on
+  seeded boards). Triage into the four buckets, answer if due, then mark.
+
 - **NEW 2026-10-23. Session 79 residue (see `docs/ledger/session-79.md`).**
   (a) Board kit gaps, for the next batched note to MAIN: the kit has no
   board create flow (the session 79 board was recreated by hand as a
@@ -27,9 +33,8 @@ version. What follows is everything the scaffold deliberately did not do.
   (d) The commit-msg hook requires `merge: <topic>` subjects without a
   worktree, agent or branch name and rejects commit type `ops`; record in
   builder prompts.
-  (e) Worktree agent-a94458aaab08d1560 (S78a, merged) stays: locked by a
-  live session pid at /done. Remove with `git worktree remove` once that
-  pid is dead; never force.
+  (e) DONE session 80, moved to `docs/roadmap-archive/2026-10.md` (see
+  `docs/ledger/session-80.md`).
 
 - **NEW 2026-10-19. Session 78 residue (see `docs/ledger/session-78.md`).**
   (b) MAIN's 2026-10-18 1215 GH-HYGIENE ORDER was NOT delivered to this
