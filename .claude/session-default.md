@@ -64,8 +64,8 @@ departure is recorded.
 - **`py_compile` before any restart**; restart with
   `echo restart > restart_trigger.txt`, verify by a NEW `pid` and `alive=true`
   in `ops/runtime/health.json`, never by looking at a window.
-- **Two suites, run SEPARATELY:** `python -m pytest tests` and
-  `python -m pytest agents/pity_engine`. NEVER `pytest .` from the root. Never
+- **Two suites, run SEPARATELY:** `python -m pytest tests -n 8 --dist loadfile`
+  (xdist; never `-n auto`) and `python -m pytest agents/pity_engine` (serial). NEVER `pytest .` from the root. Never
   pass `-q`. Plus `python -m ruff check .`. Run suites to a FILE and read the
   file back, with an `EXIT=` sentinel.
 - `python -m mypy` covers only `core/`, `engines/`, `ingest/`,

@@ -37,7 +37,7 @@ pieces make that work, so do not "simplify" them:
 Two suites, run **separately**. Never `pytest .` from the root.
 
 ```powershell
-python -m pytest tests                  # application suite
+python -m pytest tests -n 8 --dist loadfile   # application suite (xdist, never -n auto)
 python -m pytest agents/pity_engine     # engine self-validation
 python -m ruff check .
 python -m mypy

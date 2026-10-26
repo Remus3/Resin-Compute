@@ -76,7 +76,7 @@ python -m pytest tests/test_licence_posture.py
 python -m pytest tests/test_docs_consistency.py
 python scripts/qa_companion.py
 python -m ruff check .
-python -m pytest tests
+python -m pytest tests -n 8 --dist loadfile
 python -m pytest agents/pity_engine
 cd shell && node --test
 python -m headless.runner --once --dry-run
