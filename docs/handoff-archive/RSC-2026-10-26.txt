@@ -1,0 +1,55 @@
+RESINCOMPUTE HAND-OFF ARCHIVE 2026-10-26 (session 82 /done)
+Blocks moved VERBATIM from RSC-NEXT-SESSION.txt to keep it under the kit
+v24 30 KB mark limit. Each is still a reading of its own date.
+
+  S80c. RETRACTED session 81: kit v23 (f839e48) removed the artifact
+     push; the board is local only (FLEET-COMMON 18).
+
+  9. Commit-msg gate FALSE BLOCKS (work around with git commit -F): a
+     localised git; an editor commit with --no-status or
+     commit.status=false after a non-ASCII-path merge conflict (KEEP
+     fail-closed, pinned in tests/test_hook_gate.py); git commit -v below
+     the scissors (reasoned). Under-block: -F/-m with commit.cleanup=strip
+     plus a keeping flag. A comma in the scope (feat(a,b):) is rejected.
+     PR #1 merge subject 106 chars (warn only, not rewritten).
+  10. Orphan-temp sweep notes: halt clause (a) also covers WRITES (with
+     RESINCOMPUTE_RUNTIME_DIR or RC_DATA_DIR outside the repo, atomic
+     writes land there; predates); a junction swap between root check and
+     sweep is not caught.
+  11. Prov-defer notes, not defects: a re-dropped MAIN note gets a fresh
+     first_seen (hold still <= 900 s); unanswered entries prune at 24 h; a
+     scheduled tick plus a manual --once can lose one update (no lock).
+  12. /120 counter notes, not defects (ruling 0f): MAIN-replies
+     printability check unreachable; idle status over a non-oldest
+     epoch-ms row reads 120/120; a one-off kit read error reads Backing
+     Off.
+
+  DONE 64-78: docs/ledger/session-<n>.md (76 partial, see N7; 77: kit
+  v18+v19 6a3360f, 1502 ANSWER, board v3, N9; 78: I1 inbox triage, kit
+  v20+v20.1 3d4e4d9, ledger 4e0e672 and 9f69c40, ANSWER 0056 to MAIN
+  2/2 reached, GitHub-security read; 79: S78a 5973ec2, S78c PRs #6-#8,
+  S78e board, S78f f33ec7c, N7b 9b11e68, N7c a2fc098, merge
+  7efc3a4; 80: W1 worktree cleanup, S79e; 81: S80b e887f92, 2045
+  ORDER 71c1190 a0120a4; 82: kit v24 dce4f00, ANSWER 0405). Old DONE
+  blocks and full DO NOT REDO wording: docs/LEDGER.md, "Hand-off blocks
+  retired session 77". 
+
+  A MID-FIRE LOG LINE UNDER THE FIRE'S OWN LABEL COLLAPSES THE DRIFT WINDOW.
+  conftest._live_fire_windows ends a scheduledtask fire at its next line.
+  Write detail under firedetail; never hold lines in memory (a hard kill
+  loses them).
+
+  A NEW ALLOWED LOG LABEL WIDENS THE LEAK GUARD. _test_shaped must check the
+  caller prefix too, or a test child's line inside a live fire is excused.
+
+  A NEW TERMINATION MUST JOIN TERMINATIONS, with an `in` test.
+
+  A HOOK COPIED WITH shutil.copyfile HAS NO EXEC BIT ON LINUX. Read CI after
+  every hook or gate change.
+
+  git commit -F AND -m KEEP # LINES. In the editor flow git writes the
+  effective cleanup mode into the template sentence; that is what the gate
+  now reads.
+
+  ctypes OpenProcess RAISES for a pid of 2**32 or more. Bound parsed pids.
+

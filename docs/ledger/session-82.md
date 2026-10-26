@@ -33,6 +33,12 @@
   belong in the session temp dir.
 - Memory: no file under the project memory dir written this session.
 - Board render skipped: headless run (done.md section 8b).
+- First `fleet_done.py mark` read back `failed`: hand-off 32 KB over the
+  kit v24 30 KB limit; `fleet_done.py archive` found 0 framed CLOSED
+  blocks. Closed and note-only blocks (S80c, items 9-12, the DONE 64-81
+  detail, six responder and hook traps) moved verbatim to
+  docs/handoff-archive/RSC-2026-10-26.txt with pointer lines; hand-off
+  read back under 30 KB by tools/check_handoff.py.
 
 ## 2026-10-26 - KIT-V24 adopted (dce4f00), MAIN 0315 ORDER
 
