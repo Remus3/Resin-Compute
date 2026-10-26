@@ -108,10 +108,9 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      npm branch; shell change means the ui-auditor rule applies. Residue
      (b).
   S80c. board push failed: asset upload not_found for the
-     ops/status_board.json url (LLTZ76PHgZVWnP8CsoUdAQ); this account's
-     artifact list (2026-10-25) does not show it, only an older RSC status
-     board NauEF9cRqx8Fx7YP7WrJqR (updated 2026-10-18). Check which account
-     owns the session 79 board before repointing; feeds S79a.
+     ops/status_board.json url; this account's artifact list (2026-10-25)
+     shows only an older RSC status board (updated 2026-10-18). Find the
+     owning account before repointing; feeds S79a.
   S79a. BOARD KIT GAPS (NEW session 79), for the next batched note to
      MAIN: the kit has no board create flow (session 79 recreated the
      board by hand as a Dashboard-type artifact
@@ -130,9 +129,6 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   S79d. COMMIT-MSG CONVENTIONS (NEW session 79): merge subjects must be
      merge: <topic> with no worktree, agent or branch name; commit type ops
      is rejected. Put both in every builder prompt. Residue (d).
-  S79e. DONE session 80 (W1): worktree agent-a94458aaab08d1560 removed,
-     branch deleted with git branch -d; git worktree list read back main
-     only. docs/ledger/session-80.md.
   S78b. MAIN 1215 GH-HYGIENE ORDER was NEVER DELIVERED to RSC (MAIN
      deferred it: tree not clean during its run). Not in the inbox. MAIN
      re-runs it once RSC is clean; the session 78 ANSWER told MAIN the tree
@@ -143,12 +139,10 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      kind, read 2026-10-19). MAIN/operator settings call: reported, not
      changed.
   GITHUB-SECURITY RECORD (MAIN 2243 s3 asks it here), read 2026-10-19 via
-     gh api on the origin repo, open and all states: code scanning open 0
-     -> 0, fixed 0, dismissed 0, left 0 (CodeQL analyses present,
-     results_count 0); Dependabot alerts open 0 -> 0 (vulnerability alerts
-     enabled), fixed 0, dismissed 0, left 0; secret scanning open 0 -> 0
-     (enabled, push protection on), fixed 0, dismissed 0, left 0. Setting:
-     Dependabot security updates disabled (S78d).
+     gh api, open and all states: code scanning 0 (CodeQL results_count
+     0), Dependabot alerts 0, secret scanning 0 (push protection on);
+     fixed, dismissed, left all 0. SUPERSEDED for Dependabot by S80b (2
+     open high, 2026-10-25). Setting: security updates disabled (S78d).
   0x. AWAIT MAIN'S REPLY to the 1852 INFORMATION note (sent session 72,
      sha256 e8ef75592e297643e4ee1fc5d944838e4a23145571bbc4eb6f9529574820fed4,
      reached 2/2): the OutboundCap.record / _append no-lock kit defect in
@@ -221,10 +215,6 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      and 2 (then build A2 test-first); MAIN's outbox becoming tracked-only
      makes A2 unworkable. Common-mode risk left: nothing tests that MAIN's
      outbox can hold an untracked file.
-  N1. RETRACTED session 79: its reversal condition already holds - kit
-     v16 ops/fleet_kit/fleet_gitlock.py accepts git merge, lock only
-     (LOCK_ONLY_VERBS); merge 7efc3a4 ran through it. MAIN's reply to the
-     2328 ANSWER is no longer awaited for this item.
   N2. WATCH: a stale empty .git/index.lock (826 s, no git process)
      blocked session 73's first merge; the gitlock dry-run commit cleared
      and logged it. Root-cause on a repeat. ROADMAP session 73 residue (b).
@@ -239,13 +229,10 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   N7. SESSION 75 RESIDUE (ROADMAP "Session 75 residue", items a-f):
      (a) 0i: the hung --ci-mark test in tests/test_prepush_select.py also
      passes on the parent commit (non-discriminating arm).
-     (b), (c) DONE session 79 (N7b merge 9b11e68; N7c merge a2fc098,
-     fix ec07806; worktrees removed).
+     (b), (c), (e) DONE (ledger sessions 76, 79).
      (d) N5b: the first-plus-last-only mutant is caught by one arm only
      (middle of three); the all-zero (delete) skip branch was never
      mutated.
-     (e) N7e DONE session 76 (probe exit 0, outbox 153 -> 154 not ours;
-     the 4 session-75 worktrees and branches removed).
      (f) Common-mode: the N5cf KEEP and RECORD rulings both rest on an
      unverified 2026-09-15 MSIX measurement.
   N9. NEW session 77 (ROADMAP "Session 77 residue" a): N9 DONE (merge
