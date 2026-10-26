@@ -39,6 +39,7 @@ import keyword
 import os
 import subprocess
 from collections.abc import Callable
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -1118,6 +1119,28 @@ def test_a_launcher_spelling_through_an_invisible_receiver_stays_a_silence():
     )
 
 
+# MAIN 2045 ORDER of 2026-10-25 (suite speed), item 3: the three real-tree
+# walks below parsed every file under DEFAULT_ROOTS on their own, four walks a
+# run. Parse once per process (one xdist worker owns this whole module under
+# --dist loadfile) and hand each walk the same read-only trees. No walk here
+# mutates a node.
+@cache
+def _parsed_roots(root: Path) -> tuple[tuple[str, ast.AST], ...]:
+    """`(relative, tree)` for every parseable file under `DEFAULT_ROOTS`."""
+    parsed: list[tuple[str, ast.AST]] = []
+    for name in census.DEFAULT_ROOTS:
+        directory = root / name
+        if not directory.is_dir():
+            continue
+        for path in census._python_files(directory):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, SyntaxError):
+                continue
+            parsed.append((path.relative_to(root).as_posix(), tree))
+    return tuple(parsed)
+
+
 def test_no_invisible_receiver_in_this_tree_is_spelled_like_a_launcher():
     """The measurement the rejected widening was ruled out on, re-taken each run.
 
@@ -1127,27 +1150,18 @@ def test_no_invisible_receiver_in_this_tree_is_spelled_like_a_launcher():
     """
     seen = 0
     offenders: list[tuple[str, int, str]] = []
-    for name in census.DEFAULT_ROOTS:
-        directory = REPO_ROOT / name
-        if not directory.is_dir():
-            continue
-        for path in census._python_files(directory):
-            try:
-                tree = ast.parse(path.read_text(encoding="utf-8"))
-            except (OSError, UnicodeDecodeError, SyntaxError):
+    for relative, tree in _parsed_roots(REPO_ROOT):
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
                 continue
-            relative = path.relative_to(REPO_ROOT).as_posix()
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call):
-                    continue
-                func = node.func
-                if not isinstance(func, ast.Attribute):
-                    continue
-                if census._dotted(func.value) is not None:
-                    continue
-                seen += 1
-                if func.attr in _SPELLINGS_A_READER_WOULD_EXPECT:
-                    offenders.append((relative, node.lineno, func.attr))
+            func = node.func
+            if not isinstance(func, ast.Attribute):
+                continue
+            if census._dotted(func.value) is not None:
+                continue
+            seen += 1
+            if func.attr in _SPELLINGS_A_READER_WOULD_EXPECT:
+                offenders.append((relative, node.lineno, func.attr))
     assert seen > 100, (
         f"only {seen} Attribute callees with an unresolvable receiver were found; "
         "a walk that reaches almost none of them measures almost nothing and "
@@ -1259,21 +1273,12 @@ def _opaque_callee_nodes(root: Path) -> list[tuple[str, int]]:
     different callee spelling, so the two populations stay aligned.
     """
     found: list[tuple[str, int]] = []
-    for name in census.DEFAULT_ROOTS:
-        directory = root / name
-        if not directory.is_dir():
-            continue
-        for path in census._python_files(directory):
-            try:
-                tree = ast.parse(path.read_text(encoding="utf-8"))
-            except (OSError, UnicodeDecodeError, SyntaxError):
-                continue
-            relative = path.relative_to(root).as_posix()
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Call) and not isinstance(
-                    node.func, (ast.Attribute, ast.Name)
-                ):
-                    found.append((relative, node.lineno))
+    for relative, tree in _parsed_roots(root):
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and not isinstance(
+                node.func, (ast.Attribute, ast.Name)
+            ):
+                found.append((relative, node.lineno))
     return found
 
 
@@ -2313,28 +2318,19 @@ def _receiver_agreement(
     compared = 0
     resolved = 0
     disagreements: list[str] = []
-    for name in census.DEFAULT_ROOTS:
-        directory = REPO_ROOT / name
-        if not directory.is_dir():
-            continue
-        for path in census._python_files(directory):
-            try:
-                tree = ast.parse(path.read_text(encoding="utf-8"))
-            except (OSError, UnicodeDecodeError, SyntaxError):
-                continue
-            relative = path.relative_to(REPO_ROOT).as_posix()
-            for node in _receiver_nodes(tree):
-                compared += 1
-                theirs = resolver(node)
-                mine = _dotted_receiver_independently(node)
-                if theirs is not None:
-                    resolved += 1
-                if theirs != mine:
-                    lineno = getattr(node, "lineno", 0)
-                    disagreements.append(
-                        f"{relative}:{lineno} {type(node).__name__} "
-                        f"module={theirs!r} independent={mine!r}"
-                    )
+    for relative, tree in _parsed_roots(REPO_ROOT):
+        for node in _receiver_nodes(tree):
+            compared += 1
+            theirs = resolver(node)
+            mine = _dotted_receiver_independently(node)
+            if theirs is not None:
+                resolved += 1
+            if theirs != mine:
+                lineno = getattr(node, "lineno", 0)
+                disagreements.append(
+                    f"{relative}:{lineno} {type(node).__name__} "
+                    f"module={theirs!r} independent={mine!r}"
+                )
     return compared, resolved, disagreements
 
 

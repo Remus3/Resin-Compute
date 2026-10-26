@@ -57,7 +57,7 @@ def _assert_no_raw_error_text(blob: str) -> None:
 def _running_server() -> Iterator[str]:
     """Serve the real handler on an ephemeral port for the duration of a test."""
     server: ThreadingHTTPServer = build_server("127.0.0.1", 0)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
     thread.start()
     try:
         # server_address is typed as a union that admits bytes for the host, so
@@ -392,7 +392,7 @@ def _serving_engine() -> Iterator[tuple[str, int]]:
     Port 0 asks the OS for a free one and `server_address` reports what it gave.
     """
     server: ThreadingHTTPServer = build_server("127.0.0.1", 0)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
     thread.start()
     try:
         port = int(server.server_address[1])
