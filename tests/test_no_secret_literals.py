@@ -184,6 +184,18 @@ def scan_text(text: str) -> list[str]:
 
 
 def sweep() -> tuple[int, list[str]]:
+    """`(files_scanned, offenders)` over the real tree, computed once per process.
+
+    Both real-tree arms read it; each used to re-read every tracked file
+    (MAIN 2045 ORDER of 2026-10-25, item 3). A fresh list is returned so a
+    caller cannot mutate the cached answer.
+    """
+    scanned, offenders = _sweep_once()
+    return scanned, list(offenders)
+
+
+@lru_cache(maxsize=1)
+def _sweep_once() -> tuple[int, tuple[str, ...]]:
     """`(files_scanned, offenders)`. The COUNT is returned so arms can assert it."""
     scanned = 0
     offenders: list[str] = []
@@ -198,7 +210,7 @@ def sweep() -> tuple[int, list[str]]:
         scanned += 1
         for hit in scan_text(text):
             offenders.append(f"{rel}: {hit}")
-    return scanned, offenders
+    return scanned, tuple(offenders)
 
 
 # ---------------------------------------------------------------------------

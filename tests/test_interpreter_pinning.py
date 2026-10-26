@@ -83,6 +83,7 @@ import subprocess
 import sys
 import sysconfig
 from dataclasses import dataclass
+from functools import cache, lru_cache
 from pathlib import Path
 
 import pytest
@@ -289,8 +290,13 @@ class Head:
     detail: str
 
 
+@cache
 def _tracked(*patterns: str) -> tuple[str, ...]:
-    """Tracked paths from GIT, the corpus every other sweep here uses."""
+    """Tracked paths from GIT, the corpus every other sweep here uses.
+
+    Cached per process (MAIN 2045 ORDER of 2026-10-25, item 3): one
+    `git ls-files` per pattern set per xdist worker, not one per test.
+    """
     require_git_repository()
     out = subprocess.run(
         ["git", "ls-files", "-z", "--", *patterns],
@@ -413,6 +419,19 @@ def _bare(source: str) -> list[tuple[int, str]]:
     return [(h.lineno, h.detail) for h in _launch_heads(source) if h.status == BARE]
 
 
+@lru_cache(maxsize=1)
+def _py_heads() -> tuple[tuple[str, tuple[Head, ...]], ...]:
+    """`(rel, heads)` for every tracked `.py`, read and parsed once per process.
+
+    The shape arm and the unresolved census both walk this; each used to
+    re-read and re-parse the whole tracked corpus (MAIN 2045 ORDER, item 3).
+    """
+    return tuple(
+        (rel, tuple(_launch_heads((REPO_ROOT / rel).read_text(encoding="utf-8"))))
+        for rel in _tracked("*.py")
+    )
+
+
 def test_the_corpus_is_real_so_the_sweep_is_not_vacuous():
     """A sweep over nothing agrees with every expectation."""
     tracked = _tracked("*.py")
@@ -521,9 +540,8 @@ def test_no_launch_site_reaches_a_bare_interpreter():
     offenders: list[str] = []
     counted: dict[tuple[str, str], int] = {}
 
-    for rel in _tracked("*.py"):
-        source = (REPO_ROOT / rel).read_text(encoding="utf-8")
-        for head in _launch_heads(source):
+    for rel, heads in _py_heads():
+        for head in heads:
             if head.status != BARE:
                 continue
             key = (rel, head.detail)
@@ -561,9 +579,8 @@ def test_the_unresolvable_heads_are_the_ones_already_triaged():
     """
     tally: dict[str, int] = {}
     where: dict[str, list[str]] = {}
-    for rel in _tracked("*.py"):
-        source = (REPO_ROOT / rel).read_text(encoding="utf-8")
-        for head in _launch_heads(source):
+    for rel, heads in _py_heads():
+        for head in heads:
             if head.status != UNRESOLVED:
                 continue
             tally[rel] = tally.get(rel, 0) + 1
