@@ -13,6 +13,24 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-10-26. Session 82 residue (see `docs/ledger/session-82.md`).**
+  (a) HIGH: MAIN 0300 ORDER to RSC (U5 batched: repo map, SS root, timing
+  budget, hand-off size, ONE ANSWER) is unworked; only an auto-reply
+  exists. Verify its sha256 against MAIN's outbox, work it, one ANSWER.
+  (b) `docs/CHANNEL.md` does not say where MAIN's inbox is (MAIN is not on
+  its roster; the session 82 verifier located it by a filesystem scan).
+  Add it, by codename only.
+  (c) A stray empty inbox directory exists under the Windows system
+  directory, likely from a hook or script run with that cwd. Find the
+  source; delete only after a consumer check. Never write its machine
+  path into a tracked file.
+  (d) Dependabot PRs #9 (ruff 0.17.2), #10 (electron 45.0.0, a major
+  bump) and #11 (github-actions group of 3) are open; review and merge
+  or close.
+  (e) A session 82 /done suite log sits at the drive root outside the
+  repo; both deletion paths were refused by the protected-path guard.
+  Remove it by hand.
+
 - **NEW 2026-10-25. Session 80 residue (see `docs/ledger/session-80.md`).**
   (a) Inbox triage not done in session 80: 4 unread items (MAIN 1801 FIX
   to RSC/SS on a stale repo-map root, auto-replied by RSC 1815; SS 1525
