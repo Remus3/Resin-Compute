@@ -279,11 +279,20 @@ on the command line (`pytest.ini` already has one; a second makes `-qq` and
 drops the summary line).
 
 ```
-python -m pytest tests
+python -m pytest tests -n 8 --dist loadfile
 python -m pytest agents/pity_engine
 python -m ruff check .
 python -m mypy
 ```
+
+- **The application suite runs under pytest-xdist locally** (MAIN 2045
+  ORDER of 2026-10-25, SHA-256 verified): `-n 8 --dist loadfile`, never
+  `-n auto` - the box has 16 logical CPUs and the suite gate keeps 2 machine-wide
+  slots, so two gated suites share it. Measured 2026-10-25 on the 3.14 host:
+  serial 354.84 s, `-n 8 --dist loadfile` 65.41 s, same pass and skip counts.
+  The engine suite stays serial (a few seconds). CI stays serial: xdist is not
+  in the hash-pinned `requirements-dev.txt` closure. `loadfile` keeps a module
+  on one worker, so a module-level cache is computed once per worker.
 
 - Do not restate a suite count in any doc. Measure with
   `python -m pytest tests --collect-only`.
