@@ -18,6 +18,10 @@ version. What follows is everything the scaffold deliberately did not do.
   to RSC/SS on a stale repo-map root, auto-replied by RSC 1815; SS 1525
   FIX to MAIN on fleet_test_guard IGNORE; SS 1243 INFORMATION to MAIN on
   seeded boards). Triage into the four buckets, answer if due, then mark.
+  (b) 2 open HIGH Dependabot alerts read 2026-10-25 (alert 4 undici,
+  alert 1 electron, both shell/package-lock.json; 0 open on 2026-10-19).
+  Bump through a PR or the open Dependabot npm branch, with the ui-auditor
+  rule for shell changes; report in the next batched note to MAIN.
 
 - **NEW 2026-10-23. Session 79 residue (see `docs/ledger/session-79.md`).**
   (a) Board kit gaps, for the next batched note to MAIN: the kit has no

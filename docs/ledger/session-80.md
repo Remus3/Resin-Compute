@@ -27,6 +27,14 @@
   passed, ruff clean, check_handoff ok (SESSION 81), `tests` 4873 passed,
   6 skipped (349 s wall through the suite gate), `agents/pity_engine` 191
   passed (9 s wall).
+- Paperwork commit 61f797c pushed through fleet_gitlock with the pre-push
+  hook (RESIN_SKIP_PREPUSH unset); ls-remote read back 61f797c. CI at
+  61f797c read back with gh run list: ci 40249566908 success, docs-guards
+  40249566894 success.
+- NEW finding at push (2026-10-25): GitHub reported 2 open HIGH
+  Dependabot alerts; gh api read alert 4 undici and alert 1 electron, both
+  in shell/package-lock.json. The 2026-10-19 record read 0 open. Not
+  fixed this session; ROADMAP "Session 80 residue" (b).
 - Memory: no file under the project memory dir written this session.
 
 ## 2026-10-25 - W1 worktree survey and cleanup (S79e closed)
