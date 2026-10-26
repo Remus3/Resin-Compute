@@ -107,6 +107,11 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      below is stale on this point). Bump via a PR or the open Dependabot
      npm branch; shell change means the ui-auditor rule applies. Residue
      (b).
+  S80c. board push failed: asset upload not_found for the
+     ops/status_board.json url (LLTZ76PHgZVWnP8CsoUdAQ); this account's
+     artifact list (2026-10-25) does not show it, only an older RSC status
+     board NauEF9cRqx8Fx7YP7WrJqR (updated 2026-10-18). Check which account
+     owns the session 79 board before repointing; feeds S79a.
   S79a. BOARD KIT GAPS (NEW session 79), for the next batched note to
      MAIN: the kit has no board create flow (session 79 recreated the
      board by hand as a Dashboard-type artifact
