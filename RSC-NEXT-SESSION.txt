@@ -99,6 +99,7 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      ANSWER) is UNWORKED; only RSC's 0305 auto-reply exists. Verify its
      sha256 against MAIN's outbox, work it, send ONE ANSWER via
      tools/send_note.py. ROADMAP "Session 82 residue" (a).
+     Kit v24 mark FAILS a hand-off over 30 KB: keep this file under it.
   S82b. docs/CHANNEL.md does not say where MAIN's inbox is (MAIN is not
      on its roster; located by filesystem scan). Residue (b).
   S82c. A stray empty inbox directory exists under the Windows system
@@ -127,8 +128,6 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      the app suite without xdist; CI stays serial by decision (a0120a4
      commit message). Optional: -n 8 --dist loadfile in pre-push when
      xdist is importable. Not ordered by MAIN.
-  S80c. RETRACTED session 81: kit v23 (f839e48) removed the artifact
-     push; the board is local only (FLEET-COMMON 18).
   S79a. BOARD KIT GAPS (NEW session 79), for the next batched note to
      MAIN: the kit has no board create flow (session 79 recreated the
      board by hand as a Dashboard-type artifact
@@ -271,35 +270,15 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   N8. Session 76 builders overran on the suite-gate queue (N7b 45m+ vs a
      12m ETA; host at 100% CPU). Run at most ONE whole-suite builder at a
      time.
-  9. Commit-msg gate FALSE BLOCKS (work around with git commit -F): a
-     localised git; an editor commit with --no-status or
-     commit.status=false after a non-ASCII-path merge conflict (KEEP
-     fail-closed, pinned in tests/test_hook_gate.py); git commit -v below
-     the scissors (reasoned). Under-block: -F/-m with commit.cleanup=strip
-     plus a keeping flag. A comma in the scope (feat(a,b):) is rejected.
-     PR #1 merge subject 106 chars (warn only, not rewritten).
-  10. Orphan-temp sweep notes: halt clause (a) also covers WRITES (with
-     RESINCOMPUTE_RUNTIME_DIR or RC_DATA_DIR outside the repo, atomic
-     writes land there; predates); a junction swap between root check and
-     sweep is not caught.
-  11. Prov-defer notes, not defects: a re-dropped MAIN note gets a fresh
-     first_seen (hold still <= 900 s); unanswered entries prune at 24 h; a
-     scheduled tick plus a manual --once can lose one update (no lock).
-  12. /120 counter notes, not defects (ruling 0f): MAIN-replies
-     printability check unreachable; idle status over a non-oldest
-     epoch-ms row reads 120/120; a one-off kit read error reads Backing
-     Off.
+  9-12. Known-gap notes, not defects (commit-msg false blocks, orphan-
+     temp sweep, prov-defer, /120 counter): moved verbatim session 82 to
+     docs/handoff-archive/RSC-2026-10-26.txt.
   WATCHERS 0x, 0b, 0t, N10: no MAIN reply through session 79 (the only
   new note, MAIN 0730 QUIET-BENCH, is TERMINAL INFORMATION); session 80
   did not triage the inbox (S80a), so re-check them there. Session 80
   read back git worktree list: main only.
-  DONE 64-78: docs/ledger/session-<n>.md (76 partial, see N7; 77: kit
-  v18+v19 6a3360f, 1502 ANSWER, board v3, N9; 78: I1 inbox triage, kit
-  v20+v20.1 3d4e4d9, ledger 4e0e672 and 9f69c40, ANSWER 0056 to MAIN
-  2/2 reached, GitHub-security read; 79: S78a 5973ec2, S78c PRs #6-#8,
-  S78e board, S78f f33ec7c, N7b 9b11e68, N7c a2fc098, merge
-  7efc3a4; 80: W1 worktree cleanup, S79e; 81: S80b e887f92, 2045
-  ORDER 71c1190 a0120a4; 82: kit v24 dce4f00, ANSWER 0405). Old DONE
+  DONE 64-82: docs/ledger/session-<n>.md (detail moved session 82 to
+  docs/handoff-archive/RSC-2026-10-26.txt). Old DONE
   blocks and full DO NOT REDO wording: docs/LEDGER.md, "Hand-off blocks
   retired session 77". DO NOT REDO - decision -> what reverses it:
   kit v3/v4/v7-v17, v18-v20.1 and v21-v24 vendoring, provenance -> a new MAIN
@@ -481,24 +460,9 @@ TRAPS MEASURED - none are hypothetical
   A DOC LINE THAT SPELLS A HOOK COMMAND turns tests/test_docs_hook_commands.py
   red (session 62, fd4fb42). Name a rejected command form in prose.
 
-  A MID-FIRE LOG LINE UNDER THE FIRE'S OWN LABEL COLLAPSES THE DRIFT WINDOW.
-  conftest._live_fire_windows ends a scheduledtask fire at its next line.
-  Write detail under firedetail; never hold lines in memory (a hard kill
-  loses them).
-
-  A NEW ALLOWED LOG LABEL WIDENS THE LEAK GUARD. _test_shaped must check the
-  caller prefix too, or a test child's line inside a live fire is excused.
-
-  A NEW TERMINATION MUST JOIN TERMINATIONS, with an `in` test.
-
-  A HOOK COPIED WITH shutil.copyfile HAS NO EXEC BIT ON LINUX. Read CI after
-  every hook or gate change.
-
-  git commit -F AND -m KEEP # LINES. In the editor flow git writes the
-  effective cleanup mode into the template sentence; that is what the gate
-  now reads.
-
-  ctypes OpenProcess RAISES for a pid of 2**32 or more. Bound parsed pids.
+  RESPONDER AND HOOK INTERNALS TRAPS (mid-fire log label, leak-guard label,
+  TERMINATIONS, hook exec bit, commit -F keeps # lines, ctypes pid bound):
+  moved verbatim session 82 to docs/handoff-archive/RSC-2026-10-26.txt.
 
   A STATUS TASK NAME OUTSIDE THE MAIN 0915 SET RENDERS AS [?] ON THE
   OPERATOR'S WIDGET, and a limit with a null cap_frees_at reads [?] too.
