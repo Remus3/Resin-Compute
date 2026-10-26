@@ -351,14 +351,13 @@ def _rule_users() -> dict[int, list[str]]:
     return users
 
 
-#: Exemptions with NO tracked user, measured 2026-10-16 (slice N5d). Kept,
+#: Exemptions with NO tracked user, measured 2026-10-16 (slice N5d); rule 8
+#: left on 2026-10-25 when FLEET-KIT v23 shipped the sidecar default path. Kept,
 #: not deleted, each for the stated reason; the necessity arm below pins
 #: that each is STILL unused, so a first user forces this table to move.
 PROSPECTIVE_RULES: dict[int, str] = {
     2: "no tracked line puts an angle placeholder right after a drive; "
        "kept so a doc may write a drive plus <clone-dir> without a red",
-    8: "no vendored kit file holds a machine path today; kept because this "
-       "tree may never edit a kit file, so a kit-shipped path must not red",
 }
 
 

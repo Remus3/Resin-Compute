@@ -118,13 +118,17 @@ edit. Tree-specific rules go BELOW this block, never inside it.
        `Session <n> checklist` (n = this tree's session counter, kept in its
        hand-off file; a headless fire uses its run count), then one line per
        task in execution order: `<box> <ID>: <imperative task, one line>`, plus
-       `(<state>, <pct>% ~<rem>m of <total>m [<h:mmAM/PM>])` only while it is
-       running (e.g. `builder running, 25% ~22.5m of 30m [2:25PM]`). Why: the
-       operator forgets when an estimate was given. rem and total round UP
-       to 0.5 min; total is re-estimated as elapsed / pct on each update; the
+       `(<state>, started <h:mmAM/PM> - <pct>% ~<rem>m of <total>m Remain
+       [<h:mmAM/PM>])` only while it is running (e.g. `builder running,
+       started 1:55PM - 25% ~22.5m of 30m Remain [2:25PM]`). Why: the
+       operator forgets when a task started and when an estimate was given.
+       The start rounds DOWN to the minute; rem and total round UP to 0.5
+       min; total is re-estimated as elapsed / pct on each update; the
        bracket is the local finish time, recomputed on every start or update.
-       The start time is the item-12 "started" field (optional: a file
-       without it keeps `~ETA`). The status line and the agent panel show the
+       The start time is the item-12 "started" field (optional: a row
+       without it reads `<pct>% ~<rem> Remain`). Rendered by fleet_checklist
+       (render / Checklist), never hand-typed ETA prose; the item-13 b
+       reprint, status answers, the status line and the agent panel show the
        same. <box> is U+2610. The last line is `<box> /done`. At most ONE
        trailing sentence, and only for an ordering constraint ("X waits until
        Y lands because ..."). NO summary, review, what-went-wrong or history.
@@ -177,8 +181,12 @@ edit. Tree-specific rules go BELOW this block, never inside it.
        bare commit, push or whole suite; SubagentStop releases the claims.
     c. Every whole test suite runs through
        `fleet_suite_gate.py run --owner <id> -- <cmd>` (machine-wide slots,
-       default 2, FIFO queue; fails closed on timeout; refuses while another
-       live agent holds uncommitted edits in the tree).
+       default 2, FIFO queue; the count re-read live; one suite per tree at
+       a time; memory and CPU admission; `--exclusive` for a suite that
+       needs the whole box; fails closed on timeout; refuses while another
+       live agent holds uncommitted edits in the tree). Every "waiting on
+       the suite gate" report names the trees holding the gate and the ones
+       next up, read from `fleet_suite_gate.py status`.
     d. Each tree's tests/conftest.py installs `fleet_test_guard.py`: a suite
        that changes live state (control files, inbox, outbox) fails, and
        declared runtime roots point at tmp_path.
@@ -189,13 +197,14 @@ edit. Tree-specific rules go BELOW this block, never inside it.
     strips, pre-push refuses; operator identity only from local git config
     `fleet.operatorIdent`), fleet_gitlock and the account attribution keys.
     A history rewrite runs only on MAIN's ORDER, via `fleet_rewrite.py`.
-18. STATUS BOARD (kit v19; operator order 2026-10-18). Each tree's claude.ai
-    board URL lives in `ops/status_board.json` {"url"}. An interactive
-    session pushes its board ONLY at session start, after every item-13 b
-    reprint and at /done (`--final`): `fleet_board.py calls --session <n>`
-    (checklist on stdin) renders status.json and prints the exact two tool
-    calls - one Artifact asset upload of that file, one ArtifactData update
-    of datasets/board pinned with if_version. Headless runs never push.
+18. STATUS BOARD (kit v23; operator order 2026-10-25). LOCAL ONLY: no
+    claude.ai artifact, no Artifact or ArtifactData call, no board URL.
+    Why: operator views it locally; the artifact push wasted tokens. An
+    interactive session renders its board ONLY at session start, after
+    every item-13 b reprint and at /done (`--final`):
+    `fleet_board.py render --session <n>` (checklist on stdin) writes
+    status.json and board.html to ops/loop/control/board/ in the MAIN
+    checkout; open board.html in a browser. Headless runs never render.
 <!-- FLEET-COMMON END -->
 
 # Tree-specific rules (ResinCompute)
@@ -473,13 +482,16 @@ lives here.
   writes it. The read-only child it spawns never prints one.
 - **Runner.** `headless/runner.py` writes progress task `rsc-runner` on live
   passes.
-- **Status board (FLEET-KIT v19, FLEET-COMMON 18).** An interactive session
-  pushes its board at session start (after the 13a block) and after every
-  13b reprint: `python ops/fleet_kit/fleet_board.py calls --session <n>
-  --checklist <file>`, then the two printed calls. /done pushes once with
+- **Status board (FLEET-KIT v23, FLEET-COMMON 18) - LOCAL ONLY.** An
+  interactive session renders its board at session start (after the 13a
+  block) and after every 13b reprint: `python ops/fleet_kit/fleet_board.py
+  render --session <n> --checklist <file>`; it writes board.html under
+  ops/loop/control/board/. No claude.ai artifact, no Artifact or
+  ArtifactData call, no `pushed` or `account` step. /done renders once with
   `--final` (`.claude/commands/done.md` section 8b). Headless runs never
-  push. A failed push is a hand-off line, never a failure. Config
-  `ops/status_board.json`. Stop sentinels: `ops/stop_sentinels.json`
+  render. A failed render is a hand-off line, never a failure.
+  `ops/status_board.json` is kept; v23 reads only its optional "code".
+  Stop sentinels: `ops/stop_sentinels.json`
   declares ops/runtime/HALT (the runner and responder HALT file), so a
   kit spawn refuses "halted" while it exists. Reversed by: a MAIN ruling
   or a later kit version.

@@ -110,6 +110,19 @@ python -m mypy
   without S is a skipped suite.
 - Record each gate command's wall time and slot wait in the ledger entry.
 
+## 1b. Reap merged linked worktrees (FLEET-KIT v22)
+
+Before the commit, run once:
+
+```
+python ops/fleet_kit/fleet_done.py reap --apply
+```
+
+It removes a linked worktree only when nothing can be lost (never
+`--force`, never `branch -D`); every other worktree is LISTED with its reason
+and stays. Record its summary line (`reap: <n> removable, <n> kept, <n>
+listed ...`) in `RSC-NEXT-SESSION.txt` in section 7.
+
 ## 2. Commit
 
 Green gate means commit. Do not leave authored work uncommitted.
@@ -253,28 +266,26 @@ first. Rewrite it, then commit it with the rest of the paperwork.
 Check `~/.claude/projects/C--Resin-Compute/memory/` for anything written this
 session and confirm `MEMORY.md` indexes it.
 
-## 8b. The status board push (FLEET-KIT v19, FLEET-COMMON 18)
+## 8b. The local status board render (FLEET-KIT v23, FLEET-COMMON 18)
 
 After the hand-off and the commit are READ BACK and before the done marker,
-push the board once. Pipe the last printed item-13 checklist into the kit
-(n = the counter this session ran under):
+render the board once, LOCAL ONLY. Pipe the last printed item-13 checklist
+into the kit (n = the counter this session ran under):
 
 ```
-python ops/fleet_kit/fleet_board.py calls --final --session <n> --checklist <checklist file>
+python ops/fleet_kit/fleet_board.py render --final --session <n> --checklist <checklist file>
 ```
 
-Make the two tool calls it prints, exactly: (1) Artifact publish of the
-status.json asset, (2) ArtifactData update of datasets/board with the printed
-if_version and data, `__URL__` replaced by the blob url call (1) returned. On a
-version mismatch run `python ops/fleet_kit/fleet_board.py pushed --version
-<current>` and redo call (2). A headless run prints `no push: headless` and
-pushes nothing. A FAILED PUSH IS A HAND-OFF LINE, NEVER A RITUAL FAILURE:
-add `board push failed: <reason>` to `RSC-NEXT-SESSION.txt`, re-run
-`python tools/check_handoff.py`, commit that one file through fleet_gitlock,
-read it back, and continue to section 9 with `--status done`. The checklist
-file is the last printed checklist text, written to the session scratchpad.
-The board URL lives in `ops/status_board.json`; runtime state in
-the gitignored board dir under ops/loop/control.
+It writes status.json, state.json and board.html to the gitignored board dir
+under ops/loop/control in the MAIN checkout and prints one JSON summary. No
+claude.ai artifact, no Artifact or ArtifactData call, no `pushed` or
+`account` step (v23 removed the push; operator order 2026-10-25). A headless
+run renders nothing. A FAILED RENDER IS A HAND-OFF LINE, NEVER A RITUAL
+FAILURE: add `board render failed: <reason>` to `RSC-NEXT-SESSION.txt`,
+re-run `python tools/check_handoff.py`, commit that one file through
+fleet_gitlock, read it back, and continue to section 9 with `--status done`.
+The checklist file is the last printed checklist text, written to the
+session scratchpad.
 
 ## 9. The done marker, then the one line
 
