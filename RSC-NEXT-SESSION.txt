@@ -1,13 +1,13 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-25 (session 80), gates measured at commit 866f49e on main
-by the /done ritual; this paperwork commit landed after it. Everything below
-is a READING taken that day, not a promise about now. Re-measure before
-citing.
+Stamped 2026-10-25 (session 81, headless MAIN work run), gates measured at
+commit a0120a4 on main; this paperwork commit landed after it. Everything
+below is a READING taken that day, not a promise about now. Re-measure
+before citing.
 
 NEXT ACTION: triage the inbox first (S80a), then work the remaining OPEN
 WORK items below, highest priority first (S79a-S79d where actionable, then
-the list in order). Session 80 worked the worktree survey (W1) and closed
-S79e. Carry every item not acted on forward again.
+the list in order). Session 81 closed S80b (Dependabot) and worked MAIN's
+2045 suite-speed ORDER. Carry every item not acted on forward again.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -52,7 +52,7 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python -m pytest tests/test_docs_consistency.py
   python scripts/qa_companion.py
   python -m ruff check .
-  python -m pytest tests                  (through the suite gate)
+  python -m pytest tests -n 8 --dist loadfile  (through the suite gate)
   python -m pytest agents/pity_engine     (through the suite gate)
   cd shell && node --test                 (through the suite gate)
   python -m headless.runner --once --dry-run
@@ -60,10 +60,10 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 20 [] (kit v20.1: KIT_VERSION 20, KIT_PATCH 1, MANIFEST sha256
-8017eae27ba218ea51ab77885ab0a46cc3eceb39b9e9d5f4ee277f88e77d4602; read
-back 20 [] at session 79 /done). Kit v20.1 outbound cap is 12 notes a
-day (FLEET-COMMON 14 c); any text saying 6 a day is stale.
+must print 23 [] (kit v23, f839e48, MANIFEST sha256
+f5d82861cce3f5c2d565495dbd3a8cceff3b9d895117a2f6f9d4c83f11ba527c; read
+back 23 [] at session 81). Outbound cap is 12 notes a day (FLEET-COMMON
+14 c); any text saying 6 a day is stale.
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
 shared pytest temp dir: if a run needs an explicit --basetemp, use ONE
@@ -77,16 +77,14 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
-STATE OBSERVED 2026-10-25 AT 866f49e (session 80 /done gate run)
-  Python 3.14.4 (CI is 3.11): every gate GREEN; origin/main equal to local
-  main after git fetch (no merge); all three whole suites through the
-  suite gate (counts in docs/ledger/session-80.md); local ruff 0.15.12 is
-  OLDER than the 0.17.1 pin (CI runs the pin; update the local ruff before
-  trusting a local ruff verdict); mypy advisory clean; kit check 20 [].
-  send_note audit empty. git worktree list read back: main only; git
-  branch read back: main only (remote Dependabot branches exist, not
-  worktrees, left untouched).
-PRIOR READINGS (sessions 57-79): docs/ledger/ files. A worktree shows
+STATE OBSERVED 2026-10-25 AT a0120a4 (session 81, headless run)
+  Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile and pity_engine
+  green through the suite gate (counts in docs/ledger/session-81.md);
+  ruff and mypy clean; kit check 23 []. Pushed f839e48..a0120a4; CI ci
+  40261790008, codeql 40261790019, docs-guards 40261790041 all success.
+  Dependabot 1 and 4 read back FIXED; code scanning 0 open. send_note
+  audit empty; reap 0 removed, 0 kept, 0 listed.
+PRIOR READINGS (sessions 57-80): docs/ledger/ files. A worktree shows
   MORE skips (no POSIX sh on PATH); a clone or worktree under AppData fails
   test_the_session_cache_lives_under_the_runtime_directory and
   tests/test_watch_inbox_session.py near line 767 - the location trap, not
@@ -99,18 +97,16 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      2026-10-24 1525 FIX to MAIN (fleet_test_guard IGNORE misses the two
      board files), SS 2026-10-24 1243 INFORMATION to MAIN (seeded boards
      artifact not found, TERMINAL). Triage into the four buckets, answer
-     if due (one batched note), then mark. Inbox NOT marked session 80.
+     if due (one batched note), then mark. Inbox NOT marked session 80
+     or 81. Already worked session 81 (bucket ingested, do not redo):
+     MAIN 1926 v23 ORDER, 1935 FIX, 2045 ORDER (ANSWERs 2124 and 2204).
      ROADMAP "Session 80 residue" (a).
-  S80b. DEPENDABOT: 2 OPEN HIGH ALERTS (NEW session 80, read 2026-10-25
-     via gh api at push of 61f797c): alert 4 undici and alert 1 electron,
-     both shell/package-lock.json (0 open on 2026-10-19, the record
-     below is stale on this point). Bump via a PR or the open Dependabot
-     npm branch; shell change means the ui-auditor rule applies. Residue
-     (b).
-  S80c. board push failed: asset upload not_found for the
-     ops/status_board.json url; this account's artifact list (2026-10-25)
-     shows only an older RSC status board (updated 2026-10-18). Find the
-     owning account before repointing; feeds S79a.
+  S81a. PRE-PUSH STILL SERIAL (NEW session 81): .githooks/pre-push runs
+     the app suite without xdist; CI stays serial by decision (a0120a4
+     commit message). Optional: -n 8 --dist loadfile in pre-push when
+     xdist is importable. Not ordered by MAIN.
+  S80c. RETRACTED session 81: kit v23 (f839e48) removed the artifact
+     push; the board is local only (FLEET-COMMON 18).
   S79a. BOARD KIT GAPS (NEW session 79), for the next batched note to
      MAIN: the kit has no board create flow (session 79 recreated the
      board by hand as a Dashboard-type artifact
@@ -141,8 +137,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   GITHUB-SECURITY RECORD (MAIN 2243 s3 asks it here), read 2026-10-19 via
      gh api, open and all states: code scanning 0 (CodeQL results_count
      0), Dependabot alerts 0, secret scanning 0 (push protection on);
-     fixed, dismissed, left all 0. SUPERSEDED for Dependabot by S80b (2
-     open high, 2026-10-25). Setting: security updates disabled (S78d).
+     fixed, dismissed, left all 0. Dependabot: 2 opened 2026-10-25, both
+     read back FIXED session 81 (e887f92). Setting: security updates disabled (S78d).
   0x. AWAIT MAIN'S REPLY to the 1852 INFORMATION note (sent session 72,
      sha256 e8ef75592e297643e4ee1fc5d944838e4a23145571bbc4eb6f9529574820fed4,
      reached 2/2): the OutboundCap.record / _append no-lock kit defect in
@@ -518,4 +514,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 81
+SESSION: 82
