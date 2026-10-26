@@ -1,13 +1,14 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-25 (session 81, headless MAIN work run), gates measured at
-commit a0120a4 on main; this paperwork commit landed after it. Everything
+Stamped 2026-10-26 (session 82, headless Maint-KitRollout run, kit v24),
+gates measured at commit dce4f00 on main; this paperwork commit landed
+after it. Everything
 below is a READING taken that day, not a promise about now. Re-measure
 before citing.
 
-NEXT ACTION: triage the inbox first (S80a), then work the remaining OPEN
-WORK items below, highest priority first (S79a-S79d where actionable, then
-the list in order). Session 81 closed S80b (Dependabot) and worked MAIN's
-2045 suite-speed ORDER. Carry every item not acted on forward again.
+NEXT ACTION: work MAIN's 0300 ORDER to RSC first (S82a, HIGH), then
+triage the inbox (S80a), then the remaining OPEN WORK items below,
+highest priority first. Session 82 only adopted kit v24 (MAIN 0315 ORDER,
+dce4f00, ANSWER sent). Carry every item not acted on forward again.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -19,7 +20,7 @@ BOOTSTRAP - READ IN THIS ORDER
   docs/LEDGER.md (an INDEX since session 64; read the newest
     docs/ledger/session-<n>.md, older bodies in docs/ledger/archive-*.md)
   git log --oneline -10
-  gh pr list   (read 2026-10-23 session 79: #6 #7 #8 MERGED, none open)
+  gh pr list   (read 2026-10-26 session 82: #9 #10 #11 OPEN, see S82d)
   python tools/roots_map_probe.py   (FROM THE MAIN CHECKOUT; since merge
     303b839 it resolves the map via the git common dir, and a run from a
     linked worktree is read-only and writes no baseline. Read every DRIFT
@@ -60,9 +61,9 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 23 [] (kit v23, f839e48, MANIFEST sha256
-f5d82861cce3f5c2d565495dbd3a8cceff3b9d895117a2f6f9d4c83f11ba527c; read
-back 23 [] at session 81). Outbound cap is 12 notes a day (FLEET-COMMON
+must print 24 [] (kit v24, dce4f00, MANIFEST sha256
+a41ff08e4c2ace7f48119f9ffec051ce18458184c2417d6806be39f3c8804a7d; read
+back 24 [] at session 82 /done). Outbound cap is 12 notes a day (FLEET-COMMON
 14 c); any text saying 6 a day is stale.
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
@@ -77,21 +78,41 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
-STATE OBSERVED 2026-10-25 AT a0120a4 (session 81, headless run)
-  Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile and pity_engine
-  green through the suite gate (counts in docs/ledger/session-81.md);
-  ruff and mypy clean; kit check 23 []. Pushed f839e48..a0120a4; CI ci
-  40261790008, codeql 40261790019, docs-guards 40261790041 all success.
-  Dependabot 1 and 4 read back FIXED; code scanning 0 open. send_note
-  audit empty; reap 0 removed, 0 kept, 0 listed.
-PRIOR READINGS (sessions 57-80): docs/ledger/ files. A worktree shows
+STATE OBSERVED 2026-10-26 AT dce4f00 (session 82 /done, headless run)
+  Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile, pity_engine and
+  shell node --test green through the suite gate (counts in
+  docs/ledger/session-82.md; app suite waited about 194 s for a slot
+  and CPU); ruff and mypy clean; kit check 24 []. origin/main read back
+  dce4f00; CI ci 40296911028, codeql 40296911236, docs-guards
+  40296911006 all success. send_note audit empty; reap applied: 0
+  removed, 0 kept, 0 listed (base main). Board render SKIPPED: headless
+  run (.claude/commands/done.md section 8b). Inbox NOT marked.
+PRIOR READINGS (sessions 57-81): docs/ledger/ files. A worktree shows
   MORE skips (no POSIX sh on PATH); a clone or worktree under AppData fails
   test_the_session_cache_lives_under_the_runtime_directory and
   tests/test_watch_inbox_session.py near line 767 - the location trap, not
   a regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
-  S80a. INBOX TRIAGE NOT DONE (NEW session 80): 4 unread items listed by
+  S82a. HIGH (NEW session 82): MAIN ORDER 2026-10-26-0300 to RSC (U5
+     batched: repo map, SS root, timing budget, hand-off size, ONE
+     ANSWER) is UNWORKED; only RSC's 0305 auto-reply exists. Verify its
+     sha256 against MAIN's outbox, work it, send ONE ANSWER via
+     tools/send_note.py. ROADMAP "Session 82 residue" (a).
+  S82b. docs/CHANNEL.md does not say where MAIN's inbox is (MAIN is not
+     on its roster; located by filesystem scan). Residue (b).
+  S82c. A stray empty inbox directory exists under the Windows system
+     directory (likely a hook or script run with that cwd). Find the
+     source; do not delete before a consumer check; never put its
+     machine path in a tracked file. Residue (c).
+  S82d. Dependabot PRs #9 ruff 0.17.2, #10 electron 45.0.0 (major), #11
+     github-actions group of 3: open, review and merge or close.
+     Residue (d).
+  S82e. A session 82 /done app-suite log (named for RSC session 82)
+     sits at the drive root outside the repo; rm and Remove-Item were both refused
+     by the protected-path guard. Remove by hand. Residue (e).
+  S80a. INBOX TRIAGE NOT DONE (NEW session 80; still open session 82,
+     plus newer MAIN 0300 ORDER S82a and SS 0325 ANSWER to MAIN): 4 unread items listed by
      the hook - MAIN 2026-10-25 1801 FIX to RSC/SS (stale repo-map root,
      SS entry at a pre-migration root; RSC auto-replied at 1815), SS
      2026-10-24 1525 FIX to MAIN (fleet_test_guard IGNORE misses the two
@@ -99,7 +120,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      artifact not found, TERMINAL). Triage into the four buckets, answer
      if due (one batched note), then mark. Inbox NOT marked session 80
      or 81. Already worked session 81 (bucket ingested, do not redo):
-     MAIN 1926 v23 ORDER, 1935 FIX, 2045 ORDER (ANSWERs 2124 and 2204).
+     MAIN 1926 v23 ORDER, 1935 FIX, 2045 ORDER (ANSWERs 2124 and 2204);
+     session 82: MAIN 0315 v24 ORDER (ANSWER 0405, HOP 2).
      ROADMAP "Session 80 residue" (a).
   S81a. PRE-PUSH STILL SERIAL (NEW session 81): .githooks/pre-push runs
      the app suite without xdist; CI stays serial by decision (a0120a4
@@ -276,10 +298,11 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   v20+v20.1 3d4e4d9, ledger 4e0e672 and 9f69c40, ANSWER 0056 to MAIN
   2/2 reached, GitHub-security read; 79: S78a 5973ec2, S78c PRs #6-#8,
   S78e board, S78f f33ec7c, N7b 9b11e68, N7c a2fc098, merge
-  7efc3a4; 80: W1 worktree cleanup, S79e). Old DONE
+  7efc3a4; 80: W1 worktree cleanup, S79e; 81: S80b e887f92, 2045
+  ORDER 71c1190 a0120a4; 82: kit v24 dce4f00, ANSWER 0405). Old DONE
   blocks and full DO NOT REDO wording: docs/LEDGER.md, "Hand-off blocks
   retired session 77". DO NOT REDO - decision -> what reverses it:
-  kit v3/v4/v7-v17 and v18-v20.1 vendoring, provenance -> a new MAIN
+  kit v3/v4/v7-v17, v18-v20.1 and v21-v24 vendoring, provenance -> a new MAIN
     FLEET-KIT-vN note
   roster 0230/2305 -> a verified MAIN roster note; CLAUDE.md condense ->
     a MAIN kit change
@@ -343,6 +366,10 @@ TRAPS MEASURED - none are hypothetical
   merged on GitHub). git fetch origin, then a gitlock git merge --no-ff
   origin/main (subject merge: <topic>) BEFORE the /done gates, so the gates
   cover the integrated tree. gitlock refuses git pull. No force push.
+
+  A SUITE LOG REDIRECTED OUTSIDE THE REPO CANNOT BE DELETED BY AN AGENT
+  (session 82 /done: the drive root is a protected path for rm and
+  Remove-Item). Write every log to the session temp dir.
 
   /done HAS NO DURATION RECORD (session 78). A /done agent waited 40+ min
   on the suite gate and was killed mid-suite. Since S78f (session 79) a
@@ -514,4 +541,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 82
+SESSION: 83
