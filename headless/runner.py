@@ -816,10 +816,38 @@ def _lane_width() -> int:
     2 and `Config.max_concurrent_lanes` are different numbers that do not govern
     this bucket, and inventing a width is worse than failing loudly - every
     participant must read the SAME number or the bucket bounds nothing.
-    """
-    from core.config import MAX_CONCURRENT_LANES
 
-    return MAX_CONCURRENT_LANES
+    FLEET-KIT v25 (MAIN 2136 ORDER of 2026-10-27, LANE-CAP): that SAME number
+    is now the live `governor_width` of the MAIN-owned machine config, read
+    through the vendored kit's `fleet_lanes.load_config()` on every pass, so
+    a width MAIN sets is followed without a restart. The kit never raises
+    there: a missing or unreadable config is its defaults, and its default
+    width equals `core.config.MAX_CONCURRENT_LANES` (pinned by
+    `tests/test_lane_cap_v25.py`). A kit that cannot be imported still fails
+    loudly.
+    """
+    return int(_lanes_kit().load_config()["governor_width"])
+
+
+def _lanes_kit() -> Any:
+    """The vendored kit's `fleet_lanes`, by importlib and typed Any (see `_load_kit`)."""
+    return importlib.import_module("ops.fleet_kit.fleet_lanes")
+
+
+def _should_yield(root: Path | None) -> bool:
+    """FLEET-KIT v25 fair release, checked at each pass boundary.
+
+    True when another tree waits for a governor slot, none is free, and this
+    tree holds more than its fair share. ADVISORY and READ ONLY: on True the
+    daemon simply does not start this pass - it never stops, kills or signals
+    a running worker. Any error reading the bucket counts as False, so the
+    check can only skip a pass, never break one.
+    """
+    try:
+        return bool(_lanes_kit().should_yield(SLOT_REPO_LABEL, root=root))
+    except Exception:  # noqa: BLE001 - advisory read; a failure must not stop a pass
+        log.debug("should_yield could not be read; not yielding", exc_info=True)
+        return False
 
 
 class _Halted:
@@ -1162,6 +1190,17 @@ def _run_governed_pass(
 
     if _halt_requested(runtime_dir, cycle):
         return HALTED
+
+    # FLEET-KIT v25 fair release: at the cycle boundary, BEFORE any slot is
+    # taken. On True this pass does not start (a starved cycle, retried next
+    # tick); nothing running is touched.
+    if _should_yield(root):
+        log.warning(
+            "cycle %d skipped - another tree waits for a governor slot and this "
+            "tree holds more than its fair share (fleet_lanes.should_yield)",
+            cycle,
+        )
+        return None
 
     # An abandoned job from an earlier pass is executor work still running
     # outside any slot. Taking a new slot now would let the two overlap, so

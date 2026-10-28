@@ -554,6 +554,15 @@ Standing rules, each with its reversal:
   progress `lane-<i>.json` under the MAIN checkout's progress dir, never in
   the worktree. Reversed by: a later kit version or MAIN ruling that changes
   the lane contract.
+- LANE-CAP (FLEET-KIT v25, MAIN 2136 ORDER of 2026-10-27, SHA-256
+  verified). LANE_CAP is None (the kit's live machine `lane_cap_max`, was
+  3); `headless/runner.py` sizes the governor bucket from the kit's live
+  `load_config()["governor_width"]` (was MAX_CONCURRENT_LANES, now the
+  no-config default only) and calls `fleet_lanes.should_yield` at each pass
+  boundary: on True the pass is skipped as a starved cycle, nothing is
+  killed. The machine config `~/.fleet/lanes.json` is MAIN's; this tree
+  never writes it. Guard: `tests/test_lane_cap_v25.py`. Reversed by: a
+  measured reason for fewer lanes, a later kit version or a MAIN ruling.
 
 ## Inbox cost - FLEET-COMMON item 14 in this tree
 

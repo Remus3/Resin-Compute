@@ -290,13 +290,16 @@ def test_a_poisoned_environment_cannot_move_the_ceiling():
 
 # --- LANE_CAP: the per-repo lane cap for a future lane driver -------------
 #
-# FLEET-COMMON item 13 d and the kit's `fleet_lanes.run_lane(cap=...)`. The
-# ruling recorded in CLAUDE.md ("Session checklist - FLEET-COMMON item 13 in
-# this tree") fixes it at 3 and NOT environment-overridable, for the same
-# reason as the ceiling above: a lane driver that reads its cap from a shell
-# variable lets one local setting widen work every carrier budgets against.
+# FLEET-COMMON item 13 d and the kit's `fleet_lanes.run_lane(cap=...)`. Since
+# FLEET-KIT v25 (MAIN 2136 ORDER of 2026-10-27) it is None - the kit's live
+# machine `lane_cap_max` - replacing the literal 3 the CLAUDE.md ruling
+# ("Session checklist - FLEET-COMMON item 13 in this tree") fixed. Still NOT
+# environment-overridable, for the same reason as the ceiling above: a lane
+# driver that reads its cap from a shell variable lets one local setting widen
+# work every carrier budgets against; the only widening path is the
+# MAIN-owned machine config, which the kit clamps every cap to.
 # Written out independently, never imported as its own expectation.
-PER_REPO_LANE_CAP = 3
+PER_REPO_LANE_CAP = None
 
 PLAUSIBLE_LANE_CAP_ENV_NAMES = (
     "LANE_CAP",
@@ -309,18 +312,25 @@ PLAUSIBLE_LANE_CAP_ENV_NAMES = (
 )
 
 
-def test_the_lane_cap_is_three():
+def test_the_lane_cap_follows_the_live_machine_cap():
     from core.config import LANE_CAP
 
-    assert LANE_CAP == PER_REPO_LANE_CAP
-    assert type(LANE_CAP) is int
+    assert LANE_CAP is PER_REPO_LANE_CAP
 
 
 def test_the_lane_cap_never_exceeds_the_cross_repo_ceiling():
-    """Every lane holds at most one slot, so the lanes must fit the bucket."""
+    """Every lane holds at most one slot, so the lanes must fit the bucket.
+
+    With no machine config the kit resolves None to its default cap, which
+    must fit the default width this module declares.
+    """
+    import importlib
+
     from core.config import LANE_CAP
 
-    assert 1 <= LANE_CAP <= MAX_CONCURRENT_LANES
+    lanes = importlib.import_module("ops.fleet_kit.fleet_lanes")
+    effective = lanes.lane_cap(LANE_CAP, config=lanes.load_config(None))
+    assert 1 <= effective <= MAX_CONCURRENT_LANES
 
 
 def test_the_module_docstring_records_the_lane_cap():
@@ -351,13 +361,12 @@ def _is_the_literal_cap(values: list[ast.expr]) -> bool:
     return (
         len(values) == 1
         and isinstance(values[0], ast.Constant)
-        and type(values[0].value) is int
-        and values[0].value == PER_REPO_LANE_CAP
+        and values[0].value is PER_REPO_LANE_CAP
     )
 
 
 def test_lane_cap_is_assigned_a_plain_int_literal():
-    """STRUCTURAL: exactly one assignment, and it is the literal 3.
+    """STRUCTURAL: exactly one assignment, and it is the literal None.
 
     The behavioural child probe below only covers the names it poisons; an
     adversary showed `int(os.environ.get("RSC_FLEET_LANE_CAP", "3"))` passes it.
@@ -367,7 +376,7 @@ def test_lane_cap_is_assigned_a_plain_int_literal():
     source = (REPO_ROOT / "core" / "config.py").read_text(encoding="utf-8")
     values = _lane_cap_assignments(source)
     assert _is_the_literal_cap(values), (
-        f"core/config.py must assign LANE_CAP exactly once, to the int literal "
+        f"core/config.py must assign LANE_CAP exactly once, to the literal "
         f"{PER_REPO_LANE_CAP}; found {[ast.dump(v) for v in values]}"
     )
 
@@ -381,6 +390,9 @@ def test_lane_cap_is_assigned_a_plain_int_literal():
         "LANE_CAP = 3.0\n",
         "LANE_CAP = True\n",
         "LANE_CAP = 4\n",
+        "LANE_CAP = 3\n",
+        "LANE_CAP = 0\n",
+        "LANE_CAP = None\nLANE_CAP = 3\n",
         "LANE_CAP = 3\nLANE_CAP = int(os.environ['X'])\n",
         "LANE_CAP: int = os.environ.get('X', 3)\n",
     ],
@@ -391,8 +403,8 @@ def test_the_lane_cap_literal_check_rejects_a_mutant(mutant):
 
 
 def test_the_lane_cap_literal_check_accepts_the_literal():
-    assert _is_the_literal_cap(_lane_cap_assignments("LANE_CAP = 3\n"))
-    assert _is_the_literal_cap(_lane_cap_assignments("LANE_CAP: int = 3\n"))
+    assert _is_the_literal_cap(_lane_cap_assignments("LANE_CAP = None\n"))
+    assert _is_the_literal_cap(_lane_cap_assignments("LANE_CAP: int | None = None\n"))
 
 
 def test_load_config_never_names_the_lane_cap():
@@ -404,7 +416,7 @@ def test_lane_cap_is_not_read_from_the_environment():
 
     The same child also prints `load_config().engine_host` under a poisoned
     RESIN_ENGINE_HOST, so the poisoning is proven to reach the module: a child
-    that never saw the environment would report 3 for every wrong reason.
+    that never saw the environment would report None for every wrong reason.
     """
     poisoned = dict(os.environ)
     for name in PLAUSIBLE_LANE_CAP_ENV_NAMES:

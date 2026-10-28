@@ -66,12 +66,21 @@ across all of them in one round.
 It is the per-repo lane cap a future lane driver passes to the vendored
 kit's `fleet_lanes.run_lane(cap=LANE_CAP)` - how many lanes of THIS tree may
 run at once, each in its own worktree and each holding at most one governor
-slot. It is 3, by the ruling recorded in CLAUDE.md ("Session checklist -
-FLEET-COMMON item 13 in this tree"), and it is not environment-overridable
-for the reason above: every lane spends from the same shared bucket, so a
-local shell variable must not be able to widen it. It never exceeds
-`MAX_CONCURRENT_LANES` nor the kit's own `LANE_CAP_MAX`;
-`tests/test_fleet_lanes_adoption.py` pins both bounds.
+slot. Since FLEET-KIT v25 (MAIN 2136 ORDER of 2026-10-27, LANE-CAP) it is
+None: the kit reads it as the LIVE `lane_cap_max` of the MAIN-owned machine
+config (`fleet_lanes.load_config()`, default 3), clamped to the live governor
+width. It was the literal 3 under the ruling recorded in CLAUDE.md
+("Session checklist - FLEET-COMMON item 13 in this tree"); the v25 ORDER is
+that ruling's reversal. It is still not environment-overridable here: the
+only widening path is the machine config MAIN owns, and the kit clamps every
+cap to it. `tests/test_fleet_lanes_adoption.py` and
+`tests/test_lane_cap_v25.py` pin it.
+
+Since v25 the machine-wide governor width is also live:
+`headless/runner.py` sizes its slot bucket from the kit's
+`load_config()["governor_width"]`, the one number every v25 participant
+reads. `MAX_CONCURRENT_LANES` stays as that config's DEFAULT (the width with
+no machine config), and a test pins it equal to the kit's own default.
 """
 from __future__ import annotations
 
@@ -139,10 +148,11 @@ DEFAULT_ENKA_USER_AGENT = "ResinCompute/0.1 (local single-account planner)"
 MAX_CONCURRENT_LANES = 3
 
 #: Per-repo lane cap for a future lane driver: `fleet_lanes.run_lane(cap=...)`.
-#: A constant, not a `Config` field and not environment-overridable - see the
-#: module docstring. Changing it is a ruling, recorded in CLAUDE.md with its
-#: reversal condition, never a local tweak.
-LANE_CAP = 3
+#: None = the kit's live `lane_cap_max` (FLEET-KIT v25). A constant, not a
+#: `Config` field and not environment-overridable - see the module docstring.
+#: Narrowing it to an int is a ruling, recorded in CLAUDE.md with its reversal
+#: condition, never a local tweak.
+LANE_CAP: int | None = None
 
 
 @dataclass(frozen=True)
