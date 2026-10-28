@@ -7,8 +7,10 @@ with cap=`core.config.LANE_CAP`, cwd = the claim's worktree,
 No lane driver exists yet, so these arms pin the parts that can be pinned
 now, and none of them creates a lane lock or a worktree:
 
-  1. CAP BOUNDS. LANE_CAP is accepted by the kit's own `lane_cap()` unchanged,
-     and fits both the kit's per-repo maximum and the governor width.
+  1. CAP BOUNDS. LANE_CAP is None since FLEET-KIT v25, so the kit's own
+     `lane_cap()` resolves it to the live machine `lane_cap_max` (3 with no
+     machine config), within the governor width. Above the bound the kit
+     CLAMPS (v25); 0 and non-integers still raise.
   2. NO LANE-LOCK WRITER OUTSIDE THE KIT. The lane locks under
      `ops/loop/control/lanes/` are the kit's on-disk protocol; a second writer
      spelling that path itself would bypass its mutex and its ABA guard. The
@@ -156,23 +158,28 @@ def _corpus() -> dict[str, str]:
 
 
 def test_the_lane_cap_is_within_the_kit_bounds() -> None:
-    assert 1 <= LANE_CAP <= lanes.LANE_CAP_MAX
-    assert LANE_CAP <= lanes.GOVERNOR_WIDTH
-    assert LANE_CAP <= MAX_CONCURRENT_LANES
-    assert lanes.lane_cap(LANE_CAP) == LANE_CAP, (
-        "the kit clamps LANE_CAP, so a lane driver passing it would run fewer "
-        "lanes than this tree declares"
-    )
+    assert LANE_CAP is None, "v25: the tree follows the live machine lane cap"
+    defaults = lanes.load_config(None)
+    effective = lanes.lane_cap(LANE_CAP, config=defaults)
+    assert effective == defaults["lane_cap_max"] == lanes.LANE_CAP_MAX
+    assert effective <= lanes.GOVERNOR_WIDTH
+    assert effective <= MAX_CONCURRENT_LANES
 
 
 def test_the_kit_bounds_check_fires_on_an_out_of_range_cap() -> None:
-    """Non-vacuity: `lane_cap` is a real bound, not an identity."""
-    for bad in (0, lanes.LANE_CAP_MAX + 1):
+    """Non-vacuity: `lane_cap` is a real bound, not an identity.
+
+    v25 (section 4 of the MAIN 2136 ORDER): a cap above the machine maximum
+    CLAMPS to it instead of raising; below 1 and non-integers still raise.
+    """
+    defaults = lanes.load_config(None)
+    assert lanes.lane_cap(lanes.LANE_CAP_MAX + 1, config=defaults) == lanes.LANE_CAP_MAX
+    for bad in (0, -1, "x", True, 2.5j):
         try:
-            lanes.lane_cap(bad)
+            lanes.lane_cap(bad, config=defaults)
         except ValueError:
             continue
-        raise AssertionError(f"lane_cap({bad}) was accepted")
+        raise AssertionError(f"lane_cap({bad!r}) was accepted")
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +233,7 @@ def test_the_lane_lock_detector_fires_on_a_planted_writer() -> None:
 def test_the_lane_worktree_is_outside_a_repo_root_and_not_created(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
-    for index in range(LANE_CAP):
+    for index in range(lanes.lane_cap(LANE_CAP, config=lanes.load_config(None))):
         path = Path(lanes.worktree_path(repo, "RSC", index))
         assert not path.resolve().is_relative_to(repo.resolve()), path
         assert path.resolve().is_relative_to(tmp_path.resolve()), path
