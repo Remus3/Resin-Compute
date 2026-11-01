@@ -589,6 +589,12 @@ def _cli_fail(message: str, exc: BaseException | None = None, *, code: int = 1) 
 
 
 def _cli_emit(text: str) -> int:
+    # None, not a stream that fails: the interpreter sets it when descriptor 1 is
+    # already closed at startup (`>&-`, or pythonw). With no stream there is no
+    # buffer for the exit-time flush below to trip over.
+    if sys.stdout is None:
+        _LOGGER.info("uigf command failed: %s - sys.stdout is None", _CLI_NO_OUTPUT)
+        return _cli_fail(_CLI_NO_OUTPUT)
     try:
         sys.stdout.write(text)
         sys.stdout.flush()

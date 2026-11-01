@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
 import shlex
 import subprocess
 import sys
@@ -31,6 +32,7 @@ from agents.pity_engine import ENGINE_VERSION
 from agents.pity_engine.__main__ import forecast_payload
 from core.types import BannerKind
 from ingest.uigf import UigfError, _chronological, loads, parse_document, pity_state_from_uigf
+from ingest.uigf import main as uigf_main
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = "data/fixtures/uigf_v4_sample.json"
@@ -521,6 +523,64 @@ def test_a_closed_stdout_is_not_a_traceback():
     text = stderr.decode("ascii")
     assert len(text.splitlines()) == 1, text
     assert "output could not be written" in text
+
+
+#: Closes descriptor 1, then starts argv with it still closed: the `>&-` of the
+#: adversary's reproduction, without needing a POSIX shell on PATH. The interpreter
+#: it starts then sets sys.stdout to None, which the broken-pipe arm above never
+#: reaches because there the child's descriptor is open at startup.
+FD1_CLOSED_LAUNCHER = "import os, subprocess, sys\nos.close(1)\nsys.exit(subprocess.call(sys.argv[1:]))\n"
+
+
+def _run_with_fd1_closed(*args: str) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        [sys.executable, "-c", FD1_CLOSED_LAUNCHER, sys.executable, *args],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        timeout=120,
+        check=False,
+    )
+
+
+def test_the_launcher_really_starts_a_child_with_no_stdout():
+    """Non-vacuity of the arms below, on whichever platform runs them."""
+    probe = "import sys; sys.exit(0 if sys.stdout is None else 3)"
+    result = _run_with_fd1_closed("-c", probe)
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_stdout_closed_at_startup_is_the_documented_refusal():
+    """ROADMAP D1: this was a raw AttributeError traceback from `_cli_emit`."""
+    result = _run_with_fd1_closed("-m", "ingest.uigf", FIXTURE, "--uid", UID, "--banner", "standard")
+    text = _assert_friendly_failure(result)
+    assert result.returncode == 1
+    assert "output could not be written" in text
+
+
+def test_a_refusal_with_stdout_closed_at_startup_keeps_its_own_message_and_code():
+    """The neighbour: nothing is written to stdout, so its absence must change nothing."""
+    bad_uid = _run_with_fd1_closed("-m", "ingest.uigf", FIXTURE, "--uid", "999999999", "--banner", "standard")
+    assert "no account" in _assert_friendly_failure(bad_uid)
+    assert bad_uid.returncode == 1
+    bad_arg = _run_with_fd1_closed("-m", "ingest.uigf", FIXTURE, "--uid", UID, "--banner", "nope")
+    assert "--banner" in _assert_friendly_failure(bad_arg)
+    assert bad_arg.returncode == 2
+
+
+def test_help_with_stdout_closed_at_startup_is_not_a_traceback():
+    result = _run_with_fd1_closed("-m", "ingest.uigf", "--help")
+    assert result.returncode == 0, result.stderr
+    assert b"Traceback" not in result.stderr
+
+
+def test_a_missing_stdout_logs_the_reason_and_stays_off_the_console(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
+):
+    monkeypatch.setattr(sys, "stdout", None)
+    with caplog.at_level(logging.INFO, logger="ingest.uigf"):
+        assert uigf_main([FIXTURE, "--uid", UID, "--banner", "standard"]) == 1
+    assert capsys.readouterr().err == "python -m ingest.uigf: output could not be written\n"
+    assert "sys.stdout is None" in caplog.text
 
 
 # ---------------------------------------------------------------------------
