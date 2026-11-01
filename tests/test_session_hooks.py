@@ -84,6 +84,7 @@ import uuid
 from pathlib import Path
 from typing import NamedTuple
 
+import fleet_test_guard  # on sys.path via tests/conftest.py (FLEET-KIT v18 s3.5)
 import pytest
 
 from tests.conftest import require_git_repository
@@ -1017,7 +1018,7 @@ def test_the_session_start_hook_actually_fires(tmp_path):
             f"{hook.event} hook `{hook.command}` wrote {WATERMARK.name} into its "
             "isolated runtime directory; reading is not acknowledging"
         )
-        assert elapsed < MAX_HOOK_TIMEOUT, (
+        assert elapsed < fleet_test_guard.budget(MAX_HOOK_TIMEOUT), (
             f"{hook.event} hook took {elapsed:.2f}s against a declared ceiling of "
             f"{MAX_HOOK_TIMEOUT}s, so Claude Code would kill it"
         )
@@ -1145,7 +1146,7 @@ def test_the_user_prompt_submit_hook_actually_fires(tmp_path):
             f"{hook.event} hook `{hook.command}` wrote {WATERMARK.name} into its "
             "isolated runtime directory; this one fires before EVERY prompt"
         )
-        assert fired.elapsed < MAX_HOOK_TIMEOUT, (
+        assert fired.elapsed < fleet_test_guard.budget(MAX_HOOK_TIMEOUT), (
             f"{hook.event} hook took {fired.elapsed:.2f}s against a ceiling of "
             f"{MAX_HOOK_TIMEOUT}s, and it runs before every prompt"
         )

@@ -44,6 +44,7 @@ import json
 import time
 from pathlib import Path
 
+import fleet_test_guard  # on sys.path via tests/conftest.py (FLEET-KIT v18 s3.5)
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -305,7 +306,7 @@ def test_a_stdin_that_never_arrives_returns_inside_the_wait(watch, monkeypatch):
 
     assert slept, "os.read was never called, so nothing was being waited on"
     assert got == b"", f"a payload that never arrived was returned anyway: {got!r}"
-    assert elapsed < watch.STDIN_WAIT_SECONDS + 1.5, (
+    assert elapsed < fleet_test_guard.budget(watch.STDIN_WAIT_SECONDS + 1.5), (
         f"the reader took {elapsed:.2f}s against a declared wait of "
         f"{watch.STDIN_WAIT_SECONDS}s. An unbounded read here kills the hook at "
         "its five second ceiling and the harness DROPS the stdout, so the "
