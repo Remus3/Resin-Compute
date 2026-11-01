@@ -53,3 +53,105 @@ v24 30 KB mark limit. Each is still a reading of its own date.
 
   ctypes OpenProcess RAISES for a pid of 2**32 or more. Bound parsed pids.
 
+
+SESSION 83 MOVE (2026-11-01, MAIN U5-3: hand-off under 25,000 bytes).
+Blocks below moved VERBATIM from RSC-NEXT-SESSION.txt; each is still a
+reading of its own date. The DO NOT REDO list is decision -> what
+reverses it.
+
+  GITHUB-SECURITY RECORD (MAIN 2243 s3 asks it here), read 2026-10-19 via
+     gh api, open and all states: code scanning 0 (CodeQL results_count
+     0), Dependabot alerts 0, secret scanning 0 (push protection on);
+     fixed, dismissed, left all 0. Dependabot: 2 opened 2026-10-25, both
+     read back FIXED session 81 (e887f92). Setting: security updates disabled (S78d).
+
+  DO NOT REDO - decision -> what reverses it:
+  kit v3/v4/v7-v17, v18-v20.1 and v21-v24 vendoring, provenance -> a new MAIN
+    FLEET-KIT-vN note
+  roster 0230/2305 -> a verified MAIN roster note; CLAUDE.md condense ->
+    a MAIN kit change
+  no Bash on the responder child floor -> a live probe that a Bash floor
+    cannot write
+  --once slot, spawn cwd, C4 landing, test-leak fence -> none recorded
+  0f DECISION C (run ledger retired for kit RunBudget; per-sender cap,
+    MAX_HOPS, DEFAULT_RUNS kept) -> a kit version dropping the OS-held
+    lock, or the kit not counting every spawn here
+  main session orchestrates -> sub-agents gaining an Agent tool, or MAIN
+  pip-compile dev-dep pair -> Dependabot dropping pip-compile
+  ADR-011 outbox-hash provenance -> a verified MAIN note ordering
+    verify_main for runtime notes, or a measured hash-match that mattered
+  firedetail log label -> a drift-check redesign ending fires on terminals
+  README landing, OVERVIEW/OPERATIONS split -> operator or MAIN undoing it
+  responder rulings (i)-(iii) -> the reversals in CLAUDE.md
+  LANE_CAP 3 -> a measured reason for fewer lanes, or a MAIN order
+  MAIN note cools 6 h, not parked -> MAIN; kit per-file ruff ignores ->
+    per rule, a kit version shipping it clean
+  superseded MAIN notes by TRACKED STAMP only -> a MAIN ruling defining
+    supersession by version plus a refuter-tested never-drop-FIX rule
+  per-sender cap exemption MAIN-only, provenance-MATCH-gated -> a MAIN
+    ruling, or a sibling ORDER parked over 24 h blocking real work
+  no fuzzing -> parsing untrusted input, or an operator order
+  LEDGER index plus per-session files -> MAIN; name ResinCompute, one
+    word -> operator or MAIN
+  nightly gated on new commits -> plumbing tests back in the push path
+  six CI_ONLY pre-push modules, push CI never cancelled -> a cancelled
+    push run, or 3 pushes within one run duration
+  dev-dep DECISION B, pytest-timeout only -> as in 0i
+  claude/new-session-19dmsr deleted on origin -> a session or PR needing
+    it; restore from 154d5f8
+  S78f B, docs-only /done reuse of the last gated green (section 1 of
+    .claude/commands/done.md) -> a docs-only change turning an unmarked test red
+  pre-push engine skip outside its import closure -> a false SKIP letting
+    an engine-breaking push through
+  0v rootdir pins, not a pytest-version cause -> the arm red with pins in
+  0u ui-auditor waiver for a pure dependency bump -> narrowing that
+    exemption, a MAIN ruling, or a rendered regression
+  0q B, over-cap send still records its row -> as 0x
+  0y A, merge plus F1 -> tests/test_builder_ui_audit_rule.py never redding
+    on the old text
+  0z either hooksPath spelling, no extensions.worktreeConfig -> Claude
+    Code no longer rewriting it, or a MAIN ruling
+  P2 B, verifier closes, no 3rd adversary -> an arm that does not red
+  P3 C, merge: <topic> only with MERGE_HEAD or a merge HEAD -> git giving
+    commit-msg an amend signal, or a MAIN ruling
+  P5 B, no install.bat, pip --require-hashes pair -> MAIN asks a wrapper
+  N5cf c KEEP core/capture_root.py defence -> a regex or fallback change
+    making it reachable; f RECORD watch-inbox AppData red as environment
+    -> a false red from 'packages' outside AppData, or runtime_dir()
+    leaving the repo root
+  N6 dead-pid worktree removal -> a live lock pid
+  RETRACTED: 16 (floors 135 since c3bed4a) -> tests/ past 134 tracked
+    files or corpus under 270; old 3 (fleet_inbox seen_index name plus
+    sha256) -> a kit dropping that; old 0n (stray bytecode was ours) ->
+    a fresh bundle with one
+
+  THE CI IMAGE HAS NO PILLOW (session 74). A test that imports
+  tools/screen_capture.py turned ci red at 44c97ec and 6fb8a88; stub PIL
+  in the test (F1, merge 1372540). Read CI after every merge.
+
+  A STALE EMPTY .git/index.lock CAN BLOCK A MERGE (session 73, 826 s old,
+  no git process). A gitlock dry-run commit clears it safely and logs it.
+
+  A SHALLOW CI CHECKOUT CHANGES GIT-ENV TEST PREMISES (session 64, fixed in
+  4cf15be): slice B's bounded fetch depth made tests/test_git_env_scrub.py's
+  GIT_SHALLOW_FILE row vacuous. Test git-env rows in a depth-5 clone too.
+
+  A SUB-AGENT HAS NO Agent TOOL (session 63, refuted 0d shape). Only the
+  main session can dispatch planner, builders, verifier and adversaries.
+
+  core.hooksPath DRIFTS TO AN ABSOLUTE PATH (seen sessions 58, 60, 64, 68,
+  70, 71 and 72). Root-caused session 72 (0z): Claude Code's worktree setup
+  writes the absolute <main root>\.githooks into the shared .git/config.
+  Harmless; .claude/commands/done.md accepts either spelling. Run
+  python scripts/install_hooks.py only when it is empty or resolves
+  elsewhere.
+
+  MAIN CAN SUPERSEDE A KIT MID-SESSION. v7 arrived during v6 planning and v8
+  during v7 building; v10 arrived before v9 merged; v13 was staged with no
+  ORDER, then ordered by 2246. Re-read the inbox before each merge and
+  redirect builders by message.
+
+  SCRATCHPAD HELPERS NEED UNIQUE PER-SLICE NAMES (session 74). Two slices
+  ran one shared generic helper and cross-wrote progress files rsc-n4 and
+  rsc-p5. Name each helper after its slice.
+

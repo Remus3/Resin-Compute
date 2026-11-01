@@ -46,14 +46,8 @@ Questions it is built to answer:
 
 ## Status
 
-As of 2026-10-08. [`ROADMAP.md`](ROADMAP.md) is the live source; the full
-table is in [`docs/OVERVIEW.md`](docs/OVERVIEW.md#status-in-full).
-
-| | Area |
-|---|---|
-| **Shipped** | Wish forecaster (character, weapon, standard, Chronicled banners) - PityEngine HTTP service - headless lane with seven jobs, daemon and supervisor - Enka ingest - state persistence - goal DAG with cycle detection and critical path - row-scoped provenance schema - cross-repo responder - "by when" forecast over a caller-supplied banner schedule (POST /by-when; no calendar vendored) |
-| **Partial** | Dashboard (six panels; a fresh clone renders 2 READY, 4 NOT_WIRED) - material costs (zero rows) - scheduler (day offsets, no calendar dates) - resin panel (hand-typed observation) - constellation talent mapping - artifact scoring (engine only, no table, no panel) - income velocity (default-off job over operator-typed observations) |
-| **Planned** | banner calendar SOURCE (the "by when" route exists; nothing supplies the schedule yet) - team solver |
+What is shipped, partial and planned lives in [`ROADMAP.md`](ROADMAP.md),
+the live source; this README does not restate it.
 
 ## Quickstart
 

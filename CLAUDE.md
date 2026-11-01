@@ -269,6 +269,10 @@ the repository, so it uses the operator's internal vocabulary:
   HAND-AUTHORED only. Do not call it "synthetic": two of its three files are
   verified public game facts typed in by hand; only `enka_sample_profile.json`
   is invented.
+- **Never merge on github.com** (MAIN 2215 ORDER of 2026-10-31, SHA-256
+  verified). A dependabot bump lands as a local operator commit, pushed as
+  usual; the PR is then closed with a comment naming that commit. Reversed
+  by: a MAIN ruling.
 
 ## Layout
 

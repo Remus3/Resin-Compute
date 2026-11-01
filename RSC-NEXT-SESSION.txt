@@ -88,10 +88,10 @@ STATE OBSERVED 2026-10-26 AT dce4f00 (session 82 /done, headless run)
   removed, 0 kept, 0 listed (base main). Board render SKIPPED: headless
   run (.claude/commands/done.md section 8b). Inbox NOT marked.
 PRIOR READINGS (sessions 57-81): docs/ledger/ files. A worktree shows
-  MORE skips (no POSIX sh on PATH); a clone or worktree under AppData fails
+  MORE skips (no POSIX sh on PATH); one under AppData fails
   test_the_session_cache_lives_under_the_runtime_directory and
-  tests/test_watch_inbox_session.py near line 767 - the location trap, not
-  a regression.
+  tests/test_watch_inbox_session.py near line 767 - location, not a
+  regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   S82a. HIGH (NEW session 82): MAIN ORDER 2026-10-26-0300 to RSC (U5
@@ -109,9 +109,9 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   S82d. Dependabot PRs #9 ruff 0.17.2, #10 electron 45.0.0 (major), #11
      github-actions group of 3: open, review and merge or close.
      Residue (d).
-  S82e. A session 82 /done app-suite log (named for RSC session 82)
-     sits at the drive root outside the repo; rm and Remove-Item were both refused
-     by the protected-path guard. Remove by hand. Residue (e).
+  S82e. A session 82 /done app-suite log (named for RSC session 82) sits
+     at the drive root; rm and Remove-Item were refused by the
+     protected-path guard. Remove by hand. Residue (e).
   S80a. INBOX TRIAGE NOT DONE (NEW session 80; still open session 82,
      plus newer MAIN 0300 ORDER S82a and SS 0325 ANSWER to MAIN): 4 unread items listed by
      the hook - MAIN 2026-10-25 1801 FIX to RSC/SS (stale repo-map root,
@@ -119,10 +119,9 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      2026-10-24 1525 FIX to MAIN (fleet_test_guard IGNORE misses the two
      board files), SS 2026-10-24 1243 INFORMATION to MAIN (seeded boards
      artifact not found, TERMINAL). Triage into the four buckets, answer
-     if due (one batched note), then mark. Inbox NOT marked session 80
-     or 81. Already worked session 81 (bucket ingested, do not redo):
-     MAIN 1926 v23 ORDER, 1935 FIX, 2045 ORDER (ANSWERs 2124 and 2204);
-     session 82: MAIN 0315 v24 ORDER (ANSWER 0405, HOP 2).
+     if due (one batched note), then mark. Inbox NOT marked since
+     session 80. Already ingested, do not redo: MAIN 1926, 1935, 2045
+     (session 81) and 0315 (session 82).
      ROADMAP "Session 80 residue" (a).
   S81a. PRE-PUSH STILL SERIAL (NEW session 81): .githooks/pre-push runs
      the app suite without xdist; CI stays serial by decision (a0120a4
@@ -155,11 +154,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      alerts, secret scanning, push protection enabled; 0 open alerts of any
      kind, read 2026-10-19). MAIN/operator settings call: reported, not
      changed.
-  GITHUB-SECURITY RECORD (MAIN 2243 s3 asks it here), read 2026-10-19 via
-     gh api, open and all states: code scanning 0 (CodeQL results_count
-     0), Dependabot alerts 0, secret scanning 0 (push protection on);
-     fixed, dismissed, left all 0. Dependabot: 2 opened 2026-10-25, both
-     read back FIXED session 81 (e887f92). Setting: security updates disabled (S78d).
+  GITHUB-SECURITY RECORD (2026-10-19 reading, all 0): moved verbatim
+     session 83 to docs/handoff-archive/RSC-2026-10-26.txt.
   0x. AWAIT MAIN'S REPLY to the 1852 INFORMATION note (sent session 72,
      sha256 e8ef75592e297643e4ee1fc5d944838e4a23145571bbc4eb6f9529574820fed4,
      reached 2/2): the OutboundCap.record / _append no-lock kit defect in
@@ -167,13 +163,17 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      Triage the reply when it lands; never patch the vendored kit.
      Reversed by: a kit version that locks record, or a MAIN ruling the
      ledger must never exceed the cap. ROADMAP "Session 71 residue" (a).
-  O8. MAIN 2246 ORDER s4 HISTORY REWRITE + FORCE PUSH, and s8 - NOT DONE,
-     AWAITING OPERATOR APPROVAL IN PERSON (2026-10-09; never unattended).
-     s4: ops/fleet_kit/fleet_rewrite.py plan / bundle (sidecar folder) /
-     run, then the force push; scope = the 2 commits the kit identity
-     check refuses (every SHA but the root changes). s8: queue ONE
-     headless repo-review driver via the kit spawn (kind build, progress
-     task repo-review). Reversed by: the operator starting it.
+  O8. MAIN 2246 ORDER s4 HISTORY REWRITE + FORCE PUSH, and s8 - NOT DONE.
+     Was AWAITING OPERATOR APPROVAL IN PERSON (2026-10-09); a later MAIN
+     2233 ORDER turns it to RUN this session. s4:
+     ops/fleet_kit/fleet_rewrite.py plan / bundle (sidecar folder) / run,
+     then the force push. Scope WIDENED (MAIN 2215/2233): every
+     personal-address, bot-authored and AI-noreply author or committer
+     field - 183 personal-address fields, 3 bot commits, 2 AI-noreply
+     commits (every SHA but the root changes). Never write an address in
+     a tracked file. s8: queue ONE headless repo-review driver via the kit
+     spawn (kind build, progress task repo-review). Reversed by: a MAIN
+     ruling.
   0. RENEW THE RESPONDER BEFORE 2026-11-06T23:00 LOCAL (window ends
      2026-11-07T00:45; the PT43200M repeat may stop about 1 h early because
      DST ends Nov 1). Re-run ops/install_responder_task.ps1 -TaskName
@@ -196,10 +196,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      failed once in session 66 (host WMI 0x800700a4 with a taskkill.exe
      pileup, no code change); green since. Watch for a repeat. ROADMAP
      session 70 residue (f).
-  0i. MAIN 2246 s2 residue (ROADMAP 2246 entry). DONE: 2b, 4b (s68), 2c
-     30 s target (s70, 3c61cc8), s70 (b) (s73, 72b2336), s73 (e) (s75,
-     0c6a644; residue N7 (a)). (2c-b)
-     3 pushes inside one CI run (~213 s) still replace the pending run;
+  0i. MAIN 2246 s2 residue (ROADMAP 2246 entry; DONE items in the
+     ledger). (2c-b) 3 pushes inside one CI run (~213 s) still replace the pending run;
      reverse to a per-commit concurrency group if any push run is ever
      cancelled. The 10.4 GB process is still unexplained. xdist and
      execnet stay DEFERRED (reversed by an xdist run under the suite gate
@@ -246,7 +244,6 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   N7. SESSION 75 RESIDUE (ROADMAP "Session 75 residue", items a-f):
      (a) 0i: the hung --ci-mark test in tests/test_prepush_select.py also
      passes on the parent commit (non-discriminating arm).
-     (b), (c), (e) DONE (ledger sessions 76, 79).
      (d) N5b: the first-plus-last-only mutant is caught by one arm only
      (middle of three); the all-zero (delete) skip branch was never
      mutated.
@@ -273,72 +270,12 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   9-12. Known-gap notes, not defects (commit-msg false blocks, orphan-
      temp sweep, prov-defer, /120 counter): moved verbatim session 82 to
      docs/handoff-archive/RSC-2026-10-26.txt.
-  WATCHERS 0x, 0b, 0t, N10: no MAIN reply through session 79 (the only
-  new note, MAIN 0730 QUIET-BENCH, is TERMINAL INFORMATION); session 80
-  did not triage the inbox (S80a), so re-check them there. Session 80
-  read back git worktree list: main only.
-  DONE 64-82: docs/ledger/session-<n>.md (detail moved session 82 to
-  docs/handoff-archive/RSC-2026-10-26.txt). Old DONE
-  blocks and full DO NOT REDO wording: docs/LEDGER.md, "Hand-off blocks
-  retired session 77". DO NOT REDO - decision -> what reverses it:
-  kit v3/v4/v7-v17, v18-v20.1 and v21-v24 vendoring, provenance -> a new MAIN
-    FLEET-KIT-vN note
-  roster 0230/2305 -> a verified MAIN roster note; CLAUDE.md condense ->
-    a MAIN kit change
-  no Bash on the responder child floor -> a live probe that a Bash floor
-    cannot write
-  --once slot, spawn cwd, C4 landing, test-leak fence -> none recorded
-  0f DECISION C (run ledger retired for kit RunBudget; per-sender cap,
-    MAX_HOPS, DEFAULT_RUNS kept) -> a kit version dropping the OS-held
-    lock, or the kit not counting every spawn here
-  main session orchestrates -> sub-agents gaining an Agent tool, or MAIN
-  pip-compile dev-dep pair -> Dependabot dropping pip-compile
-  ADR-011 outbox-hash provenance -> a verified MAIN note ordering
-    verify_main for runtime notes, or a measured hash-match that mattered
-  firedetail log label -> a drift-check redesign ending fires on terminals
-  README landing, OVERVIEW/OPERATIONS split -> operator or MAIN undoing it
-  responder rulings (i)-(iii) -> the reversals in CLAUDE.md
-  LANE_CAP 3 -> a measured reason for fewer lanes, or a MAIN order
-  MAIN note cools 6 h, not parked -> MAIN; kit per-file ruff ignores ->
-    per rule, a kit version shipping it clean
-  superseded MAIN notes by TRACKED STAMP only -> a MAIN ruling defining
-    supersession by version plus a refuter-tested never-drop-FIX rule
-  per-sender cap exemption MAIN-only, provenance-MATCH-gated -> a MAIN
-    ruling, or a sibling ORDER parked over 24 h blocking real work
-  no fuzzing -> parsing untrusted input, or an operator order
-  LEDGER index plus per-session files -> MAIN; name ResinCompute, one
-    word -> operator or MAIN
-  nightly gated on new commits -> plumbing tests back in the push path
-  six CI_ONLY pre-push modules, push CI never cancelled -> a cancelled
-    push run, or 3 pushes within one run duration
-  dev-dep DECISION B, pytest-timeout only -> as in 0i
-  claude/new-session-19dmsr deleted on origin -> a session or PR needing
-    it; restore from 154d5f8
-  S78f B, docs-only /done reuse of the last gated green (section 1 of
-    .claude/commands/done.md) -> a docs-only change turning an unmarked test red
-  pre-push engine skip outside its import closure -> a false SKIP letting
-    an engine-breaking push through
-  0v rootdir pins, not a pytest-version cause -> the arm red with pins in
-  0u ui-auditor waiver for a pure dependency bump -> narrowing that
-    exemption, a MAIN ruling, or a rendered regression
-  0q B, over-cap send still records its row -> as 0x
-  0y A, merge plus F1 -> tests/test_builder_ui_audit_rule.py never redding
-    on the old text
-  0z either hooksPath spelling, no extensions.worktreeConfig -> Claude
-    Code no longer rewriting it, or a MAIN ruling
-  P2 B, verifier closes, no 3rd adversary -> an arm that does not red
-  P3 C, merge: <topic> only with MERGE_HEAD or a merge HEAD -> git giving
-    commit-msg an amend signal, or a MAIN ruling
-  P5 B, no install.bat, pip --require-hashes pair -> MAIN asks a wrapper
-  N5cf c KEEP core/capture_root.py defence -> a regex or fallback change
-    making it reachable; f RECORD watch-inbox AppData red as environment
-    -> a false red from 'packages' outside AppData, or runtime_dir()
-    leaving the repo root
-  N6 dead-pid worktree removal -> a live lock pid
-  RETRACTED: 16 (floors 135 since c3bed4a) -> tests/ past 134 tracked
-    files or corpus under 270; old 3 (fleet_inbox seen_index name plus
-    sha256) -> a kit dropping that; old 0n (stray bytecode was ours) ->
-    a fresh bundle with one
+  WATCHERS 0x, 0b, 0t, N10: no MAIN reply through session 79; re-check
+  them in the S80a triage.
+  DONE 64-82: docs/ledger/session-<n>.md. Old DONE blocks: docs/LEDGER.md,
+  "Hand-off blocks retired session 77". DO NOT REDO (decision -> what
+  reverses it): moved verbatim session 83 to
+  docs/handoff-archive/RSC-2026-10-26.txt; read it before re-litigating.
 
 TRAPS MEASURED - none are hypothetical
   ORIGIN CAN HOLD COMMITS LOCAL MAIN LACKS (session 79: a Dependabot PR
@@ -361,17 +298,6 @@ TRAPS MEASURED - none are hypothetical
   The merge subject is merge: <topic> (MAIN 1925 item b, merge b888286),
   accepted only while MERGE_HEAD exists or HEAD is a merge, and never with
   a worktree or agent name in it. The old Merge slice form is retired.
-
-  THE CI IMAGE HAS NO PILLOW (session 74). A test that imports
-  tools/screen_capture.py turned ci red at 44c97ec and 6fb8a88; stub PIL
-  in the test (F1, merge 1372540). Read CI after every merge.
-
-  SCRATCHPAD HELPERS NEED UNIQUE PER-SLICE NAMES (session 74). Two slices
-  ran one shared generic helper and cross-wrote progress files rsc-n4 and
-  rsc-p5. Name each helper after its slice.
-
-  A STALE EMPTY .git/index.lock CAN BLOCK A MERGE (session 73, 826 s old,
-  no git process). A gitlock dry-run commit clears it safely and logs it.
 
   A BUILDER'S NEW TEST THAT READS A .md MUST BE REGISTERED in
   tests/_markers.py (READS_DOCS or PLUMBING) (session 72: two slices
@@ -419,23 +345,9 @@ TRAPS MEASURED - none are hypothetical
   deny reason names. A guessed interpreter path that does not exist makes the suite
   gate raise FileNotFoundError; use the real sys.executable path.
 
-  A SHALLOW CI CHECKOUT CHANGES GIT-ENV TEST PREMISES (session 64, fixed in
-  4cf15be): slice B's bounded fetch depth made tests/test_git_env_scrub.py's
-  GIT_SHALLOW_FILE row vacuous. Test git-env rows in a depth-5 clone too.
-
   A DOC THAT CITES A GITIGNORED PATH NO TRACKED FILE NAMES turns
   tests/test_docs_consistency.py red (session 63 /done, the recycled MIG-1
   residue dir). Once a runtime path is gone, describe it in prose.
-
-  A SUB-AGENT HAS NO Agent TOOL (session 63, refuted 0d shape). Only the
-  main session can dispatch planner, builders, verifier and adversaries.
-
-  core.hooksPath DRIFTS TO AN ABSOLUTE PATH (seen sessions 58, 60, 64, 68,
-  70, 71 and 72). Root-caused session 72 (0z): Claude Code's worktree setup
-  writes the absolute <main root>\.githooks into the shared .git/config.
-  Harmless; .claude/commands/done.md accepts either spelling. Run
-  python scripts/install_hooks.py only when it is empty or resolves
-  elsewhere.
 
   THE SESSION SCRATCHPAD IS SHARED ACROSS TREES (MAIN 0905, observed).
   Another tree's session ran a generic-named helper found there. Use a
@@ -444,11 +356,6 @@ TRAPS MEASURED - none are hypothetical
 
   BARE python3 IS THE MICROSOFT STORE STUB HERE (MAIN 0905). Use python or
   the full interpreter path; launch children by sys.executable.
-
-  MAIN CAN SUPERSEDE A KIT MID-SESSION. v7 arrived during v6 planning and v8
-  during v7 building; v10 arrived before v9 merged; v13 was staged with no
-  ORDER, then ordered by 2246. Re-read the inbox before each merge and
-  redirect builders by message.
 
   THE KIT'S _atomic_write HAS NO RETRY. On Windows a reader holding a
   progress file makes the final replace fail and orphans <name>.<pid>.tmp.
@@ -459,6 +366,12 @@ TRAPS MEASURED - none are hypothetical
 
   A DOC LINE THAT SPELLS A HOOK COMMAND turns tests/test_docs_hook_commands.py
   red (session 62, fd4fb42). Name a rejected command form in prose.
+
+  CLOSED OR DUPLICATED TRAPS (no PIL in CI, scratchpad helper names,
+  stale index.lock, shallow CI
+  checkout, sub-agent has no Agent tool, core.hooksPath drift, MAIN can
+  supersede a kit mid-session): moved verbatim session 83 to
+  docs/handoff-archive/RSC-2026-10-26.txt.
 
   RESPONDER AND HOOK INTERNALS TRAPS (mid-fire log label, leak-guard label,
   TERMINATIONS, hook exec bit, commit -F keeps # lines, ctypes pid bound):
