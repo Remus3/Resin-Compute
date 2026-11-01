@@ -1,15 +1,15 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-11-01 (session 83, MAIN headless driver run, kit v26),
-gates measured at commit 85bf25d on main; this paperwork commit landed
+Stamped 2026-11-01 (session 84, MAIN FI-RSC-1 headless run, kit v27),
+gates measured at commit 8438cc1 on main; this paperwork commit landed
 after it. Everything below is a READING taken that day, not a promise
 about now. Re-measure before citing.
 
-NEXT ACTION: fix the pre-push interpreter (S83a, HIGH - the push gate ran
-ruff only all session 83), then the adversary pass on 85bf25d (S83c),
-then the inbox triage (S80a), then the remaining OPEN WORK items below,
-highest priority first. Session 83 worked MAIN 2215 ORDER (U5 included)
-and MAIN 2233 ORDER (history rewrite + force push), both ANSWERed. Carry
-every item not acted on forward again.
+NEXT ACTION: work the session 84 adversary rows (S84a, D1 HIGH first),
+re-read S83a against the pre-push log of session 84's push before acting
+on it, then the adversary pass on 85bf25d (S83c), then the inbox triage
+(S80a), then the remaining OPEN WORK items below, highest priority first.
+Session 84 worked MAIN's FI-RSC-1 ORDER (RSC-1 and FLEET-9). Carry every
+item not acted on forward again.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -62,9 +62,9 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 26 [] (kit v26, MANIFEST sha256
-45b5088e202a0c0c453fb1dc4ca8969783563d60d3b7b02e8d2c5c547fe4edae; read
-back 26 [] at session 83 /done). Outbound cap is 12 notes a day (FLEET-COMMON
+must print 27 [] (kit v27, MANIFEST sha256
+0a90af3540eb87fbbda2bfae8b5e84abe692dd6c73a9e7229adab8f968e949c1; read
+back 27 [] at session 84 wrap-up). Outbound cap is 12 notes a day (FLEET-COMMON
 14 c); any text saying 6 a day is stale.
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
@@ -79,6 +79,12 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
+STATE OBSERVED 2026-11-01 AT 8438cc1 (session 84 wrap-up, headless run)
+  Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile and pity_engine
+  green through the suite gate, ruff and mypy clean, each exit 0 (counts
+  in docs/ledger/session-84.md). Not run this session: shell node --test,
+  qa_companion, headless dry run. Inbox NOT marked. Push, worktree and
+  remote read-backs come after this file's commit: read them live.
 STATE OBSERVED 2026-11-01 AT 85bf25d (session 83 /done, headless run)
   Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile, pity_engine and
   shell node --test green through the suite gate, no slot wait (counts in
@@ -96,6 +102,20 @@ PRIOR READINGS (sessions 57-82): docs/ledger/ files. A worktree shows
   regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
+  S84a. ADVERSARY ROWS OPEN (NEW session 84): ROADMAP "Now" rows
+     "Adversary, RSC-1 CLI" (D1 HIGH closed fd 1 traceback, plus D2-D6)
+     and "Adversary, FLEET-9" (scratch/* blind spot, detector shapes,
+     late-write at factor 3+, zombie 0.3 s window). Not fixed: 40-minute
+     cap, filed on MAIN's time rule.
+  S84b. FLEET-9 7-day read earliest 2026-11-08, ROADMAP Now. Every
+     session's ledger must state its gated figures; no per-run gated log
+     exists.
+  S84c. MAIN's FI-RSC-1 reply sent: the ANSWER is the run's act AFTER this
+     file's commit. Verify with python tools/send_note.py audit and the
+     outbound ledger row; TERMINAL, no reply awaited.
+  S83a. RE-READ FIRST (session 84): bare python imported pytest in session
+     84's run (Python314), against the claim below; the skip may depend on
+     environment. ROADMAP "S83a re-read needed".
   S83a. HIGH (NEW session 83): PRE-PUSH SKIPPED BOTH SUITES all session
      ("pytest not importable"): bare python on PATH has no pytest (read
      back at /done), so every session 83 push was gated by ruff only.
@@ -117,8 +137,6 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      confirms. Residue (e).
   S83f. Electron 45 window (2215 item 2) not visually audited: run the
      ui-auditor over shell/. Residue (f).
-  S83g. Note only: tests/test_headless_runner_lock_budget.py near line
-     757 keeps one raw timing bound on purpose (ordering check).
   S83h. The kit v26 ANSWER (2026-10-31 2210) had no outbound ledger row;
      /done backfilled it. Find the send path that skipped it. Residue (h).
   S82b. docs/CHANNEL.md does not say where MAIN's inbox is (MAIN is not
@@ -281,7 +299,10 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      docs/handoff-archive/RSC-2026-10-26.txt.
   WATCHERS 0x, 0b, 0t, N10: no MAIN reply through session 79; re-check
   them in the S80a triage.
-  DONE 64-83 (0k and S82a/S82d closed session 83): docs/ledger/session-<n>.md. Old DONE blocks: docs/LEDGER.md,
+  S83g CLOSED FALSE session 84: the bound near line 757 of
+  tests/test_headless_runner_lock_budget.py was a wall-clock bound and now
+  reads a budgeted value (42db075).
+  DONE 64-84 (0k and S82a/S82d closed session 83): docs/ledger/session-<n>.md. Old DONE blocks: docs/LEDGER.md,
   "Hand-off blocks retired session 77". DO NOT REDO (decision -> what
   reverses it): moved verbatim session 83 to
   docs/handoff-archive/RSC-2026-10-26.txt; read it before re-litigating.
@@ -292,6 +313,8 @@ TRAPS MEASURED - none are hypothetical
   live tree state"). Gitignored scratch there is still live state. Write
   logs to a private dir under the user temp dir.
 
+  BARE python: session 84 measured it importing pytest (Python314); do not
+  assume either way, probe it (S83a).
   BARE python HERE CANNOT IMPORT pytest (session 83). Use the full 3.14
   interpreter path for every suite; the pre-push hook silently skips
   suites under it (S83a).
@@ -411,5 +434,7 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-Reap (session 83 /done): reap applied: 0 removed, 0 kept, 0 listed (base main).
-SESSION: 84
+Reap (session 84): fleet_done reap not run; the two merged RSC-1 and FLEET-9
+worktrees are removed by the wrap-up after this file's commit. Read git
+worktree list. Session 83: 0 removed, 0 kept, 0 listed (base main).
+SESSION: 85
