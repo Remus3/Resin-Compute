@@ -1,15 +1,16 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-11-01 (session 84, MAIN FI-RSC-1 headless run, kit v27),
-gates measured at commit 8438cc1 on main; this paperwork commit landed
-after it. Everything below is a READING taken that day, not a promise
+Stamped 2026-11-01 (session 85, MAIN FIX 1508 headless run, kit v27);
+the session 85 gates are in docs/ledger/session-85.md; this paperwork
+commit landed before them. Everything below is a READING taken that day, not a promise
 about now. Re-measure before citing.
 
-NEXT ACTION: work the session 84 adversary rows (S84a, D1 HIGH first),
+NEXT ACTION: work the session 84 adversary rows (S84a, D7 and the other
+MEDIUM rows first; D1 closed 7da57ca),
 re-read S83a against the pre-push log of session 84's push before acting
 on it, then the adversary pass on 85bf25d (S83c), then the inbox triage
 (S80a), then the remaining OPEN WORK items below, highest priority first.
-Session 84 worked MAIN's FI-RSC-1 ORDER (RSC-1 and FLEET-9). Carry every
-item not acted on forward again.
+Session 85 worked MAIN's FIX 1508 (CI red on 95358dd, D1 closed stdout).
+Carry every item not acted on forward again.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -79,6 +80,8 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
+STATE 2026-11-01 session 85: gated figures, tip, CI and worktree read-backs
+  come after this file's commit: docs/ledger/session-85.md and live reads.
 STATE OBSERVED 2026-11-01 AT 8438cc1 (session 84 wrap-up, headless run)
   Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile and pity_engine
   green through the suite gate, ruff and mypy clean, each exit 0 (counts
@@ -102,11 +105,20 @@ PRIOR READINGS (sessions 57-82): docs/ledger/ files. A worktree shows
   regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
+  S85a. MAIN FIX 1508 ANSWER: the run's act AFTER this file's commit, once
+     ci, docs-guards and codeql are green on the tip. Verify with python
+     tools/send_note.py audit and the pending list; TERMINAL, no reply
+     awaited.
   S84a. ADVERSARY ROWS OPEN (NEW session 84): ROADMAP "Now" rows
-     "Adversary, RSC-1 CLI" (D1 HIGH closed fd 1 traceback, plus D2-D6)
+     "Adversary, RSC-1 CLI" (D2-D6, plus D7-D10 filed session 85; D1 closed
+     7da57ca)
      and "Adversary, FLEET-9" (scratch/* blind spot, detector shapes,
      late-write at factor 3+, zombie 0.3 s window). Not fixed: 40-minute
      cap, filed on MAIN's time rule.
+  S85b. ENGINE FLOATS MOVE ONE ULP ACROSS INTERPRETERS (filed FIX 1508,
+     extended session 85): second copy of the claim at
+     agents/pity_engine/__init__.py lines 7-8; README line 111 is 1 ULP off
+     on 3.11. ROADMAP "Filed (MAIN FIX 1508". Not ordered.
   S84b. FLEET-9 7-day read earliest 2026-11-08, ROADMAP Now. Every
      session's ledger must state its gated figures; no per-run gated log
      exists.
@@ -308,6 +320,13 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   docs/handoff-archive/RSC-2026-10-26.txt; read it before re-litigating.
 
 TRAPS MEASURED - none are hypothetical
+  A PYTEST COMMAND WITH ITS PATH IN A SHELL VARIABLE IS DENIED BY THE SUITE
+  GATE HOOK (session 85): it reads as a whole suite. Type the module path.
+
+  py -3.11 HAS NO pytest; session 85 ran one module there with PYTHONPATH
+  set to the 3.14 site-packages, -p no:xdist -p no:cacheprovider (147
+  passed). Good for a module, not measured for a suite.
+
   A LOG OR HELPER WRITTEN UNDER ops/loop/control DURING A SUITE FAILS IT
   (session 83 /done: 10 failed, 8 errors, all fleet_test_guard "touched
   live tree state"). Gitignored scratch there is still live state. Write
@@ -437,4 +456,4 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
 Reap (session 84): fleet_done reap not run; the two merged RSC-1 and FLEET-9
 worktrees are removed by the wrap-up after this file's commit. Read git
 worktree list. Session 83: 0 removed, 0 kept, 0 listed (base main).
-SESSION: 85
+SESSION: 86

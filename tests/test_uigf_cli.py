@@ -61,8 +61,9 @@ RAW_ERROR_WORDS = (
 #: Relative agreement demanded of a computed float. Exact equality pins a rounding,
 #: not a forecast: sum() over floats is compensated from Python 3.12, so the same
 #: 107 terms in markov.py total 33.8216135353807 on 3.11 and 33.82161353538069 on
-#: 3.12+, one ULP or 2.1e-16 apart (measured). This admits about 47 ULP of that.
-FLOAT_REL = 1e-14
+#: 3.12+, one ULP or 2.1e-16 apart (measured). This admits under 5 ULP of that, and
+#: refuses the README figure rounded to 12 decimals, which is 9.0e-15 away.
+FLOAT_REL = 1e-15
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[bytes]:
@@ -239,7 +240,8 @@ def test_the_seeded_pity_reaches_the_forecast_against_the_readme_figure(tmp_path
 def test_the_float_tolerance_admits_rounding_and_nothing_more():
     """Both sides measured: the first pair is 3.11 against 3.12+ on the same terms."""
     assert 33.8216135353807 == _close(33.82161353538069)
-    assert 33.82161353538069 * (1 + 1e-12) != _close(33.82161353538069)
+    assert 33.82161353538069 * (1 + 2e-15) != _close(33.82161353538069)
+    assert round(33.82161353538069, 12) != _close(33.82161353538069)
     # pytest.approx adds a default abs of 1e-12 unless told otherwise, which on a
     # small probability would be far wider than the relative figure says.
     assert 1e-13 != _close(2e-13)
@@ -253,7 +255,7 @@ def test_the_seed_changes_the_answer():
     # byte-equal answers at 30 pulls, measured, and only differ once one reaches it.
     seeded = _ok(FIXTURE, "--uid", UID, "--banner", "character_event", "--target-count", "1", "--pull-budget", "80")
     unseeded = forecast_payload({"banner": "character_event", "target_count": 1, "pull_budget": 80})
-    assert seeded["forecast"]["probability"] != unseeded["probability"]
+    assert seeded["forecast"]["probability"] != _close(unseeded["probability"])
 
 
 @pytest.mark.parametrize(
@@ -267,7 +269,7 @@ def test_the_seed_changes_the_answer():
 def test_the_caller_guarantee_inputs_reach_the_engine(banner: str, flags: tuple[str, ...], body: dict):
     base = _ok(FIXTURE, "--uid", UID, "--banner", banner, "--target-count", "1", "--pull-budget", "75")
     moved = _ok(FIXTURE, "--uid", UID, "--banner", banner, "--target-count", "1", "--pull-budget", "75", *flags)
-    assert moved["forecast"]["probability"] != base["forecast"]["probability"], "the flag changed nothing"
+    assert moved["forecast"]["probability"] != _close(base["forecast"]["probability"]), "the flag changed nothing"
     for key, value in body.items():
         assert moved[key] == value
     engine = forecast_payload(
@@ -311,7 +313,7 @@ def test_the_largest_accepted_values_answer():
 
 def test_a_zero_budget_is_a_legitimate_question():
     answer = _ok(FIXTURE, "--uid", UID, "--banner", "character_event", "--target-count", "1", "--pull-budget", "0")
-    assert answer["forecast"]["probability"] == 0.0
+    assert answer["forecast"]["probability"] == _close(0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -576,8 +578,10 @@ def test_help_with_stdout_closed_at_startup_is_not_a_traceback():
 def test_a_missing_stdout_logs_the_reason_and_stays_off_the_console(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
 ):
-    monkeypatch.setattr(sys, "stdout", None)
-    with caplog.at_level(logging.INFO, logger="ingest.uigf"):
+    # A context, so the undo runs before capsys closes the stream it restores: a
+    # fixture-time undo leaves sys.stdout closed, and pytest -s then dies on exit.
+    with monkeypatch.context() as patch, caplog.at_level(logging.INFO, logger="ingest.uigf"):
+        patch.setattr(sys, "stdout", None)
         assert uigf_main([FIXTURE, "--uid", UID, "--banner", "standard"]) == 1
     assert capsys.readouterr().err == "python -m ingest.uigf: output could not be written\n"
     assert "sys.stdout is None" in caplog.text
