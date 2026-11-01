@@ -13,6 +13,16 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-11-01. Kit v27 pending-ORDER queue (MAIN 2347 ORDER section 5
+  item 3).** v27 `fleet_inbox.mark_seen` queues every ORDER / FIX / RULING
+  it acks. Wire `fleet_inbox.session_start()` (or `pending`) into the
+  responder tick so PENDING rows surface without a session, and close each
+  with `mark_work_done` when its ANSWER is delivered (`tools/send_note.py`
+  is the likely seam). Until then the read is manual per CLAUDE.md "Inbox
+  cost". Also: the v27 `fleet_test_guard` IGNORE list does not name
+  the gitignored inbox_pending_orders.json under ops/loop/control, so a responder ack of an
+  ORDER mid-suite can fail a gated suite; reported to MAIN, never patch
+  the kit.
 - **NEW 2026-11-01. Session 83 residue (see `docs/ledger/session-83.md`).**
   (a) The pre-push hook skipped BOTH suites all session ("pytest not
   importable"): the bare `python` on PATH has no pytest, so the push gate

@@ -585,6 +585,18 @@ wait for a human. Kit v10 ships the kit UP031 clean; the kit files that still
 fail a rule (UP017, UP032, BLE001) are per-file-ignored for exactly those
 rules in `ruff.toml`, never patched. `ruff.toml` carries the measured list.
 
+- **Pending ORDERs first (FLEET-KIT v27, MAIN 2347 ORDER of 2026-10-31,
+  SHA-256 verified).** Since v27 the kit's `mark_seen` of an ORDER, FIX or
+  RULING note also queues it, so the responder's mechanical ack or
+  auto-reply never retires an order; the queue is mirrored in
+  the gitignored inbox_pending_orders.json under ops/loop/control. Every interactive session
+  and every kit-rollout run reads
+  `python ops/fleet_kit/fleet_inbox.py pending . --inbox moon_sync_inbox --code RSC`
+  right after the hand-off and works the `PENDING` rows before anything
+  else; each row is closed with `fleet_inbox.mark_work_done(root, row)`
+  once its ANSWER is delivered. Wiring that read into the responder tick
+  is a ROADMAP item. Reversed by: a MAIN ruling or a later kit version.
+
 ## Sub-agent-first hook - FLEET-KIT v10 in this tree
 
 MAIN 0839 ORDER of 2026-10-08 (FLEET-KIT v10, SHA-256 verified). The project
