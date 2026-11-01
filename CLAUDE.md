@@ -266,9 +266,9 @@ the repository, so it uses the operator's internal vocabulary:
 - **Never surface a raw API or error string** on a user-facing surface. Catch it,
   render a friendly degraded state, log the raw error.
 - **Vendor no game data.** See `docs/LICENSE_NOTES.md`. `data/fixtures/` is
-  HAND-AUTHORED only. Do not call it "synthetic": two of its three files are
+  HAND-AUTHORED only. Do not call it "synthetic": two of its four files are
   verified public game facts typed in by hand; only `enka_sample_profile.json`
-  is invented.
+  and `uigf_v4_sample.json` are invented.
 - **Never merge on github.com** (MAIN 2215 ORDER of 2026-10-31, SHA-256
   verified). A dependabot bump lands as a local operator commit, pushed as
   usual; the PR is then closed with a comment naming that commit. Reversed

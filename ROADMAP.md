@@ -13,6 +13,15 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **NEW 2026-11-01. RSC-UIGF-IO and RSC-FORECAST-GLANCE shipped (MAIN 2215
+  ORDER items 6 and 7).** RSC-UIGF-IO: `ingest/uigf.py` imports and exports
+  wish history in UIGF v4, round-trip proven by `tests/test_uigf.py` over the
+  invented fixture `data/fixtures/uigf_v4_sample.json`. RSC-FORECAST-GLANCE:
+  `surface/model.py` and `surface/render.py` put a one-line forecast glance
+  as the dashboard top row, pinned by `tests/test_surface_glance.py`. STILL
+  OPEN: the ONE ANSWER to the 2215 ORDER, which must supersede the
+  auto-reply that reported both items NOT DONE.
+
 - **NEW 2026-10-26. Session 82 residue (see `docs/ledger/session-82.md`).**
   (a) HIGH: MAIN 0300 ORDER to RSC (U5 batched: repo map, SS root, timing
   budget, hand-off size, ONE ANSWER) is unworked; only an auto-reply
