@@ -39,6 +39,7 @@ surface".
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.request
@@ -61,6 +62,10 @@ INFO_PATH = "/api/uid/{uid}/?info"
 
 #: The brief's "https://enka.network<uid>" is malformed and is deliberately not
 #: reproduced anywhere in this module.
+
+#: ASCII digits only, whole string. `str.isdigit` also accepts superscripts and
+#: every Unicode Nd digit (Arabic-Indic, fullwidth), none of which is a UID.
+_UID_RE = re.compile(r"[0-9]{6,12}")
 
 #: Hard ceiling on a single batch call. Deliberately small: the upstream
 #: prohibition is against bulk collection, and a limit that would permit a
@@ -266,7 +271,7 @@ class EnkaClient:
     @staticmethod
     def _uid_looks_valid(uid: str) -> bool:
         """Cheap local shape check. Game UIDs are digit strings."""
-        return uid.isdigit() and 6 <= len(uid) <= 12
+        return _UID_RE.fullmatch(uid) is not None
 
     def _fetch_with_retries(self, url: str, headers: dict[str, str], uid: str) -> FetchResult:
         """Attempt the request, backing off on 429/503 only, bounded."""

@@ -99,11 +99,14 @@ FORBIDDEN_KEY_TOKENS: tuple[str, ...] = (
 #: A digest is 64 lowercase hex characters. Uppercase is refused rather than
 #: normalised: two spellings of one digest is two join keys, and the whole
 #: point of the field is that it joins.
-_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+#: Matched with `fullmatch`: `$` under `re.match` accepts a trailing newline.
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 #: ISO-8601 with a trailing Z. A timestamp with no zone is a timestamp about
 #: nowhere, and this tree records UTC.
-_ISO_Z = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
+#: ASCII [0-9] only, matched with `fullmatch`: `\d` accepts every Unicode Nd
+#: digit and `$` under `re.match` accepts a trailing newline.
+_ISO_Z = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z")
 
 #: A locator names a path RELATIVE to a capture root that is named outside this
 #: tree. A drive letter, a leading separator or an MSYS mount spelling all name
@@ -476,7 +479,7 @@ def _check_locator(locator: str, where: str) -> None:
 
 
 def _check_timestamp(value: str, where: str) -> None:
-    if not _ISO_Z.match(value):
+    if not _ISO_Z.fullmatch(value):
         _refuse(f"{where}: {value!r} is not ISO-8601 UTC with a trailing Z")
 
 
@@ -538,12 +541,12 @@ def validate_record(record: ProvenanceRecord) -> None:
                 f"{where}: a testimony source carries a digest. No bytes exist, so a "
                 "digest there is theatre"
             )
-    elif not _SHA256.match(source.sha256):
+    elif not _SHA256.fullmatch(source.sha256):
         _refuse(
             f"{where}: sha256 {source.sha256!r} is not 64 lowercase hex characters, so no "
             "reader can re-derive which bytes were read"
         )
-    if source.parent_sha256 and not _SHA256.match(source.parent_sha256):
+    if source.parent_sha256 and not _SHA256.fullmatch(source.parent_sha256):
         _refuse(f"{where}: parent_sha256 {source.parent_sha256!r} is not 64 lowercase hex characters")
     if source.bytes_len < 0:
         _refuse(f"{where}: bytes_len is negative")
