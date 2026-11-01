@@ -24,6 +24,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import fleet_test_guard  # on sys.path via tests/conftest.py
 import pytest
 
 from agents.pity_engine import ENGINE_VERSION
@@ -474,7 +475,7 @@ def test_a_closed_stdout_is_not_a_traceback():
     process.stdout.close()  # long before the child has imported anything
     stderr = process.stderr.read()
     process.stderr.close()
-    assert process.wait(timeout=120) != 0
+    assert process.wait(timeout=fleet_test_guard.budget(120)) != 0
     assert stderr.isascii()
     text = stderr.decode("ascii")
     assert len(text.splitlines()) == 1, text
