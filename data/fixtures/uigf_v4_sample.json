@@ -1,0 +1,35 @@
+{
+  "_invented": true,
+  "_hand_authored": true,
+  "_vendored": false,
+  "_note": "INVENTED hand-authored UIGF v4 sample for tests. The SHAPE follows the public UIGF v4 open standard (UIGF-org), implemented from the published format. Every uid, item_id, id, name and time below is a deliberate placeholder (9xxxxxxx item ids, Test Item names) corresponding to nothing real. No game item table is vendored.",
+  "info": {
+    "export_timestamp": 1767225600,
+    "export_app": "TestExporter",
+    "export_app_version": "0.0.1",
+    "version": "v4.0"
+  },
+  "hk4e": [
+    {
+      "uid": "000000001",
+      "timezone": 8,
+      "lang": "en-us",
+      "list": [
+        {"uigf_gacha_type": "301", "gacha_type": "301", "item_id": "90000003", "count": "1", "time": "2026-01-02 10:00:00", "name": "Test Item C", "item_type": "Weapon", "rank_type": "3", "id": "1000000000000000008"},
+        {"uigf_gacha_type": "301", "gacha_type": "301", "item_id": "90000003", "count": "1", "time": "2026-01-02 10:00:00", "name": "Test Item C", "item_type": "Weapon", "rank_type": "3", "id": "1000000000000000007"},
+        {"uigf_gacha_type": "301", "gacha_type": "301", "item_id": "90000002", "count": "1", "time": "2026-01-02 10:00:00", "name": "Test Item B", "item_type": "Character", "rank_type": "4", "id": "1000000000000000006"},
+        {"uigf_gacha_type": "301", "gacha_type": "400", "item_id": "90000003", "count": "1", "time": "2026-01-01 12:00:03", "name": "Test Item C", "item_type": "Weapon", "rank_type": "3", "id": "1000000000000000005"},
+        {"uigf_gacha_type": "301", "gacha_type": "400", "item_id": "90000001", "count": "1", "time": "2026-01-01 12:00:02", "name": "Test Item A", "item_type": "Character", "rank_type": "5", "id": "1000000000000000004"},
+        {"uigf_gacha_type": "301", "gacha_type": "301", "item_id": "90000003", "count": "1", "time": "2026-01-01 12:00:01", "name": "Test Item C", "item_type": "Weapon", "rank_type": "3", "id": "1000000000000000003"},
+        {"uigf_gacha_type": "301", "gacha_type": "301", "item_id": "90000002", "count": "1", "time": "2026-01-01 12:00:00", "name": "Test Item B", "item_type": "Character", "rank_type": "4", "id": "1000000000000000002"},
+        {"uigf_gacha_type": "301", "gacha_type": "301", "item_id": "90000003", "count": "1", "time": "2026-01-01 11:00:00", "name": "Test Item C", "item_type": "Weapon", "rank_type": "3", "id": "1000000000000000001"},
+        {"uigf_gacha_type": "302", "gacha_type": "302", "item_id": "90000003", "count": "1", "time": "2026-01-03 09:00:00", "name": "Test Item C", "item_type": "Weapon", "rank_type": "3", "id": "1000000000000000011"},
+        {"uigf_gacha_type": "302", "gacha_type": "302", "item_id": "90000003", "count": "1", "time": "2026-01-03 09:00:01", "name": "Test Item C", "item_type": "Weapon", "rank_type": "3", "id": "1000000000000000012"},
+        {"uigf_gacha_type": "302", "gacha_type": "302", "item_id": "90000003", "count": "1", "time": "2026-01-03 09:00:02", "name": "Test Item C", "item_type": "Weapon", "rank_type": "3", "id": "1000000000000000013"},
+        {"uigf_gacha_type": "200", "gacha_type": "200", "item_id": "90000004", "count": "1", "time": "2026-01-04 08:00:00", "name": "Test Item D", "item_type": "Character", "rank_type": "5", "id": "1000000000000000021"},
+        {"uigf_gacha_type": "200", "gacha_type": "200", "item_id": "90000003", "count": "1", "time": "2026-01-04 08:00:01", "name": "Test Item C", "item_type": "Weapon", "rank_type": "3", "id": "1000000000000000022"},
+        {"uigf_gacha_type": "100", "gacha_type": "100", "item_id": "90000003", "count": "1", "time": "2025-12-31 08:00:00", "name": "Test Item C", "item_type": "Weapon", "rank_type": "3", "id": "1000000000000000031"}
+      ]
+    }
+  ]
+}

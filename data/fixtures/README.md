@@ -10,9 +10,10 @@ section 4 of `docs/SPEC_SCAFFOLD.md` first.
 publicly known game FACT - real avatarIds and real material ids, independently
 verified and typed in one row at a time rather than lifted from a dataset.
 `enka_sample_profile.json` is the other kind: a synthetic payload whose ids and
-name hashes are deliberate placeholders corresponding to nothing real. Both
-kinds are hand-authored. Only the third file is synthetic, and each file states
-which kind it is in its own header block.
+name hashes are deliberate placeholders corresponding to nothing real.
+`uigf_v4_sample.json` is the same kind: an invented wish history in the
+public UIGF v4 format. All kinds are hand-authored. Only those two files are
+invented, and each file states which kind it is in its own header block.
 
 This heading used to read "SYNTHETIC test data only", which was false of two of
 the three files, and the two seed tables carried a `"_synthetic": true` flag on
@@ -117,8 +118,8 @@ The same correction is carried in the `_corrections` block of the JSON itself.
 
 ### `enka_sample_profile.json`
 
-**Kind: genuinely SYNTHETIC.** This is the one file in the directory whose
-contents are invented, it carries `"_synthetic": true` truthfully, and that
+**Kind: genuinely SYNTHETIC.** This file's contents are invented (the only
+other invented file is `uigf_v4_sample.json`), it carries `"_synthetic": true` truthfully, and that
 label must not be swept away with the two false ones.
 
 A small SYNTHETIC payload, hand-authored, shaped exactly like a real profile
@@ -149,3 +150,13 @@ mistaken for or reused as game data. In a live payload the
 skill depot to resolve; this fixture keys them by a skill id already present in
 `skillLevelMap` so the fold is exercised without vendoring depot data. The
 mapper accepts an explicit `skill_group_map` for the live case.
+
+### `uigf_v4_sample.json`
+
+**Kind: INVENTED.** It carries `"_invented": true` and `"_vendored": false`.
+A minimal wish history in the UIGF v4 interchange format, a public open
+standard published by UIGF-org and implemented from that published format in
+`ingest/uigf.py`. The uid, every `item_id` (9xxxxxxx), every wish `id`, every
+time and every name (`Test Item A` to `Test Item D`) is a placeholder that
+corresponds to nothing real. No item table or banner schedule is vendored.
+`tests/test_uigf.py` derives its expected pity figures by hand from these rows.
