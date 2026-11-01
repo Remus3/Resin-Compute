@@ -231,11 +231,21 @@ def _declared_scripts(commands: tuple[str, ...]) -> frozenset[str]:
     """
     targets: set[str] = set()
     for command in commands:
+        previous = ""
         for token in _tokens(command):
             target = _repo_relative(token)
+            # FLEET-KIT v26 launcher: a bare script name after it resolves
+            # beside the launcher, which runs `python "$dir/$script"`.
+            if previous == _KIT_HOOK_LAUNCHER and "/" not in target:
+                target = f"{_KIT_HOOK_LAUNCHER.rsplit('/', 1)[0]}/{target}"
             if target.endswith(".py"):
                 targets.add(target)
+            previous = target
     return frozenset(targets)
+
+
+#: FLEET-KIT v26 (MAIN 2200 ORDER of 2026-10-31, s5.2) deny-hook launcher.
+_KIT_HOOK_LAUNCHER = "ops/fleet_kit/fleet_hook.sh"
 
 
 # ---------------------------------------------------------------------------

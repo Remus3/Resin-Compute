@@ -34,9 +34,14 @@ DONE_MD = REPO_ROOT / ".claude" / "commands" / "done.md"
 
 #: The ORDER's matcher and commands, verbatim.
 CLAIMS_MATCHER = "Edit|Write|NotebookEdit|MultiEdit|Bash|PowerShell"
-CLAIMS_HOOK = 'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py" hook'
+#: Kit v26 (MAIN 2200 ORDER s5.2): PreToolUse deny hooks run through the
+#: nonce-checked launcher fleet_hook.sh with timeout 15. The SubagentStop
+#: release hook is unchanged (plain python, timeout 10).
+CLAIMS_HOOK = 'bash "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_hook.sh" fleet_claims.py hook'
+OLD_CLAIMS_HOOK = 'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py" hook'
+PRE_TIMEOUT = 15
 RELEASE_HOOK = 'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py" release-hook'
-SUBAGENT_FIRST_HOOK = 'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_subagent_first.py"'
+SUBAGENT_FIRST_HOOK = 'bash "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_hook.sh" fleet_subagent_first.py'
 TIMEOUT = 10
 
 IGNORED = (
@@ -65,7 +70,7 @@ def _settings() -> dict:
 
 
 def test_the_claims_hook_is_wired_on_the_order_matcher():
-    assert (CLAIMS_MATCHER, CLAIMS_HOOK, TIMEOUT) in _rows(_settings(), "PreToolUse")
+    assert (CLAIMS_MATCHER, CLAIMS_HOOK, PRE_TIMEOUT) in _rows(_settings(), "PreToolUse")
 
 
 def test_the_subagent_first_entry_is_kept():
@@ -80,12 +85,13 @@ def test_the_release_hook_is_wired_on_subagent_stop():
 
 def test_the_wiring_detector_fires_on_a_planted_wrong_row():
     good = {"hooks": {"PreToolUse": [{"matcher": CLAIMS_MATCHER, "hooks": [
-        {"type": "command", "command": CLAIMS_HOOK, "timeout": TIMEOUT}]}]}}
-    assert (CLAIMS_MATCHER, CLAIMS_HOOK, TIMEOUT) in _rows(good, "PreToolUse")
-    for matcher, command in (("Edit|Write", CLAIMS_HOOK), (CLAIMS_MATCHER, "python fleet_claims.py hook")):
+        {"type": "command", "command": CLAIMS_HOOK, "timeout": PRE_TIMEOUT}]}]}}
+    assert (CLAIMS_MATCHER, CLAIMS_HOOK, PRE_TIMEOUT) in _rows(good, "PreToolUse")
+    for matcher, command in (("Edit|Write", CLAIMS_HOOK), (CLAIMS_MATCHER, "python fleet_claims.py hook"),
+                             (CLAIMS_MATCHER, OLD_CLAIMS_HOOK)):
         bad = {"hooks": {"PreToolUse": [{"matcher": matcher, "hooks": [
-            {"type": "command", "command": command, "timeout": TIMEOUT}]}]}}
-        assert (CLAIMS_MATCHER, CLAIMS_HOOK, TIMEOUT) not in _rows(bad, "PreToolUse")
+            {"type": "command", "command": command, "timeout": PRE_TIMEOUT}]}]}}
+        assert (CLAIMS_MATCHER, CLAIMS_HOOK, PRE_TIMEOUT) not in _rows(bad, "PreToolUse")
 
 
 @pytest.mark.parametrize("path", IGNORED)

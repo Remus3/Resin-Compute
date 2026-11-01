@@ -44,8 +44,12 @@ MATCHER = "Bash|PowerShell|Read|Edit|Write|Grep|Glob|NotebookEdit|MultiEdit"
 #: against the CURRENT cwd, and a PreToolUse hook whose script is not found
 #: exits 2 - which Claude Code treats as a BLOCKING error on every guarded
 #: call. The quotes are load-bearing because the checkout path holds a space.
-HOOK_COMMAND = 'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_subagent_first.py"'
-HOOK_TIMEOUT = 10
+#: Kit v26 (MAIN 2200 ORDER s5.2): the deny hook runs through the
+#: nonce-checked launcher fleet_hook.sh, timeout 15, no `|| true`.
+HOOK_COMMAND = 'bash "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_hook.sh" fleet_subagent_first.py'
+HOOK_TIMEOUT = 15
+#: The pre-v26 plain form; MAIN's drift reads it as "deny hook not launcher-checked".
+OLD_HOOK_COMMAND = 'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_subagent_first.py"'
 
 IGNORED = ("ops/loop/control/subagent_first.mode", "ops/loop/control/subagent_first.jsonl")
 
@@ -90,6 +94,8 @@ def test_the_wiring_detector_fires_on_a_wrong_matcher_or_command():
     for matcher, command, timeout in (
         ("Bash|Read", HOOK_COMMAND, HOOK_TIMEOUT),
         (MATCHER, "python ops/fleet_kit/fleet_subagent_first.py", HOOK_TIMEOUT),
+        (MATCHER, OLD_HOOK_COMMAND, HOOK_TIMEOUT),
+        (MATCHER, HOOK_COMMAND + " || true", HOOK_TIMEOUT),
         (MATCHER, HOOK_COMMAND, 5),
     ):
         planted = {"hooks": {"PreToolUse": [{"matcher": matcher, "hooks": [

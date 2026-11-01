@@ -120,7 +120,16 @@ MAX_HOOK_TIMEOUT = 5
 #: SubagentStop and the second PreToolUse entry: FLEET-KIT v12 (MAIN 2031 ORDER
 #: of 2026-10-08, s3.3) declares `fleet_claims.py hook` and `release-hook` at
 #: timeout 10. Both swallow every exception and exit 0 (never fail closed).
-MAX_HOOK_TIMEOUT_BY_EVENT = {"PreToolUse": 10, "SubagentStop": 10}
+#: FLEET-KIT v26 (MAIN 2200 ORDER of 2026-10-31, s5.2) moves both PreToolUse
+#: entries behind the nonce-checked launcher `fleet_hook.sh` at timeout 15;
+#: the launcher fails CLOSED (exit 2) only when the interpreter check fails.
+#: SubagentStop is unchanged at 10.
+MAX_HOOK_TIMEOUT_BY_EVENT = {"PreToolUse": 15, "SubagentStop": 10}
+
+#: FLEET-KIT v26 launcher. A bare script name passed to it resolves beside the
+#: launcher (the launcher runs `python "$dir/$script"`), so the existence and
+#: trackedness guards follow it there instead of reading it as repo-relative.
+KIT_HOOK_LAUNCHER = "ops/fleet_kit/fleet_hook.sh"
 
 #: Claude Code substitutes the project root for these. Accepted and unwrapped
 #: so a later edit to the self-locating form keeps resolving, and so the
@@ -327,8 +336,8 @@ EXPECTED_SHAPE = {
     'python "$CLAUDE_PROJECT_DIR/tools/caveman_default.py"': BANNER_SHAPE,
     'python "$CLAUDE_PROJECT_DIR/tools/session_checklist.py"': SESSION_COUNTER_SHAPE,
     'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_done.py" stop-hook': STOP_HOOK_SHAPE,
-    'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_subagent_first.py"': SUBAGENT_FIRST_SHAPE,
-    'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py" hook': CLAIMS_HOOK_SHAPE,
+    'bash "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_hook.sh" fleet_subagent_first.py': SUBAGENT_FIRST_SHAPE,
+    'bash "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_hook.sh" fleet_claims.py hook': CLAIMS_HOOK_SHAPE,
     'python "$CLAUDE_PROJECT_DIR/ops/fleet_kit/fleet_claims.py" release-hook': RELEASE_HOOK_SHAPE,
 }
 
@@ -469,10 +478,14 @@ def _script_targets(settings: dict) -> list[tuple[str, str, str]]:
     """(event, command, repo-relative script) for every script a hook names."""
     targets = []
     for hook in _hook_commands(settings):
+        previous = ""
         for token in _tokens(hook.command):
             candidate = _repo_relative(token)
+            if previous == KIT_HOOK_LAUNCHER and "/" not in candidate:
+                candidate = f"{KIT_HOOK_LAUNCHER.rsplit('/', 1)[0]}/{candidate}"
             if candidate.lower().endswith(SCRIPT_SUFFIXES):
                 targets.append((hook.event, hook.command, candidate))
+            previous = candidate
     return targets
 
 
