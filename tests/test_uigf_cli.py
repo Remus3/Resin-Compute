@@ -56,6 +56,12 @@ RAW_ERROR_WORDS = (
     "line 1 column",
 )
 
+#: Relative agreement demanded of a computed float. Exact equality pins a rounding,
+#: not a forecast: sum() over floats is compensated from Python 3.12, so the same
+#: 107 terms in markov.py total 33.8216135353807 on 3.11 and 33.82161353538069 on
+#: 3.12+, one ULP or 2.1e-16 apart (measured). This admits about 47 ULP of that.
+FLOAT_REL = 1e-14
+
 
 def _run(*args: str) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(
@@ -122,6 +128,21 @@ def _write(path: Path, text: str) -> str:
     return str(path)
 
 
+def _close(expected: object) -> object:
+    """A computed float agrees with `expected` to FLOAT_REL, with no absolute slack."""
+    return pytest.approx(expected, rel=FLOAT_REL, abs=0.0)
+
+
+def _readme_example() -> dict:
+    """The JSON block under the README's "Example output" heading."""
+    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    _, heading, tail = text.partition("## Example output")
+    assert heading, "non-vacuity: the README has no example heading"
+    _, fence, block = tail.partition("```json\n")
+    assert fence, "non-vacuity: the example heading has no JSON block"
+    return json.loads(block.partition("\n```")[0])
+
+
 def _fenced_lines(text: str) -> list[str]:
     lines: list[str] = []
     inside = False
@@ -172,9 +193,9 @@ def test_the_command_the_docs_print_loads_the_fixture():
         {"banner": "character_event", "pity_5star": 4, "pity_4star": 2, "target_count": 1, "pull_budget": 30}
     )
     forecast = answer["forecast"]
-    assert forecast["probability"] == engine["probability"]
-    assert forecast["distribution"] == engine["distribution"]
-    assert forecast["expected_pulls"] == engine["expected_pulls"]
+    assert forecast["probability"] == _close(engine["probability"])
+    assert forecast["distribution"] == _close(engine["distribution"])
+    assert forecast["expected_pulls"] == _close(engine["expected_pulls"])
     assert forecast["target_count"] == 1
     assert forecast["pull_budget"] == 30
     assert 0.0 < forecast["probability"] < 1.0
@@ -196,12 +217,32 @@ def test_every_banner_family_without_a_forecast(banner: str, seen: int, p5: int,
 
 
 def test_the_seeded_pity_reaches_the_forecast_against_the_readme_figure(tmp_path: Path):
-    """74 wishes with no payout must reproduce the README's literal example."""
+    """74 wishes with no payout must reproduce the README's literal example.
+
+    The figures are READ FROM THE README, so that file stays their one pin and
+    the doc cannot drift from the command.
+    """
+    example = _readme_example()
     path = _write(tmp_path / "h.json", json.dumps(_document([_wish(n) for n in range(74)])))
     answer = _ok(path, "--uid", UID, "--banner", "character_event", "--target-count", "1", "--pull-budget", "30")
     assert answer["pity_5star"] == 74
-    assert answer["forecast"]["probability"] == 0.5904331542650183
-    assert answer["forecast"]["expected_pulls"] == 33.82161353538069
+    forecast = answer["forecast"]
+    assert forecast["target_count"] == example["target_count"]
+    assert forecast["pull_budget"] == example["pull_budget"]
+    assert forecast["probability"] == _close(example["probability"])
+    assert forecast["distribution"] == _close(example["distribution"])
+    assert forecast["expected_pulls"] == _close(example["expected_pulls"])
+
+
+def test_the_float_tolerance_admits_rounding_and_nothing_more():
+    """Both sides measured: the first pair is 3.11 against 3.12+ on the same terms."""
+    assert 33.8216135353807 == _close(33.82161353538069)
+    assert 33.82161353538069 * (1 + 1e-12) != _close(33.82161353538069)
+    # pytest.approx adds a default abs of 1e-12 unless told otherwise, which on a
+    # small probability would be far wider than the relative figure says.
+    assert 1e-13 != _close(2e-13)
+    assert 0.0 == _close(0.0)
+    assert 1e-300 != _close(0.0)
 
 
 def test_the_seed_changes_the_answer():
@@ -237,7 +278,7 @@ def test_the_caller_guarantee_inputs_reach_the_engine(banner: str, flags: tuple[
             **body,
         }
     )
-    assert moved["forecast"]["probability"] == engine["probability"]
+    assert moved["forecast"]["probability"] == _close(engine["probability"])
 
 
 def test_output_is_deterministic():
