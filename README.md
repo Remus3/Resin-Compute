@@ -79,6 +79,14 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8790/forecast `
   -ContentType 'application/json' -Body $body
 ```
 
+Or seed a forecast from a UIGF v4 wish-history export, with no server
+running. The fixture named here is an invented sample; flags and exit codes are in
+[`docs/OPERATIONS.md`](docs/OPERATIONS.md#importing-a-uigf-wish-history):
+
+```powershell
+python -m ingest.uigf data/fixtures/uigf_v4_sample.json --uid 000000001 --banner character_event --target-count 1 --pull-budget 30
+```
+
 The engine (8790) and the dashboard (8791, `python -m surface`) bind to
 `127.0.0.1` and **do not authenticate** - do not expose them to a network you do
 not control. Any path works for the checkout, spaces included. Bootstrap, the

@@ -18,6 +18,11 @@ traceback, an exception class name or a parser's internal complaint. The
 request-boundary `except Exception` that makes this true is the reason
 `ruff.toml` scopes a BLE001 carve-out to this one file - a bad query must
 degrade to a 400, never take the daemon down.
+
+This service takes only --host and --port, and reads no file (ADR-005). Seeding a
+forecast from a UIGF wish history is `python -m ingest.uigf <path> --uid <uid>
+--banner <banner> [--target-count N --pull-budget N]`, which lives with the
+importer: `ingest` imports this package, never the reverse.
 """
 from __future__ import annotations
 
