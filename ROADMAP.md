@@ -13,19 +13,43 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
-- **NEW 2026-11-01. RSC-UIGF-IO and RSC-FORECAST-GLANCE shipped (MAIN 2215
-  ORDER items 6 and 7).** RSC-UIGF-IO: `ingest/uigf.py` imports and exports
-  wish history in UIGF v4, round-trip proven by `tests/test_uigf.py` over the
-  invented fixture `data/fixtures/uigf_v4_sample.json`. RSC-FORECAST-GLANCE:
-  `surface/model.py` and `surface/render.py` put a one-line forecast glance
-  as the dashboard top row, pinned by `tests/test_surface_glance.py`. STILL
-  OPEN: the ONE ANSWER to the 2215 ORDER, which must supersede the
-  auto-reply that reported both items NOT DONE.
+- **NEW 2026-11-01. Session 83 residue (see `docs/ledger/session-83.md`).**
+  (a) The pre-push hook skipped BOTH suites all session ("pytest not
+  importable"): the bare `python` on PATH has no pytest, so the push gate
+  was effectively ruff-only. Fix the interpreter resolution in the
+  tree-owned `.githooks/` (not the kit), red-first test. Related reading
+  at /done: `tests/test_hook_interpreter.py` skipped "no interpreter on
+  this PATH can import pytest" (and ruff), 3 candidates probed.
+  (b) 10 unexplained errors in one gated app-suite run this session (incl.
+  `tests/test_surface_render.py` a_stopped_server_releases_its_port and
+  `tests/test_headless_runner_lock_budget.py` a_hung_job_is_failed); two
+  reruns clean. Investigate. Lead measured at /done: a suite log written
+  under the gitignored loop control directory during the run produced 10 failed and 8
+  errors, all `fleet_test_guard` "touched live tree state" - check whether
+  the earlier run did the same before calling it a flake.
+  (c) 85bf25d (`core/provenance.py`, `ingest/enka_client.py` ASCII-only
+  digit validators) got no adversary pass; run one lens set (core and
+  ingest are full-lens paths).
+  (d) Kit defects reported to MAIN in the 2233 ANSWER: `fleet_rewrite` hangs
+  on a stale filter-repo marker; `fleet_identity` pre-push refuses when the
+  remote's old tip is missing locally. Await a kit fix; never patch
+  `ops/fleet_kit/`.
+  (e) Residue of the history rewrite: GitHub refs/pull/1..11/head still
+  reference pre-rewrite commits (only delete-and-recreate purges them);
+  the local untracked rewrite mailmap under `.git` holds old identity
+  values - delete after MAIN confirms.
+  (f) 2215 item 2: the electron 45 window (newer Chromium) was not
+  visually audited; run the ui-auditor over `shell/`.
+  (g) One raw timing bound remains at
+  `tests/test_headless_runner_lock_budget.py` near line 757, left raw on
+  purpose (an ordering check, not a budget). Not a defect; recorded.
+  (h) The outbound ledger lacked a row for the kit v26 ANSWER of
+  2026-10-31 2210; /done backfilled it with `tools/send_note.py audit
+  --apply`. Find which send path skipped the row.
 
 - **NEW 2026-10-26. Session 82 residue (see `docs/ledger/session-82.md`).**
-  (a) HIGH: MAIN 0300 ORDER to RSC (U5 batched: repo map, SS root, timing
-  budget, hand-off size, ONE ANSWER) is unworked; only an auto-reply
-  exists. Verify its sha256 against MAIN's outbox, work it, one ANSWER.
+  (a) DONE session 83 (MAIN 2215 ORDER carried U5), moved to
+  `docs/roadmap-archive/2026-11.md`.
   (b) `docs/CHANNEL.md` does not say where MAIN's inbox is (MAIN is not on
   its roster; the session 82 verifier located it by a filesystem scan).
   Add it, by codename only.
@@ -33,9 +57,7 @@ version. What follows is everything the scaffold deliberately did not do.
   directory, likely from a hook or script run with that cwd. Find the
   source; delete only after a consumer check. Never write its machine
   path into a tracked file.
-  (d) Dependabot PRs #9 (ruff 0.17.2), #10 (electron 45.0.0, a major
-  bump) and #11 (github-actions group of 3) are open; review and merge
-  or close.
+  (d) DONE session 83, moved to `docs/roadmap-archive/2026-11.md`.
   (e) A session 82 /done suite log sits at the drive root outside the
   repo; both deletion paths were refused by the protected-path guard.
   Remove it by hand.
@@ -162,12 +184,10 @@ version. What follows is everything the scaffold deliberately did not do.
 - **OPEN 2026-10-09. MAIN 2246 ORDER (REPO-REVIEW), SHA-256 verified
   (7ccc71ff...) - s1-s3 and the s4 Dependabot part DONE session 64 (see
   `docs/ledger/session-64.md`); ANSWER 0019 (HOP: 2) sent. Still OPEN:**
-  (s4) the operator-APPROVED history rewrite via `fleet_rewrite.py` plan /
-  bundle (to the sidecar folder) / run, then the force push (2
-  Claude-authored commits; every SHA but the root changes). PARKED by the
-  attended session's instruction of 2026-10-09: it waits for the operator
-  in person, not for an unattended run. Reversed by: the operator starting
-  it. (s8) queue ONE headless repo-review driver through the kit spawn
+  (s4) DONE session 83 under the MAIN 2233 ORDER (GH-IDENT-REWRITE): the
+  rewrite and force push ran, scope widened to every personal, bot and
+  AI-noreply identity field; see `docs/ledger/session-83.md` and
+  `docs/roadmap-archive/2026-11.md`. (s8) queue ONE headless repo-review driver through the kit spawn
   (kind build, progress repo-review.json): PARKED the same way. FILED from
   s2: (2b) collapse the census tables (`tests/test_responder_gate_census.py`
   and peers) into one test per invariant; (2c) a plumbing-only push still

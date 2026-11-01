@@ -1,14 +1,15 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-10-26 (session 82, headless Maint-KitRollout run, kit v24),
-gates measured at commit dce4f00 on main; this paperwork commit landed
-after it. Everything
-below is a READING taken that day, not a promise about now. Re-measure
-before citing.
+Stamped 2026-11-01 (session 83, MAIN headless driver run, kit v26),
+gates measured at commit 85bf25d on main; this paperwork commit landed
+after it. Everything below is a READING taken that day, not a promise
+about now. Re-measure before citing.
 
-NEXT ACTION: work MAIN's 0300 ORDER to RSC first (S82a, HIGH), then
-triage the inbox (S80a), then the remaining OPEN WORK items below,
-highest priority first. Session 82 only adopted kit v24 (MAIN 0315 ORDER,
-dce4f00, ANSWER sent). Carry every item not acted on forward again.
+NEXT ACTION: fix the pre-push interpreter (S83a, HIGH - the push gate ran
+ruff only all session 83), then the adversary pass on 85bf25d (S83c),
+then the inbox triage (S80a), then the remaining OPEN WORK items below,
+highest priority first. Session 83 worked MAIN 2215 ORDER (U5 included)
+and MAIN 2233 ORDER (history rewrite + force push), both ANSWERed. Carry
+every item not acted on forward again.
 
 BOOTSTRAP - READ IN THIS ORDER
   CLAUDE.md
@@ -20,7 +21,7 @@ BOOTSTRAP - READ IN THIS ORDER
   docs/LEDGER.md (an INDEX since session 64; read the newest
     docs/ledger/session-<n>.md, older bodies in docs/ledger/archive-*.md)
   git log --oneline -10
-  gh pr list   (read 2026-10-26 session 82: #9 #10 #11 OPEN, see S82d)
+  gh pr list   (read 2026-11-01 session 83: 0 open)
   python tools/roots_map_probe.py   (FROM THE MAIN CHECKOUT; since merge
     303b839 it resolves the map via the git common dir, and a run from a
     linked worktree is read-only and writes no baseline. Read every DRIFT
@@ -61,9 +62,9 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 24 [] (kit v24, dce4f00, MANIFEST sha256
-a41ff08e4c2ace7f48119f9ffec051ce18458184c2417d6806be39f3c8804a7d; read
-back 24 [] at session 82 /done). Outbound cap is 12 notes a day (FLEET-COMMON
+must print 26 [] (kit v26, MANIFEST sha256
+45b5088e202a0c0c453fb1dc4ca8969783563d60d3b7b02e8d2c5c547fe4edae; read
+back 26 [] at session 83 /done). Outbound cap is 12 notes a day (FLEET-COMMON
 14 c); any text saying 6 a day is stale.
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
@@ -78,42 +79,60 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
-STATE OBSERVED 2026-10-26 AT dce4f00 (session 82 /done, headless run)
+STATE OBSERVED 2026-11-01 AT 85bf25d (session 83 /done, headless run)
   Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile, pity_engine and
-  shell node --test green through the suite gate (counts in
-  docs/ledger/session-82.md; app suite waited about 194 s for a slot
-  and CPU); ruff and mypy clean; kit check 24 []. origin/main read back
-  dce4f00; CI ci 40296911028, codeql 40296911236, docs-guards
-  40296911006 all success. send_note audit empty; reap applied: 0
-  removed, 0 kept, 0 listed (base main). Board render SKIPPED: headless
-  run (.claude/commands/done.md section 8b). Inbox NOT marked.
-PRIOR READINGS (sessions 57-81): docs/ledger/ files. A worktree shows
+  shell node --test green through the suite gate, no slot wait (counts in
+  docs/ledger/session-83.md); ruff and mypy clean; kit check 26 [].
+  origin/main read back 85bf25d; CI push ci 41280847660 and codeql
+  41280847657 success. send_note audit empty after backfilling one row
+  (S83h); reap applied: 0 removed, 0 kept, 0 listed (base main). Board
+  render SKIPPED: headless run (.claude/commands/done.md section 8b).
+  Inbox NOT marked. History rewritten under MAIN 2233: git log --all has
+  one author/committer identity; tag v0.1.0 = tag cf1b7fb -> 98b2381.
+PRIOR READINGS (sessions 57-82): docs/ledger/ files. A worktree shows
   MORE skips (no POSIX sh on PATH); one under AppData fails
   test_the_session_cache_lives_under_the_runtime_directory and
   tests/test_watch_inbox_session.py near line 767 - location, not a
   regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
-  S82a. HIGH (NEW session 82): MAIN ORDER 2026-10-26-0300 to RSC (U5
-     batched: repo map, SS root, timing budget, hand-off size, ONE
-     ANSWER) is UNWORKED; only RSC's 0305 auto-reply exists. Verify its
-     sha256 against MAIN's outbox, work it, send ONE ANSWER via
-     tools/send_note.py. ROADMAP "Session 82 residue" (a).
-     Kit v24 mark FAILS a hand-off over 30 KB: keep this file under it.
+  S83a. HIGH (NEW session 83): PRE-PUSH SKIPPED BOTH SUITES all session
+     ("pytest not importable"): bare python on PATH has no pytest (read
+     back at /done), so every session 83 push was gated by ruff only.
+     Fix interpreter resolution in the tree-owned .githooks (not the
+     kit), red-first test. ROADMAP "Session 83 residue" (a).
+  S83b. 10 unexplained errors in one gated app-suite run (surface_render
+     port release, lock_budget hung job, others); two reruns clean. Lead:
+     a log written under ops/loop/control during a run gives exactly this
+     shape via fleet_test_guard (measured at /done). Residue (b).
+  S83c. 85bf25d (core/provenance.py, ingest/enka_client.py) has had NO
+     adversary pass; run the full lens set. Residue (c).
+  S83d. Kit defects sent to MAIN in the 2233 ANSWER (fleet_rewrite stale
+     filter-repo marker hang; fleet_identity pre-push refuses when the
+     remote old tip is missing locally). AWAIT a kit fix; never patch
+     ops/fleet_kit/. Residue (d).
+  S83e. Rewrite residue: GitHub refs/pull/1..11/head still hold old
+     commits (only delete-and-recreate purges); the local untracked
+     rewrite mailmap under .git holds old values - delete after MAIN
+     confirms. Residue (e).
+  S83f. Electron 45 window (2215 item 2) not visually audited: run the
+     ui-auditor over shell/. Residue (f).
+  S83g. Note only: tests/test_headless_runner_lock_budget.py near line
+     757 keeps one raw timing bound on purpose (ordering check).
+  S83h. The kit v26 ANSWER (2026-10-31 2210) had no outbound ledger row;
+     /done backfilled it. Find the send path that skipped it. Residue (h).
   S82b. docs/CHANNEL.md does not say where MAIN's inbox is (MAIN is not
      on its roster; located by filesystem scan). Residue (b).
   S82c. A stray empty inbox directory exists under the Windows system
      directory (likely a hook or script run with that cwd). Find the
      source; do not delete before a consumer check; never put its
      machine path in a tracked file. Residue (c).
-  S82d. Dependabot PRs #9 ruff 0.17.2, #10 electron 45.0.0 (major), #11
-     github-actions group of 3: open, review and merge or close.
-     Residue (d).
   S82e. A session 82 /done app-suite log (named for RSC session 82) sits
      at the drive root; rm and Remove-Item were refused by the
      protected-path guard. Remove by hand. Residue (e).
   S80a. INBOX TRIAGE NOT DONE (NEW session 80; still open session 82,
-     plus newer MAIN 0300 ORDER S82a and SS 0325 ANSWER to MAIN): 4 unread items listed by
+     plus SS 0325 ANSWER to MAIN; MAIN 0300 was worked via 2215 in
+     session 83, and 2215/2233 need no triage): 4 unread items listed by
      the hook - MAIN 2026-10-25 1801 FIX to RSC/SS (stale repo-map root,
      SS entry at a pre-migration root; RSC auto-replied at 1815), SS
      2026-10-24 1525 FIX to MAIN (fleet_test_guard IGNORE misses the two
@@ -163,17 +182,10 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      Triage the reply when it lands; never patch the vendored kit.
      Reversed by: a kit version that locks record, or a MAIN ruling the
      ledger must never exceed the cap. ROADMAP "Session 71 residue" (a).
-  O8. MAIN 2246 ORDER s4 HISTORY REWRITE + FORCE PUSH, and s8 - NOT DONE.
-     Was AWAITING OPERATOR APPROVAL IN PERSON (2026-10-09); a later MAIN
-     2233 ORDER turns it to RUN this session. s4:
-     ops/fleet_kit/fleet_rewrite.py plan / bundle (sidecar folder) / run,
-     then the force push. Scope WIDENED (MAIN 2215/2233): every
-     personal-address, bot-authored and AI-noreply author or committer
-     field - 183 personal-address fields, 3 bot commits, 2 AI-noreply
-     commits (every SHA but the root changes). Never write an address in
-     a tracked file. s8: queue ONE headless repo-review driver via the kit
-     spawn (kind build, progress task repo-review). Reversed by: a MAIN
-     ruling.
+  O8. MAIN 2246 s8 ONLY: queue ONE headless repo-review driver via the
+     kit spawn (kind build, progress task repo-review). PARKED. s4 (history
+     rewrite + force push) DONE session 83 under MAIN 2233 ORDER, see
+     docs/ledger/session-83.md. Reversed by: a MAIN ruling.
   0. RENEW THE RESPONDER BEFORE 2026-11-06T23:00 LOCAL (window ends
      2026-11-07T00:45; the PT43200M repeat may stop about 1 h early because
      DST ends Nov 1). Re-run ops/install_responder_task.ps1 -TaskName
@@ -203,9 +215,6 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      execnet stay DEFERRED (reversed by an xdist run under the suite gate
      with no worker loss and a green lock-budget module across repeated
      runs).
-  0k. Identity section-4 history TRIGGER tier (2 ai-or-bot author and
-     committer commits, the root among them). A rewrite runs ONLY on a MAIN
-     ORDER (or the operator in person, O8) via ops/fleet_kit/fleet_rewrite.py.
   5. Future MAIN supersessions: the stamp list is closed by design. A new
      superseded MAIN order needs a verified MAIN note naming its stamps; add
      them to SUPERSEDED_MAIN_STAMPS. Not watched live yet: confirm the next
@@ -272,12 +281,21 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      docs/handoff-archive/RSC-2026-10-26.txt.
   WATCHERS 0x, 0b, 0t, N10: no MAIN reply through session 79; re-check
   them in the S80a triage.
-  DONE 64-82: docs/ledger/session-<n>.md. Old DONE blocks: docs/LEDGER.md,
+  DONE 64-83 (0k and S82a/S82d closed session 83): docs/ledger/session-<n>.md. Old DONE blocks: docs/LEDGER.md,
   "Hand-off blocks retired session 77". DO NOT REDO (decision -> what
   reverses it): moved verbatim session 83 to
   docs/handoff-archive/RSC-2026-10-26.txt; read it before re-litigating.
 
 TRAPS MEASURED - none are hypothetical
+  A LOG OR HELPER WRITTEN UNDER ops/loop/control DURING A SUITE FAILS IT
+  (session 83 /done: 10 failed, 8 errors, all fleet_test_guard "touched
+  live tree state"). Gitignored scratch there is still live state. Write
+  logs to a private dir under the user temp dir.
+
+  BARE python HERE CANNOT IMPORT pytest (session 83). Use the full 3.14
+  interpreter path for every suite; the pre-push hook silently skips
+  suites under it (S83a).
+
   ORIGIN CAN HOLD COMMITS LOCAL MAIN LACKS (session 79: a Dependabot PR
   merged on GitHub). git fetch origin, then a gitlock git merge --no-ff
   origin/main (subject merge: <topic>) BEFORE the /done gates, so the gates
@@ -303,16 +321,6 @@ TRAPS MEASURED - none are hypothetical
   tests/_markers.py (READS_DOCS or PLUMBING) (session 72: two slices
   blocked on it). Put it in every builder prompt that adds such a test.
 
-  THE HARNESS KILLS BACKGROUND SUITE RUNS UNDER LOW HOST MEMORY (session
-  71, twice; an environment kill, not a test failure). Re-run in the
-  foreground; a suite gate timeout fails closed.
-
-  A FAILED CHAINED cd RUNS GIT IN THE MAIN CHECKOUT (session 70). An
-  adversary's cd into its scratch clone failed and its git mv, git rm and
-  git reset --hard ran against the main checkout; nothing was lost only
-  because no tracked edit was unstaged then. Use git -C <clone> after a
-  git rev-parse --show-toplevel check (item 0r).
-
   FLEET_SUITE_SLOTS=1 IS MACHINE POLICY (user env, session 70). One whole
   suite runs at a time machine-wide; a sibling tree held the only slot for
   over an hour. Do not override it; queue with --timeout 7200.
@@ -320,34 +328,19 @@ TRAPS MEASURED - none are hypothetical
   THE SUITE GATE CAN HOLD A WHOLE SUITE FOR OVER 20 MINUTES (sessions 68,
   78). Run the gate in the background and poll its output for the exit.
 
-  A SYSTEM HANG CAN LEAVE MERGES UNPUSHED AND SLICES HALF-BUILT (session
-  67). On "continue" after a crash: git log origin/main..main, git
-  worktree list, and the progress files' status before anything else.
-
   THE PRE-PUSH HOOK TESTS THE WORKING TREE, NOT THE PUSHED COMMITS
   (session 66 /done). Uncommitted docs edits citing an unwritten file made
   a push of already-green commits fail 5 tests. Push before editing, or
   commit the paperwork first.
 
-  ANOTHER PROCESS CAN DELETE A SHARED TEMP DIR MID PRE-PUSH (session 65):
-  one vanished-dir failure, green on retry. Read the failing test first.
-
   DO NOT WRITE LIVE TREE STATE DURING A WHOLE-SUITE RUN (session 64 /done).
   fleet_test_guard fails the suite at teardown of whichever test was last,
   e.g. for a change to the hook mode file under ops/loop/control.
-
-  A HAND-OFF LINE NAMING A BARE FILENAME turns tests/test_docs_consistency.py
-  red (session 64 /done): write the tracked path, e.g. ops/fleet_kit/...,
-  or describe it in prose.
 
   THE CLAIMS HOOK READS --owner LITERALLY (sessions 64, 72). An invented
   id, or one passed through a shell variable, is denied; type the id the
   deny reason names. A guessed interpreter path that does not exist makes the suite
   gate raise FileNotFoundError; use the real sys.executable path.
-
-  A DOC THAT CITES A GITIGNORED PATH NO TRACKED FILE NAMES turns
-  tests/test_docs_consistency.py red (session 63 /done, the recycled MIG-1
-  residue dir). Once a runtime path is gone, describe it in prose.
 
   THE SESSION SCRATCHPAD IS SHARED ACROSS TREES (MAIN 0905, observed).
   Another tree's session ran a generic-named helper found there. Use a
@@ -357,15 +350,14 @@ TRAPS MEASURED - none are hypothetical
   BARE python3 IS THE MICROSOFT STORE STUB HERE (MAIN 0905). Use python or
   the full interpreter path; launch children by sys.executable.
 
-  THE KIT'S _atomic_write HAS NO RETRY. On Windows a reader holding a
-  progress file makes the final replace fail and orphans <name>.<pid>.tmp.
-  Both RSC progress writers retry locally (20 x 25 ms).
-
   A git push WITH THE PRE-PUSH HOOK CAN OUTLIVE ITS SHELL'S TIMEOUT and still
   land. Read origin/main back before retrying.
 
-  A DOC LINE THAT SPELLS A HOOK COMMAND turns tests/test_docs_hook_commands.py
-  red (session 62, fd4fb42). Name a rejected command form in prose.
+  OLDER TRAPS (failed chained cd, system hang, shared temp dir deleted
+  mid pre-push, bare filename in hand-off, gitignored path in a doc, doc
+  spelling a hook command, kit _atomic_write no retry, low-memory
+  background suite kills): moved verbatim
+  session 83 to docs/handoff-archive/RSC-2026-11-01.txt.
 
   CLOSED OR DUPLICATED TRAPS (no PIL in CI, scratchpad helper names,
   stale index.lock, shallow CI
@@ -409,13 +401,15 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   status from background work, the item-13 session checklist, /done runs
   unprompted and prints one line only. MAIN speaks for the operator on
   decisions when its note matches MAIN's outbox by sha256. Nothing waits for
-  operator approval EXCEPT the history rewrite and force push (O8), which
-  the attended session reserved to the operator in person: adjudicate, act,
-  report done, report to MAIN. Commit and push everything. The producer
+  operator approval: adjudicate, act, report done, report to MAIN. A
+  history rewrite or force push runs ONLY on a verified MAIN ORDER via
+  ops/fleet_kit/fleet_rewrite.py (done once, session 83, MAIN 2233); /done
+  itself never force-pushes. Commit and push everything. The producer
   NEVER grades its own work. Agreement between two agents is not evidence.
   The cross-repo inbox is reviewed, triaged into four buckets, ingested,
   implemented and ANSWERED every session, ALWAYS DELIVERED with the
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
-SESSION: 83
+Reap (session 83 /done): reap applied: 0 removed, 0 kept, 0 listed (base main).
+SESSION: 84
