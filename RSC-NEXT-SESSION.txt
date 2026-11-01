@@ -1,7 +1,7 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
 Stamped 2026-11-01 (session 85, MAIN FIX 1508 headless run, kit v27);
 the session 85 gates are in docs/ledger/session-85.md; this paperwork
-commit landed before them. Everything below is a READING taken that day, not a promise
+commit landed after the ANSWER. Everything below is a READING taken that day, not a promise
 about now. Re-measure before citing.
 
 NEXT ACTION: work the session 84 adversary rows (S84a, D7 and the other
@@ -80,8 +80,13 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
-STATE 2026-11-01 session 85: gated figures, tip, CI and worktree read-backs
-  come after this file's commit: docs/ledger/session-85.md and live reads.
+STATE OBSERVED 2026-11-01 AT 5858574 (session 85, headless run)
+  Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile and pity_engine
+  green through the suite gate at 1c5101a, ruff and mypy clean (counts in
+  docs/ledger/session-85.md). CI on 5858574: ci 41352611625, docs-guards
+  41352611611, codeql 41352611676, all success. Not run: shell node
+  --test, qa_companion, headless dry run. Inbox NOT marked. This file's
+  later commit and its CI: read them live.
 STATE OBSERVED 2026-11-01 AT 8438cc1 (session 84 wrap-up, headless run)
   Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile and pity_engine
   green through the suite gate, ruff and mypy clean, each exit 0 (counts
@@ -105,9 +110,10 @@ PRIOR READINGS (sessions 57-82): docs/ledger/ files. A worktree shows
   regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
-  S85a. MAIN FIX 1508 ANSWER: the run's act AFTER this file's commit, once
-     ci, docs-guards and codeql are green on the tip. Verify with python
-     tools/send_note.py audit and the pending list; TERMINAL, no reply
+  S85a. MAIN FIX 1508 ANSWER SENT, tip 5858574, sha256
+     c1e328fb5e941f0c3dd7fd7f40ba71675c54a3761817a72d3a60042548dc41a7,
+     recipient copy re-hashed equal, 1/1; send_note audit empty; pending
+     row closed, pending list read back with 0 rows. TERMINAL, no reply
      awaited.
   S84a. ADVERSARY ROWS OPEN (NEW session 84): ROADMAP "Now" rows
      "Adversary, RSC-1 CLI" (D2-D6, plus D7-D10 filed session 85; D1 closed
@@ -127,7 +133,11 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      outbound ledger row; TERMINAL, no reply awaited.
   S83a. RE-READ FIRST (session 84): bare python imported pytest in session
      84's run (Python314), against the claim below; the skip may depend on
-     environment. ROADMAP "S83a re-read needed".
+     environment. ROADMAP "S83a re-read needed". Session 85 reading: the
+     push of 5858574 printed ruff and pytest not importable (tried python3
+     python py) and landed with no suite run in the hook; bare python here
+     resolved to a Store-managed 3.14 with no pytest. Environment-dependent
+     and real.
   S83a. HIGH (NEW session 83): PRE-PUSH SKIPPED BOTH SUITES all session
      ("pytest not importable"): bare python on PATH has no pytest (read
      back at /done), so every session 83 push was gated by ruff only.
@@ -320,6 +330,10 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   docs/handoff-archive/RSC-2026-10-26.txt; read it before re-litigating.
 
 TRAPS MEASURED - none are hypothetical
+  BARE git push FAILS, main HAS NO UPSTREAM (session 85, rc 128): use git
+  push origin main through gitlock. A DETACHED suite needs its stdio passed
+  explicitly at every level, or the gate's output is lost (0-byte log).
+
   A PYTEST COMMAND WITH ITS PATH IN A SHELL VARIABLE IS DENIED BY THE SUITE
   GATE HOOK (session 85): it reads as a whole suite. Type the module path.
 

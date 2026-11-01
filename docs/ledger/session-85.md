@@ -25,3 +25,10 @@
   in `tests/test_hook_interpreter.py` (2), network opt-in, no exec bit, denied
   listing fault absent, POSIX half of a guard, bare python discrimination.
   Not run: shell node --test, qa_companion, headless dry run. Inbox NOT marked.
+- Pushed 5858574; the pre-push hook printed ruff and pytest not importable, so it
+  ran no suite (S83a). CI on it read back: ci 41352611625, docs-guards 41352611611,
+  codeql 41352611676, all success.
+- ANSWER to MAIN sent through `tools/send_note.py`, sha256
+  c1e328fb5e941f0c3dd7fd7f40ba71675c54a3761817a72d3a60042548dc41a7, recipient copy
+  re-hashed equal, audit empty. FIX 1508 pending row closed; pending list read back
+  with 0 rows. D1 re-probed: before 7da57ca AttributeError, after it the one line, rc 1.
