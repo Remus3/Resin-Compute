@@ -13,6 +13,8 @@ version. What follows is everything the scaffold deliberately did not do.
 
 ## Now
 
+- **FLEET-9 7-day read (MAIN ORDER, earliest 2026-11-08).** Done when zero live-state or timing failures in gated runs from 2026-11-01 to 2026-11-08. Read: `python -m pytest tests -n 8 --dist loadfile` through `fleet_suite_gate.py`, on 2026-11-08 or later, plus a search of every session ledger in `docs/ledger/` and of `ROADMAP.md` for `fleet_test_guard`, `touched live tree state` and unexplained gated-suite errors in that window. The tree keeps no per-run gated-suite log, so an unrecorded failure is invisible: each session's ledger must state its gated figures. Then ANSWER MAIN with 42db075's fixes. Reversed by: any such failure, which restarts the 7 days. Open from S83b: `a_hung_job_is_failed` error not reproduced.
+- **Filed (RSC-1 slice, 2026-11-01).** HTTP `POST /forecast` has no cap on `target_count` or `pull_budget`, so a large value ties up a handler thread (measured: target 100 unfinished at about 88 s on the CLI path; the CLI now caps at 7 and 5000). `ingest/__init__.py` says three modules and omits `uigf`.
 - **NEW 2026-11-01. Kit v27 pending-ORDER queue (MAIN 2347 ORDER section 5
   item 3).** v27 `fleet_inbox.mark_seen` queues every ORDER / FIX / RULING
   it acks. Wire `fleet_inbox.session_start()` (or `pending`) into the
@@ -50,9 +52,12 @@ version. What follows is everything the scaffold deliberately did not do.
   values - delete after MAIN confirms.
   (f) 2215 item 2: the electron 45 window (newer Chromium) was not
   visually audited; run the ui-auditor over `shell/`.
-  (g) One raw timing bound remains at
-  `tests/test_headless_runner_lock_budget.py` near line 757, left raw on
-  purpose (an ordering check, not a budget). Not a defect; recorded.
+  (g) FALSE, corrected 2026-11-01 by FLEET-9 (42db075). This note said one
+  raw timing bound remained at `tests/test_headless_runner_lock_budget.py`
+  near line 757, left raw on purpose as an ordering check. That line was a
+  parent-side wall-clock bound; the ordering check is the `late_state`
+  assertion below it. The bound now reads a value from
+  `fleet_test_guard.budget()`.
   (h) The outbound ledger lacked a row for the kit v26 ANSWER of
   2026-10-31 2210; /done backfilled it with `tools/send_note.py audit
   --apply`. Find which send path skipped the row.
