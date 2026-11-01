@@ -37,13 +37,15 @@ from enum import StrEnum
 from core import domains, resin
 from core.log_setup import get_logger
 from core.state_io import snapshot_age
-from core.types import AccountState, CurrencyKind
+from core.types import AccountState, BannerKind, CurrencyKind, PityState
 
 _log = get_logger(__name__)
 
 __all__ = [
+    "GLANCE_WISHES",
     "PANEL_IDS",
     "Dashboard",
+    "ForecastGlance",
     "Panel",
     "PanelState",
     "build_dashboard",
@@ -86,6 +88,81 @@ class Panel:
             raise ValueError(f"panel {self.panel_id} is not wired but carries {len(self.rows)} rows")
 
 
+#: How many wishes the top-row forecast glance looks ahead. 30 because the README
+#: banner's example forecast bar reads "30 wishes", and the glance mirrors it.
+GLANCE_WISHES = 30
+
+#: Friendly text for a glance the engine could not answer. Fixed text only - the
+#: raw exception goes to the log, never to the page.
+GLANCE_UNAVAILABLE = "Forecast unavailable right now. The details are in the log."
+
+#: Friendly text for an account with no character-banner pity recorded. It
+#: carries no digit on purpose: a glance that is not live must not show a number.
+GLANCE_NO_PITY = "No character banner pity recorded yet - the forecast appears once it is."
+
+
+@dataclass(frozen=True)
+class ForecastGlance:
+    """The one-line forecast card at the top of the dashboard.
+
+    Mirrors the README banner: current pity, guarantee state, and the chance of
+    the featured 5-star within `wishes` wishes. Every value is a string already
+    formatted from the PityEngine forecast, so the renderer adds no number of its
+    own. When `available` is False every numeric field is empty and `text` says
+    why, the same rule `Panel` enforces for a panel that is not READY.
+    """
+
+    available: bool
+    banner: str = ""
+    pity: str = ""
+    guarantee: str = ""
+    wishes: str = ""
+    chance: str = ""
+    text: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.text:
+            raise ValueError("a forecast glance must always carry text")
+        if not self.available and (self.pity or self.wishes or self.chance):
+            raise ValueError("an unavailable forecast glance must not carry a number")
+
+
+def _glance_forecast(state: object, wishes: int) -> float:
+    """The engine call behind the glance, isolated so a failure is testable."""
+    from agents.pity_engine.forecast import probability_of_success
+
+    if not isinstance(state, PityState):
+        raise TypeError(f"pity state is {type(state).__name__}, not PityState")
+    result = probability_of_success(state, target_count=1, pull_budget=wishes, banner=BannerKind.CHARACTER_EVENT)
+    return result.probability
+
+
+def build_glance(account: AccountState, wishes: int = GLANCE_WISHES) -> ForecastGlance:
+    """Build the top-row glance. Total: never raises, logs the raw error."""
+
+    state = account.pity.get(BannerKind.CHARACTER_EVENT) if account.pity else None
+    if state is None:
+        return ForecastGlance(available=False, banner="Character Event", text=GLANCE_NO_PITY)
+    try:
+        probability = _glance_forecast(state, wishes)
+        guarantee = "guaranteed" if state.has_guarantee else "no guarantee"
+        chance = f"{probability * 100:.1f}%"
+        pity = str(state.pity_5star)
+        text = f"Pity {pity}, {guarantee}, {wishes} wishes gives a {chance} chance of the featured 5-star"
+        return ForecastGlance(
+            available=True,
+            banner="Character Event",
+            pity=pity,
+            guarantee=guarantee,
+            wishes=str(wishes),
+            chance=chance,
+            text=text,
+        )
+    except Exception as exc:  # noqa: BLE001 - the glance must never take the board down
+        _log.error("forecast glance failed: %s: %s", exc.__class__.__name__, exc)
+        return ForecastGlance(available=False, banner="Character Event", text=GLANCE_UNAVAILABLE)
+
+
 #: A reading older than this is called stale. Chosen against the upstream
 #: refresh cycle rather than arbitrarily: an Enka showcase refreshes on a ttl
 #: measured in minutes, so anything past an hour is certainly not current.
@@ -114,6 +191,9 @@ class Dashboard:
     generated_at: datetime
     panels: tuple[Panel, ...] = ()
     source_age: timedelta | None = None
+    #: The top-row forecast glance. `None` on a board built without an account
+    #: (the server's degraded board); the renderer then shows friendly text.
+    glance: ForecastGlance | None = None
 
     @property
     def freshness(self) -> str:
@@ -744,4 +824,5 @@ def build_dashboard(
         generated_at=now,
         panels=tuple(panels),
         source_age=snapshot_age(account, now),
+        glance=build_glance(account),
     )

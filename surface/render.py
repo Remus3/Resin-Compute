@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 from html import escape
 
-from surface.model import Dashboard, Panel, PanelState
+from surface.model import GLANCE_UNAVAILABLE, Dashboard, ForecastGlance, Panel, PanelState
 
 __all__ = ["render_html", "render_json", "STYLESHEET"]
 
@@ -228,6 +228,21 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-
   padding-left: 9px;
 }
 .note { margin: 8px 0 0; color: var(--ink-dim); font-size: 11px; font-style: italic; }
+/* THE FORECAST GLANCE - the top row, one line, mirroring the README banner.
+   It sits first in the body (padded clear of the 34px drag strip) so the one
+   answer most visits want is read before anything else on the board. */
+.glance {
+  margin: 16px 0 14px;
+  padding: 8px 12px;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.glance-cold { border-left-color: var(--card-edge); color: var(--ink-dim); }
 footer { margin-top: 16px; color: var(--ink-dim); font-size: 11px; }
 """
 
@@ -252,6 +267,28 @@ def _panel_html(panel: Panel) -> str:
     return "".join(parts)
 
 
+def _glance_html(glance: ForecastGlance | None) -> str:
+    """The one-line forecast card. A missing or unavailable glance shows fixed text."""
+    if glance is None or not glance.available:
+        text = glance.text if glance is not None else GLANCE_UNAVAILABLE
+        return f'<div class="glance glance-cold" id="glance">{_esc(text)}</div>'
+    return f'<div class="glance glance-live" id="glance">{_esc(glance.text)}</div>'
+
+
+def _glance_json(glance: ForecastGlance | None) -> dict[str, object] | None:
+    if glance is None:
+        return None
+    return {
+        "available": glance.available,
+        "banner": glance.banner,
+        "pity": glance.pity,
+        "guarantee": glance.guarantee,
+        "wishes": glance.wishes,
+        "chance": glance.chance,
+        "text": glance.text,
+    }
+
+
 def render_html(board: Dashboard) -> str:
     """The whole page, as one string.
 
@@ -273,6 +310,7 @@ def render_html(board: Dashboard) -> str:
         f"<style>{STYLESHEET}</style>"
         "</head><body>"
         '<div id="dragbar"></div>'
+        f"{_glance_html(board.glance)}"
         "<header>"
         "<h1>ResinCompute</h1>"
         f'<span class="freshness{stale_class}">{freshness}</span>'
@@ -305,6 +343,7 @@ def render_json(board: Dashboard) -> str:
         "freshness": board.freshness,
         "is_stale": board.is_stale,
         "source_age_seconds": (None if board.source_age is None else int(board.source_age.total_seconds())),
+        "glance": _glance_json(board.glance),
         "readiness": board.readiness,
         "ready_count": board.ready_count,
         "partial_count": board.partial_count,
