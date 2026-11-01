@@ -80,6 +80,7 @@ import uuid
 from functools import cache
 from pathlib import Path
 
+import fleet_test_guard  # on sys.path via tests/conftest.py
 import pytest
 
 from core import config as core_config
@@ -883,7 +884,9 @@ def _exited_process() -> subprocess.Popen:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    assert proc.wait(timeout=60) == 0, "the sacrificial child must exit cleanly, and not 259"
+    assert proc.wait(timeout=fleet_test_guard.budget(60)) == 0, (
+        "the sacrificial child must exit cleanly, and not 259"
+    )
     return proc
 
 
@@ -937,7 +940,7 @@ def test_contending_threads_never_exceed_max_slots(slots, slot_root: Path):
         try:
             with slots.hold(max_slots=max_slots, root=slot_root, repo="resin-compute",
                             run_id="parity", cycle=1, backoff=0.02, jitter=0.02,
-                            timeout=60.0):
+                            timeout=fleet_test_guard.budget(60.0)):
                 with guard:
                     live += 1
                     entered += 1
@@ -948,7 +951,7 @@ def test_contending_threads_never_exceed_max_slots(slots, slot_root: Path):
                 # Bounded, and self-releasing on expiry: a governor that admits
                 # fewer than max_slots must fail the peak assertion below, never
                 # hang the suite waiting for a holder that will never arrive.
-                if not at_capacity.wait(timeout=30.0):
+                if not at_capacity.wait(timeout=fleet_test_guard.budget(30.0)):
                     at_capacity.set()
                 with guard:
                     live -= 1
@@ -960,7 +963,7 @@ def test_contending_threads_never_exceed_max_slots(slots, slot_root: Path):
     for thread in threads:
         thread.start()
     for thread in threads:
-        thread.join(timeout=180)
+        thread.join(timeout=fleet_test_guard.budget(180))
 
     assert not [t for t in threads if t.is_alive()], "a worker hung; the governor deadlocked"
     assert peak <= max_slots, (
@@ -1159,7 +1162,7 @@ def test_a_live_child_holder_past_stale_after_keeps_its_slot(slots, slot_root: P
         stderr=subprocess.PIPE,
     )
     try:
-        deadline = time.time() + 60.0
+        deadline = time.time() + fleet_test_guard.budget(60.0)
         while not ready.exists():
             assert child.poll() is None, (
                 f"the holder child exited before taking a slot: {child.stderr.read()!r}"
@@ -1360,7 +1363,7 @@ def test_the_mutex_admits_one_thread_at_a_time(winmutex):
     for thread in threads:
         thread.start()
     for thread in threads:
-        thread.join(timeout=180)
+        thread.join(timeout=fleet_test_guard.budget(180))
 
     assert not [t for t in threads if t.is_alive()], "a worker hung on the named mutex"
     assert not failures, f"workers raised: {failures!r}"
@@ -1388,14 +1391,16 @@ def test_mutex_timeout_raises_rather_than_proceeding_unserialized(winmutex):
     thread = threading.Thread(target=holder, name="mutex-holder")
     thread.start()
     try:
-        assert acquired.wait(timeout=60), "the holder never got in; nothing was contended"
+        assert acquired.wait(timeout=fleet_test_guard.budget(60)), (
+            "the holder never got in; nothing was contended"
+        )
         assert not holder_failed, f"the holder itself failed: {holder_failed!r}"
         with pytest.raises(winmutex.MutexTimeout):
             with winmutex.hold(name, timeout=0.2):
                 pytest.fail("entered a mutex-protected section while another thread held it")
     finally:
         release.set()
-        thread.join(timeout=60)
+        thread.join(timeout=fleet_test_guard.budget(60))
 
     assert not thread.is_alive()
 

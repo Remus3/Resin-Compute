@@ -19,6 +19,7 @@ import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 
+import fleet_test_guard  # on sys.path via tests/conftest.py
 import pytest
 
 from core.types import AccountState, MappedCharacter
@@ -193,7 +194,9 @@ def running_server():
 
 
 def _get(server: DashboardServer, path: str):
-    with urllib.request.urlopen(f"{server.base_url}{path}", timeout=5) as response:
+    with urllib.request.urlopen(
+        f"{server.base_url}{path}", timeout=fleet_test_guard.budget(5)
+    ) as response:
         return response.status, response.headers.get("Content-Type", ""), response.read().decode("utf-8")
 
 
@@ -255,7 +258,9 @@ def test_a_failing_state_provider_degrades_rather_than_500s():
 
 def test_the_server_sets_a_restrictive_content_security_policy(running_server):
     """The page runs inside an Electron window, so its CSP is load bearing."""
-    with urllib.request.urlopen(f"{running_server.base_url}/", timeout=5) as response:
+    with urllib.request.urlopen(
+        f"{running_server.base_url}/", timeout=fleet_test_guard.budget(5)
+    ) as response:
         csp = response.headers.get("Content-Security-Policy", "")
     assert "default-src" in csp
     assert "'self'" in csp

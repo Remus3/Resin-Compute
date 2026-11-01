@@ -209,10 +209,29 @@ import sys as _sys  # noqa: E402
 _sys.path.insert(0, str(REPO_ROOT / "ops" / "fleet_kit"))
 import fleet_test_guard  # noqa: E402
 
+#: Watched files a LIVE writer rewrites while a suite runs, so a change there is
+#: not evidence a test touched them. Measured in the MAIN checkout 2026-11-01,
+#: each a real file with a mtime inside the session:
+#:  - inbox_pending_orders.json: the kit's `fleet_inbox.mark_seen` (v27) rewrites
+#:    it when the responder tick acks an ORDER, FIX or RULING. Kit IGNORE does not
+#:    name it (reported to MAIN); `extra_ignore` is the kit's own seam for this.
+#:  - headless_budget.reset-*.json: the kit's budget reset archive, written beside
+#:    the budget file kit IGNORE already skips.
+#:  - scratch/*: session and /done agents draft notes and logs there. A /done
+#:    agent's log under the control dir is what reproduced the session-83 errors.
+#: tests/test_timing_assertions_budgeted.py pins this list, its wiring, and that
+#: a neighbour file under the same directory is still watched.
+LIVE_WRITER_IGNORES = (
+    "ops/loop/control/inbox_pending_orders.json",
+    "ops/loop/control/headless_budget.reset-*.json",
+    "ops/loop/control/scratch/*",
+)
+
 fleet_test_guard.install(
     globals(),
     root=REPO_ROOT,
     env_roots={"RESINCOMPUTE_RUNTIME_DIR": "runtime"},
+    extra_ignore=LIVE_WRITER_IGNORES,
 )
 
 # FLEET-KIT v14 (MAIN 0930 ORDER s3.4): fleet_lanes.worktree_path() reads the

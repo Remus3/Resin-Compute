@@ -649,7 +649,7 @@ sys.exit(90 + code)
 """
 
 
-def _spawn_child(work: Path) -> subprocess.Popen[bytes]:
+def _spawn_child(work: Path, late_write_at: float = LATE_WRITE_AT) -> subprocess.Popen[bytes]:
     (work / "runtime").mkdir()
     (work / "slots").mkdir()
     env = dict(os.environ)
@@ -661,7 +661,7 @@ def _spawn_child(work: Path) -> subprocess.Popen[bytes]:
             _CHILD,
             str(REPO_ROOT),
             str(work),
-            str(LATE_WRITE_AT),
+            str(late_write_at),
             str(CHILD_LINGER),
         ],
         cwd=str(REPO_ROOT),
@@ -672,7 +672,7 @@ def _spawn_child(work: Path) -> subprocess.Popen[bytes]:
 
 
 def _wait_for(predicate, ceiling: float = 20.0) -> bool:
-    end = time.monotonic() + ceiling
+    end = time.monotonic() + fleet_test_guard.budget(ceiling)
     while time.monotonic() < end:
         if predicate():
             return True
@@ -714,7 +714,7 @@ def test_a_second_holder_never_acquires_while_the_zombie_lives(tmp_path: Path) -
         assert _wait_for(lambda: (work / "started").exists()), "the zombie never started"
         refused_while_alive = 0
         acquired_alive: bool | None = None
-        end = time.monotonic() + 20.0
+        end = time.monotonic() + fleet_test_guard.budget(20.0)
         while time.monotonic() < end:
             child.poll()
             alive = slots_mod.pid_alive(child.pid)
@@ -740,10 +740,19 @@ def test_a_second_holder_never_acquires_while_the_zombie_lives(tmp_path: Path) -
 def test_the_process_dies_holding_its_slot_and_the_late_write_never_lands(
     tmp_path: Path,
 ) -> None:
-    """The late-write race is closed by construction: the writer is dead."""
+    """The late-write race is closed by construction: the writer is dead.
+
+    `late_write_at` is one budgeted value, read once and handed to the child, so
+    the zombie's own write moment and the parent's bound below widen together
+    under load. It was raw until FLEET-9 on the reasoning that it is an ordering
+    check. The ORDERING check is the `late_state` assertion below, and it has no
+    clock in it; the bound beside it is a parent-side wall clock that a starved
+    parent can overrun with the child long dead.
+    """
     work = tmp_path / "work"
     work.mkdir()
-    child = _spawn_child(work)
+    late_write_at = fleet_test_guard.budget(LATE_WRITE_AT)
+    child = _spawn_child(work, late_write_at)
     try:
         assert _wait_for(lambda: (work / "started").exists()), "the zombie never started"
         job_started = time.monotonic()
@@ -754,7 +763,7 @@ def test_the_process_dies_holding_its_slot_and_the_late_write_never_lands(
             child.wait(30)
     assert child.returncode == runner_mod.EXIT_JOB_ABANDONED
     assert child.returncode != 259, "STILL_ACTIVE would make a dead pid read as alive"
-    assert time.monotonic() - job_started < LATE_WRITE_AT, "the child outlived the late write"
+    assert time.monotonic() - job_started < late_write_at, "the child outlived the late write"
 
     # The slot was NOT released: the lock is still there, naming the dead pid.
     lock = work / "slots" / "0.lock"
@@ -763,7 +772,7 @@ def test_the_process_dies_holding_its_slot_and_the_late_write_never_lands(
     assert not slots_mod.pid_alive(child.pid)
 
     # Wait past the moment the zombie would have written its stale state.
-    remaining = LATE_WRITE_AT + 0.5 - (time.monotonic() - job_started)
+    remaining = late_write_at + 0.5 - (time.monotonic() - job_started)
     if remaining > 0:
         time.sleep(remaining)
     assert not (work / "late_state").exists(), "an abandoned job wrote after its process ended"
