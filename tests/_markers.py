@@ -142,6 +142,7 @@ READS_DOCS: frozenset[str] = frozenset(
         "tests/test_send_path_guard.py",
         "tests/test_session_checklist.py",
         "tests/test_task_state_claims.py",
+        "tests/test_uigf_cli.py",
         "tests/test_vendored_provenance.py",
     }
 )

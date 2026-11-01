@@ -117,6 +117,28 @@ curl -s -X POST http://127.0.0.1:8790/forecast \
        "target_count":1,"pull_budget":30}'
 ```
 
+## Importing a UIGF wish history
+
+A UIGF v4 export gives the pity counters of each banner family. This reads the
+file, prints JSON and exits; it needs neither server. From the repository root,
+against the invented sample fixture:
+
+```powershell
+python -m ingest.uigf data/fixtures/uigf_v4_sample.json --uid 000000001 --banner character_event --target-count 1 --pull-budget 30
+```
+
+`--banner` is `character_event`, `weapon_event`, `standard` or `chronicled`.
+`--target-count` (1 to 7) and `--pull-budget` (0 to 5000) ask for a PityEngine
+forecast seeded from the file and go together; without them the output has
+`"forecast": null`. Whether a past 5-star was the featured one needs a banner
+schedule this repository does not vendor, so the guarantee state is yours to give:
+`--has-guarantee`, `--consecutive-5050-losses` (0 to 3), `--fate-points` (0 or 1).
+They default to none. A file with a byte order mark is refused; re-save it as
+plain UTF-8.
+
+A failure is one line on stderr, nothing on stdout and exit code 1, or 2 for a bad
+argument.
+
 ## The Windows scheduled tasks, and how to remove them
 
 Nothing in the Quickstart installs either of these and nothing needs them. But
