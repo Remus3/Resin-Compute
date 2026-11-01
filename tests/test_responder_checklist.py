@@ -29,6 +29,7 @@ import time
 import types
 from pathlib import Path
 
+import fleet_test_guard  # on sys.path via tests/conftest.py
 import pytest
 
 from ops.fleet_kit import fleet_headless as kit
@@ -170,7 +171,7 @@ def test_a_concurrent_idle_fire_never_clobbers_a_spawning_fires_checklist(
 
     def held_spawn(prompt, bounds):
         entered.set()
-        assert release.wait(30), "the arm never released fire 1"
+        assert release.wait(fleet_test_guard.budget(30)), "the arm never released fire 1"
         return _draft(rsp)
 
     def fire_one():
@@ -179,7 +180,7 @@ def test_a_concurrent_idle_fire_never_clobbers_a_spawning_fires_checklist(
     worker = threading.Thread(target=fire_one, name="fire-1")
     worker.start()
     try:
-        assert entered.wait(30), "fire 1 never reached its spawn"
+        assert entered.wait(fleet_test_guard.budget(30)), "fire 1 never reached its spawn"
         second = rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
         assert second["termination"] == "empty", second
         doc = json.loads(_progress_path(rsp).read_text(encoding="ascii"))
@@ -255,7 +256,7 @@ def test_a_briefly_held_reader_is_outlasted_by_the_bounded_replace_retry(rsp, tm
     path = _seed_progress(rsp)
     opened = threading.Event()
     reader = _hold_reader(path, 0.15, opened)
-    assert opened.wait(5)
+    assert opened.wait(fleet_test_guard.budget(5))
     try:
         rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
     finally:
@@ -269,7 +270,7 @@ def test_a_reader_held_past_the_retry_leaves_no_orphaned_tmp(rsp, tmp_path):
     path = _seed_progress(rsp)
     opened = threading.Event()
     reader = _hold_reader(path, 3.0, opened)
-    assert opened.wait(5)
+    assert opened.wait(fleet_test_guard.budget(5))
     try:
         result = rsp.run_once(inbox=tmp_path / "empty-inbox", roots={}, bounds=rsp.Bounds())
         assert result["termination"] == "empty", result
