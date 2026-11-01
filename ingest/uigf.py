@@ -22,7 +22,8 @@ reproduces the source bytes' values exactly. `uigf_gacha_type` is one of
 Pity seeding
 ------------
 `pity_state_from_uigf` derives, per banner family, the count of wishes since
-the last 5-star and since the last 4-star (rank_type exactly "4"), ordered by
+the last 5-star and since the last 4-star-or-above (rank_type "4" or "5": a
+5-star also resets the 4-star counter, SPEC_SCAFFOLD 3.6), ordered by
 (time, id). The GUARANTEE state - `has_guarantee`, `consecutive_5050_losses`
 and the weapon `fate_points` - is NOT derived: deciding whether a past 5-star
 was the featured item needs a banner schedule and item table this repository
@@ -71,9 +72,11 @@ BANNER_TO_UIGF: dict[BannerKind, str] = {
 }
 
 _RANKS = frozenset({"3", "4", "5"})
-_TIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
+_TIME_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}")
 _TIME_FMT = "%Y-%m-%d %H:%M:%S"
-_DIGITS_RE = re.compile(r"^\d+$")
+# ASCII digits only, whole string: `^\d+$` with .match accepts a trailing
+# newline and any Unicode Nd digit, and str.isdigit also accepts superscripts.
+_DIGITS_RE = re.compile(r"[0-9]+")
 _OPTIONAL_ITEM_FIELDS = ("count", "name", "item_type", "rank_type")
 _ITEM_ORDER = (
     "uigf_gacha_type", "gacha_type", "item_id", "count", "time",
@@ -137,7 +140,7 @@ def _str_field(mapping: Mapping[str, Any], key: str, where: str, *, digits: bool
     value = _require(mapping, key, where)
     if not isinstance(value, str):
         raise UigfError(f"{where}: field {key!r} must be a string, got {type(value).__name__}")
-    if digits and not _DIGITS_RE.match(value):
+    if digits and not _DIGITS_RE.fullmatch(value):
         raise UigfError(f"{where}: field {key!r} must be a numeric string")
     return value
 
@@ -156,7 +159,7 @@ def _parse_item(raw: Any, where: str) -> UigfItem:
     item_id = _str_field(raw, "item_id", where, digits=True)
     item_uid = _str_field(raw, "id", where, digits=True)
     stamp = _str_field(raw, "time", where)
-    if not _TIME_RE.match(stamp):
+    if not _TIME_RE.fullmatch(stamp):
         raise UigfError(f"{where}: time must be 'YYYY-MM-DD HH:MM:SS'")
     try:
         datetime.strptime(stamp, _TIME_FMT)
@@ -172,7 +175,7 @@ def _parse_item(raw: Any, where: str) -> UigfItem:
             raise UigfError(f"{where}: field {key!r} must be a string")
         optional[key] = value
     count = optional["count"]
-    if count is not None and not _DIGITS_RE.match(count):
+    if count is not None and not _DIGITS_RE.fullmatch(count):
         raise UigfError(f"{where}: field 'count' must be a numeric string")
     rank = optional["rank_type"]
     if rank is not None and rank not in _RANKS:
@@ -194,7 +197,11 @@ def _parse_account(raw: Any, where: str) -> UigfAccount:
     if not isinstance(raw, Mapping):
         raise UigfError(f"{where}: account must be an object")
     uid = _require(raw, "uid", where)
-    if isinstance(uid, bool) or not isinstance(uid, (str, int)) or not str(uid).isdigit():
+    if (
+        isinstance(uid, bool)
+        or not isinstance(uid, (str, int))
+        or not _DIGITS_RE.fullmatch(str(uid))
+    ):
         raise UigfError(f"{where}: uid must be a numeric string or integer")
     timezone = _require(raw, "timezone", where)
     if isinstance(timezone, bool) or not isinstance(timezone, int):
@@ -363,7 +370,7 @@ def pity_state_from_uigf(
     """Starting `PityState` for one banner family, seeded from wish history.
 
     `pity_5star` / `pity_4star` are the wishes since the last rank_type "5" /
-    rank_type "4" item. The guarantee fields are caller input (see the module
+    rank_type "4" or "5" item (a 5-star also resets the 4-star counter). The guarantee fields are caller input (see the module
     docstring for why they cannot be derived from a UIGF file alone).
     """
     account = _account(doc, uid)
@@ -378,7 +385,9 @@ def pity_state_from_uigf(
     pity_4 = 0
     for item in rows:
         pity_5 = 0 if item.rank_type == "5" else pity_5 + 1
-        pity_4 = 0 if item.rank_type == "4" else pity_4 + 1
+        # A 5-star also resets the 4-star counter (SPEC_SCAFFOLD 3.6: the
+        # guarantee is "4-star or above every 10 wishes").
+        pity_4 = 0 if item.rank_type in ("4", "5") else pity_4 + 1
     return PityState(
         banner=banner,
         pity_5star=pity_5,

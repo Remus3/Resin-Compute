@@ -139,6 +139,15 @@ _ITEM0 = ("hk4e", 0, "list", 0)
         ((*_ITEM0, "rank_type"), "6", "rank_type"),
         ((*_ITEM0, "time"), "2026/01/02 10:00", "time"),
         ((*_ITEM0, "count"), "x", "count"),
+        # ASCII digits only: \d and str.isdigit accept a trailing newline,
+        # Arabic-Indic digits and superscripts (escapes keep the source ASCII).
+        ((*_ITEM0, "id"), "9\n", "id"),
+        ((*_ITEM0, "item_id"), "\u0661\u0662", "item_id"),
+        ((*_ITEM0, "count"), "1\n", "count"),
+        (("hk4e", 0, "uid"), "\u00b2", "uid"),
+        (("hk4e", 0, "uid"), "1\n", "uid"),
+        ((*_ITEM0, "time"), "\u0662026-01-02 10:00:00", "time"),
+        ((*_ITEM0, "time"), "2026-01-02 10:00:00\n", "time"),
     ],
 )
 def test_validation_rejects_malformed_input(path, value, needle):
@@ -174,8 +183,9 @@ def test_uigf_error_is_a_value_error():
 # Character (301 incl. 400), chronological by (time, id):
 #   001 r3, 002 r4, 003 r3, 004 r5, 005 r3, 006 r4, 007 r3, 008 r3
 #   since last 5-star (004): 005..008 -> 4; since last 4-star (006): 007, 008 -> 2
-# Weapon (302): three r3 -> 3 and 3. Standard (200): r5 then r3 -> 1, and no
-#   4-star at all -> 2. Chronicled (500): no rows -> 0 and 0.
+# Weapon (302): three r3 -> 3 and 3. Standard (200): r5 then r3 -> 1 and 1,
+#   because a 5-star also resets the 4-star counter (SPEC_SCAFFOLD 3.6).
+#   Chronicled (500): no rows -> 0 and 0.
 
 
 @pytest.mark.parametrize(
@@ -183,13 +193,48 @@ def test_uigf_error_is_a_value_error():
     [
         (BannerKind.CHARACTER_EVENT, 4, 2),
         (BannerKind.WEAPON_EVENT, 3, 3),
-        (BannerKind.STANDARD, 1, 2),
+        (BannerKind.STANDARD, 1, 1),
         (BannerKind.CHRONICLED, 0, 0),
     ],
 )
 def test_pity_derived_per_banner(banner, p5, p4):
     state = pity_state_from_uigf(_doc(), "000000001", banner)
     assert state == PityState(banner=banner, pity_5star=p5, pity_4star=p4)
+
+
+def _history_doc(ranks: str) -> UigfDocument:
+    """One 301 account whose wishes carry `ranks` in chronological order."""
+    raw = _raw()
+    template = raw["hk4e"][0]["list"][0]
+    rows = []
+    for n, rank in enumerate(ranks):
+        row = dict(template)
+        row.update(
+            uigf_gacha_type="301",
+            gacha_type="301",
+            rank_type=rank,
+            time=f"2026-01-02 10:{n:02d}:00",
+            id=str(2000000000000000000 + n),
+        )
+        rows.append(row)
+    raw["hk4e"] = [{**raw["hk4e"][0], "list": rows}]
+    return parse_document(raw)
+
+
+@pytest.mark.parametrize(
+    "ranks,p5,p4",
+    [
+        ("433353", 1, 1),
+        ("4" + "3" * 8 + "53", 1, 1),
+        # Neighbours: a 4-star alone still resets only the 4-star counter.
+        ("53343", 4, 1),
+        ("3334", 4, 0),
+    ],
+)
+def test_five_star_resets_the_four_star_counter(ranks, p5, p4):
+    """SPEC_SCAFFOLD 3.6: a 5-star DOES reset the 4-star counter."""
+    state = pity_state_from_uigf(_history_doc(ranks), "000000001", BannerKind.CHARACTER_EVENT)
+    assert (state.pity_5star, state.pity_4star) == (p5, p4)
 
 
 def test_pity_ignores_file_order():
