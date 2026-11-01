@@ -17,3 +17,11 @@
   and on py -3.11 (PYTHONPATH to the 3.14 site-packages); ruff and mypy clean.
 - D7 to D10 filed in `ROADMAP.md` "Adversary, RSC-1 CLI", each re-probed on the
   Windows host. The determinism row extended to both docstring copies.
+- Gated at 1c5101a, Python 3.14, 2026-11-01, through the suite gate, no slot wait,
+  each its own exit 0: `tests -n 8 --dist loadfile -rs` 5134 passed, 9 skipped;
+  `agents/pity_engine` 194 passed. Session 84 read 7 skips and did not record
+  their reasons, so the delta of 2 cannot be attributed by reason. This run's
+  reasons: 8.3 names disabled (2), no PATH interpreter importing pytest or ruff
+  in `tests/test_hook_interpreter.py` (2), network opt-in, no exec bit, denied
+  listing fault absent, POSIX half of a guard, bare python discrimination.
+  Not run: shell node --test, qa_companion, headless dry run. Inbox NOT marked.
