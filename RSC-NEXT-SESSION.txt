@@ -98,22 +98,8 @@ STATE OBSERVED 2026-11-01 AT 5858574 (session 85, headless run)
   41352611611, codeql 41352611676, all success. Not run: shell node
   --test, qa_companion, headless dry run. Inbox NOT marked. This file's
   later commit and its CI: read them live.
-STATE OBSERVED 2026-11-01 AT 8438cc1 (session 84 wrap-up, headless run)
-  Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile and pity_engine
-  green through the suite gate, ruff and mypy clean, each exit 0 (counts
-  in docs/ledger/session-84.md). Not run this session: shell node --test,
-  qa_companion, headless dry run. Inbox NOT marked. Push, worktree and
-  remote read-backs come after this file's commit: read them live.
-STATE OBSERVED 2026-11-01 AT 85bf25d (session 83 /done, headless run)
-  Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile, pity_engine and
-  shell node --test green through the suite gate, no slot wait (counts in
-  docs/ledger/session-83.md); ruff and mypy clean; kit check 26 [].
-  origin/main read back 85bf25d; CI push ci 41280847660 and codeql
-  41280847657 success. send_note audit empty after backfilling one row
-  (S83h); reap applied: 0 removed, 0 kept, 0 listed (base main). Board
-  render SKIPPED: headless run (.claude/commands/done.md section 8b).
-  Inbox NOT marked. History rewritten under MAIN 2233: git log --all has
-  one author/committer identity; tag v0.1.0 = tag cf1b7fb -> 98b2381.
+STATE OBSERVED AT 8438cc1 and 85bf25d (sessions 84, 83): moved verbatim
+  session 86 to docs/handoff-archive/RSC-2026-11-01.txt.
 PRIOR READINGS (sessions 57-82): docs/ledger/ files. A worktree shows
   MORE skips (no POSIX sh on PATH); one under AppData fails
   test_the_session_cache_lives_under_the_runtime_directory and

@@ -2,6 +2,14 @@
 
 ## 2026-11-01 - /done ritual (headless Maint-KitRollout run, candidate on bc62ea4)
 
+- Second paperwork commit: `fleet_done.py mark` refused cdb75b4 (hand-off 30726 bytes,
+  over the kit's 30 KB line) and its archive step found 0 blocks, so the session 84 and
+  83 state readings moved verbatim to `docs/handoff-archive/RSC-2026-11-01.txt`; hand-off
+  read back 29721 bytes. Re-gated on that tree through the suite gate, Python 3.14,
+  2026-11-01: `tests -n 8 --dist loadfile -rs` 5136 passed, 7 skipped, exit 0;
+  `agents/pity_engine` 194 passed, exit 0. CI on cdb75b4 read back: ci 41370787533
+  success, docs-guards 41370787584 success. CI on the commit carrying this line is
+  pending by construction.
 - Gated on the paperwork candidate (hand-off, ROADMAP, ledger index, this file),
   Python 3.14 (CI is 3.11), 2026-11-01, each read back with its own exit 0, no red and
   no `fleet_test_guard` failure. Whole suites through the suite gate:

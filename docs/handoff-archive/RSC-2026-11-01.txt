@@ -35,3 +35,20 @@ TRAPS MEASURED (moved session 83)
   71, twice; an environment kill, not a test failure). Re-run in the
   foreground; a suite gate timeout fails closed.
 
+STATE READINGS (moved session 86, a dated reading, not a claim about now)
+STATE OBSERVED 2026-11-01 AT 8438cc1 (session 84 wrap-up, headless run)
+  Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile and pity_engine
+  green through the suite gate, ruff and mypy clean, each exit 0 (counts
+  in docs/ledger/session-84.md). Not run this session: shell node --test,
+  qa_companion, headless dry run. Inbox NOT marked. Push, worktree and
+  remote read-backs come after this file's commit: read them live.
+STATE OBSERVED 2026-11-01 AT 85bf25d (session 83 /done, headless run)
+  Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile, pity_engine and
+  shell node --test green through the suite gate, no slot wait (counts in
+  docs/ledger/session-83.md); ruff and mypy clean; kit check 26 [].
+  origin/main read back 85bf25d; CI push ci 41280847660 and codeql
+  41280847657 success. send_note audit empty after backfilling one row
+  (S83h); reap applied: 0 removed, 0 kept, 0 listed (base main). Board
+  render SKIPPED: headless run (.claude/commands/done.md section 8b).
+  Inbox NOT marked. History rewritten under MAIN 2233: git log --all has
+  one author/committer identity; tag v0.1.0 = tag cf1b7fb -> 98b2381.
