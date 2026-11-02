@@ -1,15 +1,18 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-11-01 (session 85, MAIN FIX 1508 headless run, kit v27);
-the session 85 gates are in docs/ledger/session-85.md; this paperwork
+Stamped 2026-11-01 (session 86, headless Maint-KitRollout run, kit v28);
+the session 86 gates are in docs/ledger/session-86.md; this paperwork
 commit landed after the ANSWER. Everything below is a READING taken that day, not a promise
 about now. Re-measure before citing.
 
-NEXT ACTION: work the session 84 adversary rows (S84a, D7 and the other
+NEXT ACTION: first re-read S86a (RSC-InboxResponder read Disabled) and
+the inbox for a MAIN note explaining it, before assuming the responder is
+armed. Then work the session 84 adversary rows (S84a, D7 and the other
 MEDIUM rows first; D1 closed 7da57ca),
 re-read S83a against the pre-push log of session 84's push before acting
 on it, then the adversary pass on 85bf25d (S83c), then the inbox triage
 (S80a), then the remaining OPEN WORK items below, highest priority first.
-Session 85 worked MAIN's FIX 1508 (CI red on 95358dd, D1 closed stdout).
+Session 86 adopted kit v28 (bc62ea4). Session 85 worked MAIN's FIX 1508
+(CI red on 95358dd, D1 closed stdout).
 Carry every item not acted on forward again.
 
 BOOTSTRAP - READ IN THIS ORDER
@@ -63,9 +66,9 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 27 [] (kit v27, MANIFEST sha256
-0a90af3540eb87fbbda2bfae8b5e84abe692dd6c73a9e7229adab8f968e949c1; read
-back 27 [] at session 84 wrap-up). Outbound cap is 12 notes a day (FLEET-COMMON
+must print 28 [] (kit v28, MANIFEST sha256
+343471741c03a78e29c3c08fa0af713f6576ef0b2d69843a87a497b9e52a6d93; read
+back 28 [] at session 86 /done). Outbound cap is 12 notes a day (FLEET-COMMON
 14 c); any text saying 6 a day is stale.
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
@@ -80,6 +83,14 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
+STATE OBSERVED 2026-11-01 AT bc62ea4 (session 86 /done, headless run)
+  Gates run on this file's commit candidate: figures in
+  docs/ledger/session-86.md, Python 3.14 (CI is 3.11). CI on bc62ea4: ci
+  41369177169 and codeql 41369177162 success. Kit check 28 []. send_note
+  audit printed nothing. Board render SKIPPED: headless run. Inbox NOT
+  marked: ops/fleet_kit/fleet_inbox.py pending still lists the v28 note as unseen ORDER
+  work, on purpose; the pending-work queue reads empty. This file's commit
+  and its CI: read them live.
 STATE OBSERVED 2026-11-01 AT 5858574 (session 85, headless run)
   Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile and pity_engine
   green through the suite gate at 1c5101a, ruff and mypy clean (counts in
@@ -110,6 +121,23 @@ PRIOR READINGS (sessions 57-82): docs/ledger/ files. A worktree shows
   regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
+  S86a. OPEN (NEW session 86): RSC-InboxResponder READS DISABLED, ACTOR
+     UNIDENTIFIED. ops/check_task_liveness.py RSC-InboxResponder read rc 1,
+     DORMANT, at 2026-11-01 18:59. Task Scheduler event 142 disabled 7 tasks
+     18:43:11.5 to 18:43:13.8 (the CS, LW, RC, RSC, SS responders and two
+     LaneLoop tasks); then event 106 registered MAIN-RebootRestore at
+     18:43:14.2 and event 110 started Maint-KitRollout on request at
+     18:43:20.7. Same-actor or pause-for-reboot is a reading, not a
+     conclusion. Session 86 neither changed it nor re-enabled it. No repo doc
+     records this disable as deliberate (the ROADMAP 2026-09-20 disable is
+     older, superseded by the re-arm). Item 0 below ASSUMES ARMED. Next
+     session: re-read the state and the inbox for a MAIN note first; no
+     re-enable without one. ops/runtime/HALT read absent. ROADMAP "Now".
+  S86b. For MAIN (NEW session 86): the rollout order's --owner form
+     collides with the claims hook, which denied the label and named its own
+     id. In the v28 ANSWER; ROADMAP "Now". Next rollout: use the hook's id.
+  S86c. v28's force-push path (pre-push with an absent remote old tip) NOT
+     exercised live. Residue (d).
   S85a. MAIN FIX 1508 ANSWER SENT, tip 5858574, sha256
      c1e328fb5e941f0c3dd7fd7f40ba71675c54a3761817a72d3a60042548dc41a7,
      recipient copy re-hashed equal, 1/1; send_note audit empty; pending
@@ -131,7 +159,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   S84c. MAIN's FI-RSC-1 reply sent: the ANSWER is the run's act AFTER this
      file's commit. Verify with python tools/send_note.py audit and the
      outbound ledger row; TERMINAL, no reply awaited.
-  S83a. RE-READ FIRST (session 84): bare python imported pytest in session
+  S83a. RE-READ FIRST (session 84; session 86 reading: bare python is
+     Python314 with pytest 9.0.3): bare python imported pytest in session
      84's run (Python314), against the claim below; the skip may depend on
      environment. ROADMAP "S83a re-read needed". Session 85 reading: the
      push of 5858574 printed ruff and pytest not importable (tried python3
@@ -149,10 +178,11 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      shape via fleet_test_guard (measured at /done). Residue (b).
   S83c. 85bf25d (core/provenance.py, ingest/enka_client.py) has had NO
      adversary pass; run the full lens set. Residue (c).
-  S83d. Kit defects sent to MAIN in the 2233 ANSWER (fleet_rewrite stale
-     filter-repo marker hang; fleet_identity pre-push refuses when the
-     remote old tip is missing locally). AWAIT a kit fix; never patch
-     ops/fleet_kit/. Residue (d).
+  S83d. Kit defect sent to MAIN in the 2233 ANSWER: fleet_rewrite stale
+     filter-repo marker hang. OPEN: ops/fleet_kit/fleet_rewrite.py bytes unchanged in
+     v28. AWAIT a kit fix; never patch ops/fleet_kit/. The other half
+     (fleet_identity pre-push refusing an absent old tip) DELIVERED by v28,
+     bc62ea4 (absent_old_tips); see S86c. Residue (d).
   S83e. Rewrite residue: GitHub refs/pull/1..11/head still hold old
      commits (only delete-and-recreate purges); the local untracked
      rewrite mailmap under .git holds old values - delete after MAIN
@@ -226,7 +256,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      kit spawn (kind build, progress task repo-review). PARKED. s4 (history
      rewrite + force push) DONE session 83 under MAIN 2233 ORDER, see
      docs/ledger/session-83.md. Reversed by: a MAIN ruling.
-  0. RENEW THE RESPONDER BEFORE 2026-11-06T23:00 LOCAL (window ends
+  0. (Assumes armed: read S86a first.) RENEW THE RESPONDER BEFORE
+     2026-11-06T23:00 LOCAL (window ends
      2026-11-07T00:45; the PT43200M repeat may stop about 1 h early because
      DST ends Nov 1). Re-run ops/install_responder_task.ps1 -TaskName
      RSC-InboxResponder from the main checkout (-InstallRoot defaults to
@@ -330,6 +361,9 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
   docs/handoff-archive/RSC-2026-10-26.txt; read it before re-litigating.
 
 TRAPS MEASURED - none are hypothetical
+  A ROLLOUT PROMPT'S FIXED --owner LABEL IS DENIED BY THE CLAIMS HOOK
+  (session 86): type the id its deny reason names (S86b).
+
   BARE git push FAILS, main HAS NO UPSTREAM (session 85, rc 128): use git
   push origin main through gitlock. A DETACHED suite needs its stdio passed
   explicitly at every level, or the gate's output is lost (0-byte log).
@@ -467,7 +501,8 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
+Reap (session 86): reap applied: 0 removed, 0 kept, 0 listed (base main).
 Reap (session 84): fleet_done reap not run; the two merged RSC-1 and FLEET-9
 worktrees are removed by the wrap-up after this file's commit. Read git
 worktree list. Session 83: 0 removed, 0 kept, 0 listed (base main).
-SESSION: 86
+SESSION: 87
