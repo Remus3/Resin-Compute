@@ -52,3 +52,30 @@ STATE OBSERVED 2026-11-01 AT 85bf25d (session 83 /done, headless run)
   render SKIPPED: headless run (.claude/commands/done.md section 8b).
   Inbox NOT marked. History rewritten under MAIN 2233: git log --all has
   one author/committer identity; tag v0.1.0 = tag cf1b7fb -> 98b2381.
+
+STATE READINGS (moved session 87, a dated reading, not a claim about now)
+STATE OBSERVED 2026-11-01 AT 5858574 (session 85, headless run)
+  Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile and pity_engine
+  green through the suite gate at 1c5101a, ruff and mypy clean (counts in
+  docs/ledger/session-85.md). CI on 5858574: ci 41352611625, docs-guards
+  41352611611, codeql 41352611676, all success. Not run: shell node
+  --test, qa_companion, headless dry run. Inbox NOT marked. This file's
+  later commit and its CI: read them live.
+STATE OBSERVED 2026-11-01 AT bc62ea4 (session 86 /done, headless run)
+  Gates run on this file's commit candidate: figures in
+  docs/ledger/session-86.md, Python 3.14 (CI is 3.11). CI on bc62ea4: ci
+  41369177169 and codeql 41369177162 success. Kit check 28 []. send_note
+  audit printed nothing. Board render SKIPPED: headless run. Inbox NOT
+  marked: ops/fleet_kit/fleet_inbox.py pending still lists the v28 note as unseen ORDER
+  work, on purpose; the pending-work queue reads empty. This file's commit
+  and its CI: read them live.
+
+DONE RECORDS AND OLD REAP LINES (moved session 87, verbatim)
+  S85a. MAIN FIX 1508 ANSWER SENT, tip 5858574, sha256
+     c1e328fb5e941f0c3dd7fd7f40ba71675c54a3761817a72d3a60042548dc41a7,
+     recipient copy re-hashed equal, 1/1; send_note audit empty; pending
+     row closed, pending list read back with 0 rows. TERMINAL, no reply
+     awaited.
+Reap (session 84): fleet_done reap not run; the two merged RSC-1 and FLEET-9
+worktrees are removed by the wrap-up after this file's commit. Read git
+worktree list. Session 83: 0 removed, 0 kept, 0 listed (base main).

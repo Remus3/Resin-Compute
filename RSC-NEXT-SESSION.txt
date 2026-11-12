@@ -1,17 +1,20 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-11-01 (session 86, headless Maint-KitRollout run, kit v28);
-the session 86 gates are in docs/ledger/session-86.md; this paperwork
+Stamped 2026-11-12 (session 87, headless Maint-KitRollout run, kit v30);
+the session 87 gates are in docs/ledger/session-87.md; this paperwork
 commit landed after the ANSWER. Everything below is a READING taken that day, not a promise
 about now. Re-measure before citing.
 
-NEXT ACTION: first re-read S86a (RSC-InboxResponder read Disabled) and
+NEXT ACTION: first work the two PENDING ORDER rows (S87b: MAIN 1200
+feedback memory, then mark_work_done for it and the v30 row), then
+re-read S86a (RSC-InboxResponder read Disabled) and
 the inbox for a MAIN note explaining it, before assuming the responder is
 armed. Then work the session 84 adversary rows (S84a, D7 and the other
 MEDIUM rows first; D1 closed 7da57ca),
 re-read S83a against the pre-push log of session 84's push before acting
 on it, then the adversary pass on 85bf25d (S83c), then the inbox triage
 (S80a), then the remaining OPEN WORK items below, highest priority first.
-Session 86 adopted kit v28 (bc62ea4). Session 85 worked MAIN's FIX 1508
+Session 87 adopted kit v30 (3b2b1c9; S87a amend disclosed). Session 86
+adopted kit v28 (bc62ea4). Session 85 worked MAIN's FIX 1508
 (CI red on 95358dd, D1 closed stdout).
 Carry every item not acted on forward again.
 
@@ -66,9 +69,9 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 28 [] (kit v28, MANIFEST sha256
-343471741c03a78e29c3c08fa0af713f6576ef0b2d69843a87a497b9e52a6d93; read
-back 28 [] at session 86 /done). Outbound cap is 12 notes a day (FLEET-COMMON
+must print 30 [] (kit v30, MANIFEST sha256
+d2ac40250bd0efc071f0eb11c1e92ae04af88d750de200cf8ed4dc5714d07ea2; read
+back 30 [] at session 87 /done). Outbound cap is 12 notes a day (FLEET-COMMON
 14 c); any text saying 6 a day is stale.
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
@@ -83,23 +86,16 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
-STATE OBSERVED 2026-11-01 AT bc62ea4 (session 86 /done, headless run)
-  Gates run on this file's commit candidate: figures in
-  docs/ledger/session-86.md, Python 3.14 (CI is 3.11). CI on bc62ea4: ci
-  41369177169 and codeql 41369177162 success. Kit check 28 []. send_note
-  audit printed nothing. Board render SKIPPED: headless run. Inbox NOT
-  marked: ops/fleet_kit/fleet_inbox.py pending still lists the v28 note as unseen ORDER
-  work, on purpose; the pending-work queue reads empty. This file's commit
-  and its CI: read them live.
-STATE OBSERVED 2026-11-01 AT 5858574 (session 85, headless run)
-  Python 3.14 (CI is 3.11): tests -n 8 --dist loadfile and pity_engine
-  green through the suite gate at 1c5101a, ruff and mypy clean (counts in
-  docs/ledger/session-85.md). CI on 5858574: ci 41352611625, docs-guards
-  41352611611, codeql 41352611676, all success. Not run: shell node
-  --test, qa_companion, headless dry run. Inbox NOT marked. This file's
-  later commit and its CI: read them live.
-STATE OBSERVED AT 8438cc1 and 85bf25d (sessions 84, 83): moved verbatim
-  session 86 to docs/handoff-archive/RSC-2026-11-01.txt.
+STATE OBSERVED 2026-11-12 AT 3b2b1c9 (session 87 /done, headless run)
+  Gates on a clean tree at 3b2b1c9 (= origin/main after fetch): figures
+  in docs/ledger/session-87.md, Python 3.14 (CI is 3.11), all exit 0.
+  CI on 3b2b1c9: docs-guards 43197865295 and codeql 43197865227 success,
+  ci 43197865428 in progress when read. Kit check 30 []. send_note audit
+  printed nothing. Board render SKIPPED: headless run (.claude/commands/done.md 8b). Inbox
+  NOT marked; ops/fleet_kit/fleet_inbox.py pending lists the v30 and MAIN 1200 ORDERs
+  as ORDER work (S87b). This file's commit and its CI: read them live.
+STATE OBSERVED AT bc62ea4, 5858574, 8438cc1 and 85bf25d (sessions 86-83):
+  moved verbatim sessions 86 and 87 to docs/handoff-archive/RSC-2026-11-01.txt.
 PRIOR READINGS (sessions 57-82): docs/ledger/ files. A worktree shows
   MORE skips (no POSIX sh on PATH); one under AppData fails
   test_the_session_cache_lives_under_the_runtime_directory and
@@ -107,6 +103,25 @@ PRIOR READINGS (sessions 57-82): docs/ledger/ files. A worktree shows
   regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
+  S87b. PENDING ORDERS (NEW session 87): ops/fleet_kit/fleet_inbox.py
+     pending lists
+     MAIN 2026-11-08 1200 ORDER (save feedback memory "model and effort
+     fit the task" byte for byte in this tree's Claude memory dir, index
+     it in that dir's index file, apply to every spawn; TERMINAL, no ANSWER) - NOT
+     worked; and the v30 0345 ORDER, ANSWER delivered but its row not
+     closed. Work 1200, then fleet_inbox.mark_work_done for both rows.
+     ROADMAP "Now".
+  S87c. RUNNER YIELD WRITES NO PAUSE ROW (NEW session 87, kit v30
+     CARRY-8): headless/runner.py _run_governed_pass skips the pass on
+     should_yield with only a log line; call the kit's note_pause
+     (ops/fleet_kit/fleet_lanes.py:489, doc at line 109) with a
+     PAUSE_REASONS reason, red-first, pause log under tmp_path. The v30
+     ANSWER says it is filed. ROADMAP "Now".
+  S87a. RECORD: 3b2b1c9 was AMENDED once before the push to fix a file
+     count in its message (12 changed kit files, not 13); reflog adb9ff5
+     -> 3b2b1c9, adb9ff5 never pushed. The v30 ANSWER (sha256 f88de791
+     29821ebc865c6020f177e57e82aa232557a1271aece90b6a1f1edcfb, HOP 2,
+     reported 2/2) discloses it. No further act; amend stays barred.
   S86a. OPEN (NEW session 86): RSC-InboxResponder READS DISABLED, ACTOR
      UNIDENTIFIED. ops/check_task_liveness.py RSC-InboxResponder read rc 1,
      DORMANT, at 2026-11-01 18:59. Task Scheduler event 142 disabled 7 tasks
@@ -124,11 +139,8 @@ OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
      id. In the v28 ANSWER; ROADMAP "Now". Next rollout: use the hook's id.
   S86c. v28's force-push path (pre-push with an absent remote old tip) NOT
      exercised live. Residue (d).
-  S85a. MAIN FIX 1508 ANSWER SENT, tip 5858574, sha256
-     c1e328fb5e941f0c3dd7fd7f40ba71675c54a3761817a72d3a60042548dc41a7,
-     recipient copy re-hashed equal, 1/1; send_note audit empty; pending
-     row closed, pending list read back with 0 rows. TERMINAL, no reply
-     awaited.
+  S85a, and reap lines of sessions 84/83: done records, moved verbatim
+     session 87 to docs/handoff-archive/RSC-2026-11-01.txt.
   S84a. ADVERSARY ROWS OPEN (NEW session 84): ROADMAP "Now" rows
      "Adversary, RSC-1 CLI" (D2-D6, plus D7-D10 filed session 85; D1 closed
      7da57ca)
@@ -487,8 +499,7 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
+Reap (session 87): reap applied: 0 removed, 0 kept, 0 listed (base main).
+Board (session 87): render skipped, headless run (.claude/commands/done.md section 8b).
 Reap (session 86): reap applied: 0 removed, 0 kept, 0 listed (base main).
-Reap (session 84): fleet_done reap not run; the two merged RSC-1 and FLEET-9
-worktrees are removed by the wrap-up after this file's commit. Read git
-worktree list. Session 83: 0 removed, 0 kept, 0 listed (base main).
-SESSION: 87
+SESSION: 88
