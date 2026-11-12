@@ -523,7 +523,7 @@ def _unreadable_reason(relative_name: str, path: Path, exc: OSError) -> str:
 # would newly capture, and nothing else.
 # EMITTER: one of those lines that `_EMITS_OUTPUT` also matches.
 #
-# THE FIGURE, EXCLUDING THIS MODULE: 108 lines, of which ZERO emit output.
+# THE FIGURE, EXCLUDING THIS MODULE: 112 lines, of which ZERO emit output.
 # (107 -> 109 on 2026-10-18: FLEET-KIT v19's new vendored fleet_board.py,
 # lines 382 and 415, JS `r.state` inside the board page string; neither
 # emits output.)
@@ -531,8 +531,12 @@ def _unreadable_reason(relative_name: str, path: Path, exc: OSError) -> str:
 # line 814, QUOTA_FILE's `teamclaude.state.json` path; it emits nothing.)
 # (110 -> 108 on 2026-10-25: FLEET-KIT v23 removed the board page from the
 # vendored fleet_board.py, taking both v19 `r.state` lines with it.)
+# (108 -> 112 on 2026-11-12: FLEET-KIT v30's vendored fleet_headless.py
+# lines 435 (STATE_MAX, the progress-row state clip) and 1368, 1373, 1374
+# (the proxy quota `.state.json` path of the route-fallback probe); none
+# emits output.)
 # Almost all of them are a Python attribute named `state`, which is a different
-# property from PowerShell's `.State`. Not one of the 108 can reach Rule 1 in
+# property from PowerShell's `.State`. Not one of the 112 can reach Rule 1 in
 # either dialect, because Rule 1 needs an emitter and none of them is one.
 #
 # THIS MODULE IS EXCLUDED ON PURPOSE, AND THE EXCLUSION IS THE REPAIR. This
@@ -632,7 +636,7 @@ def test_case_folding_did_not_swallow_the_powershell_neighbours(survivor):
         # PYTHON file `.state` is a DIFFERENT attribute from `.State`, because
         # Python resolves attribute names case-SENSITIVELY. Folding case there
         # conflates an unrelated domain object with a scheduled task, and the
-        # conflation population is measured rather than feared: 108 lines
+        # conflation population is measured rather than feared: 112 lines
         # OUTSIDE this module carry a state needle ONLY in a non-canonical
         # spelling, and NONE of them emits output. The population, the counting
         # rule, the reason this module is excluded from its own figure, and
@@ -848,7 +852,7 @@ def _code_rule_for(suffix: str):
 # note's figures; the arm re-measures and compares.
 
 #: The Arm 5 note's figures, for the tracked corpus MINUS this module.
-_CONFLATION_LINES_OUTSIDE_THIS_MODULE = 108
+_CONFLATION_LINES_OUTSIDE_THIS_MODULE = 112
 _CONFLATION_EMITTERS_OUTSIDE_THIS_MODULE = 0
 
 #: A FLOOR on the corpus, deliberately not its size. `git ls-files "*.py"

@@ -164,8 +164,8 @@ PINNED_FILES = (
 #: a file and the manifest edited TOGETHER (its own docstring says MAIN's drift
 #: sweep catches that). Pinning the manifest's digest here, as MAIN's v15 ORDER
 #: section 1 states it (8b20a75b...3f463c), closes that gap here.
-PINNED_KIT_VERSION = 28
-MANIFEST_SHA256 = "343471741c03a78e29c3c08fa0af713f6576ef0b2d69843a87a497b9e52a6d93"
+PINNED_KIT_VERSION = 30
+MANIFEST_SHA256 = "d2ac40250bd0efc071f0eb11c1e92ae04af88d750de200cf8ed4dc5714d07ea2"
 
 
 def test_the_vendored_kit_is_the_pinned_version_and_pins_its_licence_files():
@@ -176,7 +176,7 @@ def test_the_vendored_kit_is_the_pinned_version_and_pins_its_licence_files():
     assert manifest["version"] == PINNED_KIT_VERSION
     assert tuple(sorted(manifest["files"])) == PINNED_FILES
     assert hashlib.sha256(raw).hexdigest() == MANIFEST_SHA256, (
-        "ops/fleet_kit/MANIFEST.json is not MAIN's v28 manifest byte-for-byte"
+        "ops/fleet_kit/MANIFEST.json is not MAIN's v30 manifest byte-for-byte"
     )
 
 
@@ -210,9 +210,9 @@ def test_a_manifest_version_mismatch_is_reported(tmp_path):
     root = _scratch_copy(tmp_path)
     path = root / "ops" / "fleet_kit" / "MANIFEST.json"
     data = path.read_bytes()
-    assert b'"version": 28' in data, "mutation target absent - this mutant would be a no-op"
-    path.write_bytes(data.replace(b'"version": 28', b'"version": 19', 1))
-    assert "manifest v19 != kit v28" in KIT.conformance(root)
+    assert b'"version": 30' in data, "mutation target absent - this mutant would be a no-op"
+    path.write_bytes(data.replace(b'"version": 30', b'"version": 19', 1))
+    assert "manifest v19 != kit v30" in KIT.conformance(root)
 
 
 #: U+2610 as UTF-8, built from the code point so this file stays 7-bit.

@@ -291,11 +291,16 @@ def test_non_vacuity_the_same_shape_to_this_tree_is_still_answered(rsp, tmp_path
     assert len(_sent(tmp_path)) == 1
 
 
-def test_c_a_question_to_another_sibling_is_triaged_again(rsp, tmp_path, monkeypatch):
+def test_c_a_question_to_another_sibling_is_skipped_by_the_kit(rsp, tmp_path, monkeypatch):
+    """FLEET-KIT v30 section 3 INBOX ADDRESSEE: classify() reads
+    `-from-XX-<CLASS>-to-<CODE>-` and SKIPs a note addressed to another tree,
+    whatever its class. Before v30 this note went to triage."""
+    assert fi.addressee(TO_LW) == "LW"
     _note(tmp_path / "inbox", TO_LW, "# From SS - QUESTION\n\nwhy\n")
     sessions = Sessions(rsp)
     _fire(rsp, tmp_path, monkeypatch, sessions)
-    assert sessions.triage == [TO_LW]
+    assert sessions.triage == [] and sessions.work == []
+    assert _sent(tmp_path) == []
 
 
 # ---------------------------------------------------------------- the legacy work lane

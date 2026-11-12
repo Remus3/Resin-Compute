@@ -173,11 +173,13 @@ UNRESOLVED_CENSUS: dict[str, tuple[int, str]] = {
         "head: env FLEET_GIT or the literal git; triaged 2026-10-18.",
     ),
     "ops/fleet_kit/fleet_rewrite.py": (
-        2,
+        3,
         "FLEET-KIT v13, vendored and never edited, and never run here (a "
         "history rewrite runs only on MAIN's ORDER); triaged 2026-10-08 by "
         "reading each site. git(): env FLEET_GIT or the literal git. run(): "
         "filter_argv(), whose head is the literal git (git filter-repo). "
+        "FLEET-KIT v30 adds rehearse() (line 619), whose runner argv is the "
+        "same filter_argv(), head the literal git; triaged 2026-11-12. "
         "Never a Python.",
     ),
     "ops/fleet_kit/fleet_headless.py": (
