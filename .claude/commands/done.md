@@ -256,6 +256,19 @@ first. Rewrite it, then commit it with the rest of the paperwork.
   ```
   python tools/check_handoff.py
   ```
+- **Archive before the commit (FLEET-KIT v31, MAIN 0936 ORDER of
+  2026-11-14).** After the rewrite and `tools/check_handoff.py`, and BEFORE
+  the commit, run once:
+
+  ```
+  python ops/fleet_kit/fleet_done.py archive --auto
+  ```
+
+  It applies only at 27648 B or more (else it prints `archive skipped`) and
+  moves every STATE OBSERVED block older than the newest to
+  `docs/handoff-archive/`, leaving one pointer line each. Re-run
+  `tools/check_handoff.py`, then commit the hand-off AND the archive file
+  together. Reversed by: a MAIN ruling or a later kit version.
 - **The file is tracked and the repository is public.** It is swept by
   `tests/test_machine_identity.py`, `tests/test_no_sibling_names.py` and
   `tests/test_task_state_claims.py`. No real account, sibling project name or
