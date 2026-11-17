@@ -1,0 +1,11 @@
+# archived from RSC-NEXT-SESSION.txt at 2026-11-17T10:26:11Z
+STATE OBSERVED 2026-11-12 AT 3b2b1c9 (session 87 /done, headless run)
+  Gates on a clean tree at 3b2b1c9 (= origin/main after fetch): figures
+  in docs/ledger/session-87.md, Python 3.14 (CI is 3.11), all exit 0.
+  CI on 3b2b1c9: docs-guards 43197865295 and codeql 43197865227 success,
+  ci 43197865428 in progress when read. Kit check 30 []. send_note audit
+  printed nothing. Board render SKIPPED: headless run (.claude/commands/done.md 8b). Inbox
+  NOT marked; ops/fleet_kit/fleet_inbox.py pending lists the v30 and MAIN 1200 ORDERs
+  as ORDER work (S87b). This file's commit and its CI: read them live.
+STATE OBSERVED AT bc62ea4, 5858574, 8438cc1 and 85bf25d (sessions 86-83):
+  moved verbatim sessions 86 and 87 to docs/handoff-archive/RSC-2026-11-01.txt.
