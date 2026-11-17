@@ -855,6 +855,22 @@ def workflows_missing_the_pin_install(paths: list[Path]) -> tuple[list[str], lis
     return graded, missing
 
 
+#: Kit-shipped workflows (FLEET-KIT v32): workflow name -> vendored template.
+KIT_WORKFLOW_COPIES = {
+    "fleet-identity-guard.yml": REPO_ROOT / "ops" / "fleet_kit" / "fleet_identity_guard.yml",
+}
+
+
+def test_the_kit_workflow_exemption_is_not_vacuous():
+    """Each exempt workflow exists, is byte-equal to the kit template, and
+    really is one the install arm would otherwise flag."""
+    for name, kit_copy in KIT_WORKFLOW_COPIES.items():
+        path = WORKFLOWS_DIR / name
+        assert path.read_bytes() == kit_copy.read_bytes(), name
+        _, missing = workflows_missing_the_pin_install([path])
+        assert missing == [name], name
+
+
 def test_every_workflow_installs_the_pin_file_it_is_being_graded_against():
     """The premise of every arm above, asserted as far as text can assert it.
 
@@ -877,6 +893,15 @@ def test_every_workflow_installs_the_pin_file_it_is_being_graded_against():
     """
     workflows = workflow_files()
     graded, missing = workflows_missing_the_pin_install(workflows)
+    # FLEET-KIT v32 Additions G1: the kit's identity guard runs only a
+    # stdlib checker (python3 -I) and installs nothing. It is exempt ONLY
+    # while its bytes equal the vendored kit template, so a local edit (or a
+    # different file under the same name) is graded again.
+    for name, kit_copy in KIT_WORKFLOW_COPIES.items():
+        if name in missing and (WORKFLOWS_DIR / name).read_bytes() == (
+            kit_copy.read_bytes()
+        ):
+            missing.remove(name)
     assert not missing and graded, (
         f"python-running workflows that never install requirements-dev.txt:"
         f" {missing}; graded: {graded}; workflows enumerated from"
