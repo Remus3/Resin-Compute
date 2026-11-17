@@ -9,3 +9,54 @@ STATE OBSERVED 2026-11-12 AT 3b2b1c9 (session 87 /done, headless run)
   as ORDER work (S87b). This file's commit and its CI: read them live.
 STATE OBSERVED AT bc62ea4, 5858574, 8438cc1 and 85bf25d (sessions 86-83):
   moved verbatim sessions 86 and 87 to docs/handoff-archive/RSC-2026-11-01.txt.
+# moved by hand from RSC-NEXT-SESSION.txt OPEN WORK at session 88 /done (30 KB line)
+  N2. WATCH: a stale empty .git/index.lock (826 s, no git process)
+     blocked session 73's first merge; the gitlock dry-run commit cleared
+     and logged it. Root-cause on a repeat. ROADMAP session 73 residue (b).
+     REPEAT session 76 wrap-up: an empty .git/index.lock stamped
+     2026-10-16 17:00:15 (about 16 h old, no git process in this repo)
+     blocked git add; the gitlock commit cleared it. Session 79 reading:
+     no index.lock present; the gitignored gitlock log shows 3
+     index-lock-removed rows (2026-10-14 age 826 s, 2026-10-15 age 118682
+     s, 2026-10-17 age 57280 s, so last created about 2026-10-16 17:00);
+     no log names the creator. NOT root-caused; stays a watch. Root-cause
+     on the next repeat (capture the creating process then).
+  N7. SESSION 75 RESIDUE (ROADMAP "Session 75 residue", items a-f):
+     (a) 0i: the hung --ci-mark test in tests/test_prepush_select.py also
+     passes on the parent commit (non-discriminating arm).
+     (d) N5b: the first-plus-last-only mutant is caught by one arm only
+     (middle of three); the all-zero (delete) skip branch was never
+     mutated.
+     (f) Common-mode: the N5cf KEEP and RECORD rulings both rest on an
+     unverified 2026-09-15 MSIX measurement.
+  N11. NEW session 77 (residue c): the board push at session start and the
+     13b reprint are session acts, not hook-wired; consider a SessionStart
+     hint (/done 8b pushes the final board).
+  N12. NEW session 77 (residue d): a stale claims file from 2026-10-17 (dead
+     pid 24768, a roots_map_probe builder) was seen in claims state; the
+     claims dir read empty at /done. Root-cause on a repeat.
+  N8. Session 76 builders overran on the suite-gate queue (N7b 45m+ vs a
+     12m ETA; host at 100% CPU). Run at most ONE whole-suite builder at a
+     time.
+  7. Known gaps recorded, not fixed: a forged scheduledtask log label during
+     a real fire is still excused by the drift check (conftest.py); a test
+     child's failclosed line is excused inside a live fire (pre-existing,
+     widened by the fail-closed:provenance-deferred-* lines); the live
+     child reported only Read, not Grep/Glob, cause unconfirmed; dontAsk was
+     never exercised live.
+  0. (Assumes armed: read S86a first.) RENEW THE RESPONDER BEFORE
+     2026-11-06T23:00 LOCAL (window ends
+     2026-11-07T00:45; the PT43200M repeat may stop about 1 h early because
+     DST ends Nov 1). Re-run ops/install_responder_task.ps1 -TaskName
+     RSC-InboxResponder from the main checkout (-InstallRoot defaults to
+     the script's own checkout, resolved at run time), fresh gitignored
+     agreement record, then ops/check_task_liveness.py must exit 0.
+  5. Future MAIN supersessions: the stamp list is closed by design. A new
+     superseded MAIN order needs a verified MAIN note naming its stamps; add
+     them to SUPERSEDED_MAIN_STAMPS. Not watched live yet: confirm the next
+     armed responder fire ends with no reply to any of the 14 stamps.
+  N9. NEW session 77 (ROADMAP "Session 77 residue" a): N9 DONE (merge
+     64a160c, fix b7cbe7f, decision C) but a note with no -to- filename
+     segment is never skipped and sibling-to-sibling chatter is still
+     answered. Watch inbox-kind spend in the gitignored headless usage log.
+     Reversed by: a MAIN ruling or a measured week of that reply cost.

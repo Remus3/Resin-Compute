@@ -72,3 +72,9 @@
   (feedback memory), v30, v31, v32, 0936 (surface loader, UIGF fuzz, agent pins),
   2005 (GitHub refresh), 2145 (drive-root items to the sidecar). None worked this
   session beyond v32's partial; all carried.
+- `fleet_done.py mark` first read back `failed`: "hand-off 33 KB > 30 KB" (the
+  section-7 `archive --auto` moves only STATE OBSERVED blocks). Hand-off OPEN WORK
+  items 0, 5, 7, N2, N7, N8, N9, N11 and N12 (watches and records) moved verbatim to
+  `docs/handoff-archive/RSC-2026-11-17.txt` with one pointer line; the hand-off read
+  back 29809 bytes, `tools/check_handoff.py` ok, committed as a second paperwork
+  commit.
