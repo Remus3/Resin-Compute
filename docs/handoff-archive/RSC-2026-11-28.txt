@@ -1,0 +1,11 @@
+# archived from RSC-NEXT-SESSION.txt at 2026-11-28T10:19:23Z
+STATE OBSERVED 2026-11-17 AT 5ed6942 (session 88 /done, headless run)
+  Gates on a clean tree at 5ed6942 (= origin/main after fetch): figures
+  in docs/ledger/session-88.md, Python 3.14 (CI is 3.11), all exit 0; the
+  app suite re-ran through the gate (no EXIT=0 file existed for reuse).
+  CI on 5ed6942: ci 44062306917, fleet-identity-guard 44062307160,
+  docs-guards 44062307066, codeql 44062306965, all success. Kit check
+  32 []. send_note audit printed nothing. Board render SKIPPED: headless
+  run. Inbox NOT marked; ops/fleet_kit/fleet_inbox.py pending lists 7 ORDER work rows
+  (1200, v30, v31, v32, 0936, 2005, 2145). This file's commit and its CI:
+  read them live.

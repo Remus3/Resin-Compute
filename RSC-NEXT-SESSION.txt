@@ -1,14 +1,16 @@
 RESINCOMPUTE - NEXT SESSION HAND-OFF
-Stamped 2026-11-17 (session 88, headless kit-rollout run, kit v32);
-the session 88 gates are in docs/ledger/session-88.md; this paperwork
-commit landed after the v32 ANSWER. Everything below is a READING taken that day, not a promise
+Stamped 2026-11-28 (session 89, headless kit-rollout run, kit v33);
+the session 89 gates are in docs/ledger/session-89.md; this paperwork
+commit landed after the v33 ANSWER. Everything below is a READING taken that day, not a promise
 about now. Re-measure before citing.
 
-NEXT ACTION: first work the PENDING ORDER rows (S88b: MAIN 2145
-drive-root items, 2005 GitHub refresh incl. the G4 Dependabot PRs, 0936
-surface loader / UIGF fuzz / agent pins; S87b: MAIN 1200 feedback memory,
-then mark_work_done for 1200, v30 and v31; the v32 row waits on S88a G3),
-then
+NEXT ACTION: first work the open MAIN ORDER/FIX/RULING notes (S89a: MAIN
+2026-11-27 1610 FIX mf4 agent pins + v0.1.0 release, 1612 RULING
+parked-fi-a6; S88b: MAIN 2145 drive-root items, 2005 GitHub refresh incl.
+the G4 Dependabot PRs, 0936 surface loader / UIGF fuzz / agent pins; S87b:
+MAIN 1200 feedback memory, then close 1200, v30 and v31 - each is still an
+UNSEEN note, so mark_seen it (that queues it) then mark_work_done the
+queued row, as session 89 did for v32 and v33), then
 re-read S86a (RSC-InboxResponder read Disabled) and
 the inbox for a MAIN note explaining it, before assuming the responder is
 armed. Then work the session 84 adversary rows (S84a, D7 and the other
@@ -16,6 +18,7 @@ MEDIUM rows first; D1 closed 7da57ca),
 re-read S83a against the pre-push log of session 84's push before acting
 on it, then the adversary pass on 85bf25d (S83c), then the inbox triage
 (S80a), then the remaining OPEN WORK items below, highest priority first.
+Session 89 adopted kit v33 (23ddcad; G3-FIX applied, S88a closed).
 Session 88 adopted kit v32 (5ed6942; S88c amend disclosed). Kit v31
 (65d4a8c) landed 2026-11-15 with no /done of its own.
 Session 87 adopted kit v30 (3b2b1c9; S87a amend disclosed). Session 86
@@ -74,9 +77,9 @@ THE GATES, and RUN THEM SEPARATELY RATHER THAN CHAINED
   python tools/check_handoff.py
 Kit check: python -c "import sys;sys.path.insert(0,'ops/fleet_kit');
 import fleet_headless as f;print(f.KIT_VERSION, f.conformance('.'))"
-must print 32 [] (kit v32, MANIFEST sha256
-cede0b7c8a80ca6ece410c07b572e4ac9dabe0bf7769d9c82d692bb1858c757d; read
-back 32 [] at session 88 /done). Outbound cap is 12 notes a day (FLEET-COMMON
+must print 33 [] (kit v33, MANIFEST sha256
+c096f7b0c015792cd32a9ec7acb815b84293bdeef152d0c3b0fb45304c9d5129; read
+back 33 [] at session 89 /done). Outbound cap is 12 notes a day (FLEET-COMMON
 14 c); any text saying 6 a day is stale.
 Never pytest . from the root. NEVER pass a command-line -q. mypy is ADVISORY
 and traverses only mypy.ini's files= roots. A concurrent session deletes the
@@ -91,16 +94,19 @@ Suite COUNTS are not restated here (CLAUDE.md: do not restate a suite
 count in any doc); each session's measured figures are in its
 docs/ledger/session-<n>.md entry, stamped with the date.
 
-STATE OBSERVED 2026-11-17 AT 5ed6942 (session 88 /done, headless run)
-  Gates on a clean tree at 5ed6942 (= origin/main after fetch): figures
-  in docs/ledger/session-88.md, Python 3.14 (CI is 3.11), all exit 0; the
-  app suite re-ran through the gate (no EXIT=0 file existed for reuse).
-  CI on 5ed6942: ci 44062306917, fleet-identity-guard 44062307160,
-  docs-guards 44062307066, codeql 44062306965, all success. Kit check
-  32 []. send_note audit printed nothing. Board render SKIPPED: headless
-  run. Inbox NOT marked; ops/fleet_kit/fleet_inbox.py pending lists 7 ORDER work rows
-  (1200, v30, v31, v32, 0936, 2005, 2145). This file's commit and its CI:
-  read them live.
+STATE OBSERVED 2026-11-28 AT 23ddcad (session 89 /done, headless run)
+  Gates on 23ddcad (= origin/main after fetch): figures in
+  docs/ledger/session-89.md, Python 3.14 (CI is 3.11), all exit 0; app
+  suite re-ran through the gate (no reuse: the hand-off changed). CI on
+  23ddcad: fleet-identity-guard 46134207501, docs-guards 46134207488,
+  codeql 46134207476 success; ci 46134207483 in progress at the read.
+  Kit check 33 []. main protection read: enforce_admins false, required
+  check fleet-identity-guard, strict false. send_note audit printed
+  nothing. Board render: no-op (opted out) and headless. v32 and v33
+  ORDER rows closed (mark_seen then mark_work_done, read back gone from
+  pending). Dependabot PRs #12 #13 #14 read OPEN. This file's commit and
+  its CI: read them live.
+(state block "STATE OBSERVED 2026-11-17 AT 5ED6942 (SESSION 88 /DONE, HEADLESS RUN)" archived to docs/handoff-archive/RSC-2026-11-28.txt)
 (state block "STATE OBSERVED 2026-11-12 AT 3B2B1C9 (SESSION 87 /DONE, HEADLESS RUN)" archived to docs/handoff-archive/RSC-2026-11-17.txt)
 (state block "STATE OBSERVED AT BC62EA4, 5858574, 8438CC1 AND 85BF25D (SESSIONS 86-83):" archived to docs/handoff-archive/RSC-2026-11-17.txt)
 PRIOR READINGS (sessions 57-82): docs/ledger/ files. A worktree shows
@@ -110,13 +116,16 @@ PRIOR READINGS (sessions 57-82): docs/ledger/ files. A worktree shows
   regression.
 
 OPEN WORK, HIGHEST FIRST - full text in ROADMAP.md
-  S88a. KIT v32 G3 (NEW session 88): required fleet-identity-guard check
-     on main NOT applied - main protection has no required checks and
-     enforce_admins is on, so a required check would reject this tree's
-     direct pushes. MAIN ruling asked in the v32 ANSWER (sha256 61152539
-     9aea4aecb3ebc50038c3062c4cd3b500b32dc1cd64ae5d1cc4e6fbaa, HOP 2,
-     reported 2/2). Await it; do NOT mark_work_done the v32 row until G3
-     and G4 finish. ROADMAP "Now".
+  S89a. NEW INBOX NOTES NOT WORKED (NEW session 89, ROADMAP "Now"):
+     MAIN 2026-11-27 1610 FIX mf4-agent-pins-and-v0-1-0-release (ONE
+     ANSWER; overlaps 0936 agent pins and 2005 v0.1.0 release), MAIN
+     2026-11-27 1612 RULING parked-fi-a6 (TERMINAL, read and apply, no
+     reply), RC 2026-11-17 2119 INFORMATION global ruff 0.17.3 (ack, no
+     reply). Earlier MAIN ORDERs listed in S88b/S87b also still unworked.
+  S88a. CLOSED session 89: v33 G3-FIX item 1 applied in 23ddcad's
+     rollout, protection read back at /done (docs/ledger/session-89.md,
+     docs/roadmap-archive/2026-11.md). v32 row closed; G4 stays open
+     under S88b (2) and ROADMAP.
   S88b. PENDING MAIN ORDERS NOT WORKED (NEW session 88), each ONE ANSWER,
      ROADMAP "Now": (1) 2026-11-16 2145 move this tree's drive-root items
      (the 2026-11-01 rewrite backup dir, the session 82 suite log - see
@@ -484,9 +493,11 @@ STANDING DIRECTIVES - NOT UP FOR RE-ASKING
   recipient copy hashed; under item 14 one batched note per destination,
   HOP line in the head, never answer an answer. Silence reads as DISSENT.
   CAVEMAN ULTRA in chat, byte-exact everywhere else.
+Reap (session 89): reap applied: 0 removed, 0 kept, 0 listed (base main).
+Board (session 89): no-op, tree opted out (FLEET-KIT v32) and headless run.
 Reap (session 88): reap applied: 0 removed, 0 kept, 0 listed (base main).
 Board (session 88): render skipped, headless run (.claude/commands/done.md section 8b).
 Reap (session 87): reap applied: 0 removed, 0 kept, 0 listed (base main).
 Board (session 87): render skipped, headless run (.claude/commands/done.md section 8b).
 Reap (session 86): reap applied: 0 removed, 0 kept, 0 listed (base main).
-SESSION: 89
+SESSION: 90
