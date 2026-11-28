@@ -88,7 +88,7 @@ import sys
 import time
 from pathlib import Path
 
-INBOX_VERSION = 4
+INBOX_VERSION = 5  # v33 SS-FIX-1959: forbids_reply(), trailing HOP read
 OUTBOUND_CAP = 12  # v20.1: was 6 (operator order 2026-10-18)
 MAX_HOPS = 2
 EXEMPT = ("ORDER", "FIX", "RULING")
@@ -130,6 +130,11 @@ _TITLE = re.compile(r"^#+\s*(?i:from)\s+([A-Z]+)\b(?:\s*\([^)]*\))?"
                     r"(?:\s*-\s*([A-Z][A-Za-z-]*))?")
 _RESPONDER_TAG = re.compile(r"^\[([A-Z]+)-RESPONDER\]", re.M)
 _HOP = re.compile(r"^\s*HOP:\s*(\d+)\s*$", re.M)
+# v33 SS-FIX-1959: `HOP: <n>` may also END a header line ("ORDER (...). HOP: 0").
+_HOP_TRAIL = re.compile(r"(?:^|[\s.;,(])HOP:\s*(\d+)\s*[.)]?\s*$")
+_NO_REPLY_PROSE = re.compile(
+    r"\bno\s+(?:reply|answer|response)\s+(?:is\s+)?(?:needed|required|owed|expected)\b"
+    r"|\bdo\s+not\s+(?:reply|send\s+(?:an?\s+)?(?:reply|answer))\b", re.I)
 _VERDICT = re.compile(r"^\s*VERDICT:\s*([A-Z-]+)\s*$", re.M)
 _MARK = r"(?:TERMINAL|NO[-_ ]?REPLY)"
 _MARKER = re.compile(r"^(?:CLASS\s+)?" + _MARK + r"(?:\s*[-.,:;/]?\s*" + _MARK +
@@ -216,10 +221,28 @@ def addressee(name):
     return t.group(1)
 
 
+def _own_lines(head):
+    """The head's lines outside quotes (`>`) and fenced blocks: what the note
+    itself says, not what it quotes (v33)."""
+    fenced = False
+    for line in (head or "").splitlines():
+        if line.lstrip().startswith(("```", "~~~")):
+            fenced = not fenced
+            continue
+        if fenced or line.lstrip().startswith(">"):
+            continue
+        yield line
+
+
 def hop(head):
-    """The `HOP: <n>` header line; absent = 1 (an original note)."""
-    m = _HOP.search(head or "")
-    return int(m.group(1)) if m else 1
+    """The `HOP: <n>` header line; absent = 1 (an original note). v33
+    (SS-FIX-1959): a line that ENDS in `HOP: <n>` counts too; quoted and
+    fenced lines never do. The first match wins."""
+    for line in _own_lines(head):
+        t = _HOP.match(line) or _HOP_TRAIL.search(line)
+        if t:
+            return int(t.group(1))
+    return 1
 
 
 def _terminal(name, head):
@@ -234,6 +257,18 @@ def _terminal(name, head):
         if text and _MARKER.match(text):
             return True
     return False
+
+
+def forbids_reply(name, head=""):
+    """v33 (SS-FIX-1959): True when the note forbids a reply, for EVERY class
+    (an ORDER / FIX / RULING too, which classify() sends to WORK before its
+    TERMINAL test): a TERMINAL / NO-REPLY marker in the name or on a line of
+    its own, or prose such as "No reply needed" / "do not send an ANSWER" on
+    a line outside quotes and fenced blocks. A worker closes such a note on
+    its own result with a ledger line and sends no answer."""
+    if _terminal(name, head):
+        return True
+    return any(_NO_REPLY_PROSE.search(line) for line in _own_lines(head))
 
 
 def classify(name, own_code, head=""):

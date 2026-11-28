@@ -415,9 +415,10 @@ import time
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-KIT_VERSION = 32
+KIT_VERSION = 33
 KIT_PATCH = 0
 TMPDIR_ENV = "CLAUDE_CODE_TMPDIR"  # v22: headless child temp root (sidecar)
+SCRATCH_ENV = "FLEET_SCRATCH"  # v33 E-ROOT-KIT K2: a headless run's scratch dir (sidecar)
 VAR = "CLAUDE_HEADLESS_BASE_URL"
 RUNS_CAP = 120
 RUNS_CAP_MAX = 500  # v26: ceiling of a machine-config runs_cap entry
@@ -660,6 +661,19 @@ def child_env(url, bare=False, parent=None, route=None, code=None, python_first=
                 tmp.mkdir(parents=True, exist_ok=True)
         if tmp is not None and tmp.is_dir():
             env[TMPDIR_ENV] = str(tmp)
+    if code:
+        # v33 E-ROOT-KIT K2: TEMP / TMP at <sidecar>/<CODE>/Temp and FLEET_SCRATCH
+        # at <sidecar>/<CODE>/Scratch, so a headless run's scratch never lands
+        # at a drive root; no sidecar for the code = nothing set (never a failure).
+        for kind, names in (("Temp", ("TEMP", "TMP")), ("Scratch", (SCRATCH_ENV,))):
+            d = None
+            with contextlib.suppress(Exception):
+                d = _lanes().sidecar_dir(code, kind)
+                if d is not None:
+                    d.mkdir(parents=True, exist_ok=True)
+            if d is not None and d.is_dir():
+                for n in names:
+                    env[n] = str(d)
     if python_first:
         _python_first(env)
     return env

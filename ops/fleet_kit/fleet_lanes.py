@@ -489,7 +489,9 @@ def _last_pause(root):
 def note_pause(repo_root, code, lane, reason, detail="", now=None):
     """v30 CARRY-8: append one pause row; at most one per lane and reason per
     PAUSE_DEDUPE_S. Returns the row, or None (deduped, unknown reason, write
-    failure). Never raises."""
+    failure). Never raises. v33 KIT-NOTE-PAUSE-ROUND: the epoch is stored
+    unrounded, so the dedup age is never negative for a repeat call (a stamp
+    rounded up gave now - at < 0 and a second row)."""
     try:
         if reason not in PAUSE_REASONS:
             return None
@@ -499,10 +501,10 @@ def note_pause(repo_root, code, lane, reason, detail="", now=None):
         for row in _last_pause(root):
             at = row.get("epoch")
             if (row.get("lane") == lane and row.get("reason") == reason
-                    and isinstance(at, (int, float)) and 0 <= now - at < PAUSE_DEDUPE_S):
+                    and isinstance(at, (int, float)) and -0.001 <= now - at < PAUSE_DEDUPE_S):
                 return None
         row = {"ts": _dt.datetime.fromtimestamp(now).astimezone().isoformat(timespec="seconds"),
-               "epoch": round(now, 3), "tree": str(code), "lane": lane, "reason": reason,
+               "epoch": now, "tree": str(code), "lane": lane, "reason": reason,
                "detail": " ".join(str(detail).split())[:200]}
         path = root / PAUSE_LOG_REL
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1233,11 +1235,25 @@ def worktree_path(repo_root, code, index, root=None):
     """Lane i of repo <code> runs here: <sidecar root>/<CODE>/Worktree/lane-<i>
     when FLEET_SIDECAR_ROOT is set (v14) or, unset, the v22 default
     <SIDECAR_DEFAULT>/<CODE> exists; else <parent>/<code>-worktrees/lane-<i>;
-    the old path stays in use while it exists and the new one does not."""
+    the old path stays in use while it exists and the new one does not.
+    v33 E-ROOT-KIT K1: a tree whose parent is a drive root (E:/<Tree>) never
+    gets a new <drive>/<code>-worktrees: it uses <sidecar root>/<CODE>/Worktree,
+    falling back to SIDECAR_DEFAULT; with neither it raises ValueError. An
+    existing old lane folder stays in use (sticky, as above)."""
     if not str(code).isalnum():
         raise ValueError(f"repo code {code!r} must be alphanumeric")
     parent = main_tree(repo_root).parent
     old = parent / f"{str(code).lower()}-worktrees" / f"lane-{int(index)}"
+    if parent.parent == parent:  # v33 K1: never a NEW worktree folder at a drive root
+        if old.exists():
+            return old  # a live lane already there keeps running; its tree moves it
+        side = sidecar_root() if root is None else (Path(root) if root else None)
+        if side is None and SIDECAR_DEFAULT:
+            side = Path(SIDECAR_DEFAULT)
+        if side is None:
+            raise ValueError(f"refusing a drive-root worktree parent {parent} "
+                             f"(no sidecar root for {code})")
+        return side / str(code).upper() / "Worktree" / f"lane-{int(index)}"
     if root is None:
         root = sidecar_root()
         if (root is not None and SIDECAR_VAR not in os.environ
